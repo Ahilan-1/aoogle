@@ -1,1 +1,1 @@
-web: python main.py
+web: gunicorn main:app --workers 2 --bind 0.0.0.0:$PORT --timeout 30 --access-logfile - --error-logfile -

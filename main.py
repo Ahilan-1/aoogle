@@ -183,7 +183,10 @@ class SearchIntent:
 class ImprovedSearch:
     def __init__(self):
         self.session = requests.Session()
-        self.user_agent = UserAgent(fallback='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+        try:
+            self.user_agent = UserAgent(fallback='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+        except:
+            self.user_agent = type('SimpleUA',(),{'random':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36','__getitem__':lambda s,k:s.random})()
         self.executor = ThreadPoolExecutor(max_workers=5)
         self.search_urls = [
             "https://html.duckduckgo.com/html/",
@@ -1191,6 +1194,10 @@ def suggest():
     except Exception as e:
         app.logger.error(f"Suggestion route error: {str(e)}")
         return jsonify([])
+
+@app.route('/health')
+def health():
+    return 'ok', 200
 
 @app.errorhandler(404)
 def not_found_error(error):
