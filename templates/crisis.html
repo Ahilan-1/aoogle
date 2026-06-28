@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>aoogle — You matter</title>
+    <style>
+        * { box-sizing:border-box; }
+        body { margin:0; padding:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:#fafafa; color:#222; }
+        .wrap { max-width:600px; margin:0 auto; padding:40px 20px 80px; }
+        .card { background:#fff; border-radius:16px; border:1px solid #e0e0e0; padding:32px; box-shadow:0 2px 12px rgba(0,0,0,0.04); margin-bottom:20px; }
+        h1 { font-size:24px; font-weight:600; margin:0 0 8px; }
+        .sub { font-size:14px; color:#666; margin-bottom:24px; line-height:1.6; }
+        .hl { color:#c5221f; font-weight:600; }
+        .green { color:#137333; }
+        .badge { display:inline-block; background:#e8f0fe; color:#1a73e8; font-size:12px; font-weight:600; padding:3px 10px; border-radius:6px; margin-bottom:16px; }
+        .badge.red { background:#fce8e6; color:#c5221f; }
+        .badge.green { background:#e6f4ea; color:#137333; }
+        .phone { font-size:20px; font-weight:700; color:#1a73e8; display:block; margin:12px 0; }
+        .phone a { color:#1a73e8; text-decoration:none; }
+        .phone a:hover { text-decoration:underline; }
+        .step { padding:10px 14px; background:#f8f9fa; border-radius:8px; margin-bottom:8px; font-size:14px; line-height:1.5; border-left:3px solid #1a73e8; }
+        .step:last-child { margin-bottom:0; }
+        .region-btn { display:inline-block; padding:6px 14px; font-size:13px; border-radius:20px; border:1px solid #dadce0; background:#fff; color:#444; cursor:pointer; margin:3px; transition:all .15s; }
+        .region-btn:hover { border-color:#1a73e8; color:#1a73e8; }
+        .region-btn.active { background:#1a73e8; color:#fff; border-color:#1a73e8; }
+        .region-form { margin-top:20px; }
+        .region-select { width:100%; padding:10px 14px; font-size:14px; border-radius:8px; border:1px solid #dadce0; margin-bottom:12px; background:#fff; }
+        .btn { background:#1a73e8; color:#fff; border:none; padding:10px 24px; border-radius:8px; font-size:14px; cursor:pointer; font-weight:500; }
+        .btn:hover { background:#1557b0; }
+        .resources-box { background:#f8f9fa; border-radius:10px; padding:16px; margin-top:12px; font-size:14px; line-height:1.6; }
+        .resources-box strong { display:block; margin-top:8px; }
+        .resources-box strong:first-child { margin-top:0; }
+        .back { display:inline-block; margin-top:24px; font-size:13px; color:#70757a; text-decoration:none; }
+        .back:hover { color:#222; }
+        hr { border:none; border-top:1px solid #e8e8e8; margin:24px 0; }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        {% if crisis.type == 'harmful' %}
+            <div class="card">
+                <span class="badge red">&#x2764; You matter</span>
+                <h1>It sounds like you're looking for something dangerous</h1>
+                <p class="sub">Whatever is going on, you don't have to face it alone. There are people who want to listen and help — right now, for free, confidentially.</p>
+                <p style="font-size:14px;line-height:1.6;margin-bottom:16px;"><strong class="hl">Please reach out.</strong> A single conversation can change everything.</p>
+                <p class="phone"><a href="tel:988">988</a> — Suicide &amp; Crisis Lifeline (US)</p>
+                <p style="font-size:13px;color:#666;">Call or text 988 &middot; 24/7 &middot; Free &middot; Confidential</p>
+                <hr>
+                <p style="font-size:13px;color:#666;margin:0;">Outside the US? <a href="/crisis" style="color:#1a73e8;">Find helplines in your country &rarr;</a></p>
+            </div>
+
+        {% elif crisis.type == 'crisis' %}
+            <div class="card">
+                <span class="badge green">&#x2764; You're not alone</span>
+                <h1>Help is here</h1>
+                <p class="sub">Things can feel overwhelming, but you don't have to go through it alone. These services are free, confidential, and available right now.</p>
+
+                <div class="resources-box">
+                    <strong>&#x1F4DE; Call or text 988 (US)</strong>
+                    <span style="color:#666;">Suicide &amp; Crisis Lifeline — 24/7, free, confidential</span>
+                    <strong>&#x1F4F1; Text HOME to 741741</strong>
+                    <span style="color:#666;">Crisis Text Line — anywhere in the US</span>
+                    <strong>&#x1F46A; Childhelp: 1-800-422-4453</strong>
+                    <span style="color:#666;">National Child Abuse Hotline — 24/7</span>
+                    <strong>&#x1F30D; Not in the US?</strong>
+                    <span style="color:#666;">Select your region below for local helplines.</span>
+                </div>
+
+                <div class="region-form">
+                    <form method="POST" action="/crisis">
+                        <select name="region" class="region-select">
+                            <option value="global">Global / Other</option>
+                            <option value="us">United States</option>
+                            <option value="uk">United Kingdom</option>
+                            <option value="india">India</option>
+                            <option value="canada">Canada</option>
+                            <option value="australia">Australia</option>
+                        </select>
+                        <button type="submit" class="btn">Show resources</button>
+                    </form>
+                </div>
+            </div>
+
+            {% if selected_region and resources[selected_region] %}
+            <div class="card">
+                <h1 style="font-size:18px;">Resources for {{ selected_region|upper }}</h1>
+                <div class="resources-box">
+                    {% if resources[selected_region].hotline %}
+                    <strong>&#x1F4DE; Crisis hotline</strong>
+                    <span style="color:#666;">{{ resources[selected_region].hotline }}</span>
+                    {% endif %}
+                    {% if resources[selected_region].text %}
+                    <strong>&#x1F4F1; Text support</strong>
+                    <span style="color:#666;">{{ resources[selected_region].text }}</span>
+                    {% endif %}
+                    {% if resources[selected_region].child %}
+                    <strong>&#x1F46A; Child / youth support</strong>
+                    <span style="color:#666;">{{ resources[selected_region].child }}</span>
+                    {% endif %}
+                    <p style="margin-top:12px;font-style:italic;color:#444;">{{ resources[selected_region].note }}</p>
+                </div>
+            </div>
+            {% endif %}
+
+        {% elif crisis.type == 'disaster' %}
+            <div class="card">
+                <span class="badge">&#x26A0;&#xFE0F; Emergency guide</span>
+                <h1>{{ crisis.info.title }}</h1>
+                <p class="sub">Stay calm. Follow these steps to stay safe.</p>
+                {% for step in crisis.info.steps %}
+                <div class="step">{{ step }}</div>
+                {% endfor %}
+                <hr>
+                <p style="font-size:13px;color:#666;">For real-time alerts: <a href="https://www.weather.gov" target="_blank" style="color:#1a73e8;">weather.gov</a> (US) or your local emergency services.</p>
+            </div>
+
+        {% else %}
+            <div class="card">
+                <h1>Support &amp; resources</h1>
+                <p class="sub">If you or someone you know needs help, these organizations provide free, confidential support.</p>
+                <div class="region-form">
+                    <form method="POST" action="/crisis">
+                        <select name="region" class="region-select">
+                            <option value="global">Global / Other</option>
+                            <option value="us">United States</option>
+                            <option value="uk">United Kingdom</option>
+                            <option value="india">India</option>
+                            <option value="canada">Canada</option>
+                            <option value="australia">Australia</option>
+                        </select>
+                        <button type="submit" class="btn">Show resources</button>
+                    </form>
+                </div>
+            </div>
+
+            {% if selected_region and resources[selected_region] %}
+            <div class="card">
+                <div class="resources-box">
+                    {% if resources[selected_region].hotline %}
+                    <strong>&#x1F4DE; Crisis hotline</strong>
+                    <span style="color:#666;">{{ resources[selected_region].hotline }}</span>
+                    {% endif %}
+                    {% if resources[selected_region].text %}
+                    <strong>&#x1F4F1; Text support</strong>
+                    <span style="color:#666;">{{ resources[selected_region].text }}</span>
+                    {% endif %}
+                    {% if resources[selected_region].child %}
+                    <strong>&#x1F46A; Child / youth support</strong>
+                    <span style="color:#666;">{{ resources[selected_region].child }}</span>
+                    {% endif %}
+                    <p style="margin-top:12px;font-style:italic;color:#444;">{{ resources[selected_region].note }}</p>
+                </div>
+            </div>
+            {% endif %}
+        {% endif %}
+
+        <a href="/" class="back">&larr; Back to aoogle</a>
+    </div>
+</body>
+</html>

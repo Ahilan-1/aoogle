@@ -180,6 +180,136 @@ class SearchIntent:
     def is_transactional(self):
         return 'transactional' in self.detected_intents
 
+CRISIS_PREFIXES = [
+    "i am in crisis", "i need help", "i want to die", "i want to kms",
+    "suicide", "suicidal", "self harm", "selfharm", "end my life",
+    "i can't do this anymore", "i give up", "no one cares", "help me",
+    "abuse at home", "scared at home", "unsafe at home", "being abused",
+    "hurting myself", "hurt myself", "want to hurt",
+]
+
+HARMFUL_CONTENT_PREFIXES = [
+    "how to self harm", "self harm methods", "suicide methods",
+    "how to kill myself", "how to commit suicide",
+]
+
+DISASTER_KEYWORDS = {
+    "tornado": {
+        "title": "Tornado Safety",
+        "steps": [
+            "Go to the basement or lowest floor, away from windows.",
+            "Cover your head and neck with your arms or a blanket.",
+            "Do NOT stay in a mobile home or vehicle.",
+            "Listen to local weather alerts or check NOAA Weather Radio.",
+            "After the tornado, watch for downed power lines and sharp debris."
+        ]
+    },
+    "earthquake": {
+        "title": "Earthquake Safety",
+        "steps": [
+            "Drop, Cover, and Hold On — get under a sturdy table or desk.",
+            "Stay indoors and away from windows, heavy furniture, and exterior walls.",
+            "If outside, stay in the open away from buildings, trees, and power lines.",
+            "If driving, pull over to a clear area and stay in the vehicle.",
+            "After shaking stops, check for injuries and hazards (gas leaks, fires)."
+        ]
+    },
+    "flood": {
+        "title": "Flood Safety",
+        "steps": [
+            "Move to higher ground immediately — do NOT walk or drive through floodwater.",
+            "Just 6 inches of moving water can knock you down; 12 inches can sweep a car away.",
+            "Avoid power lines and electrical wires — water conducts electricity.",
+            "Heed evacuation orders from local authorities promptly.",
+            "After the flood, avoid contact with floodwater (it may be contaminated)."
+        ]
+    },
+    "hurricane": {
+        "title": "Hurricane Safety",
+        "steps": [
+            "Stay indoors in an interior room away from windows and glass doors.",
+            "If evacuation is ordered, leave immediately with your emergency kit.",
+            "Charge phones and devices before the storm hits.",
+            "Fill bathtubs and containers with clean water in case of supply disruption.",
+            "After the storm, avoid floodwater, downed power lines, and damaged buildings."
+        ]
+    },
+    "wildfire": {
+        "title": "Wildfire Safety",
+        "steps": [
+            "Evacuate immediately if authorities advise it — take your emergency kit.",
+            "Close all windows and doors before leaving.",
+            "Wear protective clothing: long sleeves, pants, cotton or wool fabrics.",
+            "If trapped, call emergency services and find a body of water or cleared area.",
+            "After the fire, check for hot spots, smoldering stumps, and embers."
+        ]
+    },
+    "tsunami": {
+        "title": "Tsunami Safety",
+        "steps": [
+            "If you feel a strong earthquake near the coast, move inland immediately.",
+            "If you see the ocean receding rapidly, run to high ground — a tsunami is coming.",
+            "Do NOT wait for an official warning — natural signs are your first alert.",
+            "Go at least 100 feet above sea level or 2 miles inland.",
+            "Stay on high ground until authorities say it is safe to return."
+        ]
+    }
+}
+
+CRISIS_RESOURCES = {
+    "global": {
+        "hotline": "International Association for Suicide Prevention — https://www.iasp.info/resources/Crisis_Centres/",
+        "text": "Crisis Text Line — Text HOME to 741741 (US) or visit crisistextline.org",
+        "note": "You are not alone. Help is available, and you matter."
+    },
+    "us": {
+        "hotline": "988 Suicide & Crisis Lifeline — Call or text 988",
+        "text": "Crisis Text Line — Text HOME to 741741",
+        "child": "Childhelp National Child Abuse Hotline — Call 1-800-422-4453",
+        "note": "Trained counselors are available 24/7. Free and confidential."
+    },
+    "uk": {
+        "hotline": "Samaritans — Call 116 123 (free, 24/7)",
+        "text": "SHOUT — Text SHOUT to 85258",
+        "child": "Childline — Call 0800 1111",
+        "note": "Whatever you're going through, you don't have to face it alone."
+    },
+    "india": {
+        "hotline": "iCall — Call 022 2552 1111 (Mon-Sat, 8am-10pm)",
+        "text": "Snehi — Call 044 2464 0050",
+        "child": "Childline India — Call 1098 (24/7)",
+        "note": "Free, confidential support. You deserve to be heard."
+    },
+    "canada": {
+        "hotline": "Talk Suicide Canada — Call 1-833-456-4566",
+        "text": "Crisis Text Line — Text HOME to 686868",
+        "child": "Kids Help Phone — Call 1-800-668-6868",
+        "note": "Reach out. There are people who care and want to help."
+    },
+    "australia": {
+        "hotline": "Lifeline Australia — Call 13 11 14 (24/7)",
+        "text": "Kids Helpline — Call 1800 55 1800",
+        "child": "1800RESPECT — Call 1800 737 732 (domestic violence)",
+        "note": "You don't have to go through this alone. Help is a call away."
+    }
+}
+
+def detect_crisis(query):
+    q = query.lower().strip()
+    if not q:
+        return None
+    for prefix in HARMFUL_CONTENT_PREFIXES:
+        if q.startswith(prefix) or q == prefix:
+            return {"type": "harmful", "severity": "high"}
+    for prefix in CRISIS_PREFIXES:
+        if prefix in q:
+            return {"type": "crisis", "severity": "high"}
+    words = set(q.split())
+    for disaster, info in DISASTER_KEYWORDS.items():
+        if disaster in words or disaster in q:
+            return {"type": "disaster", "disaster": disaster, "info": info}
+    return None
+
 class ImprovedSearch:
     def __init__(self):
         self.session = requests.Session()
@@ -1003,6 +1133,15 @@ def search():
     if not query:
         return render_template('search.html')
 
+    crisis = detect_crisis(query)
+    if crisis:
+        return render_template(
+            'crisis.html',
+            query=query,
+            crisis=crisis,
+            resources=CRISIS_RESOURCES
+        )
+
     try:
         results = search_engine.search(query, page)
 
@@ -1194,6 +1333,27 @@ def suggest():
     except Exception as e:
         app.logger.error(f"Suggestion route error: {str(e)}")
         return jsonify([])
+
+@app.route('/crisis', methods=['GET', 'POST'])
+def crisis():
+    if request.method == 'POST':
+        region = request.form.get('region', 'global')
+        crisis_type = request.form.get('crisis_type', '')
+        return render_template(
+            'crisis.html',
+            query='',
+            crisis={'type': 'resources', 'crisis_type': crisis_type or None},
+            resources=CRISIS_RESOURCES,
+            selected_region=region
+        )
+    q = request.args.get('q', '')
+    crisis_data = detect_crisis(q) if q else None
+    return render_template(
+        'crisis.html',
+        query=q,
+        crisis=crisis_data or {'type': 'help'},
+        resources=CRISIS_RESOURCES
+    )
 
 @app.route('/health')
 def health():
