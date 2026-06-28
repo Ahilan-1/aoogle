@@ -111,6 +111,16 @@
 
         .error-message { text-align:center; padding:80px 20px; color:#70757a; font-size:16px; }
 
+        .notice-banner {
+            background:#e8f0fe; border:1px solid #c5d9f2; border-radius:10px;
+            padding:14px 18px; margin-bottom:16px; font-size:13px; line-height:1.6;
+            color:#1a3a6b;
+        }
+        .notice-banner .notice-icon { margin-right:6px; }
+        .notice-banner a { color:#1a73e8; font-weight:500; }
+        .notice-banner.warning { background:#fef7e0; border-color:#f9e0a0; color:#5c3b00; }
+        .notice-banner.redirect { background:#e6f4ea; border-color:#b8e6c0; color:#1e4620; }
+
         .suggestions-box {
             display:none; position:absolute; top:100%; left:0; right:0;
             background:#fff; border:1px solid #dfe1e5; border-radius:16px;
@@ -209,9 +219,17 @@
                 <div class="error-message">{{ error }}</div>
             {% endif %}
 
+            {% if notice %}
+                <div class="notice-banner {{ notice.type }}">
+                    {% if notice.icon %}<span class="notice-icon">{{ notice.icon|safe }}</span>{% endif %}
+                    {{ notice.message|safe }}
+                </div>
+            {% endif %}
+
             {% if results %}
                 <div style="color:#70757a;font-size:13px;margin-bottom:16px;">
-                    About {{ total_results }} results
+                    {% if notice and notice.type == 'redirect' %}No results found
+                    {% else %}About {{ total_results }} results{% endif %}
                 </div>
                 {% for result in results %}
                     <div class="result-card {{ 'reddit-result' if 'reddit' in result.url else '' }}">

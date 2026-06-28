@@ -310,6 +310,67 @@ def detect_crisis(query):
             return {"type": "disaster", "disaster": disaster, "info": info}
     return None
 
+BODY_NEGATIVE_PATTERNS = [
+    "ugly women", "ugly girl", "ugly woman", "ugly girls",
+    "fat women", "fat girl", "ugly people",
+    "women are ugly", "girls are ugly",
+    "why are women so ugly", "why are girls so ugly",
+    "hate women", "hate girls",
+    "women are useless", "girls are useless",
+]
+
+NSFW_CONTENT_PATTERNS = [
+    "nsfw", "porn", "pornography", "xxx", "adult content",
+    "sex videos", "sex images", "naked", "nude",
+    "explicit content", "adult video", "adult images",
+    "onlyfans", "strip", "stripclub",
+    "hentai", "rule34",
+]
+
+MEDICAL_HELP_PATTERNS = [
+    "chest pain", "heart attack symptoms", "stroke symptoms",
+    "i think i'm dying", "medical emergency",
+    "poison", "overdose", "bleeding heavily",
+    "difficulty breathing", "can't breathe",
+    "severe allergic reaction", "anaphylaxis",
+    "head injury", "concussion symptoms",
+]
+
+BODY_POSITIVE_RESOURCES = [
+    {"title": "You Are Enough — Body Positivity & Self-Worth", "url": "https://www.nationaleatingdisorders.org/body-image", "snippet": "Everyone deserves to feel comfortable in their own skin. Learn about body image, self-acceptance, and how to build a healthier relationship with yourself.", "category": "support"},
+    {"title": "The Body Is Not an Apology", "url": "https://thebodyisnotanapology.com/", "snippet": "Radical self-love and body positivity resources. A global movement dedicated to ending body shame and discrimination.", "category": "community"},
+    {"title": "Self-Compassion Guide", "url": "https://self-compassion.org/", "snippet": "Learn how to be kinder to yourself. Research-backed exercises and meditations to build self-compassion.", "category": "wellness"},
+    {"title": "Love Your Body — A Guide to Self-Acceptance", "url": "https://www.verywellmind.com/how-to-love-your-body-5097489", "snippet": "Practical steps to challenge negative self-talk, stop comparing yourself to others, and appreciate your body for what it does.", "category": "guide"},
+    {"title": "Crisis Text Line — Free 24/7 Support", "url": "https://www.crisistextline.org/", "snippet": "Text HOME to 741741 to connect with a trained crisis counselor. Free, confidential, available 24/7.", "category": "support"},
+]
+
+def detect_notice(query):
+    q = query.lower().strip()
+    if not q:
+        return None
+    for pattern in BODY_NEGATIVE_PATTERNS:
+        if pattern in q:
+            return {
+                "type": "redirect",
+                "title": "No results found",
+                "message": "Try searching something else. Here are some resources that might help:",
+            }
+    for pattern in NSFW_CONTENT_PATTERNS:
+        if pattern in q:
+            return {
+                "type": "warning",
+                "icon": "&#x26A0;&#xFE0F;",
+                "message": "We don't serve adult content. If you or someone you know needs support, you're not alone. <a href='/crisis' style='color:#1a73e8;'>Find help here</a>.",
+            }
+    for pattern in MEDICAL_HELP_PATTERNS:
+        if pattern in q:
+            return {
+                "type": "warning",
+                "icon": "&#x1F3E5;",
+                "message": "If this is a medical emergency, call your local emergency services immediately (911 in the US). These search results are not a substitute for professional medical help.",
+            }
+    return None
+
 class ImprovedSearch:
     def __init__(self):
         self.session = requests.Session()
@@ -1142,6 +1203,18 @@ def search():
             resources=CRISIS_RESOURCES
         )
 
+    notice = detect_notice(query)
+    if notice and notice['type'] == 'redirect':
+        return render_template(
+            'search.html',
+            query=query,
+            results=BODY_POSITIVE_RESOURCES,
+            notice=notice,
+            page=1,
+            total_results=0,
+            info_box=None
+        )
+
     try:
         results = search_engine.search(query, page)
 
@@ -1149,6 +1222,7 @@ def search():
             'search.html',
             query=query,
             results=results,
+            notice=notice,
             page=page,
             total_results=len(results),
             info_box=get_info_box(query)
@@ -1159,6 +1233,7 @@ def search():
         return render_template(
             'search.html',
             query=query,
+            notice=notice,
             error="An error occurred while processing your search. Please try again."
         )
 
