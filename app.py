@@ -23,7 +23,7 @@ class AppleSearch:
     def __init__(self):
         self.user_agent = UserAgent()
         self.session = requests.Session()
-        self.base_url = "https://www.google.com/search"
+        self.base_url = "https://html.duckduckgo.com/html/"
         self.suggest_base_url = "https://suggestqueries.google.com/complete/search"
         self.cache = {}
         self.executor = ThreadPoolExecutor(max_workers=5)  # Increased worker count for better concurrency
@@ -87,38 +87,31 @@ class AppleSearch:
     def _parse_results(self, html):
         soup = BeautifulSoup(html, 'html.parser')
         results = []
-        info_box = self._extract_info_box(soup)
-        
-        if info_box:
-            results.append(info_box)
 
-        for div in soup.find_all('div', {'class': 'tF2Cxc'}):
+        for div in soup.find_all('div', class_='result'):
             try:
-                title_elem = div.find('h3')
-                link = div.find('a')
-                url = link.get('href') if link else None
-                snippet_elem = div.find('div', {'class': 'VwiC3b'})
-                snippet = snippet_elem.get_text() if snippet_elem else ''
-                
-                if not url or not title_elem:
+                title_elem = div.select_one('.result__a')
+                if not title_elem:
+                    continue
+                url = title_elem.get('href', '')
+                title = title_elem.get_text(strip=True)
+
+                snippet_elem = div.select_one('.result__snippet')
+                snippet = snippet_elem.get_text(strip=True) if snippet_elem else ''
+
+                if not url or not title:
                     continue
 
-                # Enhanced result object
                 result = {
-                    'title': title_elem.get_text(),
+                    'title': title,
                     'url': url,
                     'display_url': url[:60] + '...' if len(url) > 60 else url,
                     'snippet': snippet,
                     'favicon': f"https://www.google.com/s2/favicons?domain={url}",
-                    'category': self._categorize_result(url, title_elem.get_text()),
+                    'category': self._categorize_result(url, title),
                     'type': 'regular',
                     'score': 0
                 }
-                
-                # Extract date if available
-                date_elem = div.find('span', {'class': 'MUxGbd'})
-                if date_elem:
-                    result['date'] = date_elem.get_text()
 
                 results.append(result)
             except Exception as e:
@@ -127,17 +120,25 @@ class AppleSearch:
 
         return results
 
-    def _fetch_with_retry(self, url, params, max_retries=5):
+    def _fetch_with_retry(self, url, params, max_retries=5, method='GET'):
         """Fetch URL with retry mechanism"""
         for attempt in range(max_retries):
             try:
                 time.sleep(random.uniform(0.5, 1.5))
-                response = self.session.get(
-                    url,
-                    params=params,
-                    headers=self._get_headers(),
-                    timeout=10
-                )
+                if method == 'POST':
+                    response = self.session.post(
+                        url,
+                        data=params,
+                        headers=self._get_headers(),
+                        timeout=10
+                    )
+                else:
+                    response = self.session.get(
+                        url,
+                        params=params,
+                        headers=self._get_headers(),
+                        timeout=10
+                    )
                 if response.status_code == 200:
                     return response
                 else:
@@ -154,14 +155,9 @@ class AppleSearch:
             return self.cache[cache_key]
 
         try:
-            params = {
-                'q': query,
-                'start': (page - 1) * 10,
-                'num': 10,
-                'hl': 'en'
-            }
+            params = {'q': query}
             
-            response = self._fetch_with_retry(self.base_url, params)
+            response = self._fetch_with_retry(self.base_url, params, method='POST')
             if not response:
                 return []
 
@@ -281,6 +277,10 @@ def search():
             query=query,
             error="An error occurred. Please try again."
         )
+
+@app.route('/about')
+def about():
+    return render_template('about.html')
 
 @app.route('/suggest')
 def suggest():

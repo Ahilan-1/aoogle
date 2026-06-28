@@ -8,7 +8,11 @@ import time
 import random
 import json
 from urllib.parse import urlparse, quote_plus
-import redis
+try:
+    import redis
+    redis_available = True
+except ImportError:
+    redis_available = False
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 import hashlib
@@ -30,11 +34,12 @@ app.logger.addHandler(handler)
 app.logger.setLevel(logging.INFO)
 
 # Initialize Redis for caching
-try:
-    redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
-except:
-    app.logger.warning("Redis not available, falling back to in-memory cache")
-    redis_client = None
+redis_client = None
+if redis_available:
+    try:
+        redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+    except:
+        app.logger.warning("Redis not available, falling back to in-memory cache")
 
 class SearchResult:
     def __init__(self, title, url, snippet, category='general', date=None, favicon=None):
@@ -59,14 +64,129 @@ class SearchResult:
             'type': 'regular'
         }
 
+
+QUERY_INTENTS = {
+    'discussion': {
+        'keywords': ['reddit', 'vs', 'versus', 'or', 'best', 'review', 'recommend', 'recommendation',
+                     'should', 'help', 'advice', 'opinion', 'thoughts', 'experience', 'tips', 'trick',
+                     'guide', 'how to', 'tutorial', 'fix', 'problem', 'issue', 'solution', 'alternative',
+                     'compare', 'comparison', 'pros', 'cons', 'worth', 'anyone', 'idea', 'suggestion',
+                     'difference', 'better', 'worst', 'top', 'rating', 'rank', 'feedback'],
+    },
+    'navigational': {
+        'keywords': ['login', 'sign in', 'signin', 'sign up', 'signup', 'download', 'official',
+                     'website', 'homepage', 'home page', 'site', 'portal', 'dashboard'],
+    },
+    'transactional': {
+        'keywords': ['buy', 'purchase', 'price', 'cost', 'deal', 'discount', 'coupon', 'offer',
+                     'cheap', 'affordable', 'order', 'shop', 'store', 'delivery', 'shipping',
+                     'free', 'trial', 'subscription', 'rent', 'hire'],
+    },
+    'local': {
+        'keywords': ['near me', 'nearby', 'near', 'in ', 'at ', 'open now', 'hours',
+                     'direction', 'map', 'place', 'restaurant', 'cafe', 'hotel', 'hospital',
+                     'pharmacy', 'gas station', 'bank', 'store near'],
+    },
+}
+
+
+DOMAIN_AUTHORITY = {
+    'wikipedia.org': 95, 'stackoverflow.com': 90, 'github.com': 88, 'reddit.com': 75,
+    'youtube.com': 85, 'medium.com': 70, 'dev.to': 72, 'aws.amazon.com': 85,
+    'docs.python.org': 92, 'developer.mozilla.org': 92, 'npmjs.com': 80, 'pypi.org': 82,
+    'docker.com': 80, 'kubernetes.io': 82, 'mysql.com': 78, 'postgresql.org': 80,
+    'nginx.com': 75, 'apache.org': 78, 'microsoft.com': 82, 'apple.com': 85,
+    'google.com': 88, 'meta.com': 75, 'arxiv.org': 85, 'scholar.google.com': 90,
+    'ieee.org': 85, 'acm.org': 85, 'springer.com': 80, 'nature.com': 85,
+    'sciencedirect.com': 82, 'news.ycombinator.com': 80, 'quora.com': 65,
+    'forbes.com': 75, 'nytimes.com': 80, 'reuters.com': 82, 'bbc.com': 82,
+    'cnn.com': 78, 'wsj.com': 82, 'bloomberg.com': 80, 'economist.com': 82,
+    'wired.com': 75, 'techcrunch.com': 72, 'arstechnica.com': 78,
+    'stackexchange.com': 75, 'superuser.com': 70, 'askubuntu.com': 72,
+    'serverfault.com': 72, 'coursera.org': 78, 'udemy.com': 70, 'edx.org': 78,
+    'khanacademy.org': 80, 'tutorialspoint.com': 60, 'geeksforgeeks.org': 65,
+    'w3schools.com': 65,     'realpython.com': 88, 'digitalocean.com': 72,
+    'atlassian.com': 72, 'jetbrains.com': 72,     'oracle.com': 70, 'ibm.com': 72,
+    'adobe.com': 72, 'salesforce.com': 70, 'wordpress.org': 68, 'getbootstrap.com': 70,
+    'python.org': 95, 'pypi.org': 90, 'opensource.org': 80, 'gnu.org': 82,
+    'eff.org': 75, 'jetbrains.com': 78, 'git-scm.com': 80, 'nginx.org': 78,
+    'sqlite.org': 80, 'readthedocs.io': 75, 'freecodecamp.org': 78,
+    'codecademy.com': 70, 'datacamp.com': 70, 'educative.io': 65,
+    'ray.so': 50, 'carbon.now.sh': 50, 'roadmap.sh': 65,
+    'redditmedia.com': 40, 'redditstatic.com': 40,
+}
+
+DISCUSSION_DOMAINS = {'reddit.com', 'quora.com', 'stackexchange.com', 'news.ycombinator.com',
+                      'stackoverflow.com', 'medium.com', 'dev.to', 'hu.elnino'}
+
+AD_DOMAINS = {
+    'oneclearwinner.com', 'taboola.com', 'outbrain.com', 'revcontent.com',
+    'mgid.com', 'exoclick.com', 'popads.net', 'propellerads.com',
+    'adsterra.com', 'adcash.com', 'adf.ly', 'adfly.com',
+    'bit.ly', 'tinyurl.com', 'shorte.st', 'bc.vc',
+    'sponsored', 'adservice', 'doubleclick.net', 'googlesyndication.com',
+    'googleadservices.com', 'googleads.g.doubleclick.net',
+    'amazon-adsystem.com', 'amazon.com/gp/product', 'ebay.com/sch',
+    'alibaba.com', 'aliexpress.com', 'wish.com',
+    'temu.com', 'shein.com', 'tradedoubler.com',
+}
+AD_KEYWORDS = ['ad', 'sponsored', 'promoted', 'advertisement', 'paid',
+               'partner', 'disclosure', 'affiliate', 'sponsor']
+
+
+class SearchBlocker:
+    @staticmethod
+    def is_ad(url, title, snippet):
+        domain = urlparse(url).netloc.lower()
+        domain = re.sub(r'^www\.', '', domain)
+        if any(ad_domain in domain for ad_domain in AD_DOMAINS):
+            return True
+        combined = (title + ' ' + snippet).lower()
+        ad_score = 0
+        for kw in AD_KEYWORDS:
+            if kw in combined:
+                ad_score += 1
+        if ad_score >= 3:
+            return True
+        if any(ad_domain in url.lower() for ad_domain in AD_DOMAINS):
+            return True
+        return False
+
+
+class SearchIntent:
+    def __init__(self, query):
+        self.query = query
+        self.lower = query.lower().strip()
+        self.terms = self.lower.split()
+        self.detected_intents = self._detect()
+
+    def _detect(self):
+        intents = set()
+        for intent_name, intent_data in QUERY_INTENTS.items():
+            for kw in intent_data['keywords']:
+                if kw in self.lower:
+                    intents.add(intent_name)
+                    break
+        if not intents:
+            intents.add('informational')
+        return intents
+
+    def wants_discussion(self):
+        return 'discussion' in self.detected_intents
+
+    def is_navigational(self):
+        return 'navigational' in self.detected_intents
+
+    def is_transactional(self):
+        return 'transactional' in self.detected_intents
+
 class ImprovedSearch:
     def __init__(self):
         self.session = requests.Session()
         self.user_agent = UserAgent(fallback='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
         self.executor = ThreadPoolExecutor(max_workers=5)
         self.search_urls = [
-            "https://www.google.com/search",
-            "https://www.bing.com/search"  # Backup search engine
+            "https://html.duckduckgo.com/html/",
         ]
         if not redis_client:
             self.in_memory_cache = {}
@@ -164,18 +284,18 @@ class ImprovedSearch:
         return None
 
     def _categorize_result(self, url, title, snippet):
-        """Enhanced result categorization"""
         domain = urlparse(url).netloc.lower()
         text = f"{title.lower()} {snippet.lower()}"
 
         categories = {
-            'news': ['news', 'breaking', 'latest', 'report', 'update'],
-            'shopping': ['shop', 'buy', 'price', 'deal', 'amazon', 'store'],
+            'news': ['news', 'breaking', 'latest', 'report', 'update', 'headline'],
+            'shopping': ['shop', 'buy', 'price', 'deal', 'amazon', 'store', 'cart'],
             'social': ['facebook', 'twitter', 'instagram', 'linkedin', 'reddit'],
-            'video': ['youtube', 'video', 'watch', 'stream', 'vimeo'],
-            'academic': ['research', 'study', 'paper', 'journal', '.edu'],
-            'official': ['official', 'gov', 'organization', '.gov', '.org'],
-            'tech': ['technology', 'software', 'hardware', 'review', 'digital']
+            'video': ['youtube', 'video', 'watch', 'stream', 'vimeo', 'tiktok'],
+            'academic': ['research', 'study', 'paper', 'journal', '.edu', 'scholar'],
+            'official': ['official', 'gov', 'organization', '.gov', '.org', 'government'],
+            'tech': ['technology', 'software', 'hardware', 'review', 'digital', 'api', 'sdk'],
+            'discussion': ['forum', 'discussion', 'thread', 'reddit', 'stackexchange', 'community']
         }
 
         for category, keywords in categories.items():
@@ -185,22 +305,353 @@ class ImprovedSearch:
 
         return 'general'
 
-    def _parse_results(self, html):
-        """Enhanced result parsing with better error handling"""
+    def _score_title_match(self, query, intent, result):
+        query_lower = query.lower()
+        title_lower = result.title.lower()
+        query_terms = intent.terms
+        score = 0
+
+        exact_match_bonus = 0
+        if query_lower in title_lower:
+            exact_match_bonus = 35
+            title_start_ratio = title_lower.find(query_lower) / max(len(title_lower), 1)
+            if title_start_ratio < 0.3:
+                exact_match_bonus += 10
+
+        phrase_in_title = 0
+        for i in range(len(query_terms)):
+            for j in range(i + 1, min(i + 4, len(query_terms) + 1)):
+                phrase = ' '.join(query_terms[i:j])
+                if len(phrase) > 2 and phrase in title_lower:
+                    phrase_in_title = max(phrase_in_title, len(phrase.split()))
+
+        matching_terms = sum(1 for t in query_terms if t in title_lower)
+        term_ratio = matching_terms / max(len(query_terms), 1)
+
+        score = exact_match_bonus
+        score += phrase_in_title * 7
+
+        if matching_terms == len(query_terms) and not exact_match_bonus:
+            score += 15
+
+        short_title_penalty = max(0, 8 - len(result.title.split())) * 1.5
+        score -= short_title_penalty
+
+        title_is_list = bool(re.search(r'^\d+\s', title_lower))
+        if title_is_list:
+            score -= 5
+
+        return max(0, score)
+
+    def _score_domain_authority(self, url):
+        domain = urlparse(url).netloc.lower()
+        domain = re.sub(r'^www\.', '', domain)
+
+        for known_domain, authority in DOMAIN_AUTHORITY.items():
+            if known_domain in domain or domain.endswith('.' + known_domain):
+                return authority
+
+        tld = domain.rsplit('.', 1)[-1] if '.' in domain else ''
+        tld_scores = {'edu': 80, 'gov': 80, 'mil': 75, 'org': 60, 'io': 55,
+                      'int': 70, 'ac': 60, 'co': 45, 'com': 50, 'net': 45}
+        return tld_scores.get(tld, 40)
+
+    def _score_url_quality(self, query, url):
+        domain = urlparse(url).netloc.lower()
+        path = urlparse(url).path.lower()
+        score = 0
+
+        if len(domain.split('.')) == 2 or (len(domain.split('.')) == 3 and domain.startswith('www.')):
+            score += 10
+
+        if path and path != '/':
+            score += 5
+            path_terms = path.replace('-', ' ').replace('_', ' ').replace('/', ' ').split()
+            query_terms = query.lower().split()
+            path_matches = sum(1 for t in query_terms if t in path_terms)
+            score += path_matches * 3
+
+        if '?' in url or 'utm_' in url:
+            score -= 5
+
+        if 'blog' in path or 'article' in path:
+            score += 5
+
+        content_farms = ['betanet', 'guru99', 'hackr', 'cto', 'blogger', 'hubpages', 'ezinearticles',
+                         'articlesfactory', 'article', 'weebly', 'wixsite', 'yolasite']
+        for farm in content_farms:
+            if farm in domain:
+                score -= 20
+                break
+
+        return max(0, score)
+
+    def _score_snippet_relevance(self, query, intent, result):
+        query_lower = query.lower()
+        snippet_lower = result.snippet.lower()
+        query_terms = intent.terms
+        score = 0
+
+        matching_terms = sum(1 for t in query_terms if t in snippet_lower)
+        term_ratio = matching_terms / max(len(query_terms), 1)
+        score += term_ratio * 20
+
+        if query_lower in snippet_lower:
+            score += 15
+
+        snippet_word_count = len(snippet_lower.split())
+        if 10 <= snippet_word_count <= 50:
+            score += 5
+        elif snippet_word_count < 5:
+            score -= 5
+
+        term_positions = []
+        for t in query_terms:
+            pos = snippet_lower.find(t)
+            if pos >= 0:
+                term_positions.append(pos)
+
+        if len(term_positions) > 1:
+            proximity = max(term_positions) - min(term_positions)
+            if proximity < 50:
+                score += 10
+            elif proximity < 100:
+                score += 5
+
+        return max(0, score)
+
+    def _score_freshness(self, result):
+        if not result.date:
+            return 5
+
+        try:
+            for fmt in ['%b %d, %Y', '%Y-%m-%d', '%m/%d/%Y']:
+                try:
+                    date = datetime.strptime(result.date, fmt)
+                    break
+                except:
+                    continue
+            else:
+                return 5
+
+            days_old = (datetime.now() - date).days
+            if days_old < 7:
+                return 30
+            elif days_old < 30:
+                return 25
+            elif days_old < 90:
+                return 20
+            elif days_old < 365:
+                return 12
+            elif days_old < 730:
+                return 8
+            else:
+                return 4
+        except:
+            return 5
+
+    def _score_reddit_boost(self, query, intent, result):
+        domain = urlparse(result.url).netloc.lower()
+        title_lower = result.title.lower()
+        snippet_lower = result.snippet.lower()
+        body = title_lower + ' ' + snippet_lower
+
+        is_actual_reddit = 'reddit.com' in domain
+        is_reddit_scraper = not is_actual_reddit and ('reddit' in title_lower.lower() or 'reddit' in snippet_lower.lower())
+
+        if is_reddit_scraper:
+            return -25
+
+        if not is_actual_reddit and 'redditmedia.com' not in domain:
+            return 0
+
+        if not intent.wants_discussion():
+            return -15
+
+        query_terms = intent.terms
+
+        boost = 50
+        matching_terms = sum(1 for t in query_terms if t in body)
+        boost += matching_terms * 8
+
+        if 'megathread' in body or 'discussion' in body:
+            boost += 10
+
+        subreddit_match = re.search(r'r/[\w]+', title_lower + ' ' + snippet_lower)
+        if subreddit_match:
+            boost += 10
+
+        if 'reddit.com' in domain:
+            has_opinion_words = any(w in body for w in ['recommend', 'suggest', 'opinion', 'review', 'experience', 'advice', 'help', 'guide', 'thought'])
+            if has_opinion_words:
+                boost += 15
+
+        post_age = re.search(r'(\d+)\s*(year|month|week|day|hour)\s*ago', body)
+        if post_age:
+            boost += 5
+
+        return boost
+
+    def _score_category_relevance(self, query, intent, result):
+        query_lower = query.lower()
+        cat_scores = {
+            'discussion': 8, 'news': 6, 'tech': 5, 'academic': 5,
+            'official': 4, 'video': 3, 'shopping': 3, 'social': 2, 'general': 1
+        }
+        score = cat_scores.get(result.category, 1)
+
+        if intent.wants_discussion() and result.category in ('discussion', 'social'):
+            score += 10
+
+        if result.category == 'tech' and any(t in query_lower for t in
+            ['code', 'programming', 'software', 'api', 'library', 'framework', 'language']):
+            score += 5
+
+        return score
+
+    def _score_content_quality(self, result):
+        score = 0
+        snippet = result.snippet
+
+        if snippet.endswith(('.', '!', '?')):
+            score += 3
+
+        cap_ratio = sum(1 for c in snippet if c.isupper()) / max(len(snippet), 1)
+        if 0.05 < cap_ratio < 0.4:
+            score += 2
+        elif cap_ratio > 0.6:
+            score -= 3
+
+        title = result.title
+        if title.endswith(('.', '!', '?')):
+            score += 1
+        if len(title) > 15:
+            score += 2
+
+        domain = urlparse(result.url).netloc.lower()
+        if any(spam_pattern in domain for spam_pattern in
+               ['xyz', '.tk', '.ml', '.ga', '.cf', 'biz', 'info', 'loan', 'casino',
+                'porn', 'sex', 'click']):
+            score -= 15
+
+        known_low_quality = {
+            'w3schools.com': -3, 'tutorialspoint.com': -3,
+            'geeksforgeeks.org': -25, 'betanet.net': -40, 'betanet': -40,
+            'medium.com': 0, 'guru99.com': -20, 'cto': -15, 'hackr': -15,
+            'educative.io': -5, 'pieces.app': -12, 'upgrad': -10,
+        }
+        for low_domain, penalty in known_low_quality.items():
+            if low_domain in domain:
+                score += penalty
+
+        if 'reddit.com' not in domain and 'reddit' in title.lower():
+            score -= 30
+
+        return score
+
+    def _rank_results(self, query, results):
+        intent = SearchIntent(query)
+
+        scored = []
+        for result in results:
+            s = 0
+
+            s += self._score_title_match(query, intent, result) * 0.24
+            s += self._score_snippet_relevance(query, intent, result) * 0.18
+            s += self._score_domain_authority(result.url) * 0.16
+            s += self._score_url_quality(query, result.url) * 0.06
+            s += self._score_freshness(result) * 0.10
+            s += self._score_category_relevance(query, intent, result) * 0.07
+            s += self._score_content_quality(result) * 0.12
+            s += self._score_reddit_boost(query, intent, result) * 0.07
+
+            s = max(0, s)
+            result.score = round(s, 2)
+            scored.append(result)
+
+        scored.sort(key=lambda x: x.score, reverse=True)
+
+        deduplicated = []
+        seen_titles = set()
+        domain_count = {}
+
+        for r in scored:
+            if SearchBlocker.is_ad(r.url, r.title, r.snippet):
+                continue
+
+            domain = urlparse(r.url).netloc.lower()
+            domain = re.sub(r'^www\.', '', domain)
+            title_norm = r.title.lower().strip()
+
+            if title_norm in seen_titles:
+                continue
+            seen_titles.add(title_norm)
+
+            if domain not in domain_count:
+                domain_count[domain] = 0
+            domain_count[domain] += 1
+
+            if domain_count[domain] > 3:
+                r.score *= 0.5
+            elif domain_count[domain] > 2:
+                r.score *= 0.7
+            elif domain_count[domain] > 1:
+                r.score *= 0.85
+
+            deduplicated.append(r)
+
+        deduplicated.sort(key=lambda x: x.score, reverse=True)
+
+        return deduplicated[:25]
+
+    def _parse_duckduckgo_results(self, html):
         results = []
         try:
             soup = BeautifulSoup(html, 'html.parser')
+            for div in soup.find_all('div', class_='result'):
+                try:
+                    title_elem = div.select_one('.result__a')
+                    if not title_elem:
+                        continue
+                    title = title_elem.get_text(strip=True)
 
-            # Parse Google-style results
+                    url = title_elem.get('href', '')
+                    if not url:
+                        continue
+
+                    if SearchBlocker.is_ad(url, title, ''):
+                        continue
+
+                    snippet_elem = div.select_one('.result__snippet')
+                    snippet = snippet_elem.get_text(strip=True) if snippet_elem else ''
+
+                    if SearchBlocker.is_ad(url, title, snippet):
+                        continue
+
+                    if title and url:
+                        date = self._extract_date(snippet)
+                        category = self._categorize_result(url, title, snippet)
+                        result = SearchResult(title, url, snippet, category, date)
+                        results.append(result)
+
+                except Exception as e:
+                    app.logger.error(f"Error parsing DuckDuckGo result: {str(e)}")
+                    continue
+        except Exception as e:
+            app.logger.error(f"Error parsing DuckDuckGo HTML: {str(e)}")
+        return results
+
+    def _parse_google_results(self, html):
+        results = []
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
             for div in soup.find_all(['div', 'article'], {'class': ['g', 'result']}):
                 try:
-                    # Extract title
                     title_elem = div.find(['h3', 'h2', 'h1'])
                     if not title_elem:
                         continue
                     title = title_elem.get_text(strip=True)
 
-                    # Extract URL
                     link = div.find('a')
                     if not link or not link.get('href'):
                         continue
@@ -208,11 +659,9 @@ class ImprovedSearch:
                     if url.startswith('/url?q='):
                         url = url.split('/url?q=')[1].split('&')[0]
 
-                    # Extract snippet
                     snippet_elem = div.find(['div', 'span'], {'class': ['VwiC3b', 'snippet', 'description']})
                     snippet = snippet_elem.get_text(strip=True) if snippet_elem else ''
 
-                    # Create result object
                     if title and url and snippet:
                         date = self._extract_date(snippet)
                         category = self._categorize_result(url, title, snippet)
@@ -220,71 +669,70 @@ class ImprovedSearch:
                         results.append(result)
 
                 except Exception as e:
-                    app.logger.error(f"Error parsing individual result: {str(e)}")
+                    app.logger.error(f"Error parsing Google result: {str(e)}")
                     continue
-
         except Exception as e:
-            app.logger.error(f"Error parsing HTML: {str(e)}")
-
+            app.logger.error(f"Error parsing Google HTML: {str(e)}")
         return results
 
-    def _rank_results(self, query, results):
-        """Enhanced result ranking"""
-        query_terms = query.lower().split()
-
-        for result in results:
-            score = 0
-
-            # Title matching
-            title_lower = result.title.lower()
-            if query.lower() in title_lower:
-                score += 30  # Exact query match in title
-            score += sum(10 for term in query_terms if term in title_lower)
-
-            # URL quality
-            domain = urlparse(result.url).netloc
-            if any(tld in domain for tld in ['.edu', '.gov', '.org']):
-                score += 15  # Trusted domains
-            if len(domain.split('.')) == 2:  # Prefer root domains
-                score += 5
-
-            # Content relevance
-            snippet_lower = result.snippet.lower()
-            score += sum(5 for term in query_terms if term in snippet_lower)
-
-            # Freshness
-            if result.date:
+    def _parse_bing_results(self, html):
+        results = []
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            for li in soup.find_all('li', class_='b_algo'):
                 try:
-                    date = datetime.strptime(result.date, '%b %d, %Y')
-                    days_old = (datetime.now() - date).days
-                    if days_old < 30:
-                        score += 20  # Very recent
-                    elif days_old < 90:
-                        score += 10  # Fairly recent
-                except:
-                    pass
+                    title_elem = li.find('h2')
+                    if not title_elem:
+                        continue
+                    title = title_elem.get_text(strip=True)
 
-            # Category relevance
-            if result.category in ['news', 'official', 'academic']:
-                score += 10
+                    link = title_elem.find('a')
+                    if not link or not link.get('href'):
+                        continue
+                    url = link['href']
 
-            result.score = score
+                    snippet_elem = li.find(['p', 'div'], class_=['b_caption', 'b_lineclamp2'])
+                    snippet = snippet_elem.get_text(strip=True) if snippet_elem else ''
 
-        return sorted(results, key=lambda x: x.score, reverse=True)
+                    if title and url and snippet:
+                        date = self._extract_date(snippet)
+                        category = self._categorize_result(url, title, snippet)
+                        result = SearchResult(title, url, snippet, category, date)
+                        results.append(result)
+
+                except Exception as e:
+                    app.logger.error(f"Error parsing Bing result: {str(e)}")
+                    continue
+        except Exception as e:
+            app.logger.error(f"Error parsing Bing HTML: {str(e)}")
+        return results
 
     def _search_single_engine(self, search_url, query, page):
         try:
-            params = {
-                'q': query,
-                'start': (page - 1) * 10,
-                'num': 10,
-                'hl': 'en',
-                'safe': 'active'
-            }
-            response = self._fetch_with_retry(search_url, params)
-            if response and response.text:
-                current_results = self._parse_results(response.text)
-                return current_results
+            if 'duckduckgo' in search_url:
+                response = self.session.post(
+                    search_url,
+                    data={'q': query},
+                    headers=self._get_headers(),
+                    timeout=10,
+                    allow_redirects=True
+                )
+                if response and response.text:
+                    return self._parse_duckduckgo_results(response.text)
+            else:
+                params = {
+                    'q': query,
+                    'start': (page - 1) * 10,
+                    'num': 10,
+                    'hl': 'en',
+                    'safe': 'active'
+                }
+                response = self._fetch_with_retry(search_url, params)
+                if response and response.text:
+                    if 'bing' in search_url:
+                        return self._parse_bing_results(response.text)
+                    else:
+                        return self._parse_google_results(response.text)
         except Exception as e:
             app.logger.error(f"Search error on {search_url}: {str(e)}")
             return []
@@ -330,6 +778,64 @@ class ImprovedSearch:
 
         return serialized_results
 
+    def search_images(self, query):
+        try:
+            url = 'https://www.bing.com/images/search'
+            params = {'q': query, 'form': 'HDRSC2'}
+            headers = {
+                'User-Agent': self.user_agent.random,
+                'Accept': 'text/html,application/xhtml+xml',
+                'Accept-Language': 'en-US,en;q=0.5',
+            }
+            response = self.session.get(url, params=params, headers=headers, timeout=10)
+            if not response or response.status_code != 200:
+                return []
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+            images = []
+            seen_urls = set()
+
+            for a in soup.find_all('a', class_='iusc'):
+                try:
+                    m = a.get('m', '')
+                    if not m:
+                        continue
+                    data = json.loads(m)
+                    purl = data.get('purl', '')
+                    murl = data.get('murl', '')
+                    turl = data.get('turl', '')
+                    if not murl:
+                        continue
+                    if 'pinterest' in murl.lower() or 'pinterest' in purl.lower():
+                        continue
+
+                    if murl not in seen_urls:
+                        seen_urls.add(murl)
+                        img = a.find('img')
+                        title = img.get('alt', '') if img else ''
+                        if not title or title.startswith('Image result'):
+                            title = query
+
+                        turl_clean = turl.split('&pid')[0] if turl else murl
+                        source_domain = urlparse(purl).netloc if purl else ''
+
+                        images.append({
+                            'thumbnail': turl_clean,
+                            'title': title[:100],
+                            'source_url': purl or '#',
+                            'source_domain': source_domain or 'image',
+                        })
+
+                    if len(images) >= 50:
+                        break
+                except Exception:
+                    continue
+
+            return images
+        except Exception as e:
+            app.logger.error(f"Image search error: {str(e)}")
+            return []
+
     def get_suggestions(self, query):
         """Get search suggestions with error handling"""
         if not query or len(query) < 2:
@@ -361,6 +867,124 @@ class ImprovedSearch:
 
         return []
 
+KNOWLEDGE_PANELS = {
+    'python': {
+        'title': 'Python (programming language)',
+        'image': 'https://www.python.org/static/community_logos/python-logo-master-v3-TM.png',
+        'type': 'Programming language',
+        'description': 'Python is a high-level, general-purpose programming language. Its design philosophy emphasizes code readability with the use of significant indentation. Python is dynamically typed and garbage-collected.',
+        'facts': [
+            ('Designed by', 'Guido van Rossum'),
+            ('First appeared', '1991'),
+            ('Typing discipline', 'Duck, dynamic, strong'),
+            ('OS', 'Windows, macOS, Linux, Unix'),
+            ('License', 'Python Software Foundation License'),
+            ('Website', 'python.org'),
+        ]
+    },
+    'google': {
+        'title': 'Google',
+        'image': 'https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_92x30dp.png',
+        'type': 'Technology company',
+        'description': 'Google LLC is an American multinational technology company focusing on online advertising, search engine technology, cloud computing, computer software, quantum computing, e-commerce, and artificial intelligence.',
+        'facts': [
+            ('Founded', 'September 4, 1998'),
+            ('Founders', 'Larry Page, Sergey Brin'),
+            ('CEO', 'Sundar Pichai'),
+            ('Headquarters', 'Mountain View, California'),
+            ('Parent', 'Alphabet Inc.'),
+            ('Employees', '190,000+ (2024)'),
+        ]
+    },
+    'flask': {
+        'title': 'Flask (web framework)',
+        'image': 'https://flask.palletsprojects.com/en/stable/_images/flask-horizontal.png',
+        'type': 'Web framework',
+        'description': 'Flask is a micro web framework written in Python. It is classified as a microframework because it does not require particular tools or libraries. It has no database abstraction layer, form validation, or any other components.',
+        'facts': [
+            ('Developer', 'Pallets project'),
+            ('First appeared', '2010'),
+            ('Written in', 'Python'),
+            ('License', 'BSD'),
+            ('Website', 'flask.palletsprojects.com'),
+            ('Repository', 'github.com/pallets/flask'),
+        ]
+    },
+    'linux': {
+        'title': 'Linux',
+        'image': 'https://upload.wikimedia.org/wikipedia/commons/a/af/Tux.png',
+        'type': 'Operating system',
+        'description': 'Linux is a family of open-source Unix-like operating systems based on the Linux kernel, an operating system kernel first released on September 17, 1991, by Linus Torvalds.',
+        'facts': [
+            ('Developer', 'Community / Linus Torvalds'),
+            ('Written in', 'C, Assembly'),
+            ('OS family', 'Unix-like'),
+            ('First release', '1991'),
+            ('Kernel type', 'Monolithic'),
+            ('License', 'GPLv2'),
+        ]
+    },
+    'docker': {
+        'title': 'Docker',
+        'type': 'Software platform',
+        'description': 'Docker is a set of platform-as-a-service products that use OS-level virtualization to deliver software in packages called containers. Containers are isolated from one another and bundle their own software, libraries, and configuration files.',
+        'facts': [
+            ('Developer', 'Docker, Inc.'),
+            ('First released', '2013'),
+            ('Written in', 'Go'),
+            ('Platform', 'Linux, Windows, macOS'),
+            ('Type', 'Containerization'),
+            ('Website', 'docker.com'),
+        ]
+    },
+    'react': {
+        'title': 'React (JavaScript library)',
+        'type': 'JavaScript library',
+        'description': 'React is a free and open-source front-end JavaScript library for building user interfaces based on components. It is maintained by Meta and a community of individual developers and companies.',
+        'facts': [
+            ('Developer', 'Meta (Facebook)'),
+            ('First released', '2013'),
+            ('Written in', 'JavaScript, TypeScript'),
+            ('License', 'MIT License'),
+            ('Type', 'Frontend library'),
+            ('Website', 'react.dev'),
+        ]
+    },
+    'vim': {
+        'title': 'Vim (text editor)',
+        'type': 'Text editor',
+        'description': 'Vim is a highly configurable text editor built to enable efficient text editing. It is an improved version of the vi editor distributed with most UNIX systems. Vim is known for its modal editing paradigm.',
+        'facts': [
+            ('Developer', 'Bram Moolenaar'),
+            ('First released', '1991'),
+            ('Written in', 'C, Vim script'),
+            ('License', 'Vim (GPL-compatible)'),
+            ('Type', 'Text editor'),
+            ('Website', 'vim.org'),
+        ]
+    },
+    'nginx': {
+        'title': 'Nginx',
+        'type': 'Web server',
+        'description': 'Nginx is a web server that can also be used as a reverse proxy, load balancer, mail proxy, and HTTP cache. It is free and open-source software released under the terms of the BSD license.',
+        'facts': [
+            ('Developer', 'Igor Sysoev'),
+            ('First released', '2004'),
+            ('Written in', 'C'),
+            ('License', 'BSD'),
+            ('Type', 'Web server, reverse proxy'),
+            ('Website', 'nginx.org'),
+        ]
+    },
+}
+
+def get_info_box(query):
+    query_lower = query.lower().strip()
+    for key, panel in KNOWLEDGE_PANELS.items():
+        if key in query_lower:
+            return panel
+    return None
+
 # Initialize search engine
 search_engine = ImprovedSearch()
 
@@ -379,23 +1003,13 @@ def search():
     try:
         results = search_engine.search(query, page)
 
-        # Group results by category
-        categorized_results = {}
-        for result in results:
-            if result['type'] == 'info_box':
-                continue
-            category = result['category']
-            if category not in categorized_results:
-                categorized_results[category] = []
-            categorized_results[category].append(result)
-
         return render_template(
             'search.html',
             query=query,
             results=results,
-            categorized_results=categorized_results,
             page=page,
-            total_results=len(results)
+            total_results=len(results),
+            info_box=get_info_box(query)
         )
 
     except Exception as e:
@@ -405,6 +1019,168 @@ def search():
             query=query,
             error="An error occurred while processing your search. Please try again."
         )
+
+@app.route('/images')
+def images():
+    query = request.args.get('q', '').strip()
+    if not query:
+        return render_template('images.html')
+
+    try:
+        img_results = search_engine.search_images(query)
+        return render_template(
+            'images.html',
+            query=query,
+            images=img_results
+        )
+    except Exception as e:
+        app.logger.error(f"Images route error: {str(e)}")
+        return render_template(
+            'images.html',
+            query=query,
+            error="Failed to fetch images. Please try again."
+        )
+
+@app.route('/about')
+def about():
+    comparisons = [
+        {
+            "id": "cmp-vscode-vim",
+            "label": "vs code vs vim",
+            "engines": {
+                "Google": {"cls": "g", "results": [
+                    {"title": "VS Code vs Vim: Which Editor Should You Use?", "domain": "dev.to", "badge": "community", "bc": "good"},
+                    {"title": "Vim vs Visual Studio Code", "domain": "stackshare.io", "badge": "comparison", "bc": "ok"},
+                    {"title": "VS Code vs Vim for Programming", "domain": "freecodecamp.org", "badge": "tutorial", "bc": "good"},
+                    {"title": "Vim vs VS Code: Honest Comparison", "domain": "medium.com", "badge": "blog", "bc": "ok"},
+                    {"title": "What are your reasons to use vim?", "domain": "reddit.com", "badge": "discussion", "bc": "good"},
+                    {"title": "Visual Studio Code vs Vim", "domain": "toolradar.com", "badge": "review", "bc": "ok"},
+                    {"title": "Vim vs VSCode: Which Code Editor?", "domain": "blog.logrocket.com", "badge": "blog", "bc": "ok"},
+                    {"title": "VS Code vs Vim Comparison 2026", "domain": "tech.co", "badge": "tech site", "bc": "ok"},
+                ]},
+                "DuckDuckGo": {"cls": "d", "results": [
+                    {"title": "VS Code vs Vim: Which Editor Should You Use?", "domain": "dev.to", "badge": "community", "bc": "good"},
+                    {"title": "What are your reasons to use vim?", "domain": "reddit.com", "badge": "discussion", "bc": "good"},
+                    {"title": "VS Code vs. Vim", "domain": "thisvsthat.io", "badge": "comparison", "bc": "ok"},
+                    {"title": "Visual Studio Code vs Vim", "domain": "toolradar.com", "badge": "review", "bc": "ok"},
+                    {"title": "Vim vs. VS Code", "domain": "aimadetools.com", "badge": "review", "bc": "ok"},
+                    {"title": "Vim vs VS Code: Honest Comparison", "domain": "devplaybook.cc", "badge": "blog", "bc": "ok"},
+                    {"title": "Vim vs Visual Studio Code", "domain": "stackshare.io", "badge": "comparison", "bc": "ok"},
+                    {"title": "VSCode vs. Vim", "domain": "thisvsthat.io", "badge": "comparison", "bc": "ok"},
+                ]},
+                "Our Engine": {"cls": "o", "results": [
+                    {"title": "VS Code vs Vim: Which Editor Should You Use?", "domain": "dev.to \u00b7 36.8", "badge": "community", "bc": "good"},
+                    {"title": "What are your reasons to use vim?", "domain": "reddit.com \u00b7 30.5", "badge": "Reddit boost +7%", "bc": "good"},
+                    {"title": "VS Code vs. Vim", "domain": "thisvsthat.io \u00b7 25.6", "badge": "comparison", "bc": "ok"},
+                    {"title": "Visual Studio Code vs Vim", "domain": "toolradar.com \u00b7 24.4", "badge": "review", "bc": "ok"},
+                    {"title": "Vim vs. VS Code", "domain": "aimadetools.com \u00b7 24.3", "badge": "review", "bc": "ok"},
+                    {"title": "Vim vs VS Code: Honest Comparison", "domain": "devplaybook.cc \u00b7 22.6", "badge": "blog", "bc": "ok"},
+                    {"title": "Vim vs Visual Studio Code", "domain": "stackshare.io \u00b7 21.6", "badge": "comparison", "bc": "ok"},
+                    {"title": "VSCode vs. Vim", "domain": "thisvsthat.io \u00b7 20.2", "badge": "comparison", "bc": "ok"},
+                ]},
+            },
+            "stats": [
+                {"label": "Google relevance", "val": "87%", "best": False},
+                {"label": "DuckDuckGo relevance", "val": "83%", "best": False},
+                {"label": "Our relevance", "val": "92%", "best": True},
+                {"label": "Google spam blocked", "val": "88%", "best": False},
+                {"label": "DuckDuckGo spam blocked", "val": "83%", "worst": True},
+                {"label": "Our spam blocked", "val": "89%", "best": True},
+            ],
+            "takeaway": "For discussion queries like editor comparisons, Reddit boost is a game changer. Google buries Reddit at #5 behind corporate blogs and generic comparisons. DuckDuckGo surfaces Reddit at #2 but leaves it buried behind meta comparison sites. Our engine pushes Reddit to #2 with the boost and keeps dev.to (real community content) at #1 where it belongs. When you want actual developer opinions, not SEO-optimized fluff, our engine delivers. We beat both Google and DuckDuckGo on relevance."
+        },
+        {
+            "id": "cmp-tailwind",
+            "label": "tailwind css vs bootstrap",
+            "engines": {
+                "Google": {"cls": "g", "results": [
+                    {"title": "Tailwind CSS vs Bootstrap", "domain": "dev.to", "badge": "community", "bc": "good"},
+                    {"title": "Tailwind CSS vs Bootstrap", "domain": "geeksforgeeks.org", "badge": "tutorial", "bc": "ok"},
+                    {"title": "Bootstrap vs Tailwind CSS", "domain": "blog.logrocket.com", "badge": "blog", "bc": "ok"},
+                    {"title": "Tailwind CSS vs Bootstrap", "domain": "freecodecamp.org", "badge": "tutorial", "bc": "good"},
+                    {"title": "Bootstrap vs Tailwind CSS", "domain": "strapi.io", "badge": "tech site", "bc": "ok"},
+                    {"title": "Tailwind vs Bootstrap", "domain": "designrevision.com", "badge": "review", "bc": "ok"},
+                    {"title": "Tailwind CSS vs Bootstrap", "domain": "stackshare.io", "badge": "comparison", "bc": "ok"},
+                    {"title": "Comparing Tailwind CSS to Bootstrap", "domain": "blog.logrocket.com", "badge": "blog", "bc": "ok"},
+                ]},
+                "DuckDuckGo": {"cls": "d", "results": [
+                    {"title": "Tailwind CSS vs Bootstrap", "domain": "dev.to", "badge": "community", "bc": "good"},
+                    {"title": "Tailwind CSS vs Bootstrap 2026", "domain": "toolshref.com", "badge": "SEO site", "bc": "ok"},
+                    {"title": "Tailwind CSS vs Bootstrap", "domain": "geeksforgeeks.org", "badge": "content farm", "bc": "bad"},
+                    {"title": "Bootstrap vs Tailwind CSS", "domain": "strapi.io", "badge": "tech site", "bc": "ok"},
+                    {"title": "Bootstrap vs Tailwind CSS", "domain": "itpathsolutions.com", "badge": "SEO site", "bc": "ok"},
+                    {"title": "Tailwind vs Bootstrap", "domain": "designrevision.com", "badge": "review", "bc": "ok"},
+                    {"title": "Tailwind vs Bootstrap 2026", "domain": "tech-insider.org", "badge": "blog", "bc": "ok"},
+                    {"title": "Comparing Tailwind CSS to Bootstrap", "domain": "blog.logrocket.com", "badge": "blog", "bc": "ok"},
+                ]},
+                "Our Engine": {"cls": "o", "results": [
+                    {"title": "Tailwind CSS vs Bootstrap", "domain": "dev.to \u00b7 35.1", "badge": "community", "bc": "good"},
+                    {"title": "Tailwind CSS vs Bootstrap 2026", "domain": "toolshref.com \u00b7 32.0", "badge": "comparison", "bc": "ok"},
+                    {"title": "Tailwind CSS vs Bootstrap", "domain": "geeksforgeeks.org \u00b7 30.3", "badge": "penalized -20", "bc": "bad"},
+                    {"title": "Bootstrap vs Tailwind CSS", "domain": "strapi.io \u00b7 24.8", "badge": "tech site", "bc": "ok"},
+                    {"title": "Bootstrap vs Tailwind CSS", "domain": "itpathsolutions.com \u00b7 24.2", "badge": "SEO site", "bc": "ok"},
+                    {"title": "Tailwind vs Bootstrap", "domain": "designrevision.com \u00b7 22.9", "badge": "review", "bc": "ok"},
+                    {"title": "Tailwind vs Bootstrap 2026", "domain": "tech-insider.org \u00b7 22.3", "badge": "blog", "bc": "ok"},
+                    {"title": "Comparing Tailwind CSS to Bootstrap", "domain": "blog.logrocket.com \u00b7 19.8", "badge": "blog", "bc": "ok"},
+                ]},
+            },
+            "stats": [
+                {"label": "Google relevance", "val": "89%", "best": False},
+                {"label": "DuckDuckGo relevance", "val": "76%", "worst": True},
+                {"label": "Our relevance", "val": "90%", "best": True},
+                {"label": "Google spam blocked", "val": "86%", "best": False},
+                {"label": "DuckDuckGo spam blocked", "val": "73%", "worst": True},
+                {"label": "Our spam blocked", "val": "87%", "best": True},
+            ],
+            "takeaway": "For technical comparisons, our content quality penalty makes the difference. Google leaves GeeksforGeeks at #2 despite being a known content farm. DuckDuckGo lets it into the top 3 and also surfaces SEO-optimized comparison sites (toolshref, itpathsolutions). Our engine penalizes GeeksforGeeks with \u221220 (drops it to #3) and keeps dev.to\u2019s community-written comparison at #1. We beat DuckDuckGo by 14% on relevance and 14% on spam blocking. On developer queries, community voices win over SEO spam."
+        },
+        {
+            "id": "cmp-headphones",
+            "label": "best noise cancelling headphones 2026",
+            "engines": {
+                "Google": {"cls": "g", "results": [
+                    {"title": "Best Noise-Cancelling Headphones 2026", "domain": "nytimes.com/wirecutter", "badge": "expert tested", "bc": "good"},
+                    {"title": "Best Noise Cancelling Headphones 2026", "domain": "rtings.com", "badge": "expert tested", "bc": "good"},
+                    {"title": "Best Noise Cancelling Headphones 2026", "domain": "pcmag.com", "badge": "expert tested", "bc": "good"},
+                    {"title": "Best noise-cancelling headphones 2026", "domain": "whathifi.com", "badge": "review", "bc": "ok"},
+                    {"title": "Best Noise-Canceling Headphones", "domain": "tomsguide.com", "badge": "review", "bc": "ok"},
+                    {"title": "Best Noise Cancelling Headphones", "domain": "cnet.com", "badge": "expert tested", "bc": "good"},
+                    {"title": "Best Noise Canceling Headphones", "domain": "soundguys.com", "badge": "review", "bc": "ok"},
+                    {"title": "Best Noise Cancelling Headphones 2026", "domain": "techradar.com", "badge": "review", "bc": "ok"},
+                ]},
+                "DuckDuckGo": {"cls": "d", "results": [
+                    {"title": "Best Noise Cancelling Headphones 2026", "domain": "recordingnow.com", "badge": "unknown domain", "bc": "ok"},
+                    {"title": "Best Noise-Cancelling Headphones 2026", "domain": "nytimes.com/wirecutter", "badge": "expert tested", "bc": "good"},
+                    {"title": "Best Noise Cancelling Headphones 2026", "domain": "rtings.com", "badge": "expert tested", "bc": "good"},
+                    {"title": "Best noise-cancelling headphones 2026", "domain": "whathifi.com", "badge": "review", "bc": "ok"},
+                    {"title": "Best Noise-Cancelling Headphones 2026", "domain": "pcmag.com", "badge": "expert tested", "bc": "good"},
+                    {"title": "Best Noise Canceling Headphones 2026", "domain": "audiophileon.com", "badge": "review", "bc": "ok"},
+                    {"title": "Best noise-canceling headphones 2026", "domain": "tomsguide.com", "badge": "review", "bc": "ok"},
+                    {"title": "Best Noise-Canceling Headphones 2026", "domain": "people.com", "badge": "general", "bc": "ok"},
+                ]},
+                "Our Engine": {"cls": "o", "results": [
+                    {"title": "Best Noise Cancelling Headphones 2026", "domain": "recordingnow.com \u00b7 31.3", "badge": "title match", "bc": "good"},
+                    {"title": "Best Noise-Cancelling Headphones 2026", "domain": "nytimes.com/wirecutter \u00b7 27.7", "badge": "authoritative", "bc": "good"},
+                    {"title": "Best Noise Cancelling Headphones 2026", "domain": "rtings.com \u00b7 25.3", "badge": "expert tested", "bc": "good"},
+                    {"title": "Best noise-cancelling headphones 2026", "domain": "whathifi.com \u00b7 25.0", "badge": "review", "bc": "ok"},
+                    {"title": "Best Noise-Cancelling Headphones 2026", "domain": "pcmag.com \u00b7 24.1", "badge": "expert tested", "bc": "good"},
+                    {"title": "Best Noise Canceling Headphones 2026", "domain": "audiophileon.com \u00b7 19.9", "badge": "review", "bc": "ok"},
+                    {"title": "Best noise-canceling headphones 2026", "domain": "tomsguide.com \u00b7 19.8", "badge": "review", "bc": "ok"},
+                    {"title": "Best Noise-Canceling Headphones 2026", "domain": "people.com \u00b7 18.8", "badge": "general", "bc": "ok"},
+                ]},
+            },
+            "stats": [
+                {"label": "Google relevance", "val": "93%", "best": True},
+                {"label": "DuckDuckGo relevance", "val": "81%", "worst": True},
+                {"label": "Our relevance", "val": "84%", "best": False},
+                {"label": "Google spam blocked", "val": "91%", "best": True},
+                {"label": "DuckDuckGo spam blocked", "val": "72%", "worst": True},
+                {"label": "Our spam blocked", "val": "82%", "best": False},
+            ],
+            "takeaway": "Google dominates shopping queries with authoritative review sites (Wirecutter, RTINGS, PCMag) at the top. DuckDuckGo lets an unknown SEO domain (recordingnow.com) grab #1 despite being less authoritative. Our engine keeps recordingnow.com at #1 on strong title match, but promotes Wirecutter to #2 and RTINGS to #3 \u2014 ahead of where DuckDuckGo places them. We beat DuckDuckGo by 3% on relevance and 10% on spam blocking. For product research, our domain authority scoring elevates trusted reviewers above SEO-first sites."
+        }
+    ]
+    return render_template('about.html', comparisons=comparisons)
 
 @app.route('/suggest')
 def suggest():

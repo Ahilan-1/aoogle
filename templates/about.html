@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How it works</title>
+    <style>
+        body { margin:0; padding:0; font-family:arial,sans-serif; color:#222; background:#fff; }
+        a { color:#1a0dab; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+
+        .bar {
+            background:#fafafa; border-bottom:1px solid #ebebeb; padding:12px 0;
+            text-align:center; font-size:13px; color:#70757a;
+        }
+        .bar a { color:#70757a; margin:0 10px; }
+        .bar a:hover { color:#333; }
+
+        .wrap { max-width:680px; margin:0 auto; padding:40px 20px 80px; }
+
+        h1 { font-size:28px; font-weight:400; margin:0 0 4px; }
+        .sub { font-size:14px; color:#70757a; margin-bottom:36px; }
+
+        h2 { font-size:20px; font-weight:400; margin:36px 0 12px; }
+        p { font-size:14px; line-height:1.7; color:#444; margin:0 0 16px; }
+        p.less { color:#70757a; font-size:13px; }
+        .fact { font-weight:600; }
+
+        .sig-grid {
+            display:grid; grid-template-columns:1fr 1fr; gap:14px;
+            margin:24px 0 8px;
+        }
+        @media (max-width:560px) {
+            .sig-grid { grid-template-columns:1fr; }
+        }
+        .sig-card {
+            background:#fff; border-radius:12px; border:1px solid #e8e8e8;
+            padding:18px 18px 16px; border-left:4px solid #999;
+            box-shadow:0 1px 4px rgba(0,0,0,0.03);
+            transition:box-shadow .2s,border-color .2s;
+        }
+        .sig-card:hover { box-shadow:0 4px 16px rgba(0,0,0,0.06); border-color:#d0d0d0; }
+        .sig-top {
+            display:flex; align-items:baseline; gap:10px; margin-bottom:6px;
+        }
+        .sig-pct {
+            font-size:22px; font-weight:700; line-height:1; flex-shrink:0;
+        }
+        .sig-name {
+            font-size:14px; font-weight:600; color:#222;
+        }
+        .sig-desc {
+            font-size:13px; line-height:1.55; color:#555; margin:0;
+        }
+
+        .cmp-wrap {
+            background:#f8f9fa; border-top:1px solid #e8e8e8; border-bottom:1px solid #e8e8e8;
+            padding:40px 20px 50px; margin:32px -9999rem 32px;
+            padding-left:calc(50vw - 340px); padding-right:calc(50vw - 340px);
+        }
+        @media (max-width:720px) {
+            .cmp-wrap { padding-left:20px; padding-right:20px; margin-left:0; margin-right:0; }
+        }
+        .cmp-wrap h2 { margin-top:0; }
+        .cmp-grid {
+            display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-top:20px;
+        }
+        @media (max-width:780px) {
+            .cmp-grid { grid-template-columns:1fr; }
+        }
+        .cmp-col {
+            background:#fff; border-radius:12px; border:1px solid #e0e0e0;
+            overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.04);
+        }
+        .cmp-col-header {
+            padding:14px 16px; font-size:14px; font-weight:600; text-align:center;
+            border-bottom:1px solid #e8e8e8; letter-spacing:0.3px;
+        }
+        .cmp-col-header.g { color:#fff; background:#4285f4; }
+        .cmp-col-header.d { color:#fff; background:#de5833; }
+        .cmp-col-header.o { color:#fff; background:#34a853; }
+
+        .cmp-result {
+            display:flex; align-items:flex-start; gap:10px;
+            padding:10px 14px; border-bottom:1px solid #f0f0f0; font-size:13px;
+            transition:background 0.15s;
+        }
+        .cmp-result:last-child { border-bottom:none; }
+        .cmp-result:hover { background:#f8f9fa; }
+        .cmp-rank {
+            width:20px; height:20px; border-radius:50%; background:#f0f0f0;
+            display:flex; align-items:center; justify-content:center;
+            font-size:11px; font-weight:600; color:#70757a; flex-shrink:0; margin-top:1px;
+        }
+        .cmp-rank.top3 { background:#e8f0fe; color:#1a73e8; }
+        .cmp-result-inner { flex:1; min-width:0; }
+        .cmp-title { color:#1a0dab; font-weight:400; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .cmp-domain { color:#006621; font-size:12px; display:block; margin-top:1px; }
+        .cmp-badge {
+            display:inline-block; font-size:10px; font-weight:600; padding:1px 7px;
+            border-radius:8px; margin-top:3px; letter-spacing:0.2px;
+        }
+        .cmp-badge.good { background:#e6f4ea; color:#137333; }
+        .cmp-badge.ok { background:#fef7e0; color:#b06000; }
+        .cmp-badge.bad { background:#fce8e6; color:#c5221f; }
+        .cmp-badge.stale { background:#f1f3f4; color:#5f6368; }
+
+        .cmp-stats {
+            display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-top:20px;
+        }
+        @media (max-width:780px) {
+            .cmp-stats { grid-template-columns:1fr; }
+        }
+        .cmp-stat {
+            background:#fff; border-radius:10px; border:1px solid #e0e0e0;
+            padding:16px; text-align:center;
+        }
+        .cmp-stat-val { font-size:28px; font-weight:400; color:#1a73e8; }
+        .cmp-stat-label { font-size:12px; color:#70757a; margin-top:4px; }
+        .cmp-stat.best .cmp-stat-val { color:#34a853; }
+        .cmp-stat.worst .cmp-stat-val { color:#c5221f; }
+
+        .cmp-takeaway {
+            background:#fff; border:1px solid #dadce0; border-radius:10px;
+            padding:18px 20px; margin-top:20px; font-size:13px; line-height:1.6; color:#444;
+        }
+        .cmp-takeaway strong { color:#222; }
+
+        .cmp-tabs {
+            display:flex; gap:8px; margin:16px 0 20px; flex-wrap:wrap;
+        }
+        .cmp-tab {
+            padding:8px 16px; font-size:13px; border-radius:20px; border:1px solid #dadce0;
+            background:#fff; color:#444; cursor:pointer; transition:all .15s;
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;
+            user-select:none;
+        }
+        .cmp-tab:hover { border-color:#1a73e8; color:#1a73e8; background:#f8f9ff; }
+        .cmp-tab.active { background:#1a73e8; color:#fff; border-color:#1a73e8; }
+        .cmp-panel { display:none; }
+        .cmp-panel.active { display:block; }
+        @media (max-width:520px) {
+            .cmp-tabs { gap:6px; }
+            .cmp-tab { font-size:12px; padding:6px 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bar">
+        <a href="/">aoogle</a> &middot; <a href="/search">Web</a> &middot; <a href="/images">Images</a>
+    </div>
+
+    <div class="wrap">
+        <h1>How it works</h1>
+        <div class="sub">A plain explanation of what happens when you search.</div>
+
+        <p>When you type a query and hit enter, it gets sent to public web indexes. The results that come back are then sorted by a scoring system that looks at a bunch of signals to figure out what&rsquo;s most useful.</p>
+
+        <p>Unlike Google or DuckDuckGo, there are no AI summaries to scroll past, no sponsored results, no ads disguised as content. Type a query, get real results, scroll zero.</p>
+
+        <h2>The signals</h2>
+
+        <div class="sig-grid">
+            <div class="sig-card" style="border-left-color:#4285f4;">
+                <div class="sig-top"><span class="sig-pct" style="color:#4285f4;">24%</span><span class="sig-name">Title match</span></div>
+                <p class="sig-desc">Does the page title contain your search words? Exact matches and phrases rank higher. Short or generic titles get penalized.</p>
+            </div>
+            <div class="sig-card" style="border-left-color:#0891b2;">
+                <div class="sig-top"><span class="sig-pct" style="color:#0891b2;">18%</span><span class="sig-name">Snippet relevance</span></div>
+                <p class="sig-desc">How often do your search terms appear in the result description? If they&rsquo;re clustered close together, that&rsquo;s a good sign.</p>
+            </div>
+            <div class="sig-card" style="border-left-color:#7c3aed;">
+                <div class="sig-top"><span class="sig-pct" style="color:#7c3aed;">16%</span><span class="sig-name">Domain authority</span></div>
+                <p class="sig-desc">Some sites are more trustworthy. Wikipedia, Stack&nbsp;Overflow, and .gov sites score high. Content farms and spammy domains score low.</p>
+            </div>
+            <div class="sig-card" style="border-left-color:#16a34a;">
+                <div class="sig-top"><span class="sig-pct" style="color:#16a34a;">12%</span><span class="sig-name">Content quality</span></div>
+                <p class="sig-desc">Known low-quality sites like GeeksforGeeks, Guru99, and betanet.net are heavily penalized. Proper capitalization gets a small boost.</p>
+            </div>
+            <div class="sig-card" style="border-left-color:#ea580c;">
+                <div class="sig-top"><span class="sig-pct" style="color:#ea580c;">10%</span><span class="sig-name">Freshness</span></div>
+                <p class="sig-desc">Newer content gets a boost. Results less than 6 months old score full points. Older content gradually drops off.</p>
+            </div>
+            <div class="sig-card" style="border-left-color:#d946ef;">
+                <div class="sig-top"><span class="sig-pct" style="color:#d946ef;">7%</span><span class="sig-name">Category relevance</span></div>
+                <p class="sig-desc">The engine guesses what a result is about (tutorial, news, forum) and whether that matches the type of answer you&rsquo;re looking for.</p>
+            </div>
+            <div class="sig-card" style="border-left-color:#dc2626;">
+                <div class="sig-top"><span class="sig-pct" style="color:#dc2626;">7%</span><span class="sig-name">Reddit boost</span></div>
+                <p class="sig-desc">If your query sounds like you want discussion (vs, best, review, opinion), Reddit results get pushed up. Pages baiting with &ldquo;reddit&rdquo; get penalized.</p>
+            </div>
+            <div class="sig-card" style="border-left-color:#64748b;">
+                <div class="sig-top"><span class="sig-pct" style="color:#64748b;">6%</span><span class="sig-name">URL quality</span></div>
+                <p class="sig-desc">Clean, short URLs beat long ones with tracking parameters. URLs that match the query in the path get a bonus.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="cmp-wrap">
+        <div class="wrap" style="padding-top:0;padding-bottom:0;">
+            <h2>How we compare</h2>
+            <p style="margin-bottom:4px;">We searched the same queries on Google and DuckDuckGo too &mdash; here&rsquo;s what happened. Notice they both serve AI summaries and ads before you see a single real result. We don&rsquo;t.</p>
+            <p class="less" style="margin-bottom:0;">Green = human-written comparison &middot; Yellow = product page &middot; Red = content farm</p>
+
+            <div class="cmp-tabs">
+                {% for cmp in comparisons %}
+                <div class="cmp-tab{% if loop.first %} active{% endif %}" onclick="switchTab(this,'{{ cmp.id }}')">{{ cmp.label }}</div>
+                {% endfor %}
+            </div>
+
+            {% for cmp in comparisons %}
+            <div id="{{ cmp.id }}" class="cmp-panel{% if loop.first %} active{% endif %}">
+                <div class="cmp-grid">
+                {% for name,engine in cmp.engines.items() %}
+                    <div class="cmp-col">
+                        <div class="cmp-col-header {{ engine.cls }}">{{ name }}</div>
+                        {% for r in engine.results %}
+                        <div class="cmp-result"><div class="cmp-rank{% if loop.index <= 3 %} top3{% endif %}">{{ loop.index }}</div><div class="cmp-result-inner"><span class="cmp-title">{{ r.title }}</span><span class="cmp-domain">{{ r.domain }}</span><span class="cmp-badge {{ r.bc }}">{{ r.badge }}</span></div></div>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+                </div>
+                <div class="cmp-stats">
+                {% for s in cmp.stats %}
+                    <div class="cmp-stat{% if s.best %} best{% endif %}{% if s.worst %} worst{% endif %}"><div class="cmp-stat-val">{{ s.val }}</div><div class="cmp-stat-label">{{ s.label }}</div></div>
+                {% endfor %}
+                </div>
+                <div class="cmp-takeaway"><strong>What this tells us:</strong> {{ cmp.takeaway }}</div>
+            </div>
+            {% endfor %}
+
+            <p class="less" style="margin-top:20px;margin-bottom:0;">&bull; Google surfaces AI overviews before any results &bull; DuckDuckGo shows promoted links &bull; We show results, period. No summaries, no ads, no scroll tax.</p>
+        </div>
+    </div>
+
+    <div class="wrap">
+        <h2>Image search</h2>
+        <p>Image results come from web image indexes. The source page URL and full-resolution image URL are extracted, and results from sites like Pinterest are filtered out since they tend to dominate otherwise.</p>
+
+        <h2>Privacy</h2>
+        <p>This engine doesn&rsquo;t track you. No cookies, no analytics, no profile building. Queries go directly to public indexes without any tracking parameters attached.</p>
+
+        <a href="/" style="display:inline-block;margin-top:36px;font-size:14px;color:#70757a;">&larr; Back</a>
+    </div>
+    <script>
+    function switchTab(el,id){
+        var tabs = el.parentNode;
+        for(var i=0;i<tabs.children.length;i++)tabs.children[i].classList.remove('active');
+        el.classList.add('active');
+        var wrap = tabs.parentNode;
+        var panels = wrap.querySelectorAll('.cmp-panel');
+        for(var i=0;i<panels.length;i++)panels[i].classList.remove('active');
+        document.getElementById(id).classList.add('active');
+    }
+    </script>
+</body>
+</html>

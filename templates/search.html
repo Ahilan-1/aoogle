@@ -3,442 +3,365 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% if query %}{{ query }} - {% endif %}Search</title>
+    <title>{% if query %}{{ query }} - {% endif %}aoogle</title>
     <style>
-        :root {
-            --apple-gray: #86868b;
-            --apple-light-gray: #f5f5f7;
-            --apple-blue: #0066cc;
-            --apple-dark: #1d1d1f;
-            --apple-highlight: #ffcc00;
+        *, *::before, *::after { box-sizing:border-box; }
+        body { margin:0; padding:0; font-family:arial,sans-serif; color:#222; background:#fff; }
+        a { text-decoration:none; color:#1a0dab; }
+        a:hover { text-decoration:underline; }
+        a:visited { color:#609; }
+
+        .glogo {
+            display:block; text-align:center; padding-top:140px; font-size:72px;
+            font-family:'Product Sans',Arial,sans-serif; color:#222; letter-spacing:-2px;
+        }
+        .glogo span:nth-child(1) { color:#4285f4; }
+        .glogo span:nth-child(2) { color:#ea4335; }
+        .glogo span:nth-child(3) { color:#fbbc05; }
+        .glogo span:nth-child(4) { color:#4285f4; }
+        .glogo span:nth-child(5) { color:#34a853; }
+        .glogo span:nth-child(6) { color:#ea4335; }
+
+        .homepage { text-align:center; }
+        .homepage .search-form { margin-top:24px; position:relative; display:inline-block; }
+        .homepage .search-input-wrap { position:relative; }
+        .homepage .search-box {
+            width:580px; height:44px; border:1px solid #dfe1e5; border-radius:24px;
+            padding:0 20px; font-size:16px; outline:none;
+            transition:box-shadow .2s; display:block;
+        }
+        .homepage .search-box:hover, .homepage .search-box:focus {
+            box-shadow:0 1px 6px rgba(32,33,36,.28); border-color:rgba(223,225,229,0);
+        }
+        .homepage .buttons { margin-top:24px; }
+        .homepage .buttons input, .homepage .buttons button {
+            background:#f8f9fa; border:1px solid #f8f9fa; border-radius:4px;
+            color:#3c4043; font-size:14px; margin:6px 4px; padding:0 16px;
+            line-height:36px; height:36px; cursor:pointer; min-width:120px; font-family:arial,sans-serif;
+        }
+        .homepage .buttons input:hover, .homepage .buttons button:hover {
+            box-shadow:0 1px 1px rgba(0,0,0,.1); border-color:#dadce0;
+        }
+        .homepage .about-link { margin-top:30px; font-size:13px; color:#70757a; }
+        .homepage .about-link a { color:#1a0dab; }
+
+
+
+        .results-header {
+            padding:16px 20px 0; border-bottom:1px solid #ebebeb; position:sticky;
+            top:0; background:#fff; z-index:100;
+        }
+        .results-header .top-row {
+            display:flex; align-items:center; gap:20px; max-width:1100px; margin:0 auto;
+        }
+        .results-header .mini-logo {
+            font-size:28px; font-family:'Product Sans',Arial,sans-serif; white-space:nowrap;
+            letter-spacing:-1px; line-height:1; color:#222;
+        }
+        .results-header .mini-logo span:nth-child(1) { color:#4285f4; }
+        .results-header .mini-logo span:nth-child(2) { color:#ea4335; }
+        .results-header .mini-logo span:nth-child(3) { color:#fbbc05; }
+        .results-header .mini-logo span:nth-child(4) { color:#4285f4; }
+        .results-header .mini-logo span:nth-child(5) { color:#34a853; }
+        .results-header .mini-logo span:nth-child(6) { color:#ea4335; }
+        .results-header .rs-wrap { flex:1; max-width:640px; position:relative; }
+        .results-header .rs-input {
+            width:100%; height:40px; border:1px solid #dfe1e5;
+            border-radius:24px; padding:0 18px; font-size:14px; outline:none;
+            box-shadow:0 1px 6px rgba(32,33,36,.08);
+        }
+        .results-header .rs-input:focus { box-shadow:0 1px 6px rgba(32,33,36,.28); }
+
+        .results-nav { max-width:1100px; margin:0 auto; padding:4px 0 0; display:flex; }
+        .results-nav a {
+            padding:12px 16px 10px; font-size:13px; color:#5f6368; display:inline-block;
+            border-bottom:3px solid transparent;
+        }
+        .results-nav a.active { color:#1a73e8; border-bottom-color:#1a73e8; }
+        .results-nav a:hover { color:#1a73e8; text-decoration:none; }
+
+        .results-layout { max-width:1100px; margin:0 auto; padding:16px 20px 60px; display:flex; gap:40px; }
+        .results-main { flex:1; max-width:652px; }
+        .results-sidebar { width:320px; flex-shrink:0; }
+
+        .result-card { margin-bottom:24px; }
+        .result-url {
+            display:flex; align-items:center; font-size:14px; color:#006621;
+            line-height:1.5;
+        }
+        .result-favicon { width:16px; height:16px; margin-right:6px; border-radius:50%; }
+        .result-title {
+            font-size:18px; line-height:1.4; font-weight:400;
+            display:inline-block;
+        }
+        .result-snippet { color:#545454; font-size:14px; line-height:1.58; word-wrap:break-word; }
+        .result-metadata {
+            display:flex; align-items:center; gap:8px; margin-top:2px; font-size:13px; color:#808080;
+        }
+        .result-category {
+            background:#f1f3f4; padding:2px 8px; border-radius:10px; font-size:11px; color:#3c4043;
+        }
+        .result-score { color:#ddd; font-size:11px; }
+        .reddit-result .result-title { color:#ff4500; }
+
+        .pagination { text-align:center; margin:40px 0; }
+        .pagination a {
+            display:inline-block; padding:8px 14px; color:#4285f4; font-size:13px;
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-        }
-
-        body {
-            background: #fff;
-            min-height: 100vh;
-            color: var(--apple-dark);
-        }
-
-        .header {
-            padding: 20px;
-            background: rgba(255, 255, 255, 0.98);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            backdrop-filter: blur(20px);
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .header.home {
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            background: var(--apple-light-gray);
-        }
-
-        .logo {
-            font-size: 24px;
-            font-weight: bold;
-            margin-right: 40px;
-            color: var(--apple-dark);
-            text-decoration: none;
-        }
-
-        .logo.home {
-            font-size: 48px;
-            margin: 0 auto 20px;
-            text-align: center;
-        }
-
-        .search-container {
-            max-width: 720px;
-            margin: 0 auto;
-            width: 100%;
-        }
-
-        .search-box {
-            display: flex;
-            align-items: center;
-            background: var(--apple-light-gray);
-            border-radius: 12px;
-            padding: 14px 18px;
-            max-width: 720px;
-            width: 100%;
-            margin: 0 auto;
-            transition: all 0.3s ease;
-            position: relative;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-        }
-
-        .search-box:hover,
-        .search-box:focus-within {
-            background: #fff;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-        }
-
-        .search-input {
-            flex: 1;
-            border: none;
-            outline: none;
-            font-size: 18px;
-            background: transparent;
-            padding: 0 8px;
-            width: 100%;
-        }
-
-        .search-button {
-            background: none;
-            border: none;
-            cursor: pointer;
-            padding: 0 8px;
-            color: var(--apple-gray);
-            transition: color 0.2s;
-        }
-
-        .search-button:hover {
-            color: var(--apple-blue);
-        }
+        .error-message { text-align:center; padding:80px 20px; color:#70757a; font-size:16px; }
 
         .suggestions-box {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
-            background: #fff;
-            border-radius: 12px;
-            margin-top: 8px;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-            z-index: 1000;
-            max-height: 300px;
-            overflow-y: auto;
-            display: none;
+            display:none; position:absolute; top:100%; left:0; right:0;
+            background:#fff; border:1px solid #dfe1e5; border-radius:16px;
+            box-shadow:0 8px 24px rgba(0,0,0,0.12); z-index:200;
+            margin-top:4px; padding:6px 0; overflow:hidden;
         }
-
-        .suggestion-item {
-            padding: 12px 16px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: background-color 0.2s;
+        .suggestions-box.show { display:block; }
+        .suggestions-box .sug-item {
+            padding:8px 20px; font-size:14px; color:#222; cursor:pointer; text-align:left;
         }
+        .suggestions-box .sug-item:hover { background:#f8f9fa; }
 
-        .suggestion-item:hover {
-            background-color: var(--apple-highlight);
+        .info-box {
+            border:1px solid #e0e0e0; border-radius:8px; padding:20px;
+            margin-bottom:24px; background:#fff;
         }
-
-        .results-container {
-            max-width: 850px;
-            margin: 30px auto;
-            padding: 0 20px;
+        .info-box .ib-title {
+            font-size:20px; font-weight:400; margin:0 0 4px;
         }
-
-        .category-section {
-            margin-bottom: 50px;
+        .info-box .ib-type {
+            font-size:14px; color:#70757a; margin-bottom:12px;
         }
-
-        .category-title {
-            font-size: 26px;
-            font-weight: 600;
-            margin-bottom: 18px;
-            color: var(--apple-dark);
-            text-transform: capitalize;
+        .info-box .ib-img {
+            width:100%; max-height:120px; object-fit:contain; margin-bottom:12px;
         }
-
-        .result-card {
-            margin-bottom: 26px;
-            padding: 18px;
-            border-radius: 14px;
-            transition: background-color 0.2s, box-shadow 0.2s;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        .info-box .ib-desc {
+            font-size:14px; color:#545454; line-height:1.5; margin-bottom:12px;
         }
-
-        .result-card:hover {
-            background: var(--apple-light-gray);
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+        .info-box .ib-facts { width:100%; border-collapse:collapse; }
+        .info-box .ib-facts td {
+            padding:4px 0; font-size:13px; vertical-align:top;
         }
-        
-        .result-url {
-            display: flex;
-            align-items: center;
-            color: var(--apple-gray);
-            font-size: 15px;
-            margin-bottom: 8px;
-            text-decoration: none;
+        .info-box .ib-facts td:first-child {
+            color:#70757a; white-space:nowrap; padding-right:12px; font-weight:500;
         }
+        .info-box .ib-facts td:last-child { color:#222; }
 
-        .result-favicon {
-            width: 18px;
-            height: 18px;
-            margin-right: 10px;
-            border-radius: 4px;
+        @media (max-width:900px) {
+            .homepage .search-box { width:460px; }
+            .results-layout { flex-direction:column; }
+            .results-sidebar { width:100%; }
         }
-
-        .result-title {
-            color: var(--apple-blue);
-            font-size: 20px;
-            line-height: 1.4;
-            margin-bottom: 10px;
-            text-decoration: none;
-            font-weight: 500;
-        }
-
-        .result-title:hover {
-            text-decoration: underline;
-        }
-
-        .result-snippet {
-            color: var(--apple-gray);
-            font-size: 16px;
-            line-height: 1.6;
-        }
-
-        .result-metadata {
-            display: flex;
-            align-items: center;
-            margin-top: 10px;
-            font-size: 14px;
-            color: var(--apple-gray);
-            gap: 10px;
-        }
-
-        .result-category {
-            background: var(--apple-light-gray);
-            padding: 6px 10px;
-            border-radius: 14px;
-            font-weight: 500;
-            text-transform: capitalize;
-        }
-
-        .result-date {
-            color: var(--apple-gray);
-        }
-
-        .pagination {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            margin: 50px 0;
-            gap: 14px;
-        }
-
-        .page-button {
-            padding: 14px 28px;
-            border: none;
-            background: var(--apple-light-gray);
-            color: var(--apple-blue);
-            font-size: 16px;
-            border-radius: 24px;
-            cursor: pointer;
-            text-decoration: none;
-            transition: all 0.3s;
-        }
-
-        .page-button:hover {
-            background: #e8e8ed;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-        }
-
-        .error-message {
-            text-align: center;
-            padding: 80px 20px;
-            color: var(--apple-gray);
-            font-size: 20px;
-        }
-
-        .loading {
-            display: none;
-            justify-content: center;
-            align-items: center;
-            padding: 50px 20px;
-            gap: 14px;
-        }
-
-        .loading.active {
-            display: flex;
-        }
-
-        .loading-spinner {
-            width: 28px;
-            height: 28px;
-            border: 4px solid var(--apple-light-gray);
-            border-top-color: var(--apple-blue);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        @media (max-width: 768px) {
-            .header {
-                padding: 18px;
-            }
-
-            .result-card {
-                padding: 14px;
-            }
+        @media (max-width:560px) {
+            .homepage .search-box { width:90%; }
+            .results-header .top-row { gap:10px; }
         }
     </style>
 </head>
 <body>
-    <header class="header {% if not results %}home{% endif %}">
-        {% if not results %}
-            <a href="/" class="logo home">Search </a>
-        {% else %}
-            <div style="display: flex; align-items: center;">
-                <a href="/" class="logo">Search</a>
-                <form class="search-box" action="/search" method="GET">
-                    <input 
-                        type="text" 
-                        name="q" 
-                        class="search-input" 
-                        value="{{ query if query else '' }}" 
-                        required 
-                        autocomplete="off"
-                        placeholder="Search..."
-                    >
-                    <button type="submit" class="search-button">
-                        <svg width="22" height="22" viewBox="0 0 20 20" fill="none">
-                            <path d="M9 17A8 8 0 1 0 9 1a8 8 0 0 0 0 16zM19 19l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
-                    </button>
-                    <div class="suggestions-box" id="suggestionsBox"></div>
+    {% set is_home = not results and not error %}
+    {% if is_home %}
+    <div class="homepage">
+        <div class="glogo">
+            <span>a</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span>
+        </div>
+        <div class="search-form">
+            <form action="/search" method="GET" autocomplete="off" id="hp-form">
+                <div class="search-input-wrap">
+                    <input type="text" name="q" class="search-box" id="hp-search" required placeholder="" autocomplete="off">
+                    <div class="suggestions-box" id="hp-suggest"></div>
+                </div>
+                <div class="buttons">
+                    <input type="submit" value="Search">
+                    <button type="button" id="lucky-btn">I'm Feeling Lucky</button>
+                </div>
+            </form>
+        </div>
+        <div style="margin-top:30px;font-size:13px;color:#70757a;">
+            <a href="/about" style="color:#1a0dab;">How it works</a>
+        </div>
+    </div>
+
+    {% else %}
+
+    <div class="results-header">
+        <div class="top-row">
+            <a href="/" class="mini-logo">
+                <span>a</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span>
+            </a>
+            <div class="rs-wrap">
+                <form action="/search" method="GET">
+                    <input type="text" name="q" class="rs-input" id="rs-input" value="{{ query }}" autocomplete="off">
+                    <div class="suggestions-box" id="rs-suggest"></div>
                 </form>
             </div>
-        {% endif %}
+        </div>
+        <div class="results-nav">
+            <a href="/search?q={{ query }}" class="active">Web</a>
+            <a href="/images?q={{ query }}">Images</a>
+        </div>
+    </div>
 
-        {% if not results %}
-            <div class="search-container">
-                <form class="search-box" action="/search" method="GET">
-                    <input 
-                        type="text" 
-                        name="q" 
-                        class="search-input" 
-                        required 
-                        autocomplete="off"
-                        placeholder="Search..."
-                    >
-                    <button type="submit" class="search-button">
-                        <svg width="22" height="22" viewBox="0 0 20 20" fill="none">
-                            <path d="M9 17A8 8 0 1 0 9 1a8 8 0 0 0 0 16zM19 19l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
-                    </button>
-                    <div class="suggestions-box" id="suggestionsBox"></div>
-                </form>
-            </div>
-        {% endif %}
-    </header>
+    <div class="results-layout">
+        <div class="results-main">
+            {% if error %}
+                <div class="error-message">{{ error }}</div>
+            {% endif %}
 
-    <main class="results-container">
-        {% if error %}
-            <div class="error-message">
-                <h2>{{ error }}</h2>
-            </div>
-        {% endif %}
+            {% if results %}
+                <div style="color:#70757a;font-size:13px;margin-bottom:16px;">
+                    About {{ total_results }} results
+                </div>
+                {% for result in results %}
+                    <div class="result-card {{ 'reddit-result' if 'reddit' in result.url else '' }}">
+                        <div class="result-url">
+                            <img src="{{ result.favicon }}" alt="" class="result-favicon" onerror="this.style.display='none'">
+                            {{ result.display_url }}
+                        </div>
+                        <a href="{{ result.url }}" class="result-title" target="_blank">{{ result.title }}</a>
+                        <div class="result-snippet">{{ result.snippet }}</div>
+                        <div class="result-metadata">
+                            <span class="result-category">{{ result.category }}</span>
+                            {% if result.date %}<span class="result-date">{{ result.date }}</span>{% endif %}
+                            <span class="result-score">{{ result.score }}</span>
+                        </div>
+                    </div>
+                {% endfor %}
 
-        {% if categorized_results %}
-            {% for category, results in categorized_results.items() %}
-                {% if results %}
-                    <section class="category-section">
-                        <h2 class="category-title">{{ category }}</h2>
-                        {% for result in results %}
-                            <article class="result-card">
-                                <a href="{{ result.url }}" class="result-url" target="_blank">
-                                    <img src="{{ result.favicon }}" alt="" class="result-favicon">
-                                    {{ result.display_url }}
-                                </a>
-                                <a href="{{ result.url }}" class="result-title" target="_blank">{{ result.title }}</a>
-                                <p class="result-snippet">{{ result.snippet }}</p>
-                                <div class="result-metadata">
-                                    <span class="result-category">{{ result.category }}</span>
-                                    {% if result.date %}
-                                        <span class="result-date">{{ result.date }}</span>
-                                    {% endif %}
-                                </div>
-                            </article>
-                        {% endfor %}
-                    </section>
-                {% endif %}
-            {% endfor %}
-        {% endif %}
-
-        <div class="loading">
-            <div class="loading-spinner"></div>
-            <p>Searching...</p>
+                <div class="pagination">
+                    {% if page > 1 %}
+                        <a href="/search?q={{ query }}&page={{ page - 1 }}">Previous</a>
+                    {% endif %}
+                    {% if total_results >= 10 %}
+                        <a href="/search?q={{ query }}&page={{ page + 1 }}">Next</a>
+                    {% endif %}
+                </div>
+            {% endif %}
         </div>
 
-        {% if results %}
-            <div class="pagination">
-                {% if page > 1 %}
-                    <a href="/search?q={{ query }}&page={{ page - 1 }}" class="page-button">Previous</a>
+        {% if info_box %}
+        <aside class="results-sidebar">
+            <div class="info-box">
+                <div class="ib-title">{{ info_box.title }}</div>
+                <div class="ib-type">{{ info_box.type }}</div>
+                {% if info_box.image %}
+                <img src="{{ info_box.image }}" alt="{{ info_box.title }}" class="ib-img">
                 {% endif %}
-                {% if total_results >= 10 %}
-                    <a href="/search?q={{ query }}&page={{ page + 1 }}" class="page-button">Next</a>
+                <div class="ib-desc">{{ info_box.description }}</div>
+                {% if info_box.facts %}
+                <table class="ib-facts">
+                    {% for label, value in info_box.facts %}
+                    <tr><td>{{ label }}</td><td>{{ value }}</td></tr>
+                    {% endfor %}
+                </table>
                 {% endif %}
             </div>
+        </aside>
         {% endif %}
-    </main>
+    </div>
+    {% endif %}
 
     <script>
-        const searchInput = document.querySelector('.search-input');
-        const suggestionsBox = document.getElementById('suggestionsBox');
-        let debounceTimeout;
+        const LUCKY_QUERIES = [
+            'cute baby animals', 'inspirational quotes', 'beautiful landscapes',
+            'fun facts about space', 'wholesome stories', 'amazing nature photography',
+            'happy news today', 'acts of kindness', 'interesting science discoveries',
+            'beautiful libraries around the world', 'hidden gems in europe',
+            'best free online courses', 'healthy easy recipes',
+            'mind blowing photography', 'underwater sea life',
+            'starry night sky wallpaper', 'world map with all countries',
+            'learn something new every day', 'positive affirmations',
+            'beautiful gardens to visit'
+        ];
 
-        searchInput.addEventListener('input', function() {
-            clearTimeout(debounceTimeout);
-            const query = this.value.trim();
-            
-            if (query.length < 2) {
-                suggestionsBox.style.display = 'none';
-                return;
+        document.addEventListener('DOMContentLoaded', function() {
+            var luckyBtn = document.getElementById('lucky-btn');
+            if (luckyBtn) {
+                luckyBtn.addEventListener('click', function() {
+                    var q = LUCKY_QUERIES[Math.floor(Math.random() * LUCKY_QUERIES.length)];
+                    window.location = '/search?q=' + encodeURIComponent(q);
+                });
             }
+        });
 
-            debounceTimeout = setTimeout(async function() {
-                try {
-                    const response = await fetch(`/suggest?q=${encodeURIComponent(query)}`);
-                    const suggestions = await response.json();
-                    
-                    if (suggestions.length > 0) {
-                        suggestionsBox.innerHTML = suggestions
-                            .map(suggestion => `<div class="suggestion-item">${suggestion}</div>`)
-                            .join('');
-                        suggestionsBox.style.display = 'block';
-                    } else {
-                        suggestionsBox.style.display = 'none';
-                    }
-                } catch (error) {
-                    console.error('Error fetching suggestions:', error);
-                    suggestionsBox.style.display = 'none';
+        function setupSuggestions(inputId, boxId) {
+            var input = document.getElementById(inputId);
+            var box = document.getElementById(boxId);
+            if (!input || !box) return;
+
+            var timer = null;
+            var activeIndex = -1;
+            var currentData = [];
+
+            input.addEventListener('input', function() {
+                clearTimeout(timer);
+                var val = this.value.trim();
+                if (val.length < 2) {
+                    box.classList.remove('show');
+                    return;
                 }
-            }, 300);
-        });
-
-        suggestionsBox.addEventListener('click', (event) => {
-            if (event.target.classList.contains('suggestion-item')) {
-                searchInput.value = event.target.textContent;
-                suggestionsBox.style.display = 'none';
-                event.target.closest('form').submit();
-            }
-        });
-
-        document.addEventListener('click', (event) => {
-            if (!event.target.closest('.search-box')) {
-                suggestionsBox.style.display = 'none';
-            }
-        });
-
-        document.querySelectorAll('form').forEach(form => {
-            form.addEventListener('submit', () => {
-                document.querySelector('.loading').classList.add('active');
+                timer = setTimeout(function() {
+                    fetch('/suggest?q=' + encodeURIComponent(val))
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            currentData = data || [];
+                            box.innerHTML = '';
+                            if (currentData.length === 0) {
+                                box.classList.remove('show');
+                                return;
+                            }
+                            currentData.forEach(function(s, i) {
+                                var d = document.createElement('div');
+                                d.className = 'sug-item';
+                                d.textContent = s;
+                                d.addEventListener('click', function() {
+                                    input.value = s;
+                                    box.classList.remove('show');
+                                    input.form.submit();
+                                });
+                                d.addEventListener('mouseenter', function() {
+                                    activeIndex = i;
+                                    box.querySelectorAll('.sug-item').forEach(function(el, j) {
+                                        el.style.background = j === activeIndex ? '#f8f9fa' : '';
+                                    });
+                                });
+                                box.appendChild(d);
+                            });
+                            box.classList.add('show');
+                        })
+                        .catch(function() { box.classList.remove('show'); });
+                }, 250);
             });
+
+            input.addEventListener('keydown', function(e) {
+                var items = box.querySelectorAll('.sug-item');
+                if (items.length === 0) return;
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    activeIndex = Math.min(activeIndex + 1, items.length - 1);
+                    items.forEach(function(el, i) { el.style.background = i === activeIndex ? '#f8f9fa' : ''; });
+                    if (items[activeIndex]) input.value = currentData[activeIndex];
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    activeIndex = Math.max(activeIndex - 1, -1);
+                    items.forEach(function(el, i) { el.style.background = i === activeIndex ? '#f8f9fa' : ''; });
+                    if (activeIndex >= 0) input.value = currentData[activeIndex];
+                } else if (e.key === 'Enter') {
+                    box.classList.remove('show');
+                }
+            });
+
+            document.addEventListener('click', function(e) {
+                if (!box.contains(e.target) && e.target !== input) {
+                    box.classList.remove('show');
+                }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            setupSuggestions('hp-search', 'hp-suggest');
+            setupSuggestions('rs-input', 'rs-suggest');
         });
     </script>
 </body>
