@@ -21,6 +21,14 @@ import threading
 
 app = Flask(__name__)
 
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, X-Requested-With'
+    response.headers['Access-Control-Max-Age'] = '86400'
+    return response
+
 # Enhanced logging configuration
 handler = RotatingFileHandler(
     'search_engine.log',

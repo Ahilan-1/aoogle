@@ -1,0 +1,59 @@
+{
+  "manifest_version": 2,
+  "name": "aoogle Sidebar",
+  "version": "1.0",
+  "description": "Shows aoogle search results in a sidebar when you search on other search engines.",
+  "permissions": [
+    "storage",
+    "https://aoogle-production.up.railway.app/*",
+    "http://localhost:5000/*"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.google.com/search*",
+        "https://google.com/search*",
+        "https://www.bing.com/search*",
+        "https://bing.com/search*",
+        "https://duckduckgo.com/*",
+        "https://search.yahoo.com/search*",
+        "https://yandex.com/search/*",
+        "https://yandex.ru/search/*",
+        "https://www.baidu.com/s*",
+        "https://baidu.com/s*",
+        "https://search.brave.com/search*",
+        "https://www.ecosia.org/search*",
+        "https://ecosia.org/search*",
+        "https://www.qwant.com/*",
+        "https://qwant.com/*",
+        "https://www.searx.be/search*",
+        "https://searx.be/search*"
+      ],
+      "js": ["content.js"],
+      "css": ["style.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "browser_action": {
+    "default_title": "aoogle Sidebar",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "aoogle-sidebar@example.com",
+      "strict_min_version": "91.0"
+    }
+  }
+}
