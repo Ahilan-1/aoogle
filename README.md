@@ -25,6 +25,28 @@ A meta search engine that scrapes public web indexes and re-ranks results using 
 - "I'm Feeling Lucky" — random wholesome query
 - Scoring is fully transparent and heuristic (no ML, no vectors, no indexing)
 
+## API
+
+Free, tokenless search API for agents, CLI tools, and LLMs. No registration or API key needed.
+
+```
+GET /api/search?q=your+query
+```
+
+- 25 requests per hour per IP address
+- Returns clean JSON with title, url, snippet, category, score, and more
+- Supports pagination (`&page=N`) and pretty-print (`&pretty=1`)
+- Respects crisis detection and content moderation
+
+**Documentation:** [`/docs`](https://aoogle-production.up.railway.app/docs)
+
+**Quick start:**
+```bash
+curl "https://aoogle-production.up.railway.app/api/search?q=python+programming"
+```
+
+Agent helper, interactive CLI demo, and JavaScript/Node.js examples available on the docs page.
+
 ## Running locally
 
 ```bash
@@ -46,6 +68,7 @@ The app is Flask-based and ready for any WSGI server. A `vercel.json` is include
 - Bing Images (image results)
 - Google Suggest API (autocomplete)
 - In-memory caching (Redis optional)
+- Chart.js (live stats dashboard)
 
 ## License
 

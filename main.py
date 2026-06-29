@@ -294,6 +294,17 @@ CRISIS_RESOURCES = {
     }
 }
 
+LIFE_RESOURCES = [
+    {"title": "Building a Life You Don't Need to Escape From", "url": "https://www.psychologytoday.com/us/basics/happiness", "snippet": "Research-backed guidance on cultivating meaning, connection, and daily practices that support emotional well-being.", "category": "wellness"},
+    {"title": "The Science of Happiness", "url": "https://greatergood.berkeley.edu/", "snippet": "Explore evidence-based strategies for living a more fulfilling life, from gratitude practices to strengthening relationships.", "category": "wellness"},
+    {"title": "You Are Not Your Thoughts", "url": "https://www.mindful.org/", "snippet": "Mindfulness and meditation resources to help you find peace, gain perspective, and build resilience through difficult times.", "category": "wellness"},
+    {"title": "Finding Purpose After Loss", "url": "https://www.whatsyourgrief.com/", "snippet": "A compassionate guide to navigating grief, rediscovering meaning, and rebuilding a life that feels worth living.", "category": "support"},
+    {"title": "Self-Compassion: A Better Way to Be Kind to Yourself", "url": "https://self-compassion.org/", "snippet": "Research and exercises from Dr. Kristin Neff on treating yourself with the same kindness you would offer a friend.", "category": "guide"},
+    {"title": "How to Get Through the Worst Days", "url": "https://www.npr.org/sections/health-shots/2020/03/20/814758032/managing-your-mental-health-during-the-coronavirus-outbreak", "snippet": "Practical strategies for surviving difficult moments, one hour at a time, with professional guidance and peer support.", "category": "guide"},
+    {"title": "988 Suicide & Crisis Lifeline", "url": "https://988lifeline.org/", "snippet": "Call or text 988. Free, confidential, 24/7. Trained crisis counselors are ready to listen and help you find hope.", "category": "support"},
+    {"title": "Crisis Text Line", "url": "https://www.crisistextline.org/", "snippet": "Text HOME to 741741 to connect with a trained crisis counselor. Free, 24/7, confidential.", "category": "support"},
+]
+
 def detect_crisis(query):
     q = query.lower().strip()
     if not q:
@@ -1179,6 +1190,87 @@ def get_info_box(query):
             return panel
     return None
 
+def detect_news(query):
+    q = query.lower().strip()
+    if q.startswith('news '):
+        return {'topic': q[5:].strip(), 'intent': 'news'}
+    if q.startswith('latest news '):
+        return {'topic': q[12:].strip(), 'intent': 'news'}
+    return None
+
+class RateLimiter:
+    def __init__(self, limit=25, window=3600):
+        self.limit = limit
+        self.window = window
+        self._store = {}
+        self._lock = threading.Lock()
+
+    def _cleanup(self, now):
+        cutoff = now - self.window
+        for ip in list(self._store.keys()):
+            self._store[ip] = [t for t in self._store[ip] if t > cutoff]
+            if not self._store[ip]:
+                del self._store[ip]
+
+    def check(self, ip):
+        now = time.time()
+        with self._lock:
+            self._cleanup(now)
+            hits = self._store.get(ip, [])
+            if len(hits) >= self.limit:
+                oldest = now - hits[0]
+                return {"allowed": False, "remaining": 0, "retry_after": int(self.window - oldest)}
+            hits.append(now)
+            self._store[ip] = hits
+            return {"allowed": True, "remaining": self.limit - len(hits), "retry_after": 0}
+
+api_limiter = RateLimiter(limit=25, window=3600)
+
+class SearchStats:
+    def __init__(self):
+        self._buckets = {}
+        self._lock = threading.Lock()
+
+    def record(self):
+        now = time.time()
+        bucket = int(now // 3600)
+        minute_bucket = int(now // 60)
+        with self._lock:
+            self._buckets[bucket] = self._buckets.get(bucket, 0) + 1
+            self._buckets[minute_bucket * -1] = self._buckets.get(minute_bucket * -1, 0) + 1
+            cutoff = bucket - 168
+            for k in list(self._buckets.keys()):
+                if isinstance(k, int) and k > 0 and k < cutoff:
+                    del self._buckets[k]
+
+    def get_hourly(self, hours=48):
+        now = time.time()
+        now_bucket = int(now // 3600)
+        result = []
+        with self._lock:
+            for offset in range(hours, -1, -1):
+                bucket = now_bucket - offset
+                result.append({
+                    "hour": datetime.fromtimestamp(bucket * 3600).strftime('%Y-%m-%d %H:00'),
+                    "count": self._buckets.get(bucket, 0)
+                })
+        return result
+
+    def get_recent_per_minute(self, minutes=30):
+        now = time.time()
+        now_bucket = int(now // 60)
+        result = []
+        with self._lock:
+            for offset in range(minutes, -1, -1):
+                bucket = now_bucket - offset
+                result.append({
+                    "minute": datetime.fromtimestamp(bucket * 60).strftime('%H:%M'),
+                    "count": self._buckets.get(bucket * -1, 0)
+                })
+        return result
+
+search_stats = SearchStats()
+
 # Initialize search engine
 search_engine = ImprovedSearch()
 
@@ -1195,12 +1287,17 @@ def search():
         return render_template('search.html')
 
     crisis = detect_crisis(query)
-    if crisis:
+
+    if crisis and crisis['type'] in ('harmful', 'crisis'):
         return render_template(
-            'crisis.html',
+            'search.html',
             query=query,
-            crisis=crisis,
-            resources=CRISIS_RESOURCES
+            crisis_info=crisis,
+            results=LIFE_RESOURCES,
+            notice={'type': 'redirect', 'message': 'You matter. Here are resources that may help.'},
+            page=1,
+            total_results=len(LIFE_RESOURCES),
+            info_box=None
         )
 
     notice = detect_notice(query)
@@ -1217,11 +1314,26 @@ def search():
 
     try:
         results = search_engine.search(query, page)
+        search_stats.record()
+
+        safety_info = crisis if crisis and crisis['type'] == 'disaster' else None
+
+        news_box = None
+        news_intent = detect_news(query)
+        if news_intent:
+            news_items = [r for r in results if r.get('category') == 'news'][:6]
+            if news_items:
+                news_box = {
+                    'topic': news_intent['topic'] or query,
+                    'items': news_items
+                }
 
         return render_template(
             'search.html',
             query=query,
             results=results,
+            safety_info=safety_info,
+            news_box=news_box,
             notice=notice,
             page=page,
             total_results=len(results),
@@ -1229,13 +1341,98 @@ def search():
         )
 
     except Exception as e:
-        app.logger.error(f"Search route error: {str(e)}")
+        import traceback
+        app.logger.error(f"Search route error: {str(e)}\n{traceback.format_exc()}")
         return render_template(
             'search.html',
             query=query,
             notice=notice,
             error="An error occurred while processing your search. Please try again."
         )
+
+@app.route('/api/search')
+def api_search():
+    query = request.args.get('q', '').strip()
+    page = max(1, int(request.args.get('page', 1)))
+    pretty = request.args.get('pretty', '').lower() in ('1', 'true', 'yes')
+
+    if not query:
+        return jsonify({"error": "Missing query parameter", "usage": "/api/search?q=your+query"}), 400
+
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    ip = ip.split(',')[0].strip()
+
+    rate = api_limiter.check(ip)
+    if not rate["allowed"]:
+        resp = jsonify({
+            "error": "Rate limit exceeded",
+            "message": f"You have exceeded the rate limit of 25 requests per hour. Retry after {rate['retry_after']} seconds.",
+            "retry_after": rate["retry_after"]
+        })
+        resp.status_code = 429
+        resp.headers['X-RateLimit-Remaining'] = '0'
+        resp.headers['X-RateLimit-Reset'] = str(rate['retry_after'])
+        return resp
+
+    crisis = detect_crisis(query)
+
+    if crisis and crisis['type'] in ('harmful', 'crisis'):
+        resp = jsonify({
+            "query": query,
+            "notice": {"type": "redirect", "message": "You matter. Here are resources that may help."},
+            "results": LIFE_RESOURCES,
+            "total_results": len(LIFE_RESOURCES),
+            "page": page
+        })
+        resp.headers['X-RateLimit-Remaining'] = str(rate['remaining'])
+        return resp
+
+    notice = detect_notice(query)
+    if notice and notice['type'] == 'redirect':
+        resp = jsonify({
+            "query": query,
+            "notice": notice,
+            "results": BODY_POSITIVE_RESOURCES,
+            "total_results": len(BODY_POSITIVE_RESOURCES),
+            "page": page
+        })
+        resp.headers['X-RateLimit-Remaining'] = str(rate['remaining'])
+        return resp
+
+    try:
+        results = search_engine.search(query, page)
+        search_stats.record()
+
+        data = {
+            "query": query,
+            "page": page,
+            "total_results": len(results),
+            "results": results,
+            "info_box": get_info_box(query)
+        }
+        if crisis and crisis['type'] == 'disaster':
+            data["safety_info"] = crisis
+        if notice:
+            data["notice"] = notice
+
+        indent = 2 if pretty else None
+        resp = app.response_class(
+            response=json.dumps(data, indent=indent),
+            status=200,
+            mimetype='application/json'
+        )
+        resp.headers['X-RateLimit-Remaining'] = str(rate['remaining'])
+        return resp
+
+    except Exception as e:
+        app.logger.error(f"API search error: {str(e)}")
+        resp = jsonify({
+            "error": "Search failed",
+            "message": "An internal error occurred while searching."
+        })
+        resp.status_code = 500
+        resp.headers['X-RateLimit-Remaining'] = str(rate['remaining'])
+        return resp
 
 @app.route('/images')
 def images():
@@ -1398,6 +1595,21 @@ def about():
         }
     ]
     return render_template('about.html', comparisons=comparisons)
+
+@app.route('/docs')
+def docs():
+    return render_template('docs.html')
+
+@app.route('/stats')
+def stats():
+    return render_template('stats.html')
+
+@app.route('/api/stats')
+def api_stats():
+    hours = min(int(request.args.get('hours', 48)), 168)
+    hourly = search_stats.get_hourly(hours)
+    per_minute = search_stats.get_recent_per_minute(30)
+    return jsonify({"hourly": hourly, "per_minute": per_minute})
 
 @app.route('/suggest')
 def suggest():

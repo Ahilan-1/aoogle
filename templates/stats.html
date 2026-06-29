@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>aoogle &middot; stats</title>
+    <style>
+        *, *::before, *::after { box-sizing:border-box; }
+        body { margin:0; padding:20px; font-family:arial,sans-serif; color:#222; background:#fff; }
+        .wrap { max-width:900px; margin:0 auto; }
+        h1 { font-size:22px; font-weight:400; margin:0 0 4px; }
+        .sub { color:#70757a; font-size:13px; margin-bottom:24px; }
+        .chart-box { background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:20px; margin-bottom:20px; }
+        .chart-box h2 { font-size:15px; font-weight:500; margin:0 0 12px; color:#3c4043; }
+        canvas { width:100% !important; height:auto !important; max-height:300px; }
+        .grid { display:flex; gap:16px; margin-bottom:24px; }
+        .stat-card { flex:1; border:1px solid #e0e0e0; border-radius:8px; padding:16px; text-align:center; }
+        .stat-card .num { font-size:28px; color:#1a73e8; font-weight:500; }
+        .stat-card .lbl { font-size:12px; color:#70757a; margin-top:4px; }
+        @media (max-width:600px) { .grid { flex-direction:column; } }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <h1>&#x1F4CA; aoogle &middot; live</h1>
+    <p class="sub">Real-time search volume &mdash; no content tracked, just counts</p>
+
+    <div class="grid">
+        <div class="stat-card"><div class="num" id="total-today">-</div><div class="lbl">today</div></div>
+        <div class="stat-card"><div class="num" id="total-this-hour">-</div><div class="lbl">this hour</div></div>
+        <div class="stat-card"><div class="num" id="total-all">-</div><div class="lbl">all time (since restart)</div></div>
+    </div>
+
+    <div class="chart-box">
+        <h2>&#x1F4C8; Searches per hour (last 48h)</h2>
+        <canvas id="hourlyChart"></canvas>
+    </div>
+
+    <div class="chart-box">
+        <h2>&#x26A1; Live per minute (last 30 min)</h2>
+        <canvas id="minuteChart"></canvas>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+let hourlyChart = null;
+let minuteChart = null;
+
+function fetchStats() {
+    fetch('/api/stats?hours=48')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.hourly) return;
+
+            var hours = data.hourly;
+            var minutes = data.per_minute || [];
+
+            var totalAll = hours.reduce(function(s, h) { return s + h.count; }, 0);
+            var today = hours.slice(-24).reduce(function(s, h) { return s + h.count; }, 0);
+            var thisHour = hours.length > 0 ? hours[hours.length - 1].count : 0;
+
+            document.getElementById('total-all').textContent = totalAll;
+            document.getElementById('total-today').textContent = today;
+            document.getElementById('total-this-hour').textContent = thisHour;
+
+            var hrLabels = hours.map(function(h) { return h.hour.slice(5, 16); });
+            var hrCounts = hours.map(function(h) { return h.count; });
+
+            if (hourlyChart) {
+                hourlyChart.data.labels = hrLabels;
+                hourlyChart.data.datasets[0].data = hrCounts;
+                hourlyChart.update();
+            } else {
+                hourlyChart = new Chart(document.getElementById('hourlyChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: hrLabels,
+                        datasets: [{
+                            label: 'searches',
+                            data: hrCounts,
+                            backgroundColor: 'rgba(66,133,244,0.6)',
+                            borderColor: '#4285f4',
+                            borderWidth: 1,
+                            borderRadius: 3
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { ticks: { font: { size: 10 }, maxTicksLimit: 24 }, grid: { display: false } },
+                            y: { beginAtZero: true, ticks: { font: { size: 10 }, stepSize: 1 } }
+                        }
+                    }
+                });
+            }
+
+            var minLabels = minutes.map(function(m) { return m.minute; });
+            var minCounts = minutes.map(function(m) { return m.count; });
+
+            if (minuteChart) {
+                minuteChart.data.labels = minLabels;
+                minuteChart.data.datasets[0].data = minCounts;
+                minuteChart.update();
+            } else {
+                minuteChart = new Chart(document.getElementById('minuteChart'), {
+                    type: 'line',
+                    data: {
+                        labels: minLabels,
+                        datasets: [{
+                            label: 'searches/min',
+                            data: minCounts,
+                            borderColor: '#34a853',
+                            backgroundColor: 'rgba(52,168,83,0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { ticks: { font: { size: 10 }, maxTicksLimit: 15 }, grid: { display: false } },
+                            y: { beginAtZero: true, ticks: { font: { size: 10 }, stepSize: 1 } }
+                        }
+                    }
+                });
+            }
+        })
+        .catch(function() {});
+}
+
+fetchStats();
+setInterval(fetchStats, 15000);
+</script>
+</body>
+</html>
