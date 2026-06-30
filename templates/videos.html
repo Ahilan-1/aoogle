@@ -46,7 +46,31 @@
         .video-desc{font-size:13px;color:var(--text2);line-height:1.4;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
         .no-results{text-align:center;padding:80px 20px;color:var(--text3);font-size:16px}
         .error-message{text-align:center;padding:60px 20px;color:var(--text3)}
-        @media(max-width:600px){.video-card{flex-direction:column}.video-thumb-wrap{width:100%;height:auto;aspect-ratio:16/9}}
+        @media(max-width:700px){
+            .header{padding:8px 12px 0}
+            .header .top-row{gap:8px}
+            .header .mini-logo{font-size:20px}
+            .header .rs-input{height:36px;font-size:13px}
+            .results-nav a{padding:8px 10px 6px;font-size:12px}
+        }
+        @media(max-width:600px){
+            .video-card{flex-direction:column;padding:8px;gap:10px;margin-bottom:14px}
+            .video-thumb-wrap{width:100%;height:auto;aspect-ratio:16/9;max-height:200px}
+            .video-title{font-size:15px}
+            .video-meta{font-size:11px}
+            .video-channel{font-size:12px}
+            .results-list{padding:0 12px 40px;margin:12px auto}
+        }
+        @media(max-width:400px){
+            .video-card{padding:6px;gap:8px}
+            .video-title{font-size:14px}
+            .video-meta span{margin-right:4px}
+        }
+        @supports(padding:max(0px)){
+            .header{padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
+            .dm-toggle{right:max(16px,env(safe-area-inset-right,16px))}
+            .results-list{padding-left:max(16px,env(safe-area-inset-left,16px));padding-right:max(16px,env(safe-area-inset-right,16px))}
+        }
     </style>
 </head>
 <body>

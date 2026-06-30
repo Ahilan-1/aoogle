@@ -172,6 +172,32 @@
             display: flex; align-items: center; justify-content: center; transition: .15s;
         }
         .dm-toggle:hover { background: var(--hover-bg); }
+        @media(max-width:640px){
+            .header{padding:10px 12px}
+            .header-inner{gap:8px;flex-wrap:wrap}
+            .logo{font-size:18px}
+            .search-box{padding:8px 12px;max-width:none;order:3;flex-basis:100%}
+            .search-input{font-size:14px}
+            .tabs{margin-left:0;gap:2px}
+            .tab{padding:5px 10px;font-size:12px}
+            .images-grid{margin:12px auto;padding:0 10px;column-gap:8px}
+            .image-card{border-radius:8px;margin-bottom:8px}
+            .image-card .info{padding:6px 8px}
+            .image-card .info .title{font-size:11px}
+            .image-card .info .source{font-size:10px}
+            .dm-toggle{top:8px;right:8px;width:30px;height:30px;font-size:13px}
+        }
+        @media(max-width:400px){
+            .images-grid{columns:2;column-gap:6px;padding:0 8px}
+            .image-card{margin-bottom:6px}
+            .header{padding:8px 10px}
+            .tab{padding:4px 8px;font-size:11px}
+        }
+        @supports(padding:max(0px)){
+            .header{padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
+            .dm-toggle{right:max(16px,env(safe-area-inset-right,16px))}
+            .images-grid{padding-left:max(16px,env(safe-area-inset-left,16px));padding-right:max(16px,env(safe-area-inset-right,16px))}
+        }
     </style>
 </head>
 <body>
