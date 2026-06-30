@@ -70,6 +70,12 @@
         .results-nav a.active{color:var(--nav-active);border-bottom-color:var(--nav-active)}
         .results-nav a:hover{color:var(--nav-active);text-decoration:none}
 
+        .filter-bar{max-width:1100px;margin:0 auto;padding:8px 0 4px;display:flex;align-items:center;gap:8px;font-size:13px}
+        .filter-bar .fl-label{color:var(--text3)}
+        .filter-select{appearance:none;-webkit-appearance:none;background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:6px 28px 6px 12px;font-size:13px;color:var(--text);cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2370757a' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center}
+        .filter-select:hover{border-color:var(--cm)}.filter-select:focus{outline:none;border-color:var(--cm)}
+        .filter-count{font-size:12px;color:var(--text3);margin-left:auto}
+
         .results-layout{max-width:1100px;margin:0 auto;padding:12px 16px 60px;display:flex;gap:32px}
         .results-main{flex:1;min-width:0}
         .results-sidebar{width:300px;flex-shrink:0}
@@ -182,6 +188,7 @@
         <div class="glogo"><span>a</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span></div>
         <div class="search-form">
             <form action="/search" method="GET" autocomplete="off" id="hp-form">
+                <input type="hidden" name="filter" value="{{ filter or 'general' }}">
                 <div class="search-input-wrap">
                     <input type="text" name="q" class="search-box" id="hp-search" required placeholder="" autocomplete="off">
                     <div class="suggestions-box" id="hp-suggest"></div>
@@ -194,6 +201,7 @@
         </div>
         <div class="about-link">
             <a href="/about">How it works</a> &middot;
+            <a href="/blog">Blog</a> &middot;
             <a href="/docs">API</a>
         </div>
     </div>
@@ -205,6 +213,7 @@
             <a href="/" class="mini-logo"><span>a</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span></a>
             <div class="rs-wrap">
                 <form action="/search" method="GET">
+                    <input type="hidden" name="filter" value="{{ filter or 'general' }}">
                     <input type="text" name="q" class="rs-input" id="rs-input" value="{{ query }}" autocomplete="off">
                     <div class="suggestions-box" id="rs-suggest"></div>
                 </form>
@@ -213,7 +222,21 @@
         <div class="results-nav">
             <a href="/search?q={{ query }}" class="active">Web</a>
             <a href="/images?q={{ query }}">Images</a>
+            <a href="/videos?q={{ query }}">Videos</a>
             <a href="/docs" style="margin-left:auto">API</a>
+        </div>
+        <div class="filter-bar">
+            <span class="fl-label">Filter:</span>
+            <select class="filter-select" id="filter-select" onchange="applyFilter(this.value)">
+                <option value="all">All results</option>
+                <option value="shopping">Shopping</option>
+                <option value="official">Official</option>
+                <option value="tutorials">Tutorials</option>
+                <option value="discussions">Discussions</option>
+                <option value="academic">Academic</option>
+                <option value="news">News</option>
+            </select>
+            <span class="filter-count" id="filter-count"></span>
         </div>
     </div>
 
@@ -278,7 +301,7 @@
                     {% else %}About {{ total_results }} results{% endif %}
                 </div>
                 {% for result in results %}
-                    <div class="result-card {{ 'reddit-result' if 'reddit' in result.url else '' }}" data-url="{{ result.url }}" data-title="{{ result.title }}">
+                    <div class="result-card {{ 'reddit-result' if 'reddit' in result.url else '' }}" data-url="{{ result.url }}" data-title="{{ result.title }}" data-category="{{ result.category or 'general' }}">
                         <div class="result-url">
                             <img src="{{ result.favicon }}" alt="" class="result-favicon" onerror="this.style.display='none'">
                             {{ result.display_url }}
@@ -429,6 +452,23 @@
             document.addEventListener('click',function(e){if(!box.contains(e.target)&&e.target!==input)box.classList.remove('show')})
         }
         document.addEventListener('DOMContentLoaded',function(){setupSuggestions('hp-search','hp-suggest');setupSuggestions('rs-input','rs-suggest')});
+
+        function applyFilter(val){
+            var cards = document.querySelectorAll('.result-card');
+            var count = 0;
+            cards.forEach(function(c){
+                var cat = c.getAttribute('data-category') || 'general';
+                if(val === 'all' || cat === val){
+                    c.style.display = '';
+                    count++;
+                } else {
+                    c.style.display = 'none';
+                }
+            });
+            var el = document.getElementById('filter-count');
+            if(el) el.textContent = count + ' results';
+        }
+        applyFilter('all');
     </script>
 </body>
 </html>

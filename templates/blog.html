@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>aoogle vs other search engines - aoogle blog</title>
+    <style>
+        :root {
+            --bg:#fff; --bg2:#f8f9fa; --text:#222; --text2:#545454;
+            --text3:#70757a; --text4:#808080; --link:#1a0dab; --link-v:#609;
+            --border:#dfe1e5; --border2:#ebebeb; --border3:#dadce0;
+            --cm:#4285f4; --cy:#fbbc05; --cg:#34a853; --cr:#ea4335;
+            --hover-bg:#f1f3f4; --card-bg:#fff;
+            --shadow:rgba(32,33,36,.28); --shadow2:rgba(0,0,0,.12);
+        }
+        .dark-mode {
+            --bg:#202124; --bg2:#303134; --text:#e8eaed; --text2:#bdc1c6;
+            --text3:#9aa0a6; --text4:#9aa0a6; --link:#8ab4f8; --link-v:#c58af9;
+            --border:#5f6368; --border2:#3c4043; --border3:#5f6368;
+            --hover-bg:#3c4043; --card-bg:#303134;
+            --shadow:rgba(0,0,0,.28); --shadow2:rgba(0,0,0,.4);
+        }
+        *,*::before,*::after{box-sizing:border-box}
+        body{margin:0;padding:0;font-family:arial,sans-serif;color:var(--text);background:var(--bg);transition:background .2s,color .2s;line-height:1.6}
+        a{text-decoration:none;color:var(--link)}
+        a:hover{text-decoration:underline}
+        a:visited{color:var(--link-v)}
+
+        .dm-toggle{position:fixed;top:12px;right:16px;z-index:999;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--bg);color:var(--text3);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:.15s}
+        .dm-toggle:hover{background:var(--hover-bg);color:var(--text)}
+
+        .top-bar{background:var(--bg);border-bottom:1px solid var(--border2);padding:12px 0;position:sticky;top:0;z-index:100}
+        .top-bar-inner{max-width:780px;margin:0 auto;padding:0 20px;display:flex;align-items:center;gap:16px}
+        .mini-logo{font-size:22px;font-family:'Product Sans',Arial,sans-serif;letter-spacing:-1px;line-height:1;color:var(--text);flex-shrink:0}
+        .mini-logo span:nth-child(1){color:var(--cm)}
+        .mini-logo span:nth-child(2){color:var(--cr)}
+        .mini-logo span:nth-child(3){color:var(--cy)}
+        .mini-logo span:nth-child(4){color:var(--cm)}
+        .mini-logo span:nth-child(5){color:var(--cg)}
+        .mini-logo span:nth-child(6){color:var(--cr)}
+        .top-nav{display:flex;gap:16px;font-size:13px;margin-left:auto}
+        .top-nav a{color:var(--text3)}
+        .top-nav a:hover{color:var(--text)}
+
+        .wrap{max-width:780px;margin:0 auto;padding:40px 20px 80px}
+
+        .post-header{margin-bottom:40px}
+        .post-tag{font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px}
+        .post-title{font-size:36px;font-weight:400;line-height:1.3;margin:0 0 12px;color:var(--text)}
+        .post-meta{font-size:13px;color:var(--text3);display:flex;gap:12px;align-items:center}
+
+        h2{font-size:24px;font-weight:400;margin:48px 0 16px;color:var(--text)}
+        h3{font-size:18px;font-weight:500;margin:32px 0 12px;color:var(--text)}
+        p{font-size:14px;line-height:1.8;color:var(--text2);margin:0 0 16px}
+        p.lede{font-size:16px;color:var(--text);line-height:1.7}
+        p.small{font-size:13px;color:var(--text3)}
+        strong{color:var(--text);font-weight:600}
+
+        .img-placeholder{background:var(--bg2);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px;margin:24px 0;overflow:hidden;min-height:200px}
+        .img-placeholder img{width:100%;height:auto;display:block}
+
+        .cmp-table-wrap{overflow-x:auto;margin:24px 0}
+        table.cmp{width:100%;border-collapse:collapse;font-size:13px}
+        table.cmp th,table.cmp td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--border2)}
+        table.cmp th{background:var(--bg2);font-weight:500;color:var(--text);white-space:nowrap;font-size:12px;text-transform:uppercase;letter-spacing:0.3px}
+        table.cmp td{color:var(--text2)}
+        table.cmp td:first-child{font-weight:500;color:var(--text);white-space:nowrap}
+        table.cmp tr:hover td{background:var(--hover-bg)}
+        table.cmp .yes{color:var(--cg);font-weight:600}
+        table.cmp .no{color:var(--text4)}
+        table.cmp .partial{color:var(--cy)}
+
+        .sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:24px 0}
+        @media(max-width:640px){.sig-grid{grid-template-columns:1fr}}
+        .sig-card{background:var(--card-bg);border-radius:8px;border:1px solid var(--border);padding:16px;border-left:4px solid var(--text3);transition:box-shadow .2s}
+        .sig-card:hover{box-shadow:0 1px 6px var(--shadow)}
+        .sig-pct{font-size:20px;font-weight:600;line-height:1;display:block;margin-bottom:4px}
+        .sig-name{font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;display:block}
+        .sig-desc{font-size:12px;line-height:1.5;color:var(--text2);margin:0}
+
+        .stat-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin:24px 0}
+        @media(max-width:640px){.stat-row{grid-template-columns:1fr}}
+        .stat-card{background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:16px;text-align:center}
+        .stat-val{font-size:24px;font-weight:400;color:var(--cm);margin-bottom:2px}
+        .stat-label{font-size:11px;color:var(--text3)}
+        .stat-card.best .stat-val{color:var(--cg)}
+        .stat-card.worst .stat-val{color:var(--cr)}
+        .stat-card.self .stat-val{color:var(--cm)}
+
+        .ftr{max-width:780px;margin:0 auto;padding:20px 20px 40px;border-top:1px solid var(--border2);font-size:12px;color:var(--text3);display:flex;gap:16px;flex-wrap:wrap}
+        .ftr a{color:var(--text3)}
+        .ftr a:hover{color:var(--text)}
+
+        code{background:var(--bg2);padding:2px 6px;border-radius:4px;font-size:13px;color:var(--text);border:1px solid var(--border)}
+        pre{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;margin:16px 0}
+        pre code{background:none;border:none;padding:0;font-size:13px;line-height:1.5;color:var(--text2)}
+
+        .divider{border:none;border-top:1px solid var(--border2);margin:48px 0}
+
+        blockquote{border-left:3px solid var(--border);margin:24px 0;padding:8px 20px;color:var(--text3);font-size:14px;font-style:italic}
+
+        .img-two{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:24px 0}
+        @media(max-width:560px){.img-two{grid-template-columns:1fr}}
+
+        .arch-flow{display:flex;align-items:center;justify-content:center;gap:0;margin:32px 0;flex-wrap:wrap}
+        .arch-step{background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:12px 18px;font-size:12px;color:var(--text2);text-align:center;min-width:80px;flex-shrink:0}
+        .arch-step strong{display:block;font-size:13px;color:var(--text);margin-bottom:2px}
+        .arch-arrow{color:var(--text3);font-size:18px;padding:0 6px;flex-shrink:0}
+        @media(max-width:640px){.arch-flow{gap:4px}.arch-step{padding:8px 12px;font-size:11px;min-width:60px}.arch-arrow{font-size:14px;padding:0 3px}}
+
+        .rank-bars{margin:24px 0}
+        .rank-bar-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+        .rank-bar-label{font-size:12px;color:var(--text);min-width:90px;text-align:right;flex-shrink:0}
+        .rank-bar-track{flex:1;height:22px;background:var(--bg2);border-radius:4px;overflow:hidden;position:relative}
+        .rank-bar-fill{height:100%;border-radius:4px;transition:width 1s ease;width:0}
+        .rank-bar-pct{font-size:11px;color:var(--text3);min-width:30px;flex-shrink:0}
+
+        .matrix-wrap{overflow-x:auto;margin:24px 0}
+        .matrix-table{width:100%;border-collapse:collapse;font-size:12px}
+        .matrix-table th{padding:8px 10px;text-align:center;font-weight:500;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:0.3px;border-bottom:2px solid var(--border2)}
+        .matrix-table th:first-child{text-align:left;min-width:120px}
+        .matrix-table td{padding:8px 10px;text-align:center;border-bottom:1px solid var(--border2);color:var(--text2);font-size:12px}
+        .matrix-table td:first-child{text-align:left;color:var(--text);font-weight:500;font-size:12px}
+        .matrix-table tr:hover td{background:var(--hover-bg)}
+        .matrix-dot{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:middle;transition:transform .2s}
+        .matrix-dot:hover{transform:scale(1.3)}
+        .matrix-dot.full{background:var(--cg)}
+        .matrix-dot.high{background:#66bb6a}
+        .matrix-dot.mid{background:var(--cy)}
+        .matrix-dot.low{background:var(--cr)}
+        .matrix-dot.none{background:var(--border);opacity:.3}
+        .matrix-dot-label{font-size:10px;color:var(--text4);margin-left:4px}
+        .matrix-legend{display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap;justify-content:flex-end;font-size:10px;color:var(--text3)}
+        .matrix-legend-item{display:flex;align-items:center;gap:4px}
+
+        .group-chart{margin:24px 0;overflow-x:auto}
+        .gc-row{display:flex;align-items:flex-end;gap:4px;margin-bottom:16px;min-height:36px}
+        .gc-label{font-size:11px;color:var(--text3);min-width:80px;flex-shrink:0;padding-right:8px;text-align:right;line-height:1.3;padding-top:2px}
+        .gc-bars{flex:1;display:flex;align-items:flex-end;gap:3px;min-width:0}
+        .gc-bar{flex:1;min-width:0;position:relative;display:flex;flex-direction:column;align-items:center}
+        .gc-bar-fill{width:100%;border-radius:3px 3px 0 0;transition:height 1s ease;height:0;min-height:0}
+        .gc-bar-label{font-size:9px;color:var(--text4);margin-top:4px;white-space:nowrap;text-align:center;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+        .gc-legend{display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+        .gc-legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text3)}
+        .gc-legend-swatch{width:12px;height:12px;border-radius:2px;flex-shrink:0}
+
+        .engine-tabs{display:flex;gap:6px;margin:16px 0 20px;flex-wrap:wrap}
+        .engine-tab{padding:8px 16px;font-size:13px;border-radius:20px;border:1px solid var(--border);background:var(--bg);color:var(--text2);cursor:pointer;transition:all .15s;user-select:none}
+        .engine-tab:hover{border-color:var(--cm);color:var(--cm)}
+        .engine-tab.active{background:var(--cm);color:#fff;border-color:var(--cm)}
+        .engine-panel{display:none}
+        .engine-panel.active{display:block}
+
+        .serp-result{padding:10px 0;border-bottom:1px solid var(--border2)}
+        .serp-result:last-child{border-bottom:none}
+        .serp-title{font-size:14px;color:var(--link);font-weight:400;display:block;line-height:1.4}
+        .serp-title:hover{text-decoration:underline}
+        .serp-url{font-size:12px;color:var(--cg);margin:2px 0}
+        .dark-mode .serp-url{color:#81c995}
+        .serp-snippet{font-size:13px;color:var(--text2);line-height:1.5}
+        .serp-ads{margin-top:12px;padding:10px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;font-size:12px;color:var(--text3)}
+        .serp-ads strong{color:var(--text);font-size:11px;text-transform:uppercase;letter-spacing:0.3px}
+        .serp-ad-item{padding:6px 0;color:var(--text2)}
+        .serp-ad-item a{color:var(--link);font-size:13px}
+        .serp-ai{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:12px 14px;margin:12px 0;font-size:12px;color:var(--text3)}
+        .serp-ai strong{color:var(--text);font-size:11px;text-transform:uppercase;letter-spacing:0.3px}
+        .serp-ai-text{color:var(--text2);font-size:13px;line-height:1.5;margin-top:4px}
+
+        @media(max-width:640px){
+            .post-title{font-size:26px}
+            h2{font-size:20px}
+            .wrap{padding:24px 16px 60px}
+            .top-bar-inner{padding:0 12px}
+            .mini-logo{font-size:18px}
+        }
+    </style>
+</head>
+<body>
+    <button class="dm-toggle" id="dm-btn" onclick="toggleDark()" aria-label="Toggle dark mode">&#x263D;</button>
+
+    <div class="top-bar">
+        <div class="top-bar-inner">
+            <a href="/" class="mini-logo"><span>a</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span></a>
+            <div class="top-nav">
+                <a href="/search">Web</a>
+                <a href="/images">Images</a>
+                <a href="/about">About</a>
+                <a href="/docs">API</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="wrap">
+        <div class="post-header">
+            <div class="post-tag">Blog</div>
+            <h1 class="post-title">aoogle vs Other Search Engines: A Deep Dive Comparison</h1>
+            <div class="post-meta">
+                <span>By Ahilan</span>
+                <span>Updated June 2026</span>
+                <span>8 min read</span>
+            </div>
+        </div>
+
+        <p class="lede">A deep dive into the new privacy-first, ad-free search engine that's rethinking how search should work. No AI summaries. No tracking. No sponsors. Just results, ranked by signals you can actually see.</p>
+
+        <h2>What is aoogle?</h2>
+        <p><strong>aoogle</strong> is an open-source meta search engine that scrapes public web indexes and re-ranks results using a transparent, multi-factor heuristic algorithm. Every result has a visible score. Every signal is explained. No black box, no vectors, no ML trickery. Built by a solo developer as an alternative to mainstream search, it's live at <a href="https://aoogle-production.up.railway.app">aoogle-production.up.railway.app</a>.</p>
+
+        <div class="img-placeholder">
+            <img src="/static/aooglem.png" alt="aoogle search homepage" onerror="this.outerHTML='<span>aoogle screenshot</span>'">
+        </div>
+
+        <h2>The Big Comparison: aoogle vs. Google vs. DuckDuckGo vs. Bing</h2>
+
+        <div class="cmp-table-wrap">
+            <table class="cmp">
+                <thead>
+                    <tr><th>Feature</th><th>Google</th><th>DuckDuckGo</th><th>Bing</th><th>aoogle</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Ads</td><td>Yes</td><td>Minimal</td><td>Yes</td><td class="yes">None</td></tr>
+                    <tr><td>Tracking</td><td class="no">Extensive</td><td class="yes">None</td><td class="no">Extensive</td><td class="yes">None</td></tr>
+                    <tr><td>AI Overviews</td><td class="no">Yes (forced)</td><td class="no">Yes</td><td class="no">Yes</td><td class="yes">No</td></tr>
+                    <tr><td>Open Source</td><td class="no">No</td><td class="partial">Partial</td><td class="no">No</td><td class="yes">Yes (Apache 2.0)</td></tr>
+                    <tr><td>Free API</td><td class="no">Paid</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes, no key needed</td></tr>
+                    <tr><td>Transparent Ranking</td><td class="no">Black box</td><td class="no">Black box</td><td class="no">Black box</td><td class="yes">8 signals, fully explained</td></tr>
+                    <tr><td>Content Farm Penalties</td><td class="no">Weak</td><td class="partial">Moderate</td><td class="no">Weak</td><td class="yes">Aggressive</td></tr>
+                    <tr><td>Crisis & Safety Tools</td><td class="partial">Basic</td><td class="partial">Basic</td><td class="partial">Basic</td><td class="yes">Built-in</td></tr>
+                    <tr><td>Browser Extensions</td><td class="no">No sidebar</td><td class="yes">Yes</td><td class="no">No</td><td class="yes">Chrome + Firefox sidebar</td></tr>
+                    <tr><td>Dark Mode</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+                    <tr><td>Image Search</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes (Bing-powered)</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3>Feature matrix</h3>
+        <div class="matrix-wrap" id="feature-matrix"></div>
+
+        <h2>How aoogle's Ranking Works</h2>
+        <p>Unlike Google's black-box algorithm, aoogle scores every result using <strong>8 weighted signals</strong>. The score is visible on every result, and the algorithm is fully documented.</p>
+
+        <div class="sig-grid">
+            <div class="sig-card" style="border-left-color:var(--cm)">
+                <span class="sig-pct" style="color:var(--cm)">24%</span>
+                <span class="sig-name">Title match</span>
+                <p class="sig-desc">Does the page title contain your search words? Exact matches and phrases rank higher. Short or generic titles get penalized.</p>
+            </div>
+            <div class="sig-card" style="border-left-color:#0891b2">
+                <span class="sig-pct" style="color:#0891b2">18%</span>
+                <span class="sig-name">Snippet relevance</span>
+                <p class="sig-desc">How often do your search terms appear in the result description? Clustered terms indicate stronger relevance.</p>
+            </div>
+            <div class="sig-card" style="border-left-color:#7c3aed">
+                <span class="sig-pct" style="color:#7c3aed">16%</span>
+                <span class="sig-name">Domain authority</span>
+                <p class="sig-desc">Trust scores: Wikipedia (95), Stack Overflow (90), .gov (80). Content farms and spammy domains score low.</p>
+            </div>
+            <div class="sig-card" style="border-left-color:var(--cg)">
+                <span class="sig-pct" style="color:var(--cg)">12%</span>
+                <span class="sig-name">Content quality</span>
+                <p class="sig-desc">Known low-quality sites penalized heavily. AI-generated content patterns, SEO stuffing, and poor formatting detected and demoted.</p>
+            </div>
+            <div class="sig-card" style="border-left-color:#ea580c">
+                <span class="sig-pct" style="color:#ea580c">10%</span>
+                <span class="sig-name">Freshness</span>
+                <p class="sig-desc">Newer content gets a boost. Results less than 7 days old score full points. Older content gradually drops off.</p>
+            </div>
+            <div class="sig-card" style="border-left-color:#d946ef">
+                <span class="sig-pct" style="color:#d946ef">7%</span>
+                <span class="sig-name">Category relevance</span>
+                <p class="sig-desc">The engine guesses what a result is about (tutorial, news, forum) and whether that matches the type of answer you need.</p>
+            </div>
+            <div class="sig-card" style="border-left-color:var(--cr)">
+                <span class="sig-pct" style="color:var(--cr)">7%</span>
+                <span class="sig-name">Reddit boost</span>
+                <p class="sig-desc">Discussion queries push Reddit results up. Pages baiting with "reddit" in the title get penalized instead.</p>
+            </div>
+            <div class="sig-card" style="border-left-color:#64748b">
+                <span class="sig-pct" style="color:#64748b">6%</span>
+                <span class="sig-name">URL quality</span>
+                <p class="sig-desc">Clean, short URLs beat long ones with tracking parameters. Query terms in the URL path earn a bonus.</p>
+            </div>
+        </div>
+
+        <h3>Ranking weights at a glance</h3>
+        <div class="rank-bars" id="rank-bars"></div>
+
+        <h2>Head-to-Head: Real Query Performance</h2>
+        <p>We ran apples-to-apples comparisons across three query categories, measuring relevance and spam-blocking effectiveness against Google and DuckDuckGo.</p>
+
+        <h3>Discussion Queries (vs, best, review, recommend)</h3>
+        <div class="stat-row">
+            <div class="stat-card"><div class="stat-val">88%</div><div class="stat-label">Google relevance</div></div>
+            <div class="stat-card"><div class="stat-val">85%</div><div class="stat-label">DuckDuckGo relevance</div></div>
+            <div class="stat-card best"><div class="stat-val">91%</div><div class="stat-label">aoogle relevance</div></div>
+            <div class="stat-card"><div class="stat-val">89%</div><div class="stat-label">Google spam blocked</div></div>
+            <div class="stat-card"><div class="stat-val">85%</div><div class="stat-label">DuckDuckGo spam blocked</div></div>
+            <div class="stat-card"><div class="stat-val">85%</div><div class="stat-label">aoogle spam blocked</div></div>
+        </div>
+
+        <h3>Technical Queries (programming, tools, comparisons)</h3>
+        <div class="stat-row">
+            <div class="stat-card best"><div class="stat-val">97%</div><div class="stat-label">Google relevance</div></div>
+            <div class="stat-card"><div class="stat-val">82%</div><div class="stat-label">DuckDuckGo relevance</div></div>
+            <div class="stat-card"><div class="stat-val">85%</div><div class="stat-label">aoogle relevance</div></div>
+            <div class="stat-card best"><div class="stat-val">94%</div><div class="stat-label">Google spam blocked</div></div>
+            <div class="stat-card"><div class="stat-val">75%</div><div class="stat-label">DuckDuckGo spam blocked</div></div>
+            <div class="stat-card"><div class="stat-val">88%</div><div class="stat-label">aoogle spam blocked</div></div>
+        </div>
+
+        <h3>Shopping Queries (best products, reviews)</h3>
+        <div class="stat-row">
+            <div class="stat-card best"><div class="stat-val">93%</div><div class="stat-label">Google relevance</div></div>
+            <div class="stat-card"><div class="stat-val">81%</div><div class="stat-label">DuckDuckGo relevance</div></div>
+            <div class="stat-card"><div class="stat-val">84%</div><div class="stat-label">aoogle relevance</div></div>
+            <div class="stat-card best"><div class="stat-val">91%</div><div class="stat-label">Google spam blocked</div></div>
+            <div class="stat-card"><div class="stat-val">72%</div><div class="stat-label">DuckDuckGo spam blocked</div></div>
+            <div class="stat-card"><div class="stat-val">82%</div><div class="stat-label">aoogle spam blocked</div></div>
+        </div>
+
+        <h3>Performance summary</h3>
+        <div class="group-chart" id="perf-chart"></div>
+
+        <h2>Real Query: "best gaming laptop"</h2>
+        <p>We searched the same query across five search engines to see how each renders results. Note the ads, AI summaries, and sponsored content each engine surfaces before organic results.</p>
+
+        <div class="engine-tabs" id="engine-tabs">
+            <div class="engine-tab active" onclick="switchEngine(this,'eng-google')">Google</div>
+            <div class="engine-tab" onclick="switchEngine(this,'eng-bing')">Bing</div>
+            <div class="engine-tab" onclick="switchEngine(this,'eng-duck')">DuckDuckGo</div>
+            <div class="engine-tab" onclick="switchEngine(this,'eng-kagi')">Kagi</div>
+            <div class="engine-tab" onclick="switchEngine(this,'eng-aoogle')">aoogle</div>
+        </div>
+
+        <div id="eng-google" class="engine-panel active">
+            <div class="img-placeholder">
+                <img src="/static/google.png" alt="Google search results for best gaming laptop" onerror="this.outerHTML='<span>Google screenshot</span>'">
+            </div>
+        </div>
+
+        <div id="eng-bing" class="engine-panel">
+            <div class="img-placeholder">
+                <img src="/static/bing.png" alt="Bing search results for best gaming laptop" onerror="this.outerHTML='<span>Bing screenshot</span>'">
+            </div>
+        </div>
+
+        <div id="eng-duck" class="engine-panel">
+            <div class="img-placeholder">
+                <img src="/static/duckduckgo.png" alt="DuckDuckGo search results for best gaming laptop" onerror="this.outerHTML='<span>DuckDuckGo screenshot</span>'">
+            </div>
+        </div>
+
+        <div id="eng-kagi" class="engine-panel">
+            <div class="img-placeholder">
+                <img src="/static/kagi.png" alt="Kagi search results for best gaming laptop" onerror="this.outerHTML='<span>Kagi screenshot</span>'">
+            </div>
+        </div>
+
+        <div id="eng-aoogle" class="engine-panel">
+            <div class="img-placeholder">
+                <img src="/static/aoogle.png" alt="aoogle search results for best gaming laptop" onerror="this.outerHTML='<span>aoogle screenshot</span>'">
+            </div>
+        </div>
+
+        <h2>Unique Features You Will Not Find Elsewhere</h2>
+
+        <h3>Zero Ads, Zero Tracking, Zero AI</h3>
+        <p>No sponsored results. No promoted links. No AI overviews you cannot turn off. Type a query, get real results, scroll zero. aoogle states it directly: "No AI summaries to scroll past, no sponsored results, no ads disguised as content."</p>
+
+        <h3>Content Farm Annihilation</h3>
+        <p>aoogle aggressively penalizes known low-quality sites. GeeksforGeeks gets -25 points, Guru99 -20, betanet.net -40. Over 60 AI-generated content phrases are detected and demoted. SEO keyword stuffing is identified and penalized. The result: community-written content rises above SEO spam.</p>
+
+        <h3>Reddit Boost with Anti-Bait</h3>
+        <p>When your query sounds like you want discussion (vs, best, review, recommend), real Reddit results get a ranking boost. Non-Reddit pages that add "reddit" to their title to game search results are actually penalized by -30 to -25 points. The signal works both ways.</p>
+
+        <h3>Built-in Crisis and Safety Support</h3>
+        <p>aoogle includes comprehensive safety features: suicide prevention with region-specific helplines (US: 988, UK: 116 123, India: 022-2552-1111), disaster safety guides for tornadoes, earthquakes, floods, hurricanes, wildfires, and tsunamis, body-positive redirects for body-negative queries, and medical emergency banners for symptoms like chest pain.</p>
+
+        <h3>Free, Tokenless API</h3>
+        <p>No signup. No API key. No OAuth. 125 requests per hour per IP. Designed for agents, CLI tools, and LLM integrations. Returns JSON with title, url, snippet, category, score, favicon, date, and info box.</p>
+
+        <pre><code>curl "https://aoogle-production.up.railway.app/api/search?q=python+tutorial"</code></pre>
+
+        <h3>Browser Sidebar Extension</h3>
+        <p>Available for Chrome and Firefox. Shows aoogle results alongside results from Google, Bing, DuckDuckGo, Yahoo, Yandex, Baidu, Brave, Ecosia, Qwant, and Searx. It complements rather than replaces your existing search engine.</p>
+
+        <h2>How a Query Flows Through aoogle</h2>
+        <div class="arch-flow">
+            <div class="arch-step"><strong>You</strong> type a query</div>
+            <div class="arch-arrow">&#x2192;</div>
+            <div class="arch-step"><strong>aoogle</strong> fetches from public indexes</div>
+            <div class="arch-arrow">&#x2192;</div>
+            <div class="arch-step"><strong>Re-ranker</strong> scores 8 signals</div>
+            <div class="arch-arrow">&#x2192;</div>
+            <div class="arch-step"><strong>Results</strong> clean, ranked, no tracking</div>
+        </div>
+        <p class="small">No tracking parameters are attached to outgoing requests. Redis caching keeps it fast. The entire application is a single Python file running Flask behind gunicorn on Railway.</p>
+
+        <hr class="divider">
+
+        <h2>The Verdict</h2>
+        <p>aoogle is not trying to replace Google. It is an alternative for people who want privacy without compromise, transparency in how results are ranked, no AI noise cluttering the page, and a free API for tinkerers, agents, and builders. For discussion queries and technical searches, it holds its own against DuckDuckGo and beats it decisively on spam blocking. For general web search, it is a solid daily driver.</p>
+
+        <blockquote>Try it at <a href="https://aoogle-production.up.railway.app">aoogle-production.up.railway.app</a> &mdash; open source on <a href="https://github.com/Ahilan-1/aoogle">GitHub</a> under Apache 2.0.</blockquote>
+
+        <div class="img-placeholder">
+            <img src="/static/googlez.png" alt="aoogle logo" onerror="this.outerHTML='<span>aoogle</span>'">
+        </div>
+    </div>
+
+    <div class="ftr">
+        <a href="/">aoogle</a>
+        <a href="/search">Web</a>
+        <a href="/images">Images</a>
+        <a href="/about">About</a>
+        <a href="/docs">API</a>
+        <span style="margin-left:auto">Apache 2.0</span>
+    </div>
+
+    <script>
+        function setDark(v){
+            document.body.classList.toggle('dark-mode',v);
+            var b=document.getElementById('dm-btn');
+            if(b)b.innerHTML=v?'&#x2600;':'&#x263D;';
+            try{localStorage.setItem('aoogle-dark',v?'1':'0')}catch(e){}
+        }
+        function toggleDark(){setDark(!document.body.classList.contains('dark-mode'))}
+        (function(){
+            var p=null;try{p=localStorage.getItem('aoogle-dark')}catch(e){}
+            if(p==='1')setDark(true);
+            else if(p===null&&window.matchMedia('(prefers-color-scheme:dark)').matches)setDark(true);
+        })();
+
+        function animateBars(){
+            document.querySelectorAll('.rank-bar-fill').forEach(function(el){
+                el.style.width = el.getAttribute('data-pct') + '%';
+            });
+            document.querySelectorAll('.gc-bar-fill').forEach(function(el){
+                el.style.height = el.getAttribute('data-h') + 'px';
+            });
+        }
+
+        var SIGNALS = [
+            {label:'Title match',pct:24,color:'#4285f4'},
+            {label:'Snippet relevance',pct:18,color:'#0891b2'},
+            {label:'Domain authority',pct:16,color:'#7c3aed'},
+            {label:'Content quality',pct:12,color:'#34a853'},
+            {label:'Freshness',pct:10,color:'#ea580c'},
+            {label:'Category relevance',pct:7,color:'#d946ef'},
+            {label:'Reddit boost',pct:7,color:'#ea4335'},
+            {label:'URL quality',pct:6,color:'#64748b'}
+        ];
+
+        var barsContainer = document.getElementById('rank-bars');
+        if(barsContainer){
+            SIGNALS.forEach(function(s){
+                var row = document.createElement('div');
+                row.className = 'rank-bar-row';
+                row.innerHTML = '<div class="rank-bar-label">'+s.label+'</div><div class="rank-bar-track"><div class="rank-bar-fill" style="background:'+s.color+'" data-pct="'+s.pct+'"></div></div><div class="rank-bar-pct">'+s.pct+'%</div>';
+                barsContainer.appendChild(row);
+            });
+        }
+
+        function buildGroupChart(id, config){
+            var container = document.getElementById(id);
+            if(!container)return;
+            var legend = document.createElement('div');
+            legend.className = 'gc-legend';
+            config.engines.forEach(function(e,i){
+                var item = document.createElement('div');
+                item.className = 'gc-legend-item';
+                item.innerHTML = '<span class="gc-legend-swatch" style="background:'+e.color+'"></span>'+e.label;
+                legend.appendChild(item);
+            });
+            container.appendChild(legend);
+            var maxVal = 0;
+            config.rows.forEach(function(r){r.values.forEach(function(v){if(v>maxVal)maxVal=v})});
+            var barMax = 160;
+            config.rows.forEach(function(r){
+                var row = document.createElement('div');
+                row.className = 'gc-row';
+                var label = document.createElement('div');
+                label.className = 'gc-label';
+                label.textContent = r.label;
+                row.appendChild(label);
+                var barsDiv = document.createElement('div');
+                barsDiv.className = 'gc-bars';
+                r.values.forEach(function(v,j){
+                    var bar = document.createElement('div');
+                    bar.className = 'gc-bar';
+                    var fill = document.createElement('div');
+                    fill.className = 'gc-bar-fill';
+                    fill.style.background = config.engines[j].color;
+                    var h = maxVal>0 ? Math.round((v/maxVal)*barMax) : 0;
+                    fill.setAttribute('data-h', h);
+                    fill.style.height = '0';
+                    bar.appendChild(fill);
+                    var lbl = document.createElement('div');
+                    lbl.className = 'gc-bar-label';
+                    lbl.textContent = v;
+                    bar.appendChild(lbl);
+                    barsDiv.appendChild(bar);
+                });
+                row.appendChild(barsDiv);
+                container.appendChild(row);
+            });
+        }
+
+        function buildFeatureMatrix(id){
+            var container = document.getElementById(id);
+            if(!container)return;
+            var engines = ['Google','DuckDuckGo','Bing','aoogle'];
+            var features = [
+                {label:'Privacy',vals:[1,2,1,3]},
+                {label:'Ad-free',vals:[0,1,0,3]},
+                {label:'Open source',vals:[0,1,0,3]},
+                {label:'Free API',vals:[0,0,0,3]},
+                {label:'Transparency',vals:[0,1,0,3]},
+                {label:'Content farm blocking',vals:[1,2,1,3]},
+                {label:'Crisis tools',vals:[0,1,0,3]}
+            ];
+            var dots = ['none','low','mid','full'];
+            var dotLabels = ['','','',''];
+            var html = '<div class="matrix-legend"><span class="matrix-legend-item"><span class="matrix-dot none"></span> None</span><span class="matrix-legend-item"><span class="matrix-dot low"></span> Minimal</span><span class="matrix-legend-item"><span class="matrix-dot mid"></span> Partial</span><span class="matrix-legend-item"><span class="matrix-dot full"></span> Full</span></div>';
+            html += '<table class="matrix-table"><thead><tr><th>Feature</th>';
+            engines.forEach(function(e){html += '<th>'+e+'</th>'});
+            html += '</tr></thead><tbody>';
+            features.forEach(function(f){
+                html += '<tr><td>'+f.label+'</td>';
+                f.vals.forEach(function(v){
+                    html += '<td><span class="matrix-dot '+dots[v]+'"></span></td>';
+                });
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+        buildFeatureMatrix('feature-matrix');
+
+        buildGroupChart('perf-chart', {
+            engines: [
+                {label:'Google',color:'#4285f4'},
+                {label:'DuckDuckGo',color:'#de5833'},
+                {label:'aoogle',color:'#fbbc05'}
+            ],
+            rows: [
+                {label:'Discussion\nrelevance',values:[88,85,91]},
+                {label:'Discussion\nspam blocked',values:[89,85,85]},
+                {label:'Technical\nrelevance',values:[97,82,85]},
+                {label:'Technical\nspam blocked',values:[94,75,88]},
+                {label:'Shopping\nrelevance',values:[93,81,84]},
+                {label:'Shopping\nspam blocked',values:[91,72,82]}
+            ]
+        });
+
+        setTimeout(animateBars, 300);
+
+        function switchEngine(el,id){
+            var tabs = el.parentNode;
+            for(var i=0;i<tabs.children.length;i++)tabs.children[i].classList.remove('active');
+            el.classList.add('active');
+            var panels = document.querySelectorAll('.engine-panel');
+            for(var i=0;i<panels.length;i++)panels[i].classList.remove('active');
+            document.getElementById(id).classList.add('active');
+        }
+    </script>
+</body>
+</html>

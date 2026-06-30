@@ -1129,7 +1129,7 @@ class ImprovedSearch:
                 return 40
         return 0
 
-    def _rank_results(self, query, results):
+    def _rank_results(self, query, results, filter_type='general'):
         intent = SearchIntent(query)
         blacklist = data_manager.get_blacklist()
 
@@ -1155,6 +1155,39 @@ class ImprovedSearch:
                     s += bl_penalty
 
             s = max(0, s)
+
+            if filter_type == 'shopping':
+                if any(d in domain for d in ['amazon.', 'bestbuy.', 'walmart.', 'newegg.', 'target.', 'etsy.', 'ebay.', 'shop.', 'store.', 'costco.']):
+                    s += 30
+                if result.category == 'shopping':
+                    s += 20
+            elif filter_type == 'official':
+                if any(d in domain for d in ['.org', '.gov', '.edu']) or any(d in domain for d in ['apple.com', 'microsoft.com', 'google.com', 'github.com']):
+                    s += 30
+                if result.category == 'official':
+                    s += 20
+            elif filter_type == 'tutorials':
+                title_lower = result.title.lower() if result.title else ''
+                if result.category == 'tutorial' or 'tutorial' in title_lower or 'guide' in title_lower or 'how to' in title_lower or 'documentation' in title_lower or 'docs' in title_lower:
+                    s += 25
+                if any(d in title_lower for d in ['learn', 'course', 'example', 'reference']):
+                    s += 15
+            elif filter_type == 'discussions':
+                url_lower = result.url.lower() if result.url else ''
+                title_lower = result.title.lower() if result.title else ''
+                if 'reddit' in url_lower or 'forum' in url_lower or 'stackexchange' in url_lower or 'discuss' in url_lower or result.category == 'discussion' or result.category == 'social':
+                    s += 30
+                if any(d in title_lower for d in ['vs', 'review', 'recommend', 'opinion', 'best', 'thoughts', 'experience']):
+                    s += 15
+            elif filter_type == 'academic':
+                url_lower = result.url.lower() if result.url else ''
+                title_lower = result.title.lower() if result.title else ''
+                snippet_lower = result.snippet.lower() if result.snippet else ''
+                if '.edu' in url_lower or '.ac.' in url_lower or result.category == 'academic':
+                    s += 40
+                if any(d in title_lower + snippet_lower for d in ['research', 'study', 'paper', 'journal', 'scholar', 'arxiv', 'pubmed', 'doi', 'citation', 'peer review']):
+                    s += 30
+
             result.score = round(s, 2)
             scored.append(result)
 
@@ -1327,7 +1360,7 @@ class ImprovedSearch:
             return []
         return []
 
-    def search(self, query, page=1):
+    def search(self, query, page=1, filter_type='general'):
         """Main search method with fallback and error handling"""
         cache_key = self._get_cache_key(query, page)
         cached_results = self._get_from_cache(cache_key)
@@ -1359,7 +1392,7 @@ class ImprovedSearch:
             app.logger.error("\n".join(errors))
             return []
 
-        ranked_results = self._rank_results(query, results)
+        ranked_results = self._rank_results(query, results, filter_type)
         serialized_results = [result.to_dict() for result in ranked_results]
 
         # Cache the results
@@ -1368,62 +1401,126 @@ class ImprovedSearch:
         return serialized_results
 
     def search_images(self, query):
+        images = []
+        seen_urls = set()
+
+        def extract_vqd(html):
+            for p in [r'vqd=([\d-]+)&', r'vqd=([\d-]+)', r'"vqd":"([\d-]+)"', r"'vqd':\s*'([\d-]+)'"]:
+                m = re.search(p, html)
+                if m:
+                    return m.group(1)
+            return None
+
         try:
-            url = 'https://www.bing.com/images/search'
-            params = {'q': query, 'form': 'HDRSC2'}
-            headers = {
-                'User-Agent': self.user_agent.random,
-                'Accept': 'text/html,application/xhtml+xml',
-                'Accept-Language': 'en-US,en;q=0.5',
-            }
-            response = self.session.get(url, params=params, headers=headers, timeout=10)
-            if not response or response.status_code != 200:
-                return []
-
-            soup = BeautifulSoup(response.text, 'html.parser')
-            images = []
-            seen_urls = set()
-
-            for a in soup.find_all('a', class_='iusc'):
-                try:
-                    m = a.get('m', '')
-                    if not m:
-                        continue
-                    data = json.loads(m)
-                    purl = data.get('purl', '')
-                    murl = data.get('murl', '')
-                    turl = data.get('turl', '')
-                    if not murl:
-                        continue
-                    if 'pinterest' in murl.lower() or 'pinterest' in purl.lower():
-                        continue
-
-                    if murl not in seen_urls:
-                        seen_urls.add(murl)
-                        img = a.find('img')
-                        title = img.get('alt', '') if img else ''
-                        if not title or title.startswith('Image result'):
-                            title = query
-
-                        turl_clean = turl.split('&pid')[0] if turl else murl
-                        source_domain = urlparse(purl).netloc if purl else ''
-
-                        images.append({
-                            'thumbnail': turl_clean,
-                            'title': title[:100],
-                            'source_url': purl or '#',
-                            'source_domain': source_domain or 'image',
-                        })
-
-                    if len(images) >= 50:
-                        break
-                except Exception:
-                    continue
-
-            return images
+            r = self.session.get('https://duckduckgo.com/', params={'q': query, 'iax': 'images', 'ia': 'images'}, headers=self._get_headers(), timeout=10)
+            vqd = extract_vqd(r.text) if r and r.status_code == 200 else None
+            if vqd:
+                api_resp = self.session.get('https://duckduckgo.com/i.js', params={'q': query, 'o': 'json', 'vqd': vqd, 'f': ',,,'}, headers={**self._get_headers(), 'Referer': 'https://duckduckgo.com/'}, timeout=10)
+                if api_resp and api_resp.status_code == 200:
+                    for item in api_resp.json().get('results', []):
+                        try:
+                            img_url = item.get('image', '')
+                            if not img_url or img_url in seen_urls:
+                                continue
+                            seen_urls.add(img_url)
+                            title = (item.get('title', '') or '')[:100]
+                            thumb = item.get('thumbnail', '') or img_url
+                            src = item.get('url', '') or '#'
+                            dom = urlparse(src).netloc if src != '#' else ''
+                            images.append({'thumbnail': thumb, 'title': title or dom or query, 'source_url': src, 'source_domain': dom or 'image'})
+                            if len(images) >= 50:
+                                break
+                        except:
+                            continue
         except Exception as e:
-            app.logger.error(f"Image search error: {str(e)}")
-            return []
+            app.logger.error(f"DDG images: {e}")
+
+        if len(images) < 6:
+            try:
+                r = self.session.get('https://www.bing.com/images/search', params={'q': query, 'form': 'HDRSC2'}, headers=self._get_headers(), timeout=10)
+                if r and r.status_code == 200:
+                    for a in BeautifulSoup(r.text, 'html.parser').find_all('a', class_='iusc'):
+                        try:
+                            d = json.loads(a.get('m', '{}'))
+                            murl = d.get('murl', '')
+                            if not murl or murl in seen_urls:
+                                continue
+                            seen_urls.add(murl)
+                            if 'pinterest' in murl.lower():
+                                continue
+                            img = a.find('img')
+                            title = img.get('alt', '') if img else ''
+                            if title and title.startswith('Image result'):
+                                title = ''
+                            purl = d.get('purl', '')
+                            dom = urlparse(purl).netloc if purl else ''
+                            turl = (d.get('turl', '') or '').split('&pid')[0] or murl
+                            images.append({'thumbnail': turl, 'title': title[:100] or dom or query, 'source_url': purl or '#', 'source_domain': dom or 'image'})
+                            if len(images) >= 50:
+                                break
+                        except:
+                            continue
+            except Exception as e:
+                app.logger.error(f"Bing images: {e}")
+
+        return images[:50]
+
+    def search_videos(self, query):
+        videos = []
+        try:
+            r = self.session.get('https://www.youtube.com/results', params={'search_query': query}, headers={**self._get_headers(), 'Accept-Language': 'en-US,en;q=0.5'}, timeout=15)
+            if not r or r.status_code != 200:
+                return videos
+            m = re.search(r'ytInitialData\s*=\s*({.*?});\s*</script>', r.text, re.DOTALL)
+            if not m:
+                m = re.search(r'window\["ytInitialData"\]\s*=\s*({.*?});', r.text, re.DOTALL)
+            if not m:
+                return videos
+            data = json.loads(m.group(1))
+            contents = data
+            for key in ['contents', 'twoColumnSearchResultsRenderer', 'primaryContents', 'sectionListRenderer', 'contents']:
+                contents = contents.get(key, {}) if isinstance(contents, dict) else {}
+            for section in contents if isinstance(contents, list) else []:
+                for item in (section.get('itemSectionRenderer', {}).get('contents', []) if isinstance(section, dict) else []):
+                    vr = item.get('videoRenderer', {}) if isinstance(item, dict) else {}
+                    if not vr:
+                        continue
+                    vid = vr.get('videoId', '')
+                    if not vid:
+                        continue
+                    title_runs = vr.get('title', {}).get('runs', [])
+                    title = ''.join(run.get('text', '') for run in title_runs) if title_runs else vr.get('title', {}).get('simpleText', '')
+                    thumbs = vr.get('thumbnail', {}).get('thumbnails', [])
+                    thumb = thumbs[-1]['url'] if thumbs else ''
+                    length = vr.get('lengthText', {}).get('simpleText', '')
+                    views = vr.get('viewCountText', {}).get('simpleText', '') or vr.get('viewCountText', {}).get('runs', [{}])[0].get('text', '')
+                    published = vr.get('publishedTimeText', {}).get('simpleText', '')
+                    channel_runs = vr.get('ownerText', {}).get('runs', []) or vr.get('shortBylineText', {}).get('runs', [])
+                    channel = channel_runs[0].get('text', '') if channel_runs else ''
+                    channel_url = ''
+                    if channel_runs:
+                        chan_id = (channel_runs[0].get('navigationEndpoint', {}) or {}).get('browseEndpoint', {}) or {}
+                        chan_id = chan_id.get('browseId', '')
+                        if chan_id:
+                            channel_url = f'https://www.youtube.com/channel/{chan_id}'
+                    videos.append({
+                        'id': vid,
+                        'title': title[:120],
+                        'url': f'https://www.youtube.com/watch?v={vid}',
+                        'thumbnail': thumb,
+                        'duration': length,
+                        'views': views,
+                        'published': published,
+                        'channel': channel,
+                        'channel_url': channel_url,
+                    })
+                    if len(videos) >= 20:
+                        break
+                if len(videos) >= 20:
+                    break
+        except Exception as e:
+            app.logger.error(f"YouTube search error: {e}")
+        return videos
 
     def get_suggestions(self, query):
         """Get search suggestions with error handling"""
@@ -1666,6 +1763,9 @@ def home():
 def search():
     query = request.args.get('q', '').strip()
     page = max(1, int(request.args.get('page', 1)))
+    filter_type = request.args.get('filter', 'general')
+    if filter_type not in ('general', 'shopping', 'official', 'tutorials', 'discussions', 'academic'):
+        filter_type = 'general'
 
     if not query:
         return render_template('search.html')
@@ -1697,7 +1797,7 @@ def search():
         )
 
     try:
-        results = search_engine.search(query, page)
+        results = search_engine.search(query, page, filter_type)
         search_stats.record()
         data_manager.increment_total_searches()
 
@@ -1716,6 +1816,7 @@ def search():
         return render_template(
             'search.html',
             query=query,
+            filter=filter_type,
             results=results,
             safety_info=safety_info,
             news_box=news_box,
@@ -1828,11 +1929,7 @@ def images():
 
     try:
         img_results = search_engine.search_images(query)
-        return render_template(
-            'images.html',
-            query=query,
-            images=img_results
-        )
+        return render_template('images.html', query=query, images=img_results)
     except Exception as e:
         app.logger.error(f"Images route error: {str(e)}")
         return render_template(
@@ -1840,6 +1937,22 @@ def images():
             query=query,
             error="Failed to fetch images. Please try again."
         )
+
+@app.route('/videos')
+def videos():
+    query = request.args.get('q', '').strip()
+    if not query:
+        return render_template('videos.html')
+    try:
+        vid_results = search_engine.search_videos(query)
+        return render_template('videos.html', query=query, videos=vid_results)
+    except Exception as e:
+        app.logger.error(f"Videos route error: {str(e)}")
+        return render_template('videos.html', query=query, error="Failed to fetch videos. Please try again.")
+
+@app.route('/blog')
+def blog():
+    return render_template('blog.html')
 
 @app.route('/about')
 def about():

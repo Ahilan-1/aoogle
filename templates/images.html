@@ -10,6 +10,17 @@
             --apple-light-gray: #f5f5f7;
             --apple-blue: #0066cc;
             --apple-dark: #1d1d1f;
+            --border: #d2d2d7;
+            --hover-bg: #e8e8ed;
+        }
+        .dark-mode {
+            --apple-gray: #a1a1a6;
+            --apple-light-gray: #2c2c2e;
+            --apple-blue: #64a8ff;
+            --apple-dark: #f5f5f7;
+            --border: #48484a;
+            --hover-bg: #3a3a3c;
+            background: #1c1c1e;
         }
         * {
             margin: 0;
@@ -20,22 +31,24 @@
         body {
             background: #fff;
             color: var(--apple-dark);
+            transition: background .2s, color .2s;
         }
         .header {
-            padding: 20px;
+            padding: 16px 20px;
             background: rgba(255, 255, 255, 0.98);
             position: sticky;
             top: 0;
             z-index: 100;
             backdrop-filter: blur(20px);
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 1px 8px rgba(0, 0, 0, 0.08);
         }
+        .dark-mode .header { background: rgba(28, 28, 30, 0.98); }
         .header-inner {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             display: flex;
             align-items: center;
-            gap: 24px;
+            gap: 16px;
         }
         .logo {
             font-size: 22px;
@@ -44,6 +57,7 @@
             text-decoration: none;
             white-space: nowrap;
         }
+        .logo:hover { text-decoration: none; }
         .search-box {
             display: flex;
             align-items: center;
@@ -51,19 +65,20 @@
             border-radius: 12px;
             padding: 10px 16px;
             flex: 1;
-            max-width: 640px;
+            max-width: 520px;
             transition: all 0.3s;
         }
         .search-box:focus-within {
-            background: #fff;
+            background: var(--bg);
             box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
         }
         .search-input {
             flex: 1;
             border: none;
             outline: none;
-            font-size: 16px;
+            font-size: 15px;
             background: transparent;
+            color: inherit;
         }
         .search-button {
             background: none;
@@ -78,34 +93,33 @@
             margin-left: auto;
         }
         .tab {
-            padding: 8px 18px;
+            padding: 7px 16px;
             border-radius: 8px;
             text-decoration: none;
-            font-size: 14px;
+            font-size: 13px;
             color: var(--apple-gray);
             font-weight: 500;
             transition: all 0.2s;
         }
-        .tab:hover {
-            background: var(--apple-light-gray);
-        }
-        .tab.active {
-            background: var(--apple-blue);
-            color: #fff;
-        }
+        .tab:hover { background: var(--apple-light-gray); text-decoration: none; }
+        .tab.active { background: var(--apple-blue); color: #fff; }
 
         .images-grid {
-            max-width: 1300px;
+            max-width: 1400px;
             margin: 20px auto;
             padding: 0 16px;
-            columns: 4;
-            column-gap: 16px;
+            columns: 5;
+            column-gap: 12px;
         }
+        @media (max-width: 1200px) { .images-grid { columns: 4; } }
+        @media (max-width: 900px) { .images-grid { columns: 3; } }
+        @media (max-width: 640px) { .images-grid { columns: 2; } }
+        @media (max-width: 400px) { .images-grid { columns: 1; } }
 
         .image-card {
             break-inside: avoid;
-            margin-bottom: 16px;
-            border-radius: 12px;
+            margin-bottom: 12px;
+            border-radius: 10px;
             overflow: hidden;
             background: var(--apple-light-gray);
             position: relative;
@@ -114,17 +128,17 @@
         }
         .image-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
         }
         .image-card img {
             width: 100%;
             display: block;
         }
         .image-card .info {
-            padding: 10px 12px;
+            padding: 8px 10px;
         }
         .image-card .info .title {
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 500;
             color: var(--apple-dark);
             display: -webkit-box;
@@ -133,7 +147,7 @@
             overflow: hidden;
         }
         .image-card .info .source {
-            font-size: 12px;
+            font-size: 11px;
             color: var(--apple-gray);
             margin-top: 2px;
         }
@@ -144,27 +158,25 @@
             color: var(--apple-gray);
             font-size: 18px;
         }
-
         .error-message {
             text-align: center;
             padding: 60px 20px;
             color: var(--apple-gray);
         }
 
-        @media (max-width: 1024px) {
-            .images-grid { columns: 3; }
+        .dm-toggle {
+            position: fixed; top: 14px; right: 16px; z-index: 999;
+            width: 32px; height: 32px; border-radius: 50%;
+            border: 1px solid var(--border); background: var(--bg);
+            color: var(--apple-gray); cursor: pointer; font-size: 14px;
+            display: flex; align-items: center; justify-content: center; transition: .15s;
         }
-        @media (max-width: 768px) {
-            .images-grid { columns: 2; }
-            .header-inner { flex-wrap: wrap; }
-            .tabs { margin-left: 0; }
-        }
-        @media (max-width: 480px) {
-            .images-grid { columns: 1; }
-        }
+        .dm-toggle:hover { background: var(--hover-bg); }
     </style>
 </head>
 <body>
+    <button class="dm-toggle" id="dm-btn" onclick="toggleDark()" aria-label="Toggle dark mode">&#x263D;</button>
+
     <header class="header">
         <div class="header-inner">
             <a href="/" class="logo">aoogle</a>
@@ -179,6 +191,7 @@
             <div class="tabs">
                 <a href="/search?q={{ query }}" class="tab">Web</a>
                 <a href="/images?q={{ query }}" class="tab active">Images</a>
+                <a href="/videos?q={{ query }}" class="tab">Videos</a>
             </div>
         </div>
     </header>
@@ -208,5 +221,20 @@
             </div>
         {% endif %}
     </main>
+
+    <script>
+        function setDark(v){
+            document.body.classList.toggle('dark-mode',v);
+            var b=document.getElementById('dm-btn');
+            if(b)b.innerHTML=v?'&#x2600;':'&#x263D;';
+            try{localStorage.setItem('aoogle-dark',v?'1':'0')}catch(e){}
+        }
+        function toggleDark(){setDark(!document.body.classList.contains('dark-mode'))}
+        (function(){
+            var p=null;try{p=localStorage.getItem('aoogle-dark')}catch(e){}
+            if(p==='1')setDark(true);
+            else if(p===null&&window.matchMedia('(prefers-color-scheme:dark)').matches)setDark(true);
+        })();
+    </script>
 </body>
 </html>
