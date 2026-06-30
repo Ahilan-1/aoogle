@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>aoogle Admin</title>
+    <style>
+        *{box-sizing:border-box}
+        body{margin:0;padding:20px;font-family:arial,sans-serif;background:#f0f2f5;color:#222}
+        a{color:#1a73e8;text-decoration:none}
+        a:hover{text-decoration:underline}
+        .login-box{max-width:360px;margin:80px auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+        .login-box h1{font-size:22px;margin:0 0 20px;text-align:center;color:#1a73e8}
+        .login-box input{width:100%;padding:10px 14px;border:1px solid #dadce0;border-radius:6px;font-size:14px;outline:none;margin-bottom:12px}
+        .login-box input:focus{border-color:#1a73e8}
+        .login-box button{width:100%;padding:10px;background:#1a73e8;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer}
+        .login-box button:hover{background:#1557b0}
+        .login-box .error{color:#c5221f;font-size:13px;margin-bottom:10px;text-align:center}
+        .header{display:flex;align-items:center;justify-content:space-between;max-width:1100px;margin:0 auto 20px}
+        .header h1{font-size:20px;margin:0;color:#1a73e8}
+        .header a{font-size:13px;color:#5f6368;padding:6px 12px;border:1px solid #dadce0;border-radius:6px}
+        .header a:hover{background:#f1f3f4;text-decoration:none}
+        .container{max-width:1100px;margin:0 auto}
+        .stats{display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap}
+        .stat-card{background:#fff;border-radius:10px;padding:18px 24px;flex:1;min-width:140px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+        .stat-card .num{font-size:28px;font-weight:600;color:#1a73e8;margin-bottom:2px}
+        .stat-card .label{font-size:12px;color:#5f6368;text-transform:uppercase;letter-spacing:.3px}
+        .card{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:20px;overflow:hidden}
+        .card-title{padding:14px 20px;font-size:15px;font-weight:600;border-bottom:1px solid #e8eaed;margin:0;display:flex;align-items:center;justify-content:space-between}
+        .card-title .badge{background:#e8f0fe;color:#1a73e8;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:500}
+        table{width:100%;border-collapse:collapse;font-size:13px}
+        th{text-align:left;padding:10px 16px;background:#f8f9fa;color:#5f6368;font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid #e8eaed}
+        td{padding:10px 16px;border-bottom:1px solid #f1f3f4;color:#3c4043;vertical-align:top}
+        tr:last-child td{border-bottom:none}
+        tr:hover td{background:#f8f9fa}
+        .url-cell{max-width:300px;word-break:break-all;font-size:12px;color:#1a73e8}
+        .title-cell{max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .query-cell{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .date-cell{font-size:12px;color:#5f6368;white-space:nowrap}
+        .status-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500}
+        .status-pending{background:#fef7e0;color:#e37400}
+        .status-approved{background:#e6f4ea;color:#137333}
+        .status-denied{background:#fce8e6;color:#c5221f}
+        .btn{display:inline-block;padding:5px 12px;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-family:arial,sans-serif}
+        .btn-approve{background:#1a73e8;color:#fff}
+        .btn-approve:hover{background:#1557b0}
+        .btn-deny{background:#f1f3f4;color:#3c4043;border:1px solid #dadce0}
+        .btn-deny:hover{background:#e8eaed}
+        .btn-remove{background:#c5221f;color:#fff;font-size:11px;padding:3px 8px}
+        .btn-remove:hover{background:#a50e0e}
+        .btn-group{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+        .penalty-input{width:50px;padding:4px 6px;border:1px solid #dadce0;border-radius:4px;font-size:12px;text-align:center}
+        .empty{text-align:center;padding:30px 20px;color:#5f6368;font-size:14px}
+        .bl-word{display:inline-flex;align-items:center;gap:8px;background:#f1f3f4;padding:4px 10px;border-radius:16px;font-size:13px;margin:3px}
+        .bl-word .bl-penalty{color:#c5221f;font-weight:600;font-size:11px}
+        .bl-word form{display:inline}
+    </style>
+</head>
+<body>
+    {% if login %}
+    <div class="login-box">
+        <h1>aoogle Admin</h1>
+        {% if error %}<div class="error">{{ error }}</div>{% endif %}
+        <form method="POST">
+            <input type="password" name="password" placeholder="Admin password" required>
+            <button type="submit">Sign in</button>
+        </form>
+    </div>
+    {% else %}
+    <div class="header">
+        <h1>aoogle Admin Panel</h1>
+        <a href="/admin/logout">Sign out</a>
+    </div>
+    <div class="container">
+        <div class="stats">
+            <div class="stat-card">
+                <div class="num">{{ stats.pending }}</div>
+                <div class="label">Pending Reports</div>
+            </div>
+            <div class="stat-card">
+                <div class="num">{{ stats.approved }}</div>
+                <div class="label">Approved</div>
+            </div>
+            <div class="stat-card">
+                <div class="num">{{ stats.denied }}</div>
+                <div class="label">Denied</div>
+            </div>
+            <div class="stat-card">
+                <div class="num">{{ stats.blacklisted_domains }}</div>
+                <div class="label">Blacklisted Domains</div>
+            </div>
+            <div class="stat-card">
+                <div class="num">{{ total_searches }}</div>
+                <div class="label">Total Searches</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">
+                Pending Reports
+                <span class="badge">{{ stats.pending }} pending</span>
+            </div>
+            {% set pending = reports|selectattr('status', 'equalto', 'pending')|list %}
+            {% if pending %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>URL</th>
+                        <th>Title</th>
+                        <th>Query</th>
+                        <th>Reported</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in pending %}
+                    <tr>
+                        <td class="url-cell"><a href="{{ r.url }}" target="_blank">{{ r.domain }}{{ r.url[r.url.index(r.domain)+r.domain|length:]|truncate(40) }}</a></td>
+                        <td class="title-cell">{{ r.title|truncate(45) }}</td>
+                        <td class="query-cell">{{ r.query|truncate(30) }}</td>
+                        <td class="date-cell">{{ r.reported_at[:10] }}</td>
+                        <td>
+                            <div class="btn-group">
+                                <form method="POST" action="/admin/reports/{{ r.id }}/approve" style="display:flex;align-items:center;gap:4px">
+                                    <input type="number" name="penalty" value="-30" class="penalty-input" title="Penalty score">
+                                    <button type="submit" class="btn btn-approve">Approve</button>
+                                </form>
+                                <form method="POST" action="/admin/reports/{{ r.id }}/deny">
+                                    <button type="submit" class="btn btn-deny">Deny</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">No pending reports. All clear!</div>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <div class="card-title">
+                All Reports
+                <span class="badge">{{ stats.total_reports }} total</span>
+            </div>
+            {% if reports %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Domain</th>
+                        <th>Title</th>
+                        <th>Query</th>
+                        <th>Date</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in reports|reverse %}
+                    <tr>
+                        <td class="url-cell">{{ r.domain }}</td>
+                        <td class="title-cell">{{ r.title|truncate(40) }}</td>
+                        <td class="query-cell">{{ r.query|truncate(25) }}</td>
+                        <td class="date-cell">{{ r.reported_at[:10] }}</td>
+                        <td><span class="status-badge status-{{ r.status }}">{{ r.status }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">No reports yet.</div>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <div class="card-title">
+                Blacklisted Domains
+                <span class="badge">{{ stats.blacklisted_domains }} domains</span>
+            </div>
+            {% if blacklist %}
+            <div style="padding:16px 20px;display:flex;flex-wrap:wrap">
+                {% for domain, penalty in blacklist.items() %}
+                <div class="bl-word">
+                    <span>{{ domain }}</span>
+                    <span class="bl-penalty">({{ penalty }})</span>
+                    <form method="POST" action="/admin/blacklist/remove">
+                        <input type="hidden" name="domain" value="{{ domain }}">
+                        <button type="submit" class="btn btn-remove" style="padding:1px 6px;font-size:10px">x</button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty">No blacklisted domains.</div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</body>
+</html>

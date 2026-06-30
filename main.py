@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, abort
+from flask import Flask, render_template, request, jsonify, abort, session, redirect, url_for
 import requests
 from bs4 import BeautifulSoup
 from fake_useragent import UserAgent
@@ -14,12 +14,32 @@ try:
 except ImportError:
     redis_available = False
 from concurrent.futures import ThreadPoolExecutor, as_completed
+try:
+    import boto3
+    from botocore.exceptions import ClientError
+    s3_available = True
+except ImportError:
+    s3_available = False
 from datetime import datetime, timedelta
 import hashlib
 import re
 import threading
+import os
 
 app = Flask(__name__)
+
+# Load .env file manually
+env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+if os.path.exists(env_path):
+    with open(env_path) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, val = line.split('=', 1)
+                os.environ.setdefault(key.strip(), val.strip())
+
+app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24).hex())
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Admin@123')
 
 @app.after_request
 def add_cors_headers(response):
@@ -28,6 +48,32 @@ def add_cors_headers(response):
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type, X-Requested-With'
     response.headers['Access-Control-Max-Age'] = '86400'
     return response
+
+# Initialize S3 for persistent storage (Railway Storage Buckets)
+s3_client = None
+S3_BUCKET = None
+S3_DATA_KEY = 'data.json'
+S3_ENABLED = False
+
+if s3_available:
+    bucket_name = os.environ.get('BUCKET')
+    access_key = os.environ.get('ACCESS_KEY_ID')
+    secret_key = os.environ.get('SECRET_ACCESS_KEY')
+    endpoint = os.environ.get('ENDPOINT')
+    if bucket_name and access_key and secret_key and endpoint:
+        try:
+            s3_client = boto3.client(
+                's3',
+                endpoint_url=endpoint,
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                region_name=os.environ.get('REGION', 'auto')
+            )
+            S3_BUCKET = bucket_name
+            S3_ENABLED = True
+            app.logger.info("S3 storage bucket configured")
+        except Exception as e:
+            app.logger.warning(f"S3 init failed, falling back to local file: {e}")
 
 # Enhanced logging configuration
 handler = RotatingFileHandler(
@@ -122,10 +168,71 @@ DOMAIN_AUTHORITY = {
     'codecademy.com': 70, 'datacamp.com': 70, 'educative.io': 65,
     'ray.so': 50, 'carbon.now.sh': 50, 'roadmap.sh': 65,
     'redditmedia.com': 40, 'redditstatic.com': 40,
+    'netflix.com': 92, 'imdb.com': 90, 'rottentomatoes.com': 85,
+    'hulu.com': 85, 'disneyplus.com': 88, 'hotstar.com': 85,
+    'amazon.com': 88, 'primevideo.com': 85, 'sonyliv.com': 80,
+    'zee5.com': 78, 'voot.com': 78, 'jiocinema.com': 80,
+    'mxplayer.in': 75, 'crunchyroll.com': 82, 'hbo.com': 88,
+    'paramountplus.com': 82, 'peacocktv.com': 80, 'appletv.com': 85,
+    'discoveryplus.com': 78, 'espn.com': 85, 'spotify.com': 85,
+    'tvtropes.org': 75, 'metacritic.com': 80, 'letterboxd.com': 72,
+    'themoviedb.org': 78, 'filmAffinity.com': 70,
+    'instagram.com': 72, 'facebook.com': 70, 'x.com': 70, 'twitter.com': 70,
+    'linkedin.com': 75, 'pinterest.com': 65, 'tiktok.com': 60,
+    'usa.gov': 92, 'whitehouse.gov': 92, 'state.gov': 90, 'defense.gov': 90,
+    'nih.gov': 95, 'cdc.gov': 93, 'fda.gov': 92, 'nasa.gov': 94,
+    'nsa.gov': 85, 'fbi.gov': 88, 'irs.gov': 85, 'ssa.gov': 85,
+    'justice.gov': 88, 'commerce.gov': 85, 'energy.gov': 85, 'interior.gov': 80,
+    'education.gov': 85, 'treasury.gov': 85, 'transportation.gov': 80,
+    'dhs.gov': 88, 'va.gov': 85, 'usda.gov': 80, 'epa.gov': 85,
+    'fema.gov': 88, 'ready.gov': 85, 'noaa.gov': 85, 'usgs.gov': 85,
+    'uk.gov': 92, 'gov.uk': 92, 'parliament.uk': 90, 'nhs.uk': 92,
+    'canada.ca': 90, 'gc.ca': 90, 'ontario.ca': 82,
+    'india.gov.in': 90, 'nic.in': 85, 'mygov.in': 85, 'pmindia.gov.in': 88,
+    'gov.in': 85, 'aus.gov.au': 90, 'gov.au': 90, 'health.gov.au': 85,
+    'govt.nz': 85, 'europa.eu': 90, 'ec.europa.eu': 88,
+    'un.org': 90, 'who.int': 92, 'unesco.org': 85, 'oecd.org': 85,
+    'worldbank.org': 85, 'imf.org': 85, 'nato.int': 85, 'redcross.org': 85,
+    'bbc.co.uk': 82, 'guardian.co.uk': 80, 'theguardian.com': 80,
+    'washingtonpost.com': 82, 'latimes.com': 78, 'wsj.com': 82,
+    'ft.com': 80, 'economist.com': 82, 'time.com': 75, 'newyorker.com': 80,
+    'nationalgeographic.com': 80, 'scientificamerican.com': 82,
+    'theverge.com': 72, 'polygon.com': 70, 'ign.com': 72, 'gamespot.com': 70,
+    'eurogamer.net': 70, 'kotaku.com': 68, 'rockpapershotgun.com': 70,
+    'pcgamer.com': 70, 'variety.com': 75, 'hollywoodreporter.com': 75,
+    'deadline.com': 72, 'thewrap.com': 70, 'empireonline.com': 72,
+    'collider.com': 68, 'screenrant.com': 60, 'cbr.com': 60,
+    'animenewsnetwork.com': 78, 'myanimelist.net': 75,
 }
 
 DISCUSSION_DOMAINS = {'reddit.com', 'quora.com', 'stackexchange.com', 'news.ycombinator.com',
                       'stackoverflow.com', 'medium.com', 'dev.to', 'hu.elnino'}
+
+PLATFORM_DOMAINS = {
+    'netflix': 'netflix.com',
+    'prime video': 'amazon.com',
+    'primevideo': 'primevideo.com',
+    'amazon prime': 'amazon.com',
+    'hotstar': 'hotstar.com',
+    'disney+': 'hotstar.com',
+    'disneyplus': 'disneyplus.com',
+    'hulu': 'hulu.com',
+    'sonyliv': 'sonyliv.com',
+    'zee5': 'zee5.com',
+    'voot': 'voot.com',
+    'jiocinema': 'jiocinema.com',
+    'mxplayer': 'mxplayer.in',
+    'crunchyroll': 'crunchyroll.com',
+    'hbo': 'hbo.com',
+    'hbo max': 'hbomax.com',
+    'paramount+': 'paramountplus.com',
+    'peacock': 'peacocktv.com',
+    'appletv': 'appletv.com',
+    'youtube': 'youtube.com',
+    'spotify': 'spotify.com',
+    'imdb': 'imdb.com',
+    'rottentomatoes': 'rottentomatoes.com',
+}
 
 AD_DOMAINS = {
     'oneclearwinner.com', 'taboola.com', 'outbrain.com', 'revcontent.com',
@@ -390,6 +497,141 @@ def detect_notice(query):
             }
     return None
 
+DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data.json')
+
+def _load_json():
+    if S3_ENABLED and s3_client:
+        try:
+            resp = s3_client.get_object(Bucket=S3_BUCKET, Key=S3_DATA_KEY)
+            return json.loads(resp['Body'].read().decode('utf-8'))
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchKey':
+                return None
+            app.logger.error(f"S3 load error: {e}")
+            return None
+        except Exception as e:
+            app.logger.error(f"S3 load error: {e}")
+            return None
+    else:
+        if os.path.exists(DATA_FILE):
+            try:
+                with open(DATA_FILE, 'r') as f:
+                    return json.load(f)
+            except:
+                return None
+        return None
+
+def _save_json(data):
+    if S3_ENABLED and s3_client:
+        try:
+            s3_client.put_object(
+                Bucket=S3_BUCKET,
+                Key=S3_DATA_KEY,
+                Body=json.dumps(data, indent=2).encode('utf-8'),
+                ContentType='application/json'
+            )
+        except Exception as e:
+            app.logger.error(f"S3 save error: {e}")
+    else:
+        with open(DATA_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+
+class DataManager:
+    def __init__(self):
+        self._lock = threading.Lock()
+        loaded = _load_json()
+        if loaded:
+            self.data = loaded
+        else:
+            self.data = {"reports": [], "blacklist": {}, "total_searches": 0}
+            _save_json(self.data)
+
+    def add_report(self, url, title, query, domain):
+        with self._lock:
+            ids = [r['id'] for r in self.data['reports']]
+            next_id = max(ids) + 1 if ids else 1
+            report = {
+                "id": next_id,
+                "url": url,
+                "domain": domain,
+                "title": title,
+                "query": query,
+                "reported_at": datetime.now().isoformat(),
+                "status": "pending"
+            }
+            self.data['reports'].append(report)
+            _save_json(self.data)
+            return report
+
+    def get_pending_reports(self):
+        with self._lock:
+            return [r for r in self.data['reports'] if r['status'] == 'pending']
+
+    def get_all_reports(self):
+        with self._lock:
+            return list(self.data['reports'])
+
+    def approve_report(self, report_id, penalty=-30):
+        with self._lock:
+            for report in self.data['reports']:
+                if report['id'] == report_id and report['status'] == 'pending':
+                    report['status'] = 'approved'
+                    domain = report['domain']
+                    self.data['blacklist'][domain] = penalty
+                    _save_json(self.data)
+                    return True
+            return False
+
+    def deny_report(self, report_id):
+        with self._lock:
+            for report in self.data['reports']:
+                if report['id'] == report_id and report['status'] == 'pending':
+                    report['status'] = 'denied'
+                    _save_json(self.data)
+                    return True
+            return False
+
+    def get_blacklist(self):
+        with self._lock:
+            return dict(self.data.get('blacklist', {}))
+
+    def remove_from_blacklist(self, domain):
+        with self._lock:
+            if domain in self.data['blacklist']:
+                del self.data['blacklist'][domain]
+                _save_json(self.data)
+                return True
+            return False
+
+    def get_stats(self):
+        with self._lock:
+            reports = self.data['reports']
+            pending = sum(1 for r in reports if r['status'] == 'pending')
+            approved = sum(1 for r in reports if r['status'] == 'approved')
+            denied = sum(1 for r in reports if r['status'] == 'denied')
+            return {
+                'total_reports': len(reports),
+                'pending': pending,
+                'approved': approved,
+                'denied': denied,
+                'blacklisted_domains': len(self.data['blacklist']),
+                'total_searches': self.data.get('total_searches', 0)
+            }
+
+    def get_total_searches(self):
+        with self._lock:
+            return self.data.get('total_searches', 0)
+
+    def increment_total_searches(self):
+        with self._lock:
+            self.data['total_searches'] = self.data.get('total_searches', 0) + 1
+
+    def flush(self):
+        with self._lock:
+            _save_json(self.data)
+
+data_manager = DataManager()
+
 class ImprovedSearch:
     def __init__(self):
         self.session = requests.Session()
@@ -591,7 +833,16 @@ class ImprovedSearch:
             score += 5
 
         content_farms = ['betanet', 'guru99', 'hackr', 'cto', 'blogger', 'hubpages', 'ezinearticles',
-                         'articlesfactory', 'article', 'weebly', 'wixsite', 'yolasite']
+                         'articlesfactory', 'article', 'weebly', 'wixsite', 'yolasite',
+                         'thecinemaworld', 'ottupdate', 'ottplay', 'bloggingaunty',
+                         'theenvoyweb', 'wikibiowiki', 'ottfree', 'gadgets360',
+                         'technews', 'tamilanjobs', 'biographyninja',
+                         'topstoriesworld', 'dailyentertainment', 'webnewswire',
+                         'thetalko', 'screenrant', 'cbr.com', 'whatculture',
+                         'fandomwire', 'pinkvilla', 'filmibeat', 'filmfare',
+                         'koimoi', 'bollywoodhungama', 'indiatimes',
+                         'timesofindia.indiatimes', 'hindustantimes',
+                         'indianexpress', 'deccanchronicle', 'thehindu']
         for farm in content_farms:
             if farm in domain:
                 score -= 20
@@ -752,6 +1003,38 @@ class ImprovedSearch:
             'geeksforgeeks.org': -25, 'betanet.net': -40, 'betanet': -40,
             'medium.com': 0, 'guru99.com': -20, 'cto': -15, 'hackr': -15,
             'educative.io': -5, 'pieces.app': -12, 'upgrad': -10,
+            'thecinemaworld': -40, 'ottupdate': -40, 'ottplay': -35,
+            'bloggingaunty': -40, 'gadgets360': -15, 'technews': -15,
+            'theenvoyweb': -30, 'wikibiowiki': -35, 'ottfree': -35,
+            'blogger': -10, 'hubpages': -20, 'ezinearticles': -25,
+            'articlesfactory': -25, 'weebly': -15, 'wixsite': -15,
+            'yolasite': -15, 'wordpress.com': 0, 'blogspot': -10,
+            'medium.com': 0, 'substack.com': 5,
+            'decider.com': -5, 'whats-on-netflix': 10,
+            'eatingwell.com': -15, 'southernliving.com': -15,
+            'dailypaws.com': -15, 'realsimple.com': -15,
+            'bhg.com': -15, 'thespruce.com': -15,
+            'marthastewart.com': -15, 'foodandwine.com': -15,
+            'allrecipes.com': -15, 'verywellmind.com': -15,
+            'thesprucepets.com': -15, 'travelandleisure.com': -15,
+            'brides.com': -15, 'simplyrecipes.com': -15,
+            'health.com': -15, 'verywellfamily.com': -15,
+            'people.com': -15, 'investopedia.com': -15,
+            'byrdie.com': -15, 'bestlifeonline.com': -20,
+            'mydomaine.com': -15, 'seriouseats.com': -10,
+            'thespruceeats.com': -15, 'verywellhealth.com': -15,
+            'tripsavvy.com': -15, 'parents.com': -15,
+            'eatthis.com': -20, 'lifewire.com': -15,
+            'woodmagazine.com': -10, 'shape.com': -15,
+            'learnreligions.com': -15, 'liquor.com': -15,
+            'verywellfit.com': -15, 'instyle.com': -15,
+            'midwestliving.com': -10, 'treehugger.com': -10,
+            'ew.com': -15, 'thoughtco.com': -15,
+            'liveabout.com': -15, 'celebwell.com': -20,
+            'agriculture.com': -10, 'thebalancemoney.com': -15,
+            'allpeoplequilt.com': -10, 'thesprucecrafts.com': -15,
+            'thebalance.com': -15, 'thebalancecareers.com': -15,
+            'lifesavvy.com': -15, 'businessinsider.com': -10,
         }
         for low_domain, penalty in known_low_quality.items():
             if low_domain in domain:
@@ -760,23 +1043,116 @@ class ImprovedSearch:
         if 'reddit.com' not in domain and 'reddit' in title.lower():
             score -= 30
 
+        # --- AI / scraped content pattern detection ---
+        body = (title + ' ' + snippet).lower()
+
+        ai_phrases = [
+            "in today's digital", "in today's world", "let's dive in", "let us dive in",
+            "in conclusion", "it's worth noting", "it is worth noting",
+            "landscape of", "the realm of", "a plethora of",
+            "we will explore", "we'll explore", "this comprehensive guide",
+            "ever-evolving", "ever evolving", "in this digital age",
+            "delve into", "diving into", "look no further",
+            "in the ever-growing", "this article will provide", "read on to",
+            "in this blog post", "welcome to our", "the ultimate guide",
+            "everything you need to know about", "here's everything",
+            "here is everything", "in this article we", "this article aims to",
+            "we will delve", "we'll delve", "you may have heard",
+            "if you're a fan", "if you are a fan", "fans of the",
+            "for those unfamiliar", "for those who don't know",
+            "let's take a look", "let us take a look", "let's explore",
+        ]
+        ai_match_count = sum(1 for phrase in ai_phrases if phrase in body)
+        if ai_match_count >= 3:
+            score -= ai_match_count * 4
+        elif ai_match_count >= 1:
+            score -= ai_match_count * 2
+
+        # Detect excessive keyword repetition (AI stuffing)
+        words = body.split()
+        word_freq = {}
+        for w in words:
+            if len(w) > 3:
+                word_freq[w] = word_freq.get(w, 0) + 1
+        if word_freq:
+            max_freq = max(word_freq.values())
+            if max_freq > 4:
+                score -= (max_freq - 3) * 2
+
+        # Overly long SEO-stuffed title
+        if len(title) > 100:
+            score -= 8
+        elif len(title) > 70:
+            score -= 3
+
+        # Very short repetitive snippet structure
+        sentences = re.split(r'[.!?]+', snippet)
+        if len(sentences) >= 3:
+            short_sentences = sum(1 for s in sentences if len(s.strip().split()) < 6)
+            if short_sentences >= len(sentences) // 2:
+                score -= 5
+
+        # Excessive comma usage (list-style AI writing)
+        if snippet.count(',') > 5:
+            score -= 3
+
+        # Detect "also" overuse (AI hallmark)
+        also_count = body.count(' also ')
+        if also_count >= 2:
+            score -= also_count * 2
+
         return score
+
+    def _score_exact_domain_match(self, query, result):
+        query_lower = query.lower()
+        domain = urlparse(result.url).netloc.lower()
+        domain = re.sub(r'^www\.', '', domain)
+
+        for platform_name, platform_domain in PLATFORM_DOMAINS.items():
+            if platform_name in query_lower and platform_domain in domain:
+                return 50
+        return 0
+
+    def _score_navigational_domain_boost(self, query, result):
+        query_lower = query.lower().strip()
+        query_terms = set(query_lower.split())
+        domain = urlparse(result.url).netloc.lower()
+        domain = re.sub(r'^www\.', '', domain)
+        domain_parts = domain.split('.')
+
+        for term in query_terms:
+            if len(term) <= 2:
+                continue
+            if any(term == part for part in domain_parts):
+                return 80
+            if any(term in part for part in domain_parts):
+                return 40
+        return 0
 
     def _rank_results(self, query, results):
         intent = SearchIntent(query)
+        blacklist = data_manager.get_blacklist()
 
         scored = []
         for result in results:
             s = 0
 
-            s += self._score_title_match(query, intent, result) * 0.24
-            s += self._score_snippet_relevance(query, intent, result) * 0.18
-            s += self._score_domain_authority(result.url) * 0.16
+            s += self._score_title_match(query, intent, result) * 0.22
+            s += self._score_snippet_relevance(query, intent, result) * 0.16
+            s += self._score_domain_authority(result.url) * 0.14
+            s += self._score_exact_domain_match(query, result) * 0.10
             s += self._score_url_quality(query, result.url) * 0.06
-            s += self._score_freshness(result) * 0.10
-            s += self._score_category_relevance(query, intent, result) * 0.07
-            s += self._score_content_quality(result) * 0.12
+            s += self._score_freshness(result) * 0.08
+            s += self._score_category_relevance(query, intent, result) * 0.06
+            s += self._score_content_quality(result) * 0.11
             s += self._score_reddit_boost(query, intent, result) * 0.07
+            s += self._score_navigational_domain_boost(query, result)
+
+            domain = urlparse(result.url).netloc.lower()
+            domain = re.sub(r'^www\.', '', domain)
+            for bl_domain, bl_penalty in blacklist.items():
+                if bl_domain in domain:
+                    s += bl_penalty
 
             s = max(0, s)
             result.score = round(s, 2)
@@ -1232,7 +1608,7 @@ class RateLimiter:
             self._store[ip] = hits
             return {"allowed": True, "remaining": self.limit - len(hits), "retry_after": 0}
 
-api_limiter = RateLimiter(limit=25, window=3600)
+api_limiter = RateLimiter(limit=125, window=3600)
 
 class SearchStats:
     def __init__(self):
@@ -1323,6 +1699,7 @@ def search():
     try:
         results = search_engine.search(query, page)
         search_stats.record()
+        data_manager.increment_total_searches()
 
         safety_info = crisis if crisis and crisis['type'] == 'disaster' else None
 
@@ -1410,6 +1787,7 @@ def api_search():
     try:
         results = search_engine.search(query, page)
         search_stats.record()
+        data_manager.increment_total_searches()
 
         data = {
             "query": query,
@@ -1663,7 +2041,72 @@ def internal_error(error):
     app.logger.error(f"Internal server error: {str(error)}")
     return render_template('search.html', error="An internal error occurred. Please try again."), 500
 
+@app.route('/api/report', methods=['POST'])
+def api_report():
+    data = request.get_json(force=True, silent=True) or {}
+    url = data.get('url', '')
+    title = data.get('title', '')
+    query = data.get('query', '')
+    domain = urlparse(url).netloc.lower()
+    domain = re.sub(r'^www\.', '', domain)
+    if not url or not domain:
+        return jsonify({"error": "Missing url"}), 400
+    report = data_manager.add_report(url, title, query, domain)
+    return jsonify({"status": "ok", "report_id": report['id']})
+
+@app.route('/admin', methods=['GET', 'POST'])
+def admin_login():
+    if session.get('admin_logged_in'):
+        return redirect(url_for('admin_dashboard'))
+    error = ''
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        if password == ADMIN_PASSWORD:
+            session['admin_logged_in'] = True
+            return redirect(url_for('admin_dashboard'))
+        else:
+            error = 'Incorrect password'
+    return render_template('admin.html', login=True, error=error)
+
+@app.route('/admin/logout')
+def admin_logout():
+    session.pop('admin_logged_in', None)
+    return redirect(url_for('admin_login'))
+
+@app.route('/admin/dashboard')
+def admin_dashboard():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    stats = data_manager.get_stats()
+    reports = data_manager.get_all_reports()
+    blacklist = data_manager.get_blacklist()
+    total_searches = data_manager.get_total_searches()
+    return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches)
+
+@app.route('/admin/reports/<int:report_id>/approve', methods=['POST'])
+def admin_approve_report(report_id):
+    if not session.get('admin_logged_in'):
+        return jsonify({"error": "Unauthorized"}), 401
+    penalty = int(request.form.get('penalty', -30))
+    data_manager.approve_report(report_id, penalty)
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/reports/<int:report_id>/deny', methods=['POST'])
+def admin_deny_report(report_id):
+    if not session.get('admin_logged_in'):
+        return jsonify({"error": "Unauthorized"}), 401
+    data_manager.deny_report(report_id)
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/blacklist/remove', methods=['POST'])
+def admin_remove_blacklist():
+    if not session.get('admin_logged_in'):
+        return jsonify({"error": "Unauthorized"}), 401
+    domain = request.form.get('domain', '')
+    if domain:
+        data_manager.remove_from_blacklist(domain)
+    return redirect(url_for('admin_dashboard'))
+
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=False, host='0.0.0.0', port=port)

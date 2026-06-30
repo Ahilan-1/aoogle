@@ -5,187 +5,152 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>API Docs - aoogle</title>
     <style>
-        *, *::before, *::after { box-sizing:border-box; }
-        body { margin:0; padding:0; font-family:arial,sans-serif; color:#222; background:#fff; }
-        a { text-decoration:none; color:#1a0dab; }
-        a:hover { text-decoration:underline; }
-        a:visited { color:#609; }
-
-        .top-bar {
-            padding:12px 20px; border-bottom:1px solid #ebebeb; background:#fff;
-            display:flex; align-items:center; gap:16px; position:sticky; top:0; z-index:100;
+        :root {
+            --bg:#fff; --text:#202124; --text2:#5f6368; --text3:#70757a;
+            --link:#1a0dab; --link-v:#609; --border:#dadce0; --cm:#4285f4;
+            --cr:#ea4335; --cy:#fbbc05; --cg:#34a853; --code-bg:#1e1e1e;
         }
-        .top-bar .ml { font-size:24px; letter-spacing:-1px; line-height:1; color:#222; white-space:nowrap; }
-        .top-bar .ml span:nth-child(1) { color:#4285f4; }
-        .top-bar .ml span:nth-child(2) { color:#ea4335; }
-        .top-bar .ml span:nth-child(3) { color:#fbbc05; }
-        .top-bar .ml span:nth-child(4) { color:#4285f4; }
-        .top-bar .ml span:nth-child(5) { color:#34a853; }
-        .top-bar .ml span:nth-child(6) { color:#ea4335; }
-        .top-bar a { font-size:14px; color:#5f6368; }
-        .top-bar a:hover { color:#1a73e8; text-decoration:none; }
-        .top-bar .active { color:#1a73e8; font-weight:500; }
+        *,*::before,*::after{box-sizing:border-box}
+        body{margin:0;padding:0;font-family:arial,sans-serif;color:var(--text);background:var(--bg)}
+        a{text-decoration:none;color:var(--link)}
+        a:hover{text-decoration:underline}
+        a:visited{color:var(--link-v)}
 
-        .container { max-width:820px; margin:0 auto; padding:24px 20px 60px; }
-        h1 { font-size:28px; font-weight:400; margin:0 0 4px; }
-        .subtitle { color:#70757a; font-size:14px; margin-bottom:24px; }
+        .top{position:sticky;top:0;z-index:100;background:var(--bg);border-bottom:1px solid var(--border)}
+        .top-inner{display:flex;align-items:center;gap:12px;max-width:820px;margin:0 auto;padding:10px 16px}
+        .ml{font-size:24px;font-family:'Product Sans',Arial,sans-serif;letter-spacing:-1px;line-height:1;flex-shrink:0}
+        .ml span:nth-child(1){color:var(--cm)}
+        .ml span:nth-child(2){color:var(--cr)}
+        .ml span:nth-child(3){color:var(--cy)}
+        .ml span:nth-child(4){color:var(--cm)}
+        .ml span:nth-child(5){color:var(--cg)}
+        .ml span:nth-child(6){color:var(--cr)}
+        .nav{display:flex;overflow-x:auto;margin-left:8px}
+        .nav a{padding:10px 14px 8px;font-size:13px;color:var(--text3);border-bottom:3px solid transparent;white-space:nowrap}
+        .nav a.active{color:var(--cm);border-bottom-color:var(--cm)}
+        .nav a:hover{color:var(--text);text-decoration:none}
 
-        .banner {
-            background:#e8f0fe; border:1px solid #c5d9f2; border-radius:10px;
-            padding:14px 18px; margin-bottom:24px; font-size:13px; line-height:1.6; color:#1a3a6b;
+        .container{max-width:820px;margin:0 auto;padding:28px 20px 60px}
+
+        h1{font-size:28px;font-weight:400;margin:0 0 6px}
+        p.subtitle{color:var(--text2);font-size:14px;margin:0 0 32px;line-height:1.5}
+
+        h2{font-size:20px;font-weight:500;margin:36px 0 12px}
+        h3{font-size:15px;font-weight:500;margin:24px 0 8px;color:var(--text)}
+
+        p,li,td,th{font-size:14px;line-height:1.6;color:var(--text2)}
+        ul{padding-left:20px}
+        li{margin-bottom:4px}
+        strong{color:var(--text);font-weight:500}
+
+        code{color:var(--cr);font-size:13px;font-family:'Consolas','Menlo',monospace}
+        pre{background:var(--code-bg);color:#d4d4d4;padding:14px 18px;border-radius:8px;overflow-x:auto;font-size:13px;line-height:1.55;margin:8px 0 16px;font-family:'Consolas','Menlo',monospace}
+        pre .c1{color:#6a9955}
+        pre .k{color:#569cd6}
+        pre .kc{color:#569cd6}
+        pre .kn{color:#569cd6}
+        pre .s{color:#ce9178}
+        pre .s2{color:#ce9178}
+        pre .nf{color:#dcdcaa}
+        pre .bp{color:#569cd6}
+        pre .mi{color:#b5cea8}
+        pre .o{color:#d4d4d4}
+        pre .nb{color:#d4d4d4}
+        pre .err{color:#f44747}
+        pre .nd{color:#c586c0}
+        pre .nl{color:#9cdcfe}
+        pre .nn{color:#4ec9b0}
+        pre .sa{color:#ce9178}
+        pre .na{color:#9cdcfe}
+
+        table{width:100%;border-collapse:collapse;margin:8px 0 16px}
+        th{text-align:left;padding:8px 12px;font-weight:500;color:var(--text2);font-size:13px;border-bottom:1px solid var(--border)}
+        td{padding:8px 12px;border-bottom:1px solid #f1f3f4;color:var(--text2);font-size:13px}
+        tr:last-child td{border-bottom:1px solid var(--border)}
+        table code{font-size:12px}
+
+        .method{display:inline-block;padding:2px 8px;font-size:11px;font-weight:600;letter-spacing:0.3px;border-radius:3px;background:#e8f0fe;color:var(--cm);margin-right:8px;vertical-align:middle}
+        .method.post{background:#e6f4ea;color:var(--cg)}
+
+        .ep{font-family:'Consolas','Menlo',monospace;font-size:14px;color:var(--text);margin:8px 0 16px;padding:10px 0;border-bottom:1px solid #f1f3f4}
+
+        .try-section{margin:8px 0 16px}
+        .try-section input{border:1px solid var(--border);border-radius:20px;padding:8px 14px;font-size:14px;outline:none;width:280px;max-width:100%;font-family:arial,sans-serif;vertical-align:middle}
+        .try-section input:focus{border-color:var(--cm)}
+        .try-section button{background:var(--cm);color:#fff;border:none;border-radius:20px;padding:8px 18px;font-size:13px;cursor:pointer;font-family:arial,sans-serif;vertical-align:middle;margin-left:6px}
+        .try-section button:hover{opacity:.9}
+        .try-section button:active{transform:scale(.97)}
+        .response-box{background:var(--code-bg);color:#d4d4d4;border-radius:8px;padding:12px 14px;font-size:12px;line-height:1.5;max-height:300px;overflow-y:auto;font-family:'Consolas','Menlo',monospace;white-space:pre-wrap;word-break:break-all;margin-top:10px}
+
+        .hr{border:none;border-top:1px solid #f1f3f4;margin:36px 0}
+
+        .footer-links{margin-top:36px;padding-top:16px;border-top:1px solid #f1f3f4;font-size:13px}
+        .footer-links a{color:var(--link);margin-right:12px}
+
+        @media(max-width:640px){
+            .container{padding:16px 16px 40px}
+            h1{font-size:22px}
+            .try-section input{width:100%;margin-bottom:8px}
+            .try-section button{width:100%;margin-left:0}
         }
-        .banner strong { color:#1557b0; }
-
-        h2 { font-size:20px; font-weight:400; margin:28px 0 12px; color:#1a0dab; }
-        h3 { font-size:16px; font-weight:500; margin:20px 0 8px; color:#222; }
-
-        p, li { font-size:14px; line-height:1.6; color:#444; }
-
-        code {
-            background:#f1f3f4; padding:2px 6px; border-radius:4px; font-size:13px;
-            color:#1a73e8; font-family: 'Consolas','Menlo',monospace;
-        }
-        pre {
-            background:#1e1e1e; color:#d4d4d4; padding:16px 20px; border-radius:8px;
-            overflow-x:auto; font-size:13px; line-height:1.5; margin:8px 0 16px;
-            font-family: 'Consolas','Menlo',monospace;
-        }
-        pre .c1 { color:#6a9955; }
-        pre .k { color:#569cd6; }
-        pre .s { color:#ce9178; }
-        pre .s2 { color:#ce9178; }
-        pre .nf { color:#dcdcaa; }
-        pre .bp { color:#569cd6; }
-        pre .mi { color:#b5cea8; }
-        pre .o { color:#d4d4d4; }
-        pre .kc { color:#569cd6; }
-        pre .kn { color:#569cd6; }
-        pre .nb { color:#d4d4d4; }
-        pre .err { color:#f44747; }
-        pre .nd { color:#c586c0; }
-        pre .nl { color:#9cdcfe; }
-
-        table { width:100%; border-collapse:collapse; margin:12px 0 16px; font-size:14px; }
-        th, td { text-align:left; padding:10px 12px; border-bottom:1px solid #ebebeb; }
-        th { background:#f8f9fa; font-weight:500; color:#3c4043; font-size:13px; }
-        td { color:#444; font-size:13px; }
-
-        .badge { display:inline-block; padding:2px 10px; border-radius:12px; font-size:11px; font-weight:600; }
-        .badge.get { background:#e3f2fd; color:#1565c0; }
-        .badge.post { background:#e8f5e9; color:#2e7d32; }
-
-        .endpoint-box {
-            background:#f8f9fa; border:1px solid #dadce0; border-radius:8px;
-            padding:16px 20px; margin:12px 0 16px;
-        }
-        .endpoint-box .method { font-weight:700; color:#1a73e8; font-size:15px; }
-        .endpoint-box .path { font-family:'Consolas','Menlo',monospace; font-size:14px; margin-left:8px; color:#222; }
-
-        hr { border:none; border-top:1px solid #ebebeb; margin:32px 0; }
-
-        .demo-card {
-            background:#fff; border:1px solid #dadce0; border-radius:8px;
-            padding:20px; margin:16px 0;
-        }
-        .demo-card h3 { margin-top:0; }
-        .demo-card .demo-label {
-            font-size:12px; color:#70757a; text-transform:uppercase; letter-spacing:0.5px;
-            margin-bottom:8px;
-        }
-
-        .try-box {
-            background:#fff; border:1px solid #dadce0; border-radius:24px;
-            display:flex; align-items:center; padding:0 16px; margin:12px 0 16px;
-        }
-        .try-box input {
-            flex:1; border:none; outline:none; padding:12px 8px; font-size:14px;
-            font-family:arial,sans-serif;
-        }
-        .try-box button {
-            background:none; border:none; color:#1a73e8; cursor:pointer; font-size:14px;
-            padding:8px 12px; font-family:arial,sans-serif; font-weight:500;
-        }
-        .try-box button:hover { background:#f1f3f4; border-radius:20px; }
-
-        .response-preview {
-            background:#f8f9fa; border:1px solid #dadce0; border-radius:8px;
-            padding:16px; margin:8px 0 16px; font-size:12px; color:#545454;
-            max-height:300px; overflow-y:auto; white-space:pre-wrap;
-            font-family:'Consolas','Menlo',monospace;
-        }
-
-        ul { padding-left:20px; }
-        li { margin-bottom:4px; }
-
-        .tip {
-            background:#fef7e0; border:1px solid #f9e0a0; border-radius:8px;
-            padding:12px 16px; margin:12px 0; font-size:13px; color:#5c3b00;
-        }
-        .tip strong { color:#3c2a00; }
-
-        .footer-links { margin-top:32px; font-size:13px; color:#70757a; }
-        .footer-links a { color:#1a0dab; }
     </style>
 </head>
 <body>
-<div class="top-bar">
-    <a href="/" class="ml"><span>a</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span></a>
-    <a href="/">Search</a>
-    <a href="/images">Images</a>
-    <a href="/about">About</a>
-    <a href="/docs" class="active">API</a>
+<div class="top">
+    <div class="top-inner">
+        <a href="/" class="ml"><span>a</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span></a>
+        <div class="nav">
+            <a href="/">Search</a>
+            <a href="/images">Images</a>
+            <a href="/about">About</a>
+            <a href="/docs" class="active">API</a>
+        </div>
+    </div>
 </div>
+
 <div class="container">
-    <h1>aoogle API</h1>
+    <h1>API</h1>
     <p class="subtitle">Free, tokenless search API for agents, CLI tools, and LLM integrations. No registration, no API key, no tracking.</p>
 
-    <div class="banner">
-        <strong>&#x26A0;&#xFE0F; Rate limit:</strong> 25 requests per hour per IP address.
-        This is a free shared resource &mdash; please cache results and use responsibly.
-    </div>
+    <p style="font-size:13px;color:var(--text3);margin-bottom:28px">Rate limit: 125 requests per hour per IP address. This is a free shared resource — please cache results and use responsibly.</p>
 
     <h2>Base URL</h2>
-    <p>All API requests use the following base URL:</p>
     <pre><span class="s">https://aoogle-production.up.railway.app</span></pre>
 
     <h2>Endpoint</h2>
-    <div class="endpoint-box">
-        <span class="badge get">GET</span>
-        <span class="path">/api/search?q={query}</span>
-    </div>
+    <p class="ep"><span class="method">GET</span> <span>/api/search?q={query}</span></p>
 
     <h2>Parameters</h2>
     <table>
         <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
         <tr><td><code>q</code></td><td>string</td><td>—</td><td><strong>Required.</strong> Your search query.</td></tr>
         <tr><td><code>page</code></td><td>integer</td><td>1</td><td>Page number for pagination.</td></tr>
-        <tr><td><code>pretty</code></td><td>boolean</td><td>0</td><td>Set to <code>1</code> to pretty-print JSON output.</td></tr>
+        <tr><td><code>pretty</code></td><td>boolean</td><td>0</td><td>Set to <code>1</code> for pretty-printed JSON output.</td></tr>
     </table>
 
-    <h2>Quick Try</h2>
-    <p>Type a query below to see a live API response:</p>
-    <div class="try-box">
+    <h2>Try it</h2>
+    <div class="try-section">
         <input type="text" id="try-input" value="python programming" placeholder="Enter a search query...">
-        <button onclick="tryApi()">Try it</button>
+        <button onclick="tryApi()">Send request</button>
+        <div class="response-box" id="try-response">Click <strong>Send request</strong> to see a live JSON response.</div>
     </div>
-    <div class="response-preview" id="try-response">Click "Try it" to see the JSON response.</div>
 
-    <h2>Response Format</h2>
+    <h2>Response</h2>
     <p>A successful search returns JSON with the following structure:</p>
+
     <pre>{
   <span class="nl">"query"</span>: <span class="s2">"python programming"</span>,
   <span class="nl">"page"</span>: <span class="mi">1</span>,
   <span class="nl">"total_results"</span>: <span class="mi">25</span>,
 
-  <span class="c1">// Knowledge panel (present for known entities like "python", "docker", etc.)</span>
+  <span class="c1">// Knowledge panel (present for known entities)</span>
   <span class="nl">"info_box"</span>: {
     <span class="nl">"title"</span>: <span class="s2">"Python (programming language)"</span>,
     <span class="nl">"type"</span>: <span class="s2">"Programming language"</span>,
-    <span class="nl">"description"</span>: <span class="s2">"Python is a high-level, general-purpose..."</span>,
-    <span class="nl">"image"</span>: <span class="s2">"https://www.python.org/static/community_logos/..."</span>,
+    <span class="nl">"description"</span>: <span class="s2">"Python is a high-level..."</span>,
+    <span class="nl">"image"</span>: <span class="s2">"https://python.org/logo.png"</span>,
     <span class="nl">"facts"</span>: [
-      [<span class="s2">"Designed by"</span>, <span class="s2">"Guido van Rossum"</span>],
-      [<span class="s2">"First appeared"</span>, <span class="s2">"1991"</span>]
+      [<span class="s2">"Designed by"</span>, <span class="s2">"Guido van Rossum"</span>]
     ]
   },
 
@@ -195,8 +160,8 @@
       <span class="nl">"title"</span>:       <span class="s2">"Welcome to Python.org"</span>,
       <span class="nl">"url"</span>:         <span class="s2">"https://www.python.org/"</span>,
       <span class="nl">"display_url"</span>: <span class="s2">"https://www.python.org/"</span>,
-      <span class="nl">"snippet"</span>:     <span class="s2">"The official home of the Python Programming Language."</span>,
-      <span class="nl">"favicon"</span>:     <span class="s2">"https://www.google.com/s2/favicons?domain=..."</span>,
+      <span class="nl">"snippet"</span>:     <span class="s2">"The official home of Python."</span>,
+      <span class="nl">"favicon"</span>:     <span class="s2">"https://icons.duckduckgo.com/ip3/..."</span>,
       <span class="nl">"category"</span>:    <span class="s2">"official"</span>,
       <span class="nl">"date"</span>:        <span class="kc">null</span>,
       <span class="nl">"score"</span>:       <span class="mi">42.15</span>
@@ -204,136 +169,87 @@
   ]
 }</pre>
 
-    <h3>Result Fields</h3>
+    <h3>Result fields</h3>
     <table>
         <tr><th>Field</th><th>Type</th><th>Description</th></tr>
         <tr><td><code>title</code></td><td>string</td><td>Title of the search result.</td></tr>
         <tr><td><code>url</code></td><td>string</td><td>Full URL to the result page.</td></tr>
         <tr><td><code>display_url</code></td><td>string</td><td>Truncated URL for display (max 60 chars).</td></tr>
         <tr><td><code>snippet</code></td><td>string</td><td>Contextual excerpt from the page.</td></tr>
-        <tr><td><code>favicon</code></td><td>string</td><td>Favicon URL via Google's favicon service.</td></tr>
-        <tr><td><code>category</code></td><td>string</td><td>Result category: <code>general</code>, <code>news</code>, <code>tech</code>, <code>academic</code>, <code>official</code>, <code>shopping</code>, <code>social</code>, <code>video</code>, <code>discussion</code>.</td></tr>
-        <tr><td><code>date</code></td><td>string|null</td><td>Extracted date from snippet, if found (e.g. <code>"Jun 15, 2026"</code>).</td></tr>
+        <tr><td><code>favicon</code></td><td>string</td><td>Favicon URL via DuckDuckGo's icons service.</td></tr>
+        <tr><td><code>category</code></td><td>string</td><td>Result category e.g. <code>general</code>, <code>news</code>, <code>official</code>, <code>tech</code>.</td></tr>
+        <tr><td><code>date</code></td><td>string|null</td><td>Extracted date from snippet e.g. <code>"Jun 15, 2026"</code>.</td></tr>
         <tr><td><code>score</code></td><td>float</td><td>Relevance score from 0–100+. Higher = more relevant.</td></tr>
     </table>
 
-    <h2>Response Headers</h2>
+    <h2>Response headers</h2>
     <table>
         <tr><th>Header</th><th>Description</th></tr>
-        <tr><td><code>X-RateLimit-Remaining</code></td><td>Number of requests remaining in the current hour window.</td></tr>
+        <tr><td><code>X-RateLimit-Remaining</code></td><td>Requests remaining in the current hour window.</td></tr>
         <tr><td><code>X-RateLimit-Reset</code></td><td>Seconds until the rate limit resets (present on 429 responses).</td></tr>
     </table>
 
-    <h2>Error Responses</h2>
+    <h2>Error responses</h2>
 
-    <h3>400 — Missing query parameter</h3>
+    <h3>400 — Bad request</h3>
+    <p>Returned when <code>q</code> parameter is missing.</p>
     <pre>{
   <span class="nl">"error"</span>: <span class="s2">"Missing query parameter"</span>,
   <span class="nl">"usage"</span>: <span class="s2">"/api/search?q=your+query"</span>
 }</pre>
 
     <h3>429 — Rate limit exceeded</h3>
+    <p>Returned when you exceed 125 requests in an hour. The <code>retry_after</code> field tells you when to retry.</p>
     <pre>{
   <span class="nl">"error"</span>: <span class="s2">"Rate limit exceeded"</span>,
-  <span class="nl">"message"</span>: <span class="s2">"You have exceeded the rate limit of 25 requests per hour. Retry after 1234 seconds."</span>,
+  <span class="nl">"message"</span>: <span class="s2">"Limit: 125 req/hour. Retry after 1234 seconds."</span>,
   <span class="nl">"retry_after"</span>: <span class="mi">1234</span>
 }</pre>
 
-    <h3>500 — Internal server error</h3>
+    <h3>500 — Internal error</h3>
+    <p>The search backend encountered an unexpected error. Retry after a short delay.</p>
     <pre>{
   <span class="nl">"error"</span>: <span class="s2">"Search failed"</span>,
   <span class="nl">"message"</span>: <span class="s2">"An internal error occurred while searching."</span>
 }</pre>
 
-    <hr>
+    <div class="hr"></div>
 
-    <h2>Demo: Terminal Search Tool</h2>
-    <p>Here's a complete Python program that turns the API into an interactive terminal search tool — perfect for use in agents, scripts, or just from the command line:</p>
+    <h2>Quickstart</h2>
 
-    <div class="demo-card">
-        <div class="demo-label">&#x1F4D6; aoogle CLI — interactive search in terminal</div>
-        <pre><span class="c1">#!/usr/bin/env python3</span>
-<span class="c1">"""aoogle-cli — search from the terminal using the aoogle API"""</span>
+    <h3>cURL</h3>
+    <pre>curl <span class="s2">"https://aoogle-production.up.railway.app/api/search?q=weather+forecast&amp;pretty=1"</span></pre>
 
-<span class="kn">import</span> <span class="nn">sys</span>
-<span class="kn">import</span> <span class="nn">requests</span>
+    <h3>Python</h3>
+    <pre><span class="kn">import</span> <span class="nn">requests</span>
 
-<span class="k">BASE</span> <span class="o">=</span> <span class="s2">"https://aoogle-production.up.railway.app/api/search"</span>
+<span class="n">r</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="nf">get</span><span class="p">(</span>
+    <span class="s2">"https://aoogle-production.up.railway.app/api/search"</span><span class="p">,</span>
+    <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"q"</span><span class="p">:</span> <span class="s2">"python programming"</span><span class="p">}</span>
+<span class="p">)</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">r</span><span class="o">.</span><span class="nf">json</span><span class="p">()</span>
+<span class="k">for</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">data</span><span class="p">[</span><span class="s2">"results"</span><span class="p">][:</span><span class="mi">3</span><span class="p">]:</span>
+    <span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">res</span><span class="p">[</span><span class="s1">'title'</span><span class="p">]</span><span class="si">}</span><span class="s2"> — </span><span class="si">{</span><span class="n">res</span><span class="p">[</span><span class="s1">'url'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span></pre>
 
-<span class="k">def</span> <span class="nf">search</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">page</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">r</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="nf">get</span><span class="p">(</span><span class="n">BASE</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"q"</span><span class="p">:</span> <span class="n">query</span><span class="p">,</span> <span class="s2">"page"</span><span class="p">:</span> <span class="n">page</span><span class="p">},</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+    <h3>JavaScript</h3>
+    <pre><span class="k">const</span> <span class="n">res</span> <span class="o">=</span> <span class="k">await</span> <span class="nf">fetch</span><span class="p">(</span>
+    <span class="s2">"https://aoogle-production.up.railway.app/api/search?q=javascript+fetch"</span>
+<span class="p">);</span>
+<span class="k">const</span> <span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">res</span><span class="o">.</span><span class="nf">json</span><span class="p">();</span>
+<span class="n">console</span><span class="o">.</span><span class="nf">log</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">results</span><span class="p">);</span></pre>
 
-        <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">429</span><span class="p">:</span>
-            <span class="nf">print</span><span class="p">(</span><span class="s2">"Rate limit hit. Try again later."</span><span class="p">)</span>
-            <span class="k">return</span> <span class="bp">None</span>
-
-        <span class="n">r</span><span class="o">.</span><span class="nf">raise_for_status</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">r</span><span class="o">.</span><span class="nf">json</span><span class="p">()</span>
-
-    <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">RequestException</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Request failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">None</span>
-
-<span class="k">def</span> <span class="nf">show_results</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">data</span> <span class="ow">or</span> <span class="s2">"results"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
-        <span class="k">return</span>
-
-    <span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'\nResults for "{</span><span class="si">data["query"]</span><span class="s1">}":'</span><span class="p">)</span>
-    <span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'Found {</span><span class="si">data["total_results"]</span><span class="s1">} results\n'</span><span class="p">)</span>
-
-    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="nf">enumerate</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">"results"</span><span class="p">],</span> <span class="mi">1</span><span class="p">):</span>
-        <span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'  {</span><span class="si">i</span><span class="s1">}. {</span><span class="si">r["title"]</span><span class="s1">}'</span><span class="p">)</span>
-        <span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'     {</span><span class="si">r["url"]</span><span class="s1">}'</span><span class="p">)</span>
-        <span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'     {</span><span class="si">r["snippet"][:120]</span><span class="s1">}'</span><span class="p">)</span>
-        <span class="nf">print</span><span class="p">()</span>
-
-<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">)</span> <span class="o">></span> <span class="mi">1</span><span class="p">:</span>
-        <span class="n">query</span> <span class="o">=</span> <span class="s2">" "</span><span class="o">.</span><span class="nf">join</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="nf">search</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
-        <span class="nf">show_results</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-        <span class="k">return</span>
-
-    <span class="c1"># Interactive mode</span>
-    <span class="nf">print</span><span class="p">(</span><span class="s2">"aoogle CLI — type a query or 'q' to quit"</span><span class="p">)</span>
-    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">q</span> <span class="o">=</span> <span class="nf">input</span><span class="p">(</span><span class="s2">"\n> "</span><span class="p">)</span><span class="o">.</span><span class="nf">strip</span><span class="p">()</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">q</span> <span class="ow">or</span> <span class="n">q</span> <span class="o">==</span> <span class="s2">"q"</span><span class="p">:</span>
-                <span class="k">break</span>
-            <span class="n">data</span> <span class="o">=</span> <span class="nf">search</span><span class="p">(</span><span class="n">q</span><span class="p">)</span>
-            <span class="nf">show_results</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-        <span class="k">except</span> <span class="n">KeyboardInterrupt</span><span class="p">:</span>
-            <span class="nf">print</span><span class="p">()</span>
-            <span class="k">break</span>
-
-<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
-    <span class="nf">main</span><span class="p">()</span></pre>
-    </div>
-
-    <div class="tip">
-        <strong>&#x1F4A1; Usage:</strong> Save as <code>aoogle-cli.py</code> and run:
-        <code>python aoogle-cli.py your search query</code> for a one-shot search, or just <code>python aoogle-cli.py</code> for interactive mode.
-    </div>
-
-    <hr>
-
-    <h2>Agent / LLM Integration</h2>
-    <p>The API is designed to work seamlessly with AI agents, LLM tool-calling, and automation pipelines:</p>
-
-    <h3>Function tool definition (OpenAI / Anthropic style)</h3>
+    <h3>LLM function tool definition</h3>
     <pre><span class="k">aoogle_search_tool</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"function"</span><span class="p">,</span>
     <span class="s2">"function"</span><span class="p">:</span> <span class="p">{</span>
         <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"web_search"</span><span class="p">,</span>
-        <span class="s2">"description"</span><span class="p">:</span> <span class="s2">"Search the web for current information. No API key needed."</span><span class="p">,</span>
+        <span class="s2">"description"</span><span class="p">:</span> <span class="s2">"Search the web. No API key required."</span><span class="p">,</span>
         <span class="s2">"parameters"</span><span class="p">:</span> <span class="p">{</span>
             <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"object"</span><span class="p">,</span>
             <span class="s2">"properties"</span><span class="p">:</span> <span class="p">{</span>
                 <span class="s2">"q"</span><span class="p">:</span> <span class="p">{</span>
                     <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"string"</span><span class="p">,</span>
-                    <span class="s2">"description"</span><span class="p">:</span> <span class="s2">"The search query"</span>
+                    <span class="s2">"description"</span><span class="p">:</span> <span class="s2">"Search query"</span>
                 <span class="p">}</span>
             <span class="p">},</span>
             <span class="s2">"required"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"q"</span><span class="p">]</span>
@@ -341,97 +257,104 @@
     <span class="p">}</span>
 <span class="p">}</span></pre>
 
-    <h3>Python agent helper</h3>
-    <pre><span class="kn">import</span> <span class="nn">requests</span>
+    <h3>Python CLI tool</h3>
+    <pre><span class="c1">#!/usr/bin/env python3</span>
+<span class="c1">"""aoogle-cli — terminal search client"""</span>
+<span class="kn">import</span> <span class="nn">sys</span><span class="o">,</span> <span class="nn">requests</span>
 
-<span class="k">def</span> <span class="nf">web_search</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">max_results</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
-    <span class="s2">"""Search the web and return top results as a formatted string."""</span>
-    <span class="n">r</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="nf">get</span><span class="p">(</span>
-        <span class="s2">"https://aoogle-production.up.railway.app/api/search"</span><span class="p">,</span>
-        <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"q"</span><span class="p">:</span> <span class="n">query</span><span class="p">},</span>
-        <span class="n">timeout</span><span class="o">=</span><span class="mi">15</span>
-    <span class="p">)</span>
-    <span class="n">data</span> <span class="o">=</span> <span class="n">r</span><span class="o">.</span><span class="nf">json</span><span class="p">()</span>
+<span class="k">BASE</span> <span class="o">=</span> <span class="s2">"https://aoogle-production.up.railway.app/api/search"</span>
 
-    <span class="n">lines</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="nf">get</span><span class="p">(</span><span class="s2">"results"</span><span class="p">,</span> <span class="p">[])[:</span><span class="n">max_results</span><span class="p">]:</span>
-        <span class="n">lines</span><span class="o">.</span><span class="nf">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"- </span><span class="si">{</span><span class="n">res</span><span class="p">[</span><span class="s2">"title"</span><span class="p">]</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">res</span><span class="p">[</span><span class="s2">"snippet"</span><span class="p">]</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">res</span><span class="p">[</span><span class="s2">"url"</span><span class="p">]</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
-    <span class="k">return</span> <span class="s2">"\n"</span><span class="o">.</span><span class="nf">join</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">"No results found."</span></pre>
+<span class="k">def</span> <span class="nf">search</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">page</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="nf">get</span><span class="p">(</span><span class="n">BASE</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"q"</span><span class="p">:</span> <span class="n">q</span><span class="p">,</span> <span class="s2">"page"</span><span class="p">:</span> <span class="n">page</span><span class="p">},</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">429</span><span class="p">:</span> <span class="k">return</span> <span class="bp">None</span>
+        <span class="n">r</span><span class="o">.</span><span class="nf">raise_for_status</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">r</span><span class="o">.</span><span class="nf">json</span><span class="p">()</span>
+    <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">RequestException</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">None</span>
 
-    <h3>Shell one-liner for scripts</h3>
-    <pre>curl <span class="s2">"https://aoogle-production.up.railway.app/api/search?q=weather+forecast"</span> | jq <span class="s2">'.results[] | "\(.title): \(.url)"'</span></pre>
+<span class="k">def</span> <span class="nf">show</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">data</span><span class="p">:</span> <span class="k">return</span>
+    <span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'\nResults for "</span><span class="si">{</span><span class="n">data</span><span class="p">[</span><span class="s2">"query"</span><span class="p">]</span><span class="si">}</span><span class="s1">":'</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="nf">enumerate</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">"results"</span><span class="p">],</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'  </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">. </span><span class="si">{</span><span class="n">r</span><span class="p">[</span><span class="s2">"title"</span><span class="p">]</span><span class="si">}</span><span class="s1">'</span><span class="p">)</span>
+        <span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'     </span><span class="si">{</span><span class="n">r</span><span class="p">[</span><span class="s2">"url"</span><span class="p">]</span><span class="si">}</span><span class="s1">'</span><span class="p">)</span>
 
-    <h3>Node.js / JavaScript agent</h3>
-    <pre><span class="k">async function</span> <span class="nf">aoogleSearch</span><span class="p">(</span><span class="n">query</span><span class="p">)</span> <span class="p">{</span>
-    <span class="k">const</span> <span class="n">res</span> <span class="o">=</span> <span class="k">await</span> <span class="nf">fetch</span><span class="p">(</span>
-        <span class="s2">`https://aoogle-production.up.railway.app/api/search?q=<span class="si">${</span><span class="nf">encodeURIComponent</span><span class="p">(</span><span class="n">query</span><span class="p">)</span><span class="si">}</span>`</span>
-    <span class="p">);</span>
-    <span class="k">const</span> <span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">res</span><span class="o">.</span><span class="nf">json</span><span class="p">();</span>
-    <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">results</span><span class="o">.</span><span class="nf">map</span><span class="p">(</span><span class="n">r</span> <span class="k">=></span> <span class="p">({</span>
-        <span class="n">title</span><span class="o">:</span> <span class="n">r</span><span class="o">.</span><span class="n">title</span><span class="p">,</span>
-        <span class="n">url</span><span class="o">:</span> <span class="n">r</span><span class="o">.</span><span class="n">url</span><span class="p">,</span>
-        <span class="n">snippet</span><span class="o">:</span> <span class="n">r</span><span class="o">.</span><span class="n">snippet</span>
-    <span class="p">}));</span>
-<span class="p">}</span></pre>
+<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">)</span> <span class="o">></span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="nf">search</span><span class="p">(</span><span class="s2">" "</span><span class="o">.</span><span class="nf">join</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">:]))</span>
+        <span class="nf">show</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">return</span>
+    <span class="nf">print</span><span class="p">(</span><span class="s2">"aoogle CLI — type a query or 'q' to quit"</span><span class="p">)</span>
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">q</span> <span class="o">=</span> <span class="nf">input</span><span class="p">(</span><span class="s2">"\n> "</span><span class="p">)</span><span class="o">.</span><span class="nf">strip</span><span class="p">()</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">q</span> <span class="ow">or</span> <span class="n">q</span> <span class="o">==</span> <span class="s2">"q"</span><span class="p">:</span> <span class="k">break</span>
+            <span class="nf">show</span><span class="p">(</span><span class="nf">search</span><span class="p">(</span><span class="n">q</span><span class="p">))</span>
+        <span class="k">except</span> <span class="n">KeyboardInterrupt</span><span class="p">:</span>
+            <span class="k">break</span>
 
-    <hr>
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
+    <span class="nf">main</span><span class="p">()</span></pre>
 
-    <h2>Best Practices</h2>
+    <p style="font-size:13px;color:var(--text3);margin:4px 0 20px">Save as <code>aoogle-cli.py</code>. Run <code>python aoogle-cli.py your search</code> for a one-shot search, or <code>python aoogle-cli.py</code> for interactive mode.</p>
+
+    <div class="hr"></div>
+
+    <h2>Best practices</h2>
     <ul>
-        <li><strong>Cache results</strong> — the same query returns the same results for an hour. Cache locally to avoid hitting the rate limit.</li>
-        <li><strong>Respect rate limits</strong> — 25 req/hour is generous for a free service. Spread your requests out.</li>
-        <li><strong>Handle 429s gracefully</strong> — back off and retry after the <code>retry_after</code> period.</li>
-        <li><strong>User-agent is optional</strong> — no headers required, no API key needed.</li>
-        <li><strong>Use the <code>pretty=1</code> param</strong> during development for readable output.</li>
+        <li><strong>Cache results</strong> — identical queries return the same results for one hour. Cache locally to avoid hitting the rate limit.</li>
+        <li><strong>Respect rate limits</strong> — 125 req/hour per IP. Back off and retry after the <code>retry_after</code> period on 429s.</li>
+        <li><strong>Use <code>pretty=1</code></strong> during development for human-readable JSON output.</li>
+        <li><strong>No headers needed</strong> — no API key, no auth, no user-agent required.</li>
     </ul>
 
-    <hr>
+    <div class="hr"></div>
 
-    <h2>Integrity &amp; Safety</h2>
-    <p>The API respects the same safety checks as the web interface:</p>
+    <h2>Safety and integrity</h2>
+    <p>The API enforces the same safeguards as the web interface:</p>
     <ul>
         <li><strong>Crisis detection</strong> — queries expressing suicidal ideation or self-harm return crisis resources instead of search results.</li>
-        <li><strong>Content moderation</strong> — NSFW and body-negative queries are blocked.</li>
+        <li><strong>Content moderation</strong> — NSFW queries are blocked and redirected to support resources.</li>
         <li><strong>Ad filtering</strong> — all sponsored and promoted results are removed before ranking.</li>
         <li><strong>No tracking</strong> — no cookies, no analytics, no user profiling, no query logging.</li>
     </ul>
 
-    <div class="banner">
-        <strong>&#x1F49C; No API key needed.</strong> Just send requests. If you need a higher rate limit for a legitimate open-source project, open an issue on the repository.
-    </div>
+    <p style="font-size:13px;color:var(--text3);margin-top:28px">No API key required. Just send requests. If you need a higher rate limit for a legitimate open-source project, open an issue on the repository.</p>
 
     <div class="footer-links">
-        <a href="/">Search</a> &middot;
-        <a href="/about">About</a> &middot;
+        <a href="/">Search</a>
+        <a href="/about">About</a>
         <a href="/docs">API</a>
     </div>
 </div>
 
 <script>
-function tryApi() {
-    var q = document.getElementById('try-input').value.trim();
-    if (!q) { q = 'python programming'; }
-    var el = document.getElementById('try-response');
-    el.textContent = 'Loading...';
+    function tryApi() {
+        var q = document.getElementById('try-input').value.trim();
+        if (!q) { q = 'python programming'; document.getElementById('try-input').value = q; }
+        var el = document.getElementById('try-response');
+        el.textContent = 'Loading...';
 
-    fetch('/api/search?q=' + encodeURIComponent(q) + '&pretty=1')
-        .then(function(r) { return r.text(); })
-        .then(function(text) {
-            try {
-                var parsed = JSON.parse(text);
-                el.textContent = JSON.stringify(parsed, null, 2);
-            } catch(e) {
-                el.textContent = text;
-            }
-        })
-        .catch(function(err) {
-            el.textContent = 'Error: ' + err.message;
-        });
-}
+        fetch('/api/search?q=' + encodeURIComponent(q) + '&pretty=1')
+            .then(function(r) { return r.text(); })
+            .then(function(text) {
+                try {
+                    var parsed = JSON.parse(text);
+                    el.textContent = JSON.stringify(parsed, null, 2);
+                } catch(e) {
+                    el.textContent = text;
+                }
+            })
+            .catch(function(err) {
+                el.textContent = 'Error: ' + err.message;
+            });
+    }
 
-document.getElementById('try-input').addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') { tryApi(); }
-});
+    document.getElementById('try-input').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { tryApi(); }
+    });
 </script>
 </body>
 </html>

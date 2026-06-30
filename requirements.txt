@@ -3,3 +3,4 @@ gunicorn>=22.0
 requests>=2.32
 beautifulsoup4>=4.12
 fake-useragent>=1.5
+boto3>=1.34
