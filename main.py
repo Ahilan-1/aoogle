@@ -543,7 +543,7 @@ class DataManager:
         if loaded:
             self.data = loaded
         else:
-            self.data = {"reports": [], "blacklist": {}, "total_searches": 0}
+            self.data = {"reports": [], "blacklist": {}, "total_searches": 0, "celebration": ""}
             _save_json(self.data)
 
     def add_report(self, url, title, query, domain):
@@ -626,11 +626,22 @@ class DataManager:
         with self._lock:
             self.data['total_searches'] = self.data.get('total_searches', 0) + 1
 
+    def get_celebration(self):
+        with self._lock:
+            return self.data.get('celebration', '')
+
+    def set_celebration(self, text):
+        with self._lock:
+            self.data['celebration'] = text
+            _save_json(self.data)
+
     def flush(self):
         with self._lock:
             _save_json(self.data)
 
 data_manager = DataManager()
+pg_progress = {}
+pg_lock = threading.Lock()
 
 class ImprovedSearch:
     def __init__(self):
@@ -677,13 +688,24 @@ class ImprovedSearch:
                 self.in_memory_cache[key] = (data, time.time() + expire_time)
 
     def _get_headers(self):
-        """Generate random headers for requests"""
+        """Generate realistic browser headers to avoid detection"""
+        accept_values = [
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        ]
         return {
             'User-Agent': self.user_agent.random,
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept': random.choice(accept_values),
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate',
             'DNT': '1',
             'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0',
         }
 
     def _fetch_with_retry(self, url, params, max_retries=2, backoff_factor=0.3):
@@ -1349,13 +1371,15 @@ class ImprovedSearch:
                         if response and response.text:
                             page_results = self._parse_duckduckgo_results(response.text)
                             all_results.extend(page_results)
-                            if len(page_results) < 5:
+                            if len(page_results) < 3:
                                 break
                         else:
                             break
                     except Exception as e:
                         app.logger.error(f"DDG page {i} error: {str(e)}")
                         continue
+                    if len(all_results) >= 20:
+                        break
                 return all_results
             else:
                 params = {
@@ -1398,7 +1422,7 @@ class ImprovedSearch:
             try:
                 current_results = future.result()
                 results.extend(current_results)
-                if len(results) >= 30:  # We have enough results
+                if len(results) >= 50:  # We have enough results
                     break
             except Exception as e:
                 errors.append(str(e))
@@ -1429,6 +1453,126 @@ class ImprovedSearch:
             self._save_to_cache(cache_key, serialized_results)
 
         return serialized_results
+
+    def _pg_scrape_ddg(self, query, results, seen, limit=15):
+        ddg_url = 'https://html.duckduckgo.com/html/'
+        for offset in [0, 30, 60]:
+            if len(results) >= limit:
+                break
+            try:
+                data = {'q': query, 's': offset, 'o': 'json', 'api': 'd.js'}
+                r = self.session.post(ddg_url, data=data, headers={**self._get_headers(), 'Content-Type': 'application/x-www-form-urlencoded'}, timeout=5)
+                if not r or r.status_code != 200:
+                    continue
+                soup = BeautifulSoup(r.text, 'html.parser')
+                for a in soup.select('.result__a'):
+                    url = a.get('href', '')
+                    title = a.get_text(strip=True)
+                    if not url or url in seen:
+                        continue
+                    seen.add(url)
+                    snippet_el = a.find_next(class_='result__snippet')
+                    snippet = snippet_el.get_text(strip=True) if snippet_el else ''
+                    parsed = urlparse(url)
+                    results.append(SearchResult(
+                        url=url, title=title, snippet=snippet,
+                        domain=parsed.netloc, category='general',
+                        favicon=f'https://www.google.com/s2/favicons?domain={parsed.netloc}&sz=16'
+                    ))
+            except Exception as e:
+                app.logger.error(f"PG DDG offset {offset} error: {e}")
+
+    def _pg_scrape_site(self, query, site):
+        out = []
+        try:
+            data = {'q': f'site:{site} {query}', 's': '0'}
+            r = self.session.post('https://html.duckduckgo.com/html/', data=data, headers={**self._get_headers(), 'Content-Type': 'application/x-www-form-urlencoded'}, timeout=8)
+            if not r or r.status_code != 200:
+                return out
+            soup = BeautifulSoup(r.text, 'html.parser')
+            for a in soup.select('.result__a')[:5]:
+                url = a.get('href', '')
+                title = a.get_text(strip=True)
+                if not url:
+                    continue
+                snippet_el = a.find_next(class_='result__snippet')
+                snippet = snippet_el.get_text(strip=True) if snippet_el else ''
+                parsed = urlparse(url)
+                out.append(SearchResult(
+                    url=url, title=title, snippet=snippet,
+                    domain=parsed.netloc, category='general',
+                    favicon=f'https://www.google.com/s2/favicons?domain={parsed.netloc}&sz=16'
+                ))
+        except Exception as e:
+            app.logger.error(f"PG site search {site} error: {e}")
+        return out
+
+    def _pg_update_progress(self, query, results, seen, completed, total):
+        with pg_lock:
+            if query in pg_progress:
+                pg_progress[query]['results'] = [r.to_dict() for r in results]
+                pg_progress[query]['found'] = len(results)
+                pg_progress[query]['sources_completed'] = completed
+                pg_progress[query]['total_sources'] = total
+
+    def _pg_search_bg(self, query):
+        try:
+            results = []
+            seen = set()
+            total_sources = 15  # 3 DDG pages + 12 hidden sites
+
+            self._pg_scrape_ddg(query, results, seen, limit=15)
+            self._pg_update_progress(query, results, seen, 3, total_sources)
+
+            hidden_sites = [
+                'wikileaks.org', 'theintercept.com', 'propublica.org',
+                'icij.org', 'archive.org', 'pastebin.com',
+                'globaleaks.org', 'freedom.press', 'eff.org',
+                'cryptome.org', 'epic.org', 'rsf.org',
+            ]
+            futures = {self.executor.submit(self._pg_scrape_site, query, s): s for s in hidden_sites}
+            done = 3
+            for future in as_completed(futures):
+                if len(results) >= 40:
+                    break
+                done += 1
+                for sr in future.result():
+                    if sr.url in seen:
+                        continue
+                    seen.add(sr.url)
+                    results.append(sr)
+                self._pg_update_progress(query, results, seen, done, total_sources)
+
+            cache_key = f"pg:{query}"
+            if results:
+                self._save_to_cache(cache_key, [r.to_dict() for r in results])
+
+            with pg_lock:
+                if query in pg_progress:
+                    pg_progress[query]['status'] = 'done'
+                    pg_progress[query]['results'] = [r.to_dict() for r in results]
+                    pg_progress[query]['found'] = len(results)
+        except Exception as e:
+            app.logger.error(f"PG background error: {e}")
+            with pg_lock:
+                if query in pg_progress:
+                    pg_progress[query]['status'] = 'error'
+
+    def search_poneglyph(self, query):
+        cache_key = f"pg:{query}"
+        cached_results = self._get_from_cache(cache_key)
+        if cached_results:
+            return cached_results, "done"
+
+        with pg_lock:
+            if query in pg_progress and pg_progress[query]['status'] == 'running':
+                return [], "running"
+            pg_progress[query] = {"results": [], "found": 0, "status": "running", "sources_completed": 0, "total_sources": 15}
+
+        t = threading.Thread(target=self._pg_search_bg, args=(query,))
+        t.daemon = True
+        t.start()
+        return [], "running"
 
     def search_images(self, query):
         images = []
@@ -1498,16 +1642,11 @@ class ImprovedSearch:
     def search_videos(self, query):
         videos = []
 
-        def extract_json(text, marker):
-            idx = text.find(marker)
-            if idx == -1:
+        def extract_json(text):
+            m = re.search(r'ytInitialData\s*=\s*(\{)', text)
+            if not m:
                 return None
-            eq = text.find('=', idx)
-            if eq == -1:
-                return None
-            brace_start = text.find('{', eq)
-            if brace_start == -1:
-                return None
+            brace_start = m.start(1)
             depth = 0
             in_str = False
             esc = False
@@ -1530,60 +1669,79 @@ class ImprovedSearch:
                         return text[brace_start:i+1]
             return None
 
-        try:
+        def raw_to_json(raw):
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                raw = re.sub(r"(?<!\\)'", '"', raw)
+                raw = re.sub(r',\s*}', '}', raw)
+                raw = re.sub(r',\s*]', ']', raw)
+                raw = re.sub(r'\bundefined\b', 'null', raw)
+                raw = re.sub(r'\bNaN\b', 'null', raw)
+                try:
+                    return json.loads(raw)
+                except json.JSONDecodeError:
+                    app.logger.error(f"YouTube JSON parse failed, raw[:200]: {raw[:200]}")
+                    raise
+
+        def fetch_page(query):
             r = self.session.get('https://www.youtube.com/results', params={'search_query': query}, headers={**self._get_headers(), 'Accept-Language': 'en-US,en;q=0.5'}, timeout=15)
-            if not r or r.status_code != 200:
-                return videos
-            raw = extract_json(r.text, 'ytInitialData')
-            if not raw:
-                raw = extract_json(r.text, 'window["ytInitialData"]')
-            if not raw:
-                # Fallback: older /browse endpoint or re-crawl
-                r2 = self.session.get(f'https://www.youtube.com/results?search_query={query}', headers={**self._get_headers(), 'Accept-Language': 'en-US,en;q=0.5'}, timeout=15)
-                if r2 and r2.status_code == 200:
-                    raw = extract_json(r2.text, 'ytInitialData')
+            if r and r.status_code == 200:
+                raw = extract_json(r.text)
+                if raw:
+                    return raw
+            r2 = self.session.get(f'https://www.youtube.com/results?search_query={query}', headers={**self._get_headers(), 'Accept-Language': 'en-US,en;q=0.5'}, timeout=15)
+            if r2 and r2.status_code == 200:
+                raw = extract_json(r2.text)
+                if raw:
+                    return raw
+            return None
+
+        for attempt in range(2):
+            try:
+                raw = fetch_page(query)
                 if not raw:
-                    raw = extract_json(r2.text, 'window["ytInitialData"]') if r2 else None
-                if not raw:
-                    return videos
-            data = json.loads(raw)
-            c = data
-            for key in ['contents', 'twoColumnSearchResultsRenderer', 'primaryContents', 'sectionListRenderer', 'contents']:
-                c = c.get(key, {}) if isinstance(c, dict) else {}
-            for section in c if isinstance(c, list) else []:
-                items = (section.get('itemSectionRenderer', {}) if isinstance(section, dict) else {}).get('contents', [])
-                for item in items:
-                    vr = item.get('videoRenderer', {}) if isinstance(item, dict) else {}
-                    if not vr:
-                        continue
-                    vid = vr.get('videoId', '')
-                    if not vid:
-                        continue
-                    tr = vr.get('title', {}).get('runs', [])
-                    title = ''.join(t.get('text', '') for t in tr) if tr else vr.get('title', {}).get('simpleText', '')
-                    thumbs = vr.get('thumbnail', {}).get('thumbnails', [])
-                    thumb = thumbs[-1]['url'] if thumbs else ''
-                    videos.append({
-                        'id': vid,
-                        'title': title[:120],
-                        'url': f'https://www.youtube.com/watch?v={vid}',
-                        'thumbnail': thumb,
-                        'duration': vr.get('lengthText', {}).get('simpleText', ''),
-                        'views': vr.get('viewCountText', {}).get('simpleText', '') or (vr.get('viewCountText', {}).get('runs', [{}])[0].get('text', '') if vr.get('viewCountText', {}).get('runs') else ''),
-                        'published': vr.get('publishedTimeText', {}).get('simpleText', ''),
-                        'channel': (vr.get('ownerText', {}).get('runs', []) or vr.get('shortBylineText', {}).get('runs', []) or [{}])[0].get('text', ''),
-                        'channel_url': '',
-                    })
-                    ch_id = ((vr.get('ownerText', {}).get('runs', []) or vr.get('shortBylineText', {}).get('runs', []) or [{}])[0].get('navigationEndpoint', {}) or {}).get('browseEndpoint', {}) or {}
-                    ch_id = ch_id.get('browseId', '')
-                    if ch_id:
-                        videos[-1]['channel_url'] = f'https://www.youtube.com/channel/{ch_id}'
+                    continue
+                data = raw_to_json(raw)
+                c = data
+                for key in ['contents', 'twoColumnSearchResultsRenderer', 'primaryContents', 'sectionListRenderer', 'contents']:
+                    c = c.get(key, {}) if isinstance(c, dict) else {}
+                for section in c if isinstance(c, list) else []:
+                    items = (section.get('itemSectionRenderer', {}) if isinstance(section, dict) else {}).get('contents', [])
+                    for item in items:
+                        vr = item.get('videoRenderer', {}) if isinstance(item, dict) else {}
+                        if not vr:
+                            continue
+                        vid = vr.get('videoId', '')
+                        if not vid:
+                            continue
+                        tr = vr.get('title', {}).get('runs', [])
+                        title = ''.join(t.get('text', '') for t in tr) if tr else vr.get('title', {}).get('simpleText', '')
+                        thumbs = vr.get('thumbnail', {}).get('thumbnails', [])
+                        thumb = thumbs[-1]['url'] if thumbs else ''
+                        videos.append({
+                            'id': vid,
+                            'title': title[:120],
+                            'url': f'https://www.youtube.com/watch?v={vid}',
+                            'thumbnail': thumb,
+                            'duration': vr.get('lengthText', {}).get('simpleText', ''),
+                            'views': vr.get('viewCountText', {}).get('simpleText', '') or (vr.get('viewCountText', {}).get('runs', [{}])[0].get('text', '') if vr.get('viewCountText', {}).get('runs') else ''),
+                            'published': vr.get('publishedTimeText', {}).get('simpleText', ''),
+                            'channel': (vr.get('ownerText', {}).get('runs', []) or vr.get('shortBylineText', {}).get('runs', []) or [{}])[0].get('text', ''),
+                            'channel_url': '',
+                        })
+                        ch_id = ((vr.get('ownerText', {}).get('runs', []) or vr.get('shortBylineText', {}).get('runs', []) or [{}])[0].get('navigationEndpoint', {}) or {}).get('browseEndpoint', {}) or {}
+                        ch_id = ch_id.get('browseId', '')
+                        if ch_id:
+                            videos[-1]['channel_url'] = f'https://www.youtube.com/channel/{ch_id}'
+                        if len(videos) >= 20:
+                            break
                     if len(videos) >= 20:
                         break
-                if len(videos) >= 20:
-                    break
-        except Exception as e:
-            app.logger.error(f"YouTube search error: {e}")
+            except Exception as e:
+                app.logger.error(f"YouTube search error: {e}")
+            if videos:
+                break
         return videos
 
     def get_suggestions(self, query):
@@ -1597,23 +1755,22 @@ class ImprovedSearch:
         if cached_suggestions:
             return cached_suggestions
 
+        # DuckDuckGo suggest API
         try:
-            params = {
-                'client': 'chrome',
-                'q': query
-            }
-            response = self._fetch_with_retry(
-                'https://suggestqueries.google.com/complete/search',
-                params
+            r = self.session.get(
+                'https://duckduckgo.com/ac/',
+                params={'q': query, 'type': 'list'},
+                timeout=3
             )
-
-            if response and response.status_code == 200:
-                suggestions = json.loads(response.text)[1]
-                self._save_to_cache(cache_key, suggestions, expire_time=1800)
-                return suggestions
-
-        except Exception as e:
-            app.logger.error(f"Suggestion error: {str(e)}")
+            if r and r.status_code == 200 and r.text.strip():
+                data = r.json()
+                if isinstance(data, list) and len(data) >= 2:
+                    suggestions = data[1]
+                    if isinstance(suggestions, list) and suggestions:
+                        self._save_to_cache(cache_key, suggestions, expire_time=1800)
+                        return suggestions
+        except Exception:
+            pass
 
         return []
 
@@ -1821,7 +1978,7 @@ search_engine = ImprovedSearch()
 
 @app.route('/')
 def home():
-    return render_template('search.html')
+    return render_template('search.html', celebration=data_manager.get_celebration(), poneglyph=request.args.get('poneglyph') == '1')
 
 @app.route('/search')
 def search():
@@ -1830,9 +1987,10 @@ def search():
     filter_type = request.args.get('filter', 'general')
     if filter_type not in ('general', 'shopping', 'official', 'tutorials', 'discussions', 'academic'):
         filter_type = 'general'
+    poneglyph = request.args.get('poneglyph') == '1'
 
     if not query:
-        return render_template('search.html')
+        return render_template('search.html', celebration=data_manager.get_celebration(), poneglyph=poneglyph)
 
     crisis = detect_crisis(query)
 
@@ -1845,7 +2003,8 @@ def search():
             notice={'type': 'redirect', 'message': 'You matter. Here are resources that may help.'},
             page=1,
             total_results=len(LIFE_RESOURCES),
-            info_box=None
+            info_box=None,
+            poneglyph=poneglyph
         )
 
     notice = detect_notice(query)
@@ -1857,11 +2016,25 @@ def search():
             notice=notice,
             page=1,
             total_results=0,
-            info_box=None
+            info_box=None,
+            poneglyph=poneglyph
         )
 
     try:
-        results = search_engine.search(query, page, filter_type)
+        if poneglyph:
+            results, pg_status = search_engine.search_poneglyph(query)
+            if pg_status == 'running':
+                return render_template(
+                    'search.html',
+                    query=query,
+                    poneglyph=True,
+                    pg_loading=True,
+                    results=[],
+                    error=None
+                )
+        else:
+            results = search_engine.search(query, page, filter_type)
+
         search_stats.record()
         data_manager.increment_total_searches()
 
@@ -1869,7 +2042,7 @@ def search():
 
         news_box = None
         news_intent = detect_news(query)
-        if news_intent:
+        if news_intent and not poneglyph:
             news_items = [r for r in results if r.get('category') == 'news'][:6]
             if news_items:
                 news_box = {
@@ -1887,7 +2060,8 @@ def search():
             notice=notice,
             page=page,
             total_results=len(results),
-            info_box=get_info_box(query)
+            info_box=get_info_box(query),
+            poneglyph=poneglyph
         )
 
     except Exception as e:
@@ -2218,6 +2392,13 @@ def internal_error(error):
     app.logger.error(f"Internal server error: {str(error)}")
     return render_template('search.html', error="An internal error occurred. Please try again."), 500
 
+@app.route('/api/pg-progress')
+def api_pg_progress():
+    query = request.args.get('q', '').strip()
+    with pg_lock:
+        p = pg_progress.get(query, {})
+    return jsonify(p)
+
 @app.route('/api/report', methods=['POST'])
 def api_report():
     data = request.get_json(force=True, silent=True) or {}
@@ -2258,7 +2439,8 @@ def admin_dashboard():
     reports = data_manager.get_all_reports()
     blacklist = data_manager.get_blacklist()
     total_searches = data_manager.get_total_searches()
-    return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches)
+    celebration = data_manager.get_celebration()
+    return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches, celebration=celebration)
 
 @app.route('/admin/reports/<int:report_id>/approve', methods=['POST'])
 def admin_approve_report(report_id):
@@ -2282,6 +2464,14 @@ def admin_remove_blacklist():
     domain = request.form.get('domain', '')
     if domain:
         data_manager.remove_from_blacklist(domain)
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/celebration', methods=['POST'])
+def admin_celebration():
+    if not session.get('admin_logged_in'):
+        return jsonify({"error": "Unauthorized"}), 401
+    text = request.form.get('celebration', '').strip()
+    data_manager.set_celebration(text)
     return redirect(url_for('admin_dashboard'))
 
 if __name__ == "__main__":

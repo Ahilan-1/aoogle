@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>{% if query %}{{ query }} - {% endif %}aoogle Videos</title>
+    <title>{% if query %}{{ query }} - {% endif %}arlong Videos</title>
     <style>
         :root{--bg:#fff;--bg2:#fff;--text:#222;--text2:#545454;--text3:#70757a;--text4:#808080;--link:#1a0dab;--link-v:#609;--border:#dfe1e5;--border2:#ebebeb;--border3:#e0e0e0;--border4:#dadce0;--nav-active:#1a73e8;--cm:#4285f4;--cr:#ea4335;--cy:#fbbc05;--cg:#34a853;--shadow:rgba(32,33,36,.28);--card-bg:#fff;--hover-bg:#f1f3f4;--input-bg:#fff}
         .dark-mode{--bg:#202124;--bg2:#303134;--text:#e8eaed;--text2:#bdc1c6;--text3:#9aa0a6;--text4:#9aa0a6;--link:#8ab4f8;--link-v:#c58af9;--border:#5f6368;--border2:#3c4043;--border3:#5f6368;--border4:#5f6368;--nav-active:#8ab4f8;--shadow:rgba(0,0,0,.28);--card-bg:#303134;--hover-bg:#3c4043;--input-bg:#303134}
@@ -16,13 +16,25 @@
         .dm-toggle:hover{background:var(--hover-bg);color:var(--text)}
         .header{padding:12px 16px 0;border-bottom:1px solid var(--border2);position:sticky;top:0;background:var(--bg);z-index:100}
         .header .top-row{display:flex;align-items:center;gap:12px;max-width:1100px;margin:0 auto}
-        .header .mini-logo{font-size:26px;font-family:'Product Sans',Arial,sans-serif;white-space:nowrap;letter-spacing:-1px;line-height:1;color:var(--text);flex-shrink:0}
-        .header .mini-logo span:nth-child(1){color:var(--cm)}
-        .header .mini-logo span:nth-child(2){color:var(--cr)}
-        .header .mini-logo span:nth-child(3){color:var(--cy)}
-        .header .mini-logo span:nth-child(4){color:var(--cm)}
-        .header .mini-logo span:nth-child(5){color:var(--cg)}
-        .header .mini-logo span:nth-child(6){color:var(--cr)}
+        .header .mini-logo{font-size:26px;font-family:'Product Sans',Arial,sans-serif;white-space:nowrap;letter-spacing:-1px;line-height:1;flex-shrink:0}
+        .header .mini-logo span {
+            background: linear-gradient(to top, #0066cc, #3399ff 50%, var(--text) 50%);
+            background-size: 100% 200%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            animation: arlong-wave 4s ease-in-out infinite;
+        }
+        .header .mini-logo span:nth-child(1) { animation-delay: 0s; }
+        .header .mini-logo span:nth-child(2) { animation-delay: 0.15s; }
+        .header .mini-logo span:nth-child(3) { animation-delay: 0.3s; }
+        .header .mini-logo span:nth-child(4) { animation-delay: 0.45s; }
+        .header .mini-logo span:nth-child(5) { animation-delay: 0.6s; }
+        .header .mini-logo span:nth-child(6) { animation-delay: 0.75s; }
+        @keyframes arlong-wave {
+            0%, 100% { background-position: 0 45%; }
+            50% { background-position: 0 55%; }
+        }
         .header .rs-wrap{flex:1;max-width:640px}
         .header .rs-input{width:100%;height:40px;border:1px solid var(--border);border-radius:24px;padding:0 16px;font-size:14px;outline:none;transition:box-shadow .2s;background:var(--input-bg);color:var(--text)}
         .header .rs-input:focus{box-shadow:0 1px 6px var(--shadow)}
@@ -77,7 +89,7 @@
     <button class="dm-toggle" id="dm-btn" onclick="toggleDark()" aria-label="Toggle dark mode">&#x263D;</button>
     <header class="header">
         <div class="top-row">
-            <a href="/" class="mini-logo"><span>a</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span></a>
+            <a href="/" class="mini-logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></a>
             <div class="rs-wrap">
                 <form action="/videos" method="GET">
                     <input type="text" name="q" class="rs-input" value="{{ query if query else '' }}" required autocomplete="off" placeholder="Search videos...">
@@ -121,9 +133,9 @@
         {% endif %}
     </main>
     <script>
-        function setDark(v){document.body.classList.toggle('dark-mode',v);var b=document.getElementById('dm-btn');if(b)b.innerHTML=v?'&#x2600;':'&#x263D;';try{localStorage.setItem('aoogle-dark',v?'1':'0')}catch(e){}}
+        function setDark(v){document.body.classList.toggle('dark-mode',v);var b=document.getElementById('dm-btn');if(b)b.innerHTML=v?'&#x2600;':'&#x263D;';try{localStorage.setItem('arlong-dark',v?'1':'0')}catch(e){}}
         function toggleDark(){setDark(!document.body.classList.contains('dark-mode'))}
-        (function(){var p=null;try{p=localStorage.getItem('aoogle-dark')}catch(e){}if(p==='1')setDark(true);else if(p===null&&window.matchMedia('(prefers-color-scheme:dark)').matches)setDark(true);        })();
+        (function(){var p=null;try{p=localStorage.getItem('arlong-dark')}catch(e){}if(p==='1')setDark(true);else if(p===null&&window.matchMedia('(prefers-color-scheme:dark)').matches)setDark(true);        })();
     </script>
 </body>
 </html>

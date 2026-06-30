@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>aoogle vs other search engines - aoogle blog</title>
+    <title>arlong vs other search engines - arlong blog</title>
     <style>
         :root {
             --bg:#fff; --bg2:#f8f9fa; --text:#222; --text2:#545454;
@@ -31,13 +31,25 @@
 
         .top-bar{background:var(--bg);border-bottom:1px solid var(--border2);padding:12px 0;position:sticky;top:0;z-index:100}
         .top-bar-inner{max-width:780px;margin:0 auto;padding:0 20px;display:flex;align-items:center;gap:16px}
-        .mini-logo{font-size:22px;font-family:'Product Sans',Arial,sans-serif;letter-spacing:-1px;line-height:1;color:var(--text);flex-shrink:0}
-        .mini-logo span:nth-child(1){color:var(--cm)}
-        .mini-logo span:nth-child(2){color:var(--cr)}
-        .mini-logo span:nth-child(3){color:var(--cy)}
-        .mini-logo span:nth-child(4){color:var(--cm)}
-        .mini-logo span:nth-child(5){color:var(--cg)}
-        .mini-logo span:nth-child(6){color:var(--cr)}
+        .mini-logo{font-size:22px;font-family:'Product Sans',Arial,sans-serif;letter-spacing:-1px;line-height:1;flex-shrink:0}
+        .mini-logo span {
+            background: linear-gradient(to top, #0066cc, #3399ff 50%, var(--text) 50%);
+            background-size: 100% 200%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            animation: arlong-wave 4s ease-in-out infinite;
+        }
+        .mini-logo span:nth-child(1) { animation-delay: 0s; }
+        .mini-logo span:nth-child(2) { animation-delay: 0.15s; }
+        .mini-logo span:nth-child(3) { animation-delay: 0.3s; }
+        .mini-logo span:nth-child(4) { animation-delay: 0.45s; }
+        .mini-logo span:nth-child(5) { animation-delay: 0.6s; }
+        .mini-logo span:nth-child(6) { animation-delay: 0.75s; }
+        @keyframes arlong-wave {
+            0%, 100% { background-position: 0 45%; }
+            50% { background-position: 0 55%; }
+        }
         .top-nav{display:flex;gap:16px;font-size:13px;margin-left:auto}
         .top-nav a{color:var(--text3)}
         .top-nav a:hover{color:var(--text)}
@@ -180,7 +192,7 @@
 
     <div class="top-bar">
         <div class="top-bar-inner">
-            <a href="/" class="mini-logo"><span>a</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span></a>
+            <a href="/" class="mini-logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></a>
             <div class="top-nav">
                 <a href="/search">Web</a>
                 <a href="/images">Images</a>
@@ -193,7 +205,7 @@
     <div class="wrap">
         <div class="post-header">
             <div class="post-tag">Blog</div>
-            <h1 class="post-title">aoogle vs Other Search Engines: A Deep Dive Comparison</h1>
+            <h1 class="post-title">arlong vs Other Search Engines: A Deep Dive Comparison</h1>
             <div class="post-meta">
                 <span>By Ahilan</span>
                 <span>Updated June 2026</span>
@@ -203,19 +215,19 @@
 
         <p class="lede">A deep dive into the new privacy-first, ad-free search engine that's rethinking how search should work. No AI summaries. No tracking. No sponsors. Just results, ranked by signals you can actually see.</p>
 
-        <h2>What is aoogle?</h2>
-        <p><strong>aoogle</strong> is an open-source meta search engine that scrapes public web indexes and re-ranks results using a transparent, multi-factor heuristic algorithm. Every result has a visible score. Every signal is explained. No black box, no vectors, no ML trickery. Built by a solo developer as an alternative to mainstream search, it's live at <a href="https://aoogle-production.up.railway.app">aoogle-production.up.railway.app</a>.</p>
+        <h2>What is arlong?</h2>
+        <p><strong>arlong</strong> is an open-source meta search engine that scrapes public web indexes and re-ranks results using a transparent, multi-factor heuristic algorithm. Every result has a visible score. Every signal is explained. No black box, no vectors, no ML trickery. Built by a solo developer as an alternative to mainstream search, it's live at <a href="https://arlong-production.up.railway.app">arlong-production.up.railway.app</a>.</p>
 
         <div class="img-placeholder">
-            <img src="/static/aooglem.png" alt="aoogle search homepage" onerror="this.outerHTML='<span>aoogle screenshot</span>'">
+            <img src="/static/arlongm.png" alt="arlong search homepage" onerror="this.outerHTML='<span>arlong screenshot</span>'">
         </div>
 
-        <h2>The Big Comparison: aoogle vs. Google vs. DuckDuckGo vs. Bing</h2>
+        <h2>The Big Comparison: arlong vs. Google vs. DuckDuckGo vs. Bing</h2>
 
         <div class="cmp-table-wrap">
             <table class="cmp">
                 <thead>
-                    <tr><th>Feature</th><th>Google</th><th>DuckDuckGo</th><th>Bing</th><th>aoogle</th></tr>
+                    <tr><th>Feature</th><th>Google</th><th>DuckDuckGo</th><th>Bing</th><th>arlong</th></tr>
                 </thead>
                 <tbody>
                     <tr><td>Ads</td><td>Yes</td><td>Minimal</td><td>Yes</td><td class="yes">None</td></tr>
@@ -236,8 +248,8 @@
         <h3>Feature matrix</h3>
         <div class="matrix-wrap" id="feature-matrix"></div>
 
-        <h2>How aoogle's Ranking Works</h2>
-        <p>Unlike Google's black-box algorithm, aoogle scores every result using <strong>8 weighted signals</strong>. The score is visible on every result, and the algorithm is fully documented.</p>
+        <h2>How arlong's Ranking Works</h2>
+        <p>Unlike Google's black-box algorithm, arlong scores every result using <strong>8 weighted signals</strong>. The score is visible on every result, and the algorithm is fully documented.</p>
 
         <div class="sig-grid">
             <div class="sig-card" style="border-left-color:var(--cm)">
@@ -292,30 +304,30 @@
         <div class="stat-row">
             <div class="stat-card"><div class="stat-val">88%</div><div class="stat-label">Google relevance</div></div>
             <div class="stat-card"><div class="stat-val">85%</div><div class="stat-label">DuckDuckGo relevance</div></div>
-            <div class="stat-card best"><div class="stat-val">91%</div><div class="stat-label">aoogle relevance</div></div>
+            <div class="stat-card best"><div class="stat-val">91%</div><div class="stat-label">arlong relevance</div></div>
             <div class="stat-card"><div class="stat-val">89%</div><div class="stat-label">Google spam blocked</div></div>
             <div class="stat-card"><div class="stat-val">85%</div><div class="stat-label">DuckDuckGo spam blocked</div></div>
-            <div class="stat-card"><div class="stat-val">85%</div><div class="stat-label">aoogle spam blocked</div></div>
+            <div class="stat-card"><div class="stat-val">85%</div><div class="stat-label">arlong spam blocked</div></div>
         </div>
 
         <h3>Technical Queries (programming, tools, comparisons)</h3>
         <div class="stat-row">
             <div class="stat-card best"><div class="stat-val">97%</div><div class="stat-label">Google relevance</div></div>
             <div class="stat-card"><div class="stat-val">82%</div><div class="stat-label">DuckDuckGo relevance</div></div>
-            <div class="stat-card"><div class="stat-val">85%</div><div class="stat-label">aoogle relevance</div></div>
+            <div class="stat-card"><div class="stat-val">85%</div><div class="stat-label">arlong relevance</div></div>
             <div class="stat-card best"><div class="stat-val">94%</div><div class="stat-label">Google spam blocked</div></div>
             <div class="stat-card"><div class="stat-val">75%</div><div class="stat-label">DuckDuckGo spam blocked</div></div>
-            <div class="stat-card"><div class="stat-val">88%</div><div class="stat-label">aoogle spam blocked</div></div>
+            <div class="stat-card"><div class="stat-val">88%</div><div class="stat-label">arlong spam blocked</div></div>
         </div>
 
         <h3>Shopping Queries (best products, reviews)</h3>
         <div class="stat-row">
             <div class="stat-card best"><div class="stat-val">93%</div><div class="stat-label">Google relevance</div></div>
             <div class="stat-card"><div class="stat-val">81%</div><div class="stat-label">DuckDuckGo relevance</div></div>
-            <div class="stat-card"><div class="stat-val">84%</div><div class="stat-label">aoogle relevance</div></div>
+            <div class="stat-card"><div class="stat-val">84%</div><div class="stat-label">arlong relevance</div></div>
             <div class="stat-card best"><div class="stat-val">91%</div><div class="stat-label">Google spam blocked</div></div>
             <div class="stat-card"><div class="stat-val">72%</div><div class="stat-label">DuckDuckGo spam blocked</div></div>
-            <div class="stat-card"><div class="stat-val">82%</div><div class="stat-label">aoogle spam blocked</div></div>
+            <div class="stat-card"><div class="stat-val">82%</div><div class="stat-label">arlong spam blocked</div></div>
         </div>
 
         <h3>Performance summary</h3>
@@ -329,7 +341,7 @@
             <div class="engine-tab" onclick="switchEngine(this,'eng-bing')">Bing</div>
             <div class="engine-tab" onclick="switchEngine(this,'eng-duck')">DuckDuckGo</div>
             <div class="engine-tab" onclick="switchEngine(this,'eng-kagi')">Kagi</div>
-            <div class="engine-tab" onclick="switchEngine(this,'eng-aoogle')">aoogle</div>
+            <div class="engine-tab" onclick="switchEngine(this,'eng-arlong')">arlong</div>
         </div>
 
         <div id="eng-google" class="engine-panel active">
@@ -356,39 +368,39 @@
             </div>
         </div>
 
-        <div id="eng-aoogle" class="engine-panel">
+        <div id="eng-arlong" class="engine-panel">
             <div class="img-placeholder">
-                <img src="/static/aoogle.png" alt="aoogle search results for best gaming laptop" onerror="this.outerHTML='<span>aoogle screenshot</span>'">
+                <img src="/static/arlong.png" alt="arlong search results for best gaming laptop" onerror="this.outerHTML='<span>arlong screenshot</span>'">
             </div>
         </div>
 
         <h2>Unique Features You Will Not Find Elsewhere</h2>
 
         <h3>Zero Ads, Zero Tracking, Zero AI</h3>
-        <p>No sponsored results. No promoted links. No AI overviews you cannot turn off. Type a query, get real results, scroll zero. aoogle states it directly: "No AI summaries to scroll past, no sponsored results, no ads disguised as content."</p>
+        <p>No sponsored results. No promoted links. No AI overviews you cannot turn off. Type a query, get real results, scroll zero. arlong states it directly: "No AI summaries to scroll past, no sponsored results, no ads disguised as content."</p>
 
         <h3>Content Farm Annihilation</h3>
-        <p>aoogle aggressively penalizes known low-quality sites. GeeksforGeeks gets -25 points, Guru99 -20, betanet.net -40. Over 60 AI-generated content phrases are detected and demoted. SEO keyword stuffing is identified and penalized. The result: community-written content rises above SEO spam.</p>
+        <p>arlong aggressively penalizes known low-quality sites. GeeksforGeeks gets -25 points, Guru99 -20, betanet.net -40. Over 60 AI-generated content phrases are detected and demoted. SEO keyword stuffing is identified and penalized. The result: community-written content rises above SEO spam.</p>
 
         <h3>Reddit Boost with Anti-Bait</h3>
         <p>When your query sounds like you want discussion (vs, best, review, recommend), real Reddit results get a ranking boost. Non-Reddit pages that add "reddit" to their title to game search results are actually penalized by -30 to -25 points. The signal works both ways.</p>
 
         <h3>Built-in Crisis and Safety Support</h3>
-        <p>aoogle includes comprehensive safety features: suicide prevention with region-specific helplines (US: 988, UK: 116 123, India: 022-2552-1111), disaster safety guides for tornadoes, earthquakes, floods, hurricanes, wildfires, and tsunamis, body-positive redirects for body-negative queries, and medical emergency banners for symptoms like chest pain.</p>
+        <p>arlong includes comprehensive safety features: suicide prevention with region-specific helplines (US: 988, UK: 116 123, India: 022-2552-1111), disaster safety guides for tornadoes, earthquakes, floods, hurricanes, wildfires, and tsunamis, body-positive redirects for body-negative queries, and medical emergency banners for symptoms like chest pain.</p>
 
         <h3>Free, Tokenless API</h3>
         <p>No signup. No API key. No OAuth. 125 requests per hour per IP. Designed for agents, CLI tools, and LLM integrations. Returns JSON with title, url, snippet, category, score, favicon, date, and info box.</p>
 
-        <pre><code>curl "https://aoogle-production.up.railway.app/api/search?q=python+tutorial"</code></pre>
+        <pre><code>curl "https://arlong-production.up.railway.app/api/search?q=python+tutorial"</code></pre>
 
         <h3>Browser Sidebar Extension</h3>
-        <p>Available for Chrome and Firefox. Shows aoogle results alongside results from Google, Bing, DuckDuckGo, Yahoo, Yandex, Baidu, Brave, Ecosia, Qwant, and Searx. It complements rather than replaces your existing search engine.</p>
+        <p>Available for Chrome and Firefox. Shows arlong results alongside results from Google, Bing, DuckDuckGo, Yahoo, Yandex, Baidu, Brave, Ecosia, Qwant, and Searx. It complements rather than replaces your existing search engine.</p>
 
-        <h2>How a Query Flows Through aoogle</h2>
+        <h2>How a Query Flows Through arlong</h2>
         <div class="arch-flow">
             <div class="arch-step"><strong>You</strong> type a query</div>
             <div class="arch-arrow">&#x2192;</div>
-            <div class="arch-step"><strong>aoogle</strong> fetches from public indexes</div>
+            <div class="arch-step"><strong>arlong</strong> fetches from public indexes</div>
             <div class="arch-arrow">&#x2192;</div>
             <div class="arch-step"><strong>Re-ranker</strong> scores 8 signals</div>
             <div class="arch-arrow">&#x2192;</div>
@@ -399,17 +411,17 @@
         <hr class="divider">
 
         <h2>The Verdict</h2>
-        <p>aoogle is not trying to replace Google. It is an alternative for people who want privacy without compromise, transparency in how results are ranked, no AI noise cluttering the page, and a free API for tinkerers, agents, and builders. For discussion queries and technical searches, it holds its own against DuckDuckGo and beats it decisively on spam blocking. For general web search, it is a solid daily driver.</p>
+        <p>arlong is not trying to replace Google. It is an alternative for people who want privacy without compromise, transparency in how results are ranked, no AI noise cluttering the page, and a free API for tinkerers, agents, and builders. For discussion queries and technical searches, it holds its own against DuckDuckGo and beats it decisively on spam blocking. For general web search, it is a solid daily driver.</p>
 
-        <blockquote>Try it at <a href="https://aoogle-production.up.railway.app">aoogle-production.up.railway.app</a> &mdash; open source on <a href="https://github.com/Ahilan-1/aoogle">GitHub</a> under Apache 2.0.</blockquote>
+        <blockquote>Try it at <a href="https://arlong-production.up.railway.app">arlong-production.up.railway.app</a> &mdash; open source on <a href="https://github.com/Ahilan-1/aoogle">GitHub</a> under Apache 2.0.</blockquote>
 
         <div class="img-placeholder">
-            <img src="/static/googlez.png" alt="aoogle logo" onerror="this.outerHTML='<span>aoogle</span>'">
+            <img src="/static/arlongz.png" alt="arlong logo" onerror="this.outerHTML='<span>arlong</span>'">
         </div>
     </div>
 
     <div class="ftr">
-        <a href="/">aoogle</a>
+        <a href="/">arlong</a>
         <a href="/search">Web</a>
         <a href="/images">Images</a>
         <a href="/about">About</a>
@@ -422,11 +434,11 @@
             document.body.classList.toggle('dark-mode',v);
             var b=document.getElementById('dm-btn');
             if(b)b.innerHTML=v?'&#x2600;':'&#x263D;';
-            try{localStorage.setItem('aoogle-dark',v?'1':'0')}catch(e){}
+            try{localStorage.setItem('arlong-dark',v?'1':'0')}catch(e){}
         }
         function toggleDark(){setDark(!document.body.classList.contains('dark-mode'))}
         (function(){
-            var p=null;try{p=localStorage.getItem('aoogle-dark')}catch(e){}
+            var p=null;try{p=localStorage.getItem('arlong-dark')}catch(e){}
             if(p==='1')setDark(true);
             else if(p===null&&window.matchMedia('(prefers-color-scheme:dark)').matches)setDark(true);
         })();
@@ -509,7 +521,7 @@
         function buildFeatureMatrix(id){
             var container = document.getElementById(id);
             if(!container)return;
-            var engines = ['Google','DuckDuckGo','Bing','aoogle'];
+            var engines = ['Google','DuckDuckGo','Bing','arlong'];
             var features = [
                 {label:'Privacy',vals:[1,2,1,3]},
                 {label:'Ad-free',vals:[0,1,0,3]},
@@ -541,7 +553,7 @@
             engines: [
                 {label:'Google',color:'#4285f4'},
                 {label:'DuckDuckGo',color:'#de5833'},
-                {label:'aoogle',color:'#fbbc05'}
+                {label:'arlong',color:'#fbbc05'}
             ],
             rows: [
                 {label:'Discussion\nrelevance',values:[88,85,91]},

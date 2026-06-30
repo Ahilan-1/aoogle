@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>aoogle Admin</title>
+    <title>arlong Admin</title>
     <style>
         *{box-sizing:border-box}
         body{margin:0;padding:20px;font-family:arial,sans-serif;background:#f0f2f5;color:#222}
@@ -59,7 +59,7 @@
 <body>
     {% if login %}
     <div class="login-box">
-        <h1>aoogle Admin</h1>
+        <h1>arlong Admin</h1>
         {% if error %}<div class="error">{{ error }}</div>{% endif %}
         <form method="POST">
             <input type="password" name="password" placeholder="Admin password" required>
@@ -68,7 +68,7 @@
     </div>
     {% else %}
     <div class="header">
-        <h1>aoogle Admin Panel</h1>
+        <h1>arlong Admin Panel</h1>
         <a href="/admin/logout">Sign out</a>
     </div>
     <div class="container">
@@ -92,6 +92,21 @@
             <div class="stat-card">
                 <div class="num">{{ total_searches }}</div>
                 <div class="label">Total Searches</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">
+                Celebration Wish
+                {% if celebration %}<span class="badge">active</span>{% endif %}
+            </div>
+            <div style="padding:16px 20px">
+                <form method="POST" action="/admin/celebration" style="display:flex;gap:8px;flex-wrap:wrap">
+                    <input type="text" name="celebration" value="{{ celebration }}" placeholder="e.g. Happy World Snake Day!" style="flex:1;min-width:200px;padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:14px;outline:none">
+                    <button type="submit" class="btn btn-approve" style="padding:8px 16px">Set</button>
+                    {% if celebration %}<button type="submit" class="btn btn-deny" name="celebration" value="" style="padding:8px 16px">Clear</button>{% endif %}
+                </form>
+                {% if celebration %}<p style="font-size:13px;color:#5f6368;margin:8px 0 0">Currently showing on homepage: <strong>{{ celebration }}</strong></p>{% endif %}
             </div>
         </div>
 

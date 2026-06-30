@@ -29,14 +29,23 @@ class AppleSearch:
         self.executor = ThreadPoolExecutor(max_workers=5)  # Increased worker count for better concurrency
 
     def _get_headers(self):
+        accept_values = [
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        ]
         return {
             'User-Agent': self.user_agent.random,
-            'Accept': 'text/html,application/xhtml+xml',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Referer': 'https://www.apple.com/',
+            'Accept': random.choice(accept_values),
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate',
             'DNT': '1',
             'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1'
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0',
         }
 
     def _extract_info_box(self, soup):
@@ -155,14 +164,27 @@ class AppleSearch:
             return self.cache[cache_key]
 
         try:
-            params = {'q': query}
-            
-            response = self._fetch_with_retry(self.base_url, params, method='POST')
-            if not response:
-                return []
+            all_results = []
+            offsets = [0, 30, 60, 90, 120]
+            for i, offset in enumerate(offsets):
+                params = {'q': query}
+                if offset > 0:
+                    params['s'] = str(offset)
+                try:
+                    response = self._fetch_with_retry(self.base_url, params, method='POST')
+                    if not response:
+                        break
+                    page_results = self._parse_results(response.text)
+                    all_results.extend(page_results)
+                    if len(page_results) < 3:
+                        break
+                    if len(all_results) >= 20:
+                        break
+                except Exception as e:
+                    logging.error(f"Search page {i} error: {e}")
+                    continue
 
-            results = self._parse_results(response.text)
-            ranked_results = self._rank_results(query, results)
+            ranked_results = self._rank_results(query, all_results)
             self.cache[cache_key] = ranked_results
             return ranked_results
 

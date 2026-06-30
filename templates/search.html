@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>{% if query %}{{ query }} - {% endif %}aoogle</title>
+    <title>{% if query %}{{ query }} - {% endif %}arlong</title>
+    <link rel="icon" type="image/x-icon" href="data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+vr6/y4uLqcAAAAAAAAAAAAAAAAAAAAALS0t0i0tLdIAAAAAAAAAAAAAAAAAAAAAMTExrvr6+v8AAAAA+vr6//7+/v4sLCx4AAAAAAAAAAAAAAAA/v7+/uvr6//m5ub//v7+/gAAAAAAAAAAAAAAACQkJH7+/v7++vr6/zExMa4kJCR+/v7+/igoKGoAAAAADgsJ42RkZPv39/f/9fX1/2lpaP8OCwnjAAAAACIiIm/+/v7+LCwseC4uLqcAAAAAAAAAACIiIm/+/v7+akUh/0syGP/8/Pz/kZGR/4yMjP/8/Pz/Py4a/mRAH//+/v7+KCgoagAAAAAAAAAAAAAAAAAAAAAcHyEIakUh//7+/+64uLj//v7+/v7+/v7+/v7+/v7+/tLS0v/+/v7+akUh/zgzLBUAAAAAAAAAAAAAAAAAAAAArG40/7x8PP/y8vL+8vLy/v7+/v5NTU3/XFxc//7+/v7u7u7//f39/7x8PP+zdzn/AAAAAAAAAAAAAAAAHB8hCMODP/9TPij+KSkp/wAAAP4AAAD+8vLy/vr6+v8AAAD+AAAA/hgTDv9aUEX/w4M//y0kFyIAAAAAAAAAABsUCaPHiEL/9fX1/wAAAP4AAAD+AAAA/np6e/+fn5/+AAAA/gAAAP4AAAD+/v7+/seIQv8jGQzTAAAAAAAAAAAAHzT6AJL0//7+/v7i4uL/AAAA/gAAAP7+/v7+/v7+/gAAAP4AAAD+zMzM//7+/v4AlPj/AB80+gAAAAAAAAAAAFiU/wCX/v4Agtn/N1Bg/5GRkf/Hx8f+29vb/9vb2//Hx8f+l5iY/zdQYP8Aecr/AJf+/gBYlP8AAAAAAAAAADIxMBnZnU7/Hx8e/gAKmv4ACYX/AAdr/wAIYP8ACGD/AAdr/wAJhf8ACpr+AQ02/9mdTv8pHQ41AAAAAAAAAAAAAAAA26BP/31dLv4Al/7+AJf+/gCX/v4Al/7+AJf+/gCX/v4Al/7+AJf+/oRiMf/do1H/AAAAAAAAAAAAAAAAAAAAAB0aFoH+/v7+hGIx/wCU+P8Al/7+AJf+/gCX/v4Al/7+AJf+/nZYLf7+/v7+GxoaiwAAAAAAAAAAMTExriQkJH7+/v7+GxQJo+ivWP/or1j/r4BA/xdBVv4XQVb+mXA4/+ivWP/or1j/GBIKuf7+/v4sLCx4Li4up/r6+v/+/v7+LCwseAAAAAAAAAAAa1Ep/uyzWv/ss1r/7LNa/+yzWv99XS7+JiIeBAAAAAAkJCR+/v7+/vr6+v8AAAAA+vr6/y4uLqcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMTExrvr6+v8AAAAAnnkAADw8AABYGgAA4AcAAOAHAADAAwAAwAMAAIABAACAAQAAgAEAAMADAADAAwAAwAMAAEACAAA4HAAAn/kAAA==">
     <style>
         :root {
             --bg:#fff; --bg2:#fff; --bg3:#f8f9fa; --text:#222; --text2:#545454;
@@ -11,7 +12,6 @@
             --border:#dfe1e5; --border2:#ebebeb; --border3:#e0e0e0; --border4:#dadce0;
             --nav-active:#1a73e8; --red:#c5221f; --red-bg:#fce8e6; --red-border:#f5c6c2;
             --blue-bg:#e8f0fe; --blue-border:#c5d9f2; --green-bg:#e6f4ea; --green-border:#b8e6c0;
-            --cm:#4285f4; --cy:#fbbc05; --cg:#34a853; --cr:#ea4335;
             --shadow:rgba(32,33,36,.28); --shadow2:rgba(0,0,0,.12);
             --card-bg:#fff; --hover-bg:#f1f3f4; --input-bg:#fff;
         }
@@ -30,13 +30,50 @@
         a:hover{text-decoration:underline}
         a:visited{color:var(--link-v)}
 
-        .glogo{text-align:center;font-size:72px;font-family:'Product Sans',Arial,sans-serif;color:var(--text);letter-spacing:-2px}
-        .glogo span:nth-child(1){color:var(--cm)}
-        .glogo span:nth-child(2){color:var(--cr)}
-        .glogo span:nth-child(3){color:var(--cy)}
-        .glogo span:nth-child(4){color:var(--cm)}
-        .glogo span:nth-child(5){color:var(--cg)}
-        .glogo span:nth-child(6){color:var(--cr)}
+        .glogo{text-align:center;font-size:72px;font-family:'Product Sans',Arial,sans-serif;letter-spacing:-2px}
+        .slogan{font-size:14px;color:var(--text3);margin-top:4px;letter-spacing:.3px;font-family:Georgia,serif;font-style:italic}
+        .poneglyph-mode .slogan{color:#4fc3f7}
+        .pg-toggle{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:14px;font-size:13px;color:var(--text3);cursor:pointer;user-select:none}
+        .pg-toggle input{display:none}
+        .pg-toggle .slider{position:relative;width:40px;height:22px;background:var(--border);border-radius:11px;transition:.3s;flex-shrink:0}
+        .pg-toggle .slider::after{content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;background:var(--bg);border-radius:50%;transition:.3s}
+        .pg-toggle input:checked+.slider{background:#0288d1}
+        .pg-toggle input:checked+.slider::after{transform:translateX(18px)}
+        .pg-toggle .pg-label{font-weight:500;letter-spacing:.3px}
+        .pg-toggle .pg-label.active{color:#4fc3f7}
+        .pg-icon{font-size:16px}
+        .pg-loading{display:none;position:fixed;top:0;left:0;width:100%;height:3px;z-index:9999;background:var(--bg3)}
+        .pg-loading .bar{height:100%;width:0;background:linear-gradient(90deg,#0288d1,#4fc3f7,#0288d1);background-size:200% 100%;animation:pg-fill 8s ease-in-out forwards,pg-shine 1s linear infinite}
+        @keyframes pg-fill{0%{width:5%}30%{width:35%}60%{width:60%}85%{width:80%}100%{width:90%}}
+        @keyframes pg-shine{0%{background-position:200% 0}100%{background-position:-200% 0}}
+        .pg-lab{position:fixed;top:6px;left:50%;transform:translateX(-50%);z-index:9999;font-size:12px;color:#4fc3f7;display:none;background:var(--bg2);padding:2px 12px;border-radius:10px;border:1px solid #0288d1;white-space:nowrap;font-weight:500;letter-spacing:.5px}
+        .iceberg .result-url{color:#4fc3f7}
+        .iceberg .result-title{color:#81d4fa}
+        .iceberg .result-snippet{color:#b0bec5}
+        .iceberg .result-card{border-left:3px solid #0288d1;padding-left:12px;margin-bottom:18px}
+        .iceberg .result-score{display:none}
+        .iceberg .results-nav a.active{color:#4fc3f7;border-bottom-color:#4fc3f7}
+        .iceberg .filter-count{color:#4fc3f7}
+        .iceberg .rs-input{border-color:#0288d1}
+        .iceberg .rs-input:focus{box-shadow:0 1px 6px rgba(2,136,209,.4)}
+        .glogo span, .mini-logo span {
+            background: linear-gradient(to top, #0066cc, #3399ff 50%, var(--text) 50%);
+            background-size: 100% 200%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            animation: arlong-wave 4s ease-in-out infinite;
+        }
+        .glogo span:nth-child(1), .mini-logo span:nth-child(1) { animation-delay: 0s; }
+        .glogo span:nth-child(2), .mini-logo span:nth-child(2) { animation-delay: 0.15s; }
+        .glogo span:nth-child(3), .mini-logo span:nth-child(3) { animation-delay: 0.3s; }
+        .glogo span:nth-child(4), .mini-logo span:nth-child(4) { animation-delay: 0.45s; }
+        .glogo span:nth-child(5), .mini-logo span:nth-child(5) { animation-delay: 0.6s; }
+        .glogo span:nth-child(6), .mini-logo span:nth-child(6) { animation-delay: 0.75s; }
+        @keyframes arlong-wave {
+            0%, 100% { background-position: 0 45%; }
+            50% { background-position: 0 55%; }
+        }
 
         .dm-toggle{position:fixed;top:12px;right:16px;z-index:999;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:.15s}
         .dm-toggle:hover{background:var(--hover-bg);color:var(--text)}
@@ -54,13 +91,7 @@
 
         .results-header{padding:12px 16px 0;border-bottom:1px solid var(--border2);position:sticky;top:0;background:var(--bg);z-index:100}
         .results-header .top-row{display:flex;align-items:center;gap:12px;max-width:1100px;margin:0 auto}
-        .results-header .mini-logo{font-size:26px;font-family:'Product Sans',Arial,sans-serif;white-space:nowrap;letter-spacing:-1px;line-height:1;color:var(--text);flex-shrink:0}
-        .results-header .mini-logo span:nth-child(1){color:var(--cm)}
-        .results-header .mini-logo span:nth-child(2){color:var(--cr)}
-        .results-header .mini-logo span:nth-child(3){color:var(--cy)}
-        .results-header .mini-logo span:nth-child(4){color:var(--cm)}
-        .results-header .mini-logo span:nth-child(5){color:var(--cg)}
-        .results-header .mini-logo span:nth-child(6){color:var(--cr)}
+        .results-header .mini-logo{font-size:26px;font-family:'Product Sans',Arial,sans-serif;white-space:nowrap;letter-spacing:-1px;line-height:1;flex-shrink:0}
         .results-header .rs-wrap{flex:1;max-width:640px;position:relative}
         .results-header .rs-input{width:100%;height:40px;border:1px solid var(--border);border-radius:24px;padding:0 16px;font-size:14px;outline:none;transition:box-shadow .2s;background:var(--input-bg);color:var(--text)}
         .results-header .rs-input:focus{box-shadow:0 1px 6px var(--shadow)}
@@ -203,12 +234,96 @@
     </style>
 </head>
 <body>
+    <div class="pg-loading" id="pg-loading"><div class="bar"></div></div>
+    <div class="pg-lab" id="pg-lab"></div>
     <button class="dm-toggle" id="dm-btn" onclick="toggleDark()" aria-label="Toggle dark mode">&#x263D;</button>
+    {% if poneglyph %}
+    <style>
+        .pg-loading{display:block}.pg-lab{display:block}
+        body{background:#0d1117!important}
+        body.iceberg{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--text:#e6edf3;--text2:#8b949e;--text3:#8b949e;--border:#30363d;--border2:#21262d;--link:#58a6ff}
+        body.iceberg .result-card{border-left-color:#0288d1;padding-left:12px;margin-bottom:18px}
+        body.iceberg .result-url{color:#4fc3f7}
+        body.iceberg .result-title{color:#81d4fa}
+        body.iceberg .result-snippet{color:#b0bec5}
+        body.iceberg .rs-input{border-color:#0288d1}
+        .pg-counter{text-align:center;font-size:13px;color:#4fc3f7;margin-top:8px;font-family:monospace}
+        .pg-results{max-width:700px;margin:60px auto;padding:0 16px}
+        .pg-results .result-card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:14px 16px;margin-bottom:12px;border-left:3px solid #0288d1}
+        .pg-results .result-card .result-url{color:#4fc3f7;font-size:13px}
+        .pg-results .result-card .result-title{color:#81d4fa;font-size:16px;font-weight:500}
+        .pg-results .result-card .result-snippet{color:#8b949e;font-size:13px;margin-top:4px}
+        .pg-status{margin-top:20px;text-align:center}
+        .pg-status .pg-source{display:inline-block;padding:4px 10px;margin:3px;border-radius:12px;font-size:11px;background:#21262d;color:#8b949e;border:1px solid #30363d}
+        .pg-status .pg-source.done{color:#4fc3f7;border-color:#0288d1}
+    </style>
+    <script>
+        document.body.classList.add('iceberg');
+        {% if pg_loading %}
+        (function(){
+            var loading = document.getElementById('pg-loading');
+            var lab = document.getElementById('pg-lab');
+            if(lab){lab.textContent='Initiating deep search...';lab.style.display='block'}
+            if(loading) loading.style.display='block';
+            var q = '{{ query|e }}';
+            var resultsContainer = document.getElementById('pg-dynamic-results');
+            var counter = document.getElementById('pg-counter');
+            var statusContainer = document.getElementById('pg-status-list');
+            var POLL_INTERVAL = 2500;
+            var SOURCE_NAMES = [
+                'DDG Page 1','DDG Page 2','DDG Page 3',
+                'Wikileaks','Intercept','ProPublica','ICIJ',
+                'Archive','Pastebin','Globaleaks','Freedom Press',
+                'EFF','Cryptome','EPIC','RSF'
+            ];
+            function poll(){
+                fetch('/api/pg-progress?q='+encodeURIComponent(q)).then(function(r){return r.json()}).then(function(d){
+                    if(d.status === 'running' || d.status === 'done'){
+                        if(d.found > 0 && resultsContainer){
+                            resultsContainer.innerHTML = '';
+                            (d.results || []).forEach(function(r){
+                                var card = document.createElement('div');
+                                card.className = 'result-card';
+                                card.innerHTML = '<div class="result-url">'+r.domain+'</div>' +
+                                    '<a href="'+r.url+'" class="result-title" target="_blank">'+r.title+'</a>' +
+                                    '<div class="result-snippet">'+(r.snippet || '')+'</div>';
+                                resultsContainer.appendChild(card);
+                            });
+                        }
+                        if(counter) counter.textContent = d.found + ' results found from ' + d.sources_completed + '/' + d.total_sources + ' sources';
+                        if(statusContainer){
+                            statusContainer.innerHTML = '';
+                            var completed = d.sources_completed || 0;
+                            SOURCE_NAMES.forEach(function(name, i){
+                                var el = document.createElement('span');
+                                el.className = 'pg-source' + (i < completed ? ' done' : '');
+                                el.textContent = name;
+                                statusContainer.appendChild(el);
+                            });
+                        }
+                        if(lab){
+                            if(d.status === 'done'){
+                                lab.textContent = 'Search complete! ' + d.found + ' results.';
+                                if(loading) loading.style.display = 'none';
+                            } else {
+                                lab.textContent = 'Searching... ' + d.sources_completed + '/' + d.total_sources + ' sources done';
+                            }
+                        }
+                        if(d.status === 'running') setTimeout(poll, POLL_INTERVAL);
+                    }
+                }).catch(function(){setTimeout(poll, POLL_INTERVAL)});
+            }
+            setTimeout(poll, 1000);
+        })();
+        {% endif %}
+    </script>
+    {% endif %}
 
-    {% set is_home = not results and not error %}
+    {% set is_home = not results and not error and not pg_loading %}
     {% if is_home %}
     <div class="homepage">
-        <div class="glogo"><span>a</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span></div>
+        <div class="glogo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></div>
+        <div class="slogan">{% if celebration %}{{ celebration }}{% else %}Sail the web{% endif %}</div>
         <div class="search-form">
             <form action="/search" method="GET" autocomplete="off" id="hp-form">
                 <input type="hidden" name="filter" value="{{ filter or 'general' }}">
@@ -220,6 +335,12 @@
                     <input type="submit" value="Search">
                     <button type="button" id="lucky-btn">I'm Feeling Lucky</button>
                 </div>
+                <label class="pg-toggle">
+                    <input type="checkbox" id="hp-pg" onchange="togglePoneglyph(this.checked)">
+                    <span class="slider"></span>
+                    <span class="pg-label">Poneglyph Search</span>
+                    <span class="pg-icon">&#x1F30A;</span>
+                </label>
             </form>
         </div>
         <div class="about-link">
@@ -233,7 +354,7 @@
 
     <div class="results-header">
         <div class="top-row">
-            <a href="/" class="mini-logo"><span>a</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span></a>
+            <a href="/" class="mini-logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></a>
             <div class="rs-wrap">
                 <form action="/search" method="GET" id="rs-form">
                     <input type="hidden" name="filter" value="{{ filter or 'general' }}">
@@ -264,6 +385,13 @@
         </div>
     </div>
 
+    {% if pg_loading %}
+    <div class="pg-results" id="pg-dynamic-results"></div>
+    <div class="pg-status" id="pg-status-list"></div>
+    <div class="pg-counter" id="pg-counter">Initializing search...</div>
+    {% endif %}
+
+    {% if not pg_loading %}
     <div class="results-layout">
         <div class="results-main">
             {% if error %}
@@ -386,6 +514,7 @@
         {% endif %}
     </div>
     {% endif %}
+    {% endif %}
 
     <div class="report-toast" id="report-toast"></div>
 
@@ -435,17 +564,52 @@
         document.addEventListener('DOMContentLoaded',function(){
             var b=document.getElementById('lucky-btn');
             if(b){b.addEventListener('click',function(){window.location='/search?q='+encodeURIComponent(LUCKY_QUERIES[Math.floor(Math.random()*LUCKY_QUERIES.length)])})}
+            var PG_STEPS = [
+                'Searching DuckDuckGo...',
+                'Searching Wikileaks...',
+                'Searching free press archives...',
+                'Searching Pastebin & hidden forums...',
+                'Searching Internet Archive...',
+                'Compiling results...'
+            ];
+            function showPGProgress(){
+                var lab = document.getElementById('pg-lab');
+                if(!lab) return;
+                lab.style.display = 'block';
+                lab.textContent = PG_STEPS[0];
+                var i = 1;
+                var iv = setInterval(function(){
+                    if(i < PG_STEPS.length){
+                        lab.textContent = PG_STEPS[i];
+                        i++;
+                    } else {
+                        lab.textContent = 'Almost there...';
+                        clearInterval(iv);
+                    }
+                }, 4000);
+            }
+            var hf=document.getElementById('hp-form');
+            if(hf){hf.addEventListener('submit',function(e){
+                var pg = this.querySelector('input[name="poneglyph"]');
+                if(pg && pg.value === '1'){
+                    e.preventDefault();
+                    document.getElementById('pg-loading').style.display='block';
+                    showPGProgress();
+                    var q = this.querySelector('input[name="q"]').value;
+                    setTimeout(function(){window.location='/search?q='+encodeURIComponent(q)+'&poneglyph=1'}, 800);
+                }
+            })}
         });
 
         function setDark(v){
             document.body.classList.toggle('dark-mode',v);
             var b=document.getElementById('dm-btn');
             if(b)b.innerHTML=v?'&#x2600;':'&#x263D;';
-            try{localStorage.setItem('aoogle-dark',v?'1':'0')}catch(e){}
+            try{localStorage.setItem('arlong-dark',v?'1':'0')}catch(e){}
         }
         function toggleDark(){setDark(!document.body.classList.contains('dark-mode'))}
         (function(){
-            var p=null;try{p=localStorage.getItem('aoogle-dark')}catch(e){}
+            var p=null;try{p=localStorage.getItem('arlong-dark')}catch(e){}
             if(p==='1')setDark(true);
             else if(p===null&&window.matchMedia('(prefers-color-scheme:dark)').matches)setDark(true);
         })();
@@ -503,6 +667,39 @@
             if(el) el.textContent = count + ' results';
         }
         applyFilter('all');
+
+        function togglePoneglyph(on){
+            var forms = document.querySelectorAll('form[action="/search"]');
+            forms.forEach(function(f){
+                var existing = f.querySelector('input[name="poneglyph"]');
+                if(on){
+                    if(!existing){
+                        var inp = document.createElement('input');
+                        inp.type = 'hidden';
+                        inp.name = 'poneglyph';
+                        inp.value = '1';
+                        f.appendChild(inp);
+                    }
+                } else {
+                    if(existing) existing.remove();
+                }
+            });
+            var labels = document.querySelectorAll('.pg-label');
+            labels.forEach(function(l){l.classList.toggle('active',on)});
+            var toggles = document.querySelectorAll('.pg-toggle input');
+            toggles.forEach(function(t){t.checked = on});
+            var hp = document.querySelector('.homepage');
+            if(hp){
+                var g = hp.querySelector('.glogo');
+                if(g) g.style.opacity = on ? '0.7' : '';
+                var s = hp.querySelector('.slogan');
+                if(s) s.style.color = on ? '#4fc3f7' : '';
+            }
+        }
+        (function(){
+            var params = new URLSearchParams(window.location.search);
+            if(params.get('poneglyph') === '1') togglePoneglyph(true);
+        })();
     </script>
 </body>
 </html>

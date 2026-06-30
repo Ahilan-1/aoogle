@@ -239,3 +239,27 @@ TypeError: ImprovedSearch._rank_results() takes 3 positional arguments but 4 wer
 [2026-07-01 01:07:22,361] WARNING in main: Search returned no results, retrying once...
 [2026-07-01 01:09:18,749] WARNING in main: Search returned no results, retrying once...
 [2026-07-01 01:09:20,472] WARNING in main: Search returned no results, retrying once...
+[2026-07-01 01:46:12,724] ERROR in main: Suggestion error: Expecting value: line 1 column 1 (char 0)
+[2026-07-01 01:46:13,228] ERROR in main: Suggestion error: Expecting value: line 1 column 1 (char 0)
+[2026-07-01 01:46:17,324] ERROR in main: Suggestion error: Expecting value: line 1 column 1 (char 0)
+[2026-07-01 01:46:17,590] ERROR in main: Suggestion error: Expecting value: line 1 column 1 (char 0)
+[2026-07-01 01:46:18,030] ERROR in main: Suggestion error: Expecting value: line 1 column 1 (char 0)
+[2026-07-01 01:46:18,642] ERROR in main: Suggestion error: Expecting value: line 1 column 1 (char 0)
+[2026-07-01 01:46:53,467] WARNING in main: Search returned no results, retrying once...
+[2026-07-01 01:47:29,503] ERROR in main: DDG suggest error: Expecting value: line 1 column 1 (char 0)
+[2026-07-01 01:47:30,633] ERROR in main: Google suggest error: Expecting value: line 1 column 1 (char 0)
+[2026-07-01 01:53:16,865] ERROR in main: YouTube search error: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[2026-07-01 01:53:20,734] ERROR in main: YouTube search error: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[2026-07-01 01:53:23,543] ERROR in main: YouTube search error: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[2026-07-01 01:57:27,157] ERROR in main: YouTube search error: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[2026-07-01 02:03:44,235] ERROR in main: YouTube search error: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[2026-07-01 02:03:45,159] ERROR in main: YouTube search error: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[2026-07-01 02:08:34,246] ERROR in main: YouTube JSON parse failed, raw[:200]: {window.ytcsi.tick("pdr", null, "");}
+[2026-07-01 02:08:34,246] ERROR in main: YouTube search error: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[2026-07-01 02:08:34,954] ERROR in main: YouTube JSON parse failed, raw[:200]: {window.ytcsi.tick("pdr", null, "");}
+[2026-07-01 02:08:34,955] ERROR in main: YouTube search error: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[2026-07-01 02:09:52,274] ERROR in main: YouTube JSON parse failed, raw[:200]: {window.ytcsi.tick("pdr", null, "");}
+[2026-07-01 02:09:52,275] ERROR in main: YouTube search error: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[2026-07-01 02:09:53,058] ERROR in main: YouTube JSON parse failed, raw[:200]: {window.ytcsi.tick("pdr", null, "");}
+[2026-07-01 02:09:53,058] ERROR in main: YouTube search error: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[2026-07-01 02:40:09,328] WARNING in main: Search returned no results, retrying once...
