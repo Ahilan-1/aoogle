@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>{% if query %}{{ query }} - {% endif %}aoogle</title>
+    <title>latest news india - aoogle</title>
     <style>
         :root {
             --bg:#fff; --bg2:#fff; --bg3:#f8f9fa; --text:#222; --text2:#545454;
@@ -30,7 +30,7 @@
         a:hover{text-decoration:underline}
         a:visited{color:var(--link-v)}
 
-        .glogo{text-align:center;font-size:72px;font-family:'Product Sans',Arial,sans-serif;color:var(--text);letter-spacing:-2px}
+        .glogo{display:block;text-align:center;padding-top:140px;font-size:72px;font-family:'Product Sans',Arial,sans-serif;color:var(--text);letter-spacing:-2px}
         .glogo span:nth-child(1){color:var(--cm)}
         .glogo span:nth-child(2){color:var(--cr)}
         .glogo span:nth-child(3){color:var(--cy)}
@@ -41,8 +41,8 @@
         .dm-toggle{position:fixed;top:12px;right:16px;z-index:999;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:.15s}
         .dm-toggle:hover{background:var(--hover-bg);color:var(--text)}
 
-        .homepage{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 16px}
-        .homepage .search-form{margin-top:24px;position:relative;width:100%;max-width:584px}
+        .homepage{text-align:center}
+        .homepage .search-form{margin-top:24px;position:relative;display:inline-block;width:100%;max-width:584px}
         .homepage .search-input-wrap{position:relative}
         .homepage .search-box{width:100%;height:44px;border:1px solid var(--border);border-radius:24px;padding:0 20px;font-size:16px;outline:none;transition:box-shadow .2s;background:var(--input-bg);color:var(--text)}
         .homepage .search-box:hover,.homepage .search-box:focus{box-shadow:0 1px 6px var(--shadow);border-color:transparent}
@@ -69,12 +69,6 @@
         .results-nav a{padding:10px 14px 8px;font-size:13px;color:var(--text3);display:inline-block;border-bottom:3px solid transparent;white-space:nowrap}
         .results-nav a.active{color:var(--nav-active);border-bottom-color:var(--nav-active)}
         .results-nav a:hover{color:var(--nav-active);text-decoration:none}
-
-        .filter-bar{max-width:1100px;margin:0 auto;padding:8px 0 4px;display:flex;align-items:center;gap:8px;font-size:13px}
-        .filter-bar .fl-label{color:var(--text3)}
-        .filter-select{appearance:none;-webkit-appearance:none;background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:6px 28px 6px 12px;font-size:13px;color:var(--text);cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2370757a' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center}
-        .filter-select:hover{border-color:var(--cm)}.filter-select:focus{outline:none;border-color:var(--cm)}
-        .filter-count{font-size:12px;color:var(--text3);margin-left:auto}
 
         .results-layout{max-width:1100px;margin:0 auto;padding:12px 16px 60px;display:flex;gap:32px}
         .results-main{flex:1;min-width:0}
@@ -146,11 +140,6 @@
         .info-box .ib-facts td{padding:4px 0;font-size:13px;vertical-align:top;color:var(--text)}
         .info-box .ib-facts td:first-child{color:var(--text3);white-space:nowrap;padding-right:12px;font-weight:500}
 
-        .result-actions{user-select:none}
-        .three-dots:hover{background:var(--hover-bg)!important;color:var(--text)!important}
-        .report-option:hover{background:var(--hover-bg)!important}
-        .report-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#323232;color:#fff;padding:10px 24px;border-radius:24px;font-size:13px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.3);transition:opacity .3s;opacity:0;pointer-events:none}
-        .report-toast.show{opacity:1}
         @media(max-width:900px){
             .results-layout{flex-direction:column;gap:0}
             .results-sidebar{width:100%}
@@ -158,20 +147,13 @@
             .homepage .search-box{width:100%}
         }
         @media(max-width:640px){
-            .glogo{font-size:48px}
+            .glogo{padding-top:80px;font-size:48px}
             .homepage .search-form{margin-top:16px}
-            .homepage .search-box{height:48px;font-size:16px;border-radius:28px}
-            .homepage .buttons input,.homepage .buttons button{min-width:90px;font-size:13px;height:44px;line-height:44px;border-radius:8px}
-            .homepage{padding:40px 16px}
-            .homepage .about-link{margin-top:20px}
+            .homepage .buttons input,.homepage .buttons button{min-width:90px;font-size:13px}
             .results-header{padding:8px 10px 0}
             .results-header .mini-logo{font-size:20px}
-            .results-header .rs-input{height:36px;font-size:13px;padding:0 12px;border-radius:20px}
+            .results-header .rs-input{height:36px;font-size:13px;padding:0 12px}
             .results-nav a{padding:8px 10px 6px;font-size:12px}
-            .filter-bar{padding:4px 10px 2px;gap:4px}
-            .filter-select{font-size:12px;padding:4px 22px 4px 8px;max-width:130px}
-            .fl-label{display:none}
-            .filter-count{font-size:11px}
             .result-title{font-size:16px}
             .result-snippet{font-size:13px}
             .results-layout{padding:10px 12px 40px}
@@ -180,256 +162,57 @@
             .dm-toggle{top:8px;right:8px;width:32px;height:32px;font-size:14px}
         }
         @media(max-width:400px){
-            .glogo{font-size:36px}
-            .homepage{padding:24px 12px}
-            .homepage .search-box{height:44px;font-size:15px}
+            .glogo{padding-top:60px;font-size:36px}
             .result-url{font-size:12px}
-            .result-title{font-size:14px}
-            .result-snippet{font-size:12px}
             .pagination a{padding:6px 10px;font-size:12px}
-        }
-        @media(hover:none){
-            .result-card:active{background:var(--hover-bg);margin:0 -8px;padding:0 8px;border-radius:6px}
-            .pagination a{display:block;margin:6px 0;padding:14px;border-radius:10px;background:var(--bg2);border:1px solid var(--border);text-align:center;font-size:15px;font-weight:500}
-            .result-actions button{min-width:44px;min-height:44px}
-            .suggestions-box .sug-item{padding:14px 16px;font-size:15px}
-        }
-        @supports(padding:max(0px)){
-            .results-header{padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
-            .results-header .top-row{padding-left:0;padding-right:0}
-            .dm-toggle{right:max(16px,env(safe-area-inset-right,16px))}
-            .results-layout{padding-left:max(16px,env(safe-area-inset-left,16px));padding-right:max(16px,env(safe-area-inset-right,16px))}
         }
     </style>
 </head>
 <body>
     <button class="dm-toggle" id="dm-btn" onclick="toggleDark()" aria-label="Toggle dark mode">&#x263D;</button>
 
-    {% set is_home = not results and not error %}
-    {% if is_home %}
-    <div class="homepage">
-        <div class="glogo"><span>a</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span></div>
-        <div class="search-form">
-            <form action="/search" method="GET" autocomplete="off" id="hp-form">
-                <input type="hidden" name="filter" value="{{ filter or 'general' }}">
-                <div class="search-input-wrap">
-                    <input type="text" name="q" class="search-box" id="hp-search" required placeholder="" autocomplete="off">
-                    <div class="suggestions-box" id="hp-suggest"></div>
-                </div>
-                <div class="buttons">
-                    <input type="submit" value="Search">
-                    <button type="button" id="lucky-btn">I'm Feeling Lucky</button>
-                </div>
-            </form>
-        </div>
-        <div class="about-link">
-            <a href="/about">How it works</a> &middot;
-            <a href="/blog">Blog</a> &middot;
-            <a href="/docs">API</a>
-        </div>
-    </div>
-
-    {% else %}
+    
+    
 
     <div class="results-header">
         <div class="top-row">
             <a href="/" class="mini-logo"><span>a</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span></a>
             <div class="rs-wrap">
-                <form action="/search" method="GET" id="rs-form">
-                    <input type="hidden" name="filter" value="{{ filter or 'general' }}">
-                    <input type="text" name="q" class="rs-input" id="rs-input" value="{{ query }}" autocomplete="off">
-                    <button type="submit" class="rs-submit" style="display:none">Search</button>
+                <form action="/search" method="GET">
+                    <input type="text" name="q" class="rs-input" id="rs-input" value="latest news india" autocomplete="off">
                     <div class="suggestions-box" id="rs-suggest"></div>
                 </form>
             </div>
         </div>
         <div class="results-nav">
-            <a href="/search?q={{ query }}" class="active">Web</a>
-            <a href="/images?q={{ query }}">Images</a>
-            <a href="/videos?q={{ query }}">Videos</a>
+            <a href="/search?q=latest news india" class="active">Web</a>
+            <a href="/images?q=latest news india">Images</a>
             <a href="/docs" style="margin-left:auto">API</a>
-        </div>
-        <div class="filter-bar">
-            <span class="fl-label">Filter:</span>
-            <select class="filter-select" id="filter-select" onchange="applyFilter(this.value)">
-                <option value="all">All results</option>
-                <option value="shopping">Shopping</option>
-                <option value="official">Official</option>
-                <option value="tutorials">Tutorials</option>
-                <option value="discussions">Discussions</option>
-                <option value="academic">Academic</option>
-                <option value="news">News</option>
-            </select>
-            <span class="filter-count" id="filter-count"></span>
         </div>
     </div>
 
     <div class="results-layout">
         <div class="results-main">
-            {% if error %}
-                <div class="error-message">{{ error }}</div>
-            {% endif %}
+            
+                <div class="error-message">An error occurred while processing your search. Please try again.</div>
+            
 
-            {% if crisis_info %}
-                <div class="crisis-banner">
-                    <div class="cb-title">You matter</div>
-                    <p class="cb-text">Whatever you are going through, you do not have to face it alone. Help is available, free and confidential. These resources are here for you.</p>
-                    <a class="cb-link" href="/crisis">Find support resources</a>
-                </div>
-            {% endif %}
+            
 
-            {% if safety_info %}
-                <div class="safety-box">
-                    <div class="sb-title">{{ safety_info.info.title }}</div>
-                    <div class="sb-sub">Stay calm and follow these steps to stay safe.</div>
-                    {% for step in safety_info.info.steps %}
-                    <div class="sb-step">{{ step }}</div>
-                    {% endfor %}
-                    <div class="sb-footer">For real-time alerts: <a href="https://www.weather.gov" target="_blank">weather.gov</a> (US) or your local emergency services.</div>
-                </div>
-            {% endif %}
+            
 
-            {% if news_box %}
-                <div class="news-box">
-                    <div class="nb-header">
-                        <span class="nb-icon">&#x1F4F0;</span>
-                        <div>
-                            <div class="nb-title">News</div>
-                            <div class="nb-topic">{{ news_box.topic }}</div>
-                        </div>
-                    </div>
-                    {% for item in news_box['items'] %}
-                    <div class="nb-item">
-                        <span class="nb-rank">{{ loop.index }}.</span>
-                        <div class="nb-content">
-                            <a href="{{ item.url }}" class="nb-headline" target="_blank">{{ item.title }}</a>
-                            <div class="nb-source">{{ item.display_url }}</div>
-                            {% if item.snippet %}<div class="nb-snippet">{{ item.snippet[:150] }}</div>{% endif %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            {% endif %}
+            
 
-            {% if notice %}
-                <div class="notice-banner {{ notice.type }}">
-                    {% if notice.icon %}<span class="notice-icon">{{ notice.icon|safe }}</span>{% endif %}
-                    {{ notice.message|safe }}
-                </div>
-            {% endif %}
+            
 
-            {% if results %}
-                <div style="color:var(--text3);font-size:13px;margin-bottom:14px;">
-                    {% if crisis_info %}You are not alone. These resources can help.
-                    {% elif notice and notice.type == 'redirect' %}No results found
-                    {% else %}About {{ total_results }} results{% endif %}
-                </div>
-                {% for result in results %}
-                    <div class="result-card {{ 'reddit-result' if 'reddit' in result.url else '' }}" data-url="{{ result.url }}" data-title="{{ result.title }}" data-category="{{ result.category or 'general' }}">
-                        <div class="result-url">
-                            <img src="{{ result.favicon }}" alt="" class="result-favicon" onerror="this.style.display='none'">
-                            {{ result.display_url }}
-                        </div>
-                        <a href="{{ result.url }}" class="result-title" target="_blank">{{ result.title }}</a>
-                        <div class="result-snippet">{{ result.snippet }}</div>
-                        <div class="result-metadata">
-                            <span class="result-category">{{ result.category }}</span>
-                            {% if result.date %}<span class="result-date">{{ result.date }}</span>{% endif %}
-                            <span class="result-score">{{ result.score }}</span>
-                            <span class="result-actions" style="position:relative;margin-left:auto">
-                                <button class="three-dots" onclick="toggleReportMenu(this)" title="More" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:2px 6px;border-radius:50%;line-height:1">&#x22EE;</button>
-                                <div class="report-menu" style="display:none;position:absolute;right:0;top:100%;background:var(--bg2);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px var(--shadow2);z-index:300;min-width:180px;padding:4px 0;margin-top:2px">
-                                    <div class="report-option" onclick="reportResult(this)" style="padding:8px 14px;cursor:pointer;font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px" onmouseover="this.style.background='var(--hover-bg)'" onmouseout="this.style.background=''">
-                                        <span style="font-size:14px">&#x26A0;</span> Report low quality
-                                    </div>
-                                </div>
-                            </span>
-                        </div>
-                    </div>
-                {% endfor %}
-
-                <div class="pagination">
-                    {% if page > 1 %}
-                        <a href="/search?q={{ query }}&page={{ page - 1 }}">Previous</a>
-                    {% endif %}
-                    {% if total_results >= 10 %}
-                        <a href="/search?q={{ query }}&page={{ page + 1 }}">Next</a>
-                    {% endif %}
-                </div>
-            {% elif query and not error %}
-                <div style="text-align:center;padding:60px 20px;color:var(--text3);font-size:16px;line-height:1.6">
-                    <div style="font-size:40px;margin-bottom:16px;opacity:0.4">&#x1F50D;</div>
-                    <div style="font-size:18px;font-weight:500;margin-bottom:8px;color:var(--text)">No results found</div>
-                    <div>Try different keywords or check your spelling</div>
-                </div>
-            {% endif %}
+            
         </div>
 
-        {% if info_box %}
-        <aside class="results-sidebar">
-            <div class="info-box">
-                <div class="ib-title">{{ info_box.title }}</div>
-                <div class="ib-type">{{ info_box.type }}</div>
-                {% if info_box.image %}
-                <img src="{{ info_box.image }}" alt="{{ info_box.title }}" class="ib-img">
-                {% endif %}
-                <div class="ib-desc">{{ info_box.description }}</div>
-                {% if info_box.facts %}
-                <table class="ib-facts">
-                    {% for label, value in info_box.facts %}
-                    <tr><td>{{ label }}</td><td>{{ value }}</td></tr>
-                    {% endfor %}
-                </table>
-                {% endif %}
-            </div>
-        </aside>
-        {% endif %}
+        
     </div>
-    {% endif %}
-
-    <div class="report-toast" id="report-toast"></div>
+    
 
     <script>
-        function toggleReportMenu(btn){
-            var menu=btn.nextElementSibling;
-            var isOpen=menu.style.display==='block';
-            document.querySelectorAll('.report-menu').forEach(function(m){m.style.display='none'});
-            if(!isOpen) menu.style.display='block';
-        }
-        document.addEventListener('click',function(e){
-            if(!e.target.classList.contains('three-dots')){
-                document.querySelectorAll('.report-menu').forEach(function(m){m.style.display='none'});
-            }
-        });
-        function reportResult(el){
-            var card=el.closest('.result-card');
-            var url=card.getAttribute('data-url');
-            var title=card.getAttribute('data-title');
-            var q=document.getElementById('rs-input')?document.getElementById('rs-input').value:'';
-            var menu=el.closest('.report-menu');
-            menu.style.display='none';
-            showToast('Reporting...');
-            fetch('/api/report',{
-                method:'POST',
-                headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({url:url,title:title,query:q})
-            }).then(function(r){return r.json()}).then(function(d){
-                if(d.status==='ok'){
-                    showToast('Reported. Thank you for helping improve search quality.');
-                }else{
-                    showToast('Failed to submit report.');
-                }
-            }).catch(function(){
-                showToast('Failed to submit report.');
-            });
-        }
-        function showToast(msg){
-            var t=document.getElementById('report-toast');
-            t.textContent=msg;
-            t.classList.add('show');
-            clearTimeout(t._timer);
-            t._timer=setTimeout(function(){t.classList.remove('show')},3000);
-        }
         var LUCKY_QUERIES = ['cute baby animals','inspirational quotes','beautiful landscapes','fun facts about space','wholesome stories','amazing nature photography','happy news today','acts of kindness','interesting science discoveries','beautiful libraries around the world','hidden gems in europe','best free online courses','healthy easy recipes','mind blowing photography','underwater sea life','starry night sky wallpaper','world map with all countries','learn something new every day','positive affirmations','beautiful gardens to visit'];
 
         document.addEventListener('DOMContentLoaded',function(){
@@ -473,36 +256,15 @@
                 },250)
             });
             input.addEventListener('keydown',function(e){
-                if(e.key==='Enter'){
-                    box.classList.remove('show');
-                    input.form.submit();
-                    return;
-                }
                 var items=box.querySelectorAll('.sug-item');
                 if(!items.length)return;
                 if(e.key==='ArrowDown'){e.preventDefault();activeIndex=Math.min(activeIndex+1,items.length-1);items.forEach(function(el,i){el.style.background=i===activeIndex?'var(--hover-bg)':''});if(items[activeIndex])input.value=currentData[activeIndex]}
                 if(e.key==='ArrowUp'){e.preventDefault();activeIndex=Math.max(activeIndex-1,-1);items.forEach(function(el,i){el.style.background=i===activeIndex?'var(--hover-bg)':''});if(activeIndex>=0)input.value=currentData[activeIndex]}
+                if(e.key==='Enter'){box.classList.remove('show')}
             });
             document.addEventListener('click',function(e){if(!box.contains(e.target)&&e.target!==input)box.classList.remove('show')})
         }
         document.addEventListener('DOMContentLoaded',function(){setupSuggestions('hp-search','hp-suggest');setupSuggestions('rs-input','rs-suggest')});
-
-        function applyFilter(val){
-            var cards = document.querySelectorAll('.result-card');
-            var count = 0;
-            cards.forEach(function(c){
-                var cat = c.getAttribute('data-category') || 'general';
-                if(val === 'all' || cat === val){
-                    c.style.display = '';
-                    count++;
-                } else {
-                    c.style.display = 'none';
-                }
-            });
-            var el = document.getElementById('filter-count');
-            if(el) el.textContent = count + ' results';
-        }
-        applyFilter('all');
     </script>
 </body>
 </html>

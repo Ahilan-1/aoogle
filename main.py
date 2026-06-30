@@ -1224,7 +1224,7 @@ class ImprovedSearch:
 
         deduplicated.sort(key=lambda x: x.score, reverse=True)
 
-        return deduplicated[:25]
+        return deduplicated[:50]
 
     def _parse_duckduckgo_results(self, html):
         results = []
@@ -1332,15 +1332,31 @@ class ImprovedSearch:
     def _search_single_engine(self, search_url, query, page):
         try:
             if 'duckduckgo' in search_url:
-                response = self.session.post(
-                    search_url,
-                    data={'q': query},
-                    headers=self._get_headers(),
-                    timeout=10,
-                    allow_redirects=True
-                )
-                if response and response.text:
-                    return self._parse_duckduckgo_results(response.text)
+                all_results = []
+                offsets = [0, 30, 60]
+                for i, offset in enumerate(offsets):
+                    try:
+                        data = {'q': query}
+                        if offset > 0:
+                            data['s'] = str(offset)
+                        response = self.session.post(
+                            search_url,
+                            data=data,
+                            headers=self._get_headers(),
+                            timeout=8,
+                            allow_redirects=True
+                        )
+                        if response and response.text:
+                            page_results = self._parse_duckduckgo_results(response.text)
+                            all_results.extend(page_results)
+                            if len(page_results) < 5:
+                                break
+                        else:
+                            break
+                    except Exception as e:
+                        app.logger.error(f"DDG page {i} error: {str(e)}")
+                        continue
+                return all_results
             else:
                 params = {
                     'q': query,
@@ -1382,21 +1398,35 @@ class ImprovedSearch:
             try:
                 current_results = future.result()
                 results.extend(current_results)
-                if len(results) >= 5:  # We have enough results
+                if len(results) >= 30:  # We have enough results
                     break
             except Exception as e:
                 errors.append(str(e))
                 continue
 
-        if not results and errors:
-            app.logger.error("\n".join(errors))
-            return []
+        if not results:
+            if errors:
+                app.logger.error(f"Search returned no results with errors: {'; '.join(errors)}")
+            else:
+                app.logger.warning("Search returned no results, retrying once...")
+                for search_url in self.search_urls:
+                    try:
+                        retry_results = self._search_single_engine(search_url, query, page)
+                        if retry_results:
+                            results = retry_results
+                            break
+                    except Exception as e:
+                        app.logger.error(f"Retry error on {search_url}: {str(e)}")
+                        continue
+            if not results:
+                return []
 
         ranked_results = self._rank_results(query, results, filter_type)
         serialized_results = [result.to_dict() for result in ranked_results]
 
-        # Cache the results
-        self._save_to_cache(cache_key, serialized_results)
+        # Cache the results (only if non-empty)
+        if serialized_results:
+            self._save_to_cache(cache_key, serialized_results)
 
         return serialized_results
 

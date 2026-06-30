@@ -1,1 +1,241 @@
 [2026-06-28 19:02:21,567] ERROR in main: Images route error: 'ImprovedSearch' object has no attribute 'search_images'
+[2026-06-29 14:36:27,148] ERROR in main: Search route error: 'builtin_function_or_method' object is not iterable
+[2026-06-29 14:36:28,306] ERROR in main: Search route error: 'builtin_function_or_method' object is not iterable
+[2026-06-29 14:36:50,662] ERROR in main: Search route error: 'builtin_function_or_method' object is not iterable
+[2026-06-29 14:37:45,617] ERROR in main: Search route error: 'builtin_function_or_method' object is not iterable
+[2026-06-29 14:39:33,489] ERROR in main: Search route error: 'builtin_function_or_method' object is not iterable
+[2026-06-29 14:41:43,110] ERROR in main: Search route error: 'builtin_function_or_method' object is not iterable
+Traceback (most recent call last):
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\main.py", line 1331, in search
+    return render_template(
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\flask\templating.py", line 150, in render_template
+    return _render(app, template, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\flask\templating.py", line 131, in _render
+    rv = template.render(context)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\environment.py", line 1304, in render
+    self.environment.handle_exception()
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\environment.py", line 939, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\templates\search.html", line 249, in top-level template code
+    {% for item in news_box.items %}
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\runtime.py", line 422, in __init__
+    self._iterator = self._to_iterator(iterable)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\runtime.py", line 430, in _to_iterator
+    return iter(iterable)
+           ^^^^^^^^^^^^^^
+TypeError: 'builtin_function_or_method' object is not iterable
+
+[2026-06-29 14:41:47,182] ERROR in main: Search route error: 'builtin_function_or_method' object is not iterable
+Traceback (most recent call last):
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\main.py", line 1331, in search
+    return render_template(
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\flask\templating.py", line 150, in render_template
+    return _render(app, template, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\flask\templating.py", line 131, in _render
+    rv = template.render(context)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\environment.py", line 1304, in render
+    self.environment.handle_exception()
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\environment.py", line 939, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\templates\search.html", line 249, in top-level template code
+    {% for item in news_box.items %}
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\runtime.py", line 422, in __init__
+    self._iterator = self._to_iterator(iterable)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\runtime.py", line 430, in _to_iterator
+    return iter(iterable)
+           ^^^^^^^^^^^^^^
+TypeError: 'builtin_function_or_method' object is not iterable
+
+[2026-06-29 14:41:53,844] ERROR in main: Search route error: 'builtin_function_or_method' object is not iterable
+Traceback (most recent call last):
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\main.py", line 1331, in search
+    return render_template(
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\flask\templating.py", line 150, in render_template
+    return _render(app, template, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\flask\templating.py", line 131, in _render
+    rv = template.render(context)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\environment.py", line 1304, in render
+    self.environment.handle_exception()
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\environment.py", line 939, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\templates\search.html", line 249, in top-level template code
+    {% for item in news_box.items %}
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\runtime.py", line 422, in __init__
+    self._iterator = self._to_iterator(iterable)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\runtime.py", line 430, in _to_iterator
+    return iter(iterable)
+           ^^^^^^^^^^^^^^
+TypeError: 'builtin_function_or_method' object is not iterable
+
+[2026-06-29 14:42:26,379] ERROR in main: Search route error: 'builtin_function_or_method' object is not iterable
+Traceback (most recent call last):
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\main.py", line 1331, in search
+    return render_template(
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\flask\templating.py", line 150, in render_template
+    return _render(app, template, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\flask\templating.py", line 131, in _render
+    rv = template.render(context)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\environment.py", line 1304, in render
+    self.environment.handle_exception()
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\environment.py", line 939, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\templates\search.html", line 249, in top-level template code
+    {% for item in news_box.items %}
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\runtime.py", line 422, in __init__
+    self._iterator = self._to_iterator(iterable)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\runtime.py", line 430, in _to_iterator
+    return iter(iterable)
+           ^^^^^^^^^^^^^^
+TypeError: 'builtin_function_or_method' object is not iterable
+
+[2026-06-29 14:42:41,511] ERROR in main: Search route error: 'builtin_function_or_method' object is not iterable
+Traceback (most recent call last):
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\main.py", line 1331, in search
+    return render_template(
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\flask\templating.py", line 150, in render_template
+    return _render(app, template, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\flask\templating.py", line 131, in _render
+    rv = template.render(context)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\environment.py", line 1304, in render
+    self.environment.handle_exception()
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\environment.py", line 939, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\templates\search.html", line 249, in top-level template code
+    {% for item in news_box.items %}
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\runtime.py", line 422, in __init__
+    self._iterator = self._to_iterator(iterable)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\runtime.py", line 430, in _to_iterator
+    return iter(iterable)
+           ^^^^^^^^^^^^^^
+TypeError: 'builtin_function_or_method' object is not iterable
+
+[2026-06-29 14:43:20,390] ERROR in main: Search route error: 'builtin_function_or_method' object is not iterable
+Traceback (most recent call last):
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\main.py", line 1331, in search
+    return render_template(
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\flask\templating.py", line 150, in render_template
+    return _render(app, template, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\flask\templating.py", line 131, in _render
+    rv = template.render(context)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\environment.py", line 1304, in render
+    self.environment.handle_exception()
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\environment.py", line 939, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\templates\search.html", line 249, in top-level template code
+    {% for item in news_box['items'] %}
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\runtime.py", line 422, in __init__
+    self._iterator = self._to_iterator(iterable)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\runtime.py", line 430, in _to_iterator
+    return iter(iterable)
+           ^^^^^^^^^^^^^^
+TypeError: 'builtin_function_or_method' object is not iterable
+
+[2026-06-29 14:43:40,391] ERROR in main: Search route error: 'builtin_function_or_method' object is not iterable
+Traceback (most recent call last):
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\main.py", line 1331, in search
+    return render_template(
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\flask\templating.py", line 150, in render_template
+    return _render(app, template, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\flask\templating.py", line 131, in _render
+    rv = template.render(context)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\environment.py", line 1304, in render
+    self.environment.handle_exception()
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\environment.py", line 939, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\templates\search.html", line 249, in top-level template code
+    {% for item in news_box['items'] %}
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\runtime.py", line 422, in __init__
+    self._iterator = self._to_iterator(iterable)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\AppData\Roaming\Python\Python312\site-packages\jinja2\runtime.py", line 430, in _to_iterator
+    return iter(iterable)
+           ^^^^^^^^^^^^^^
+TypeError: 'builtin_function_or_method' object is not iterable
+
+[2026-06-30 11:31:26,793] ERROR in main: Search route error: name 'filter_type' is not defined
+Traceback (most recent call last):
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\main.py", line 1823, in search
+    results = search_engine.search(query, page, filter_type)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\main.py", line 1391, in search
+    ranked_results = self._rank_results(query, results)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\main.py", line 1194, in _rank_results
+    if filter_type == 'shopping':
+       ^^^^^^^^^^^
+NameError: name 'filter_type' is not defined
+
+[2026-06-30 11:32:22,800] ERROR in main: Search route error: name 'filter_type' is not defined
+Traceback (most recent call last):
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\main.py", line 1823, in search
+    results = search_engine.search(query, page, filter_type)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\main.py", line 1391, in search
+    ranked_results = self._rank_results(query, results)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\main.py", line 1194, in _rank_results
+    if filter_type == 'shopping':
+       ^^^^^^^^^^^
+NameError: name 'filter_type' is not defined
+
+[2026-06-30 11:32:32,218] ERROR in main: Search route error: name 'filter_type' is not defined
+Traceback (most recent call last):
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\main.py", line 1823, in search
+    results = search_engine.search(query, page, filter_type)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\main.py", line 1391, in search
+    ranked_results = self._rank_results(query, results)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\main.py", line 1194, in _rank_results
+    if filter_type == 'shopping':
+       ^^^^^^^^^^^
+NameError: name 'filter_type' is not defined
+
+[2026-06-30 11:32:46,591] ERROR in main: Search route error: ImprovedSearch._rank_results() takes 3 positional arguments but 4 were given
+Traceback (most recent call last):
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\main.py", line 1823, in search
+    results = search_engine.search(query, page, filter_type)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VIJAY GANESH S\Downloads\Programs\search\aoogle\main.py", line 1391, in search
+    ranked_results = self._rank_results(query, results, filter_type)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: ImprovedSearch._rank_results() takes 3 positional arguments but 4 were given
+
+[2026-06-30 12:45:54,477] ERROR in main: YouTube search error: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[2026-07-01 01:07:22,361] WARNING in main: Search returned no results, retrying once...
+[2026-07-01 01:09:18,749] WARNING in main: Search returned no results, retrying once...
+[2026-07-01 01:09:20,472] WARNING in main: Search returned no results, retrying once...
