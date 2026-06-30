@@ -1467,53 +1467,66 @@ class ImprovedSearch:
 
     def search_videos(self, query):
         videos = []
+
+        def extract_json(text, marker):
+            idx = text.find(marker)
+            if idx == -1:
+                return None
+            brace_start = text.find('{', idx)
+            if brace_start == -1:
+                return None
+            depth = 0
+            for i in range(brace_start, len(text)):
+                ch = text[i]
+                if ch == '{':
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                    if depth == 0:
+                        return text[brace_start:i+1]
+            return None
+
         try:
             r = self.session.get('https://www.youtube.com/results', params={'search_query': query}, headers={**self._get_headers(), 'Accept-Language': 'en-US,en;q=0.5'}, timeout=15)
             if not r or r.status_code != 200:
                 return videos
-            m = re.search(r'ytInitialData\s*=\s*({.*?});\s*</script>', r.text, re.DOTALL)
-            if not m:
-                m = re.search(r'window\["ytInitialData"\]\s*=\s*({.*?});', r.text, re.DOTALL)
-            if not m:
+            raw = extract_json(r.text, 'ytInitialData')
+            if not raw:
+                raw = extract_json(r.text, 'window["ytInitialData"]')
+            if not raw:
                 return videos
-            data = json.loads(m.group(1))
-            contents = data
+            data = json.loads(raw)
+            c = data
             for key in ['contents', 'twoColumnSearchResultsRenderer', 'primaryContents', 'sectionListRenderer', 'contents']:
-                contents = contents.get(key, {}) if isinstance(contents, dict) else {}
-            for section in contents if isinstance(contents, list) else []:
-                for item in (section.get('itemSectionRenderer', {}).get('contents', []) if isinstance(section, dict) else []):
+                c = c.get(key, {}) if isinstance(c, dict) else {}
+            for section in c if isinstance(c, list) else []:
+                items = (section.get('itemSectionRenderer', {}) if isinstance(section, dict) else {}).get('contents', [])
+                for item in items:
                     vr = item.get('videoRenderer', {}) if isinstance(item, dict) else {}
                     if not vr:
                         continue
                     vid = vr.get('videoId', '')
                     if not vid:
                         continue
-                    title_runs = vr.get('title', {}).get('runs', [])
-                    title = ''.join(run.get('text', '') for run in title_runs) if title_runs else vr.get('title', {}).get('simpleText', '')
+                    tr = vr.get('title', {}).get('runs', [])
+                    title = ''.join(t.get('text', '') for t in tr) if tr else vr.get('title', {}).get('simpleText', '')
                     thumbs = vr.get('thumbnail', {}).get('thumbnails', [])
                     thumb = thumbs[-1]['url'] if thumbs else ''
-                    length = vr.get('lengthText', {}).get('simpleText', '')
-                    views = vr.get('viewCountText', {}).get('simpleText', '') or vr.get('viewCountText', {}).get('runs', [{}])[0].get('text', '')
-                    published = vr.get('publishedTimeText', {}).get('simpleText', '')
-                    channel_runs = vr.get('ownerText', {}).get('runs', []) or vr.get('shortBylineText', {}).get('runs', [])
-                    channel = channel_runs[0].get('text', '') if channel_runs else ''
-                    channel_url = ''
-                    if channel_runs:
-                        chan_id = (channel_runs[0].get('navigationEndpoint', {}) or {}).get('browseEndpoint', {}) or {}
-                        chan_id = chan_id.get('browseId', '')
-                        if chan_id:
-                            channel_url = f'https://www.youtube.com/channel/{chan_id}'
                     videos.append({
                         'id': vid,
                         'title': title[:120],
                         'url': f'https://www.youtube.com/watch?v={vid}',
                         'thumbnail': thumb,
-                        'duration': length,
-                        'views': views,
-                        'published': published,
-                        'channel': channel,
-                        'channel_url': channel_url,
+                        'duration': vr.get('lengthText', {}).get('simpleText', ''),
+                        'views': vr.get('viewCountText', {}).get('simpleText', '') or (vr.get('viewCountText', {}).get('runs', [{}])[0].get('text', '') if vr.get('viewCountText', {}).get('runs') else ''),
+                        'published': vr.get('publishedTimeText', {}).get('simpleText', ''),
+                        'channel': (vr.get('ownerText', {}).get('runs', []) or vr.get('shortBylineText', {}).get('runs', []) or [{}])[0].get('text', ''),
+                        'channel_url': '',
                     })
+                    ch_id = ((vr.get('ownerText', {}).get('runs', []) or vr.get('shortBylineText', {}).get('runs', []) or [{}])[0].get('navigationEndpoint', {}) or {}).get('browseEndpoint', {}) or {}
+                    ch_id = ch_id.get('browseId', '')
+                    if ch_id:
+                        videos[-1]['channel_url'] = f'https://www.youtube.com/channel/{ch_id}'
                     if len(videos) >= 20:
                         break
                 if len(videos) >= 20:

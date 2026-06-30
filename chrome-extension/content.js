@@ -4,23 +4,56 @@
   function getSearchQuery() {
     var url = new URL(window.location.href);
     var h = url.hostname;
-    if (h.includes('google'))    return url.searchParams.get('q');
-    if (h.includes('bing'))      return url.searchParams.get('q');
-    if (h.includes('duckduckgo')) return url.searchParams.get('q');
-    if (h.includes('yahoo'))     return url.searchParams.get('p');
-    if (h.includes('yandex'))    return url.searchParams.get('text');
-    if (h.includes('baidu'))     return url.searchParams.get('wd');
-    if (h.includes('brave'))     return url.searchParams.get('q');
-    if (h.includes('ecosia'))    return url.searchParams.get('q');
-    if (h.includes('qwant'))     return url.searchParams.get('q');
-    if (h.includes('searx'))     return url.searchParams.get('q');
+    var p = url.pathname;
+    if (h.includes('google') && (p.includes('/search') || p.includes('/'))) return url.searchParams.get('q');
+    if (h.includes('bing') && p.includes('/search')) return url.searchParams.get('q');
+    if (h.includes('duckduckgo') && p.includes('/')) return url.searchParams.get('q');
+    if (h.includes('yahoo') && p.includes('/search')) return url.searchParams.get('p');
+    if (h.includes('yandex') && p.includes('/search')) return url.searchParams.get('text');
+    if (h.includes('baidu') && p.includes('/s')) return url.searchParams.get('wd');
+    if (h.includes('brave') && p.includes('/search')) return url.searchParams.get('q');
+    if (h.includes('ecosia') && p.includes('/search')) return url.searchParams.get('q');
+    if (h.includes('qwant') && p.includes('/')) return url.searchParams.get('q');
+    if (h.includes('searx') && p.includes('/search')) return url.searchParams.get('q');
     return null;
+  }
+
+  var lastSearchUrl = '';
+
+  function listenForUrlChanges() {
+    var pushState = history.pushState;
+    var replaceState = history.replaceState;
+    history.pushState = function() {
+      pushState.apply(this, arguments);
+      checkUrlChange();
+    };
+    history.replaceState = function() {
+      replaceState.apply(this, arguments);
+      checkUrlChange();
+    };
+    window.addEventListener('popstate', checkUrlChange);
+    window.addEventListener('hashchange', checkUrlChange);
+  }
+
+  function checkUrlChange() {
+    var url = window.location.href;
+    if (url === lastSearchUrl) return;
+    lastSearchUrl = url;
+    var q = getSearchQuery();
+    if (q && queryInput) {
+      queryInput.value = q;
+      fetchResults(q);
+    }
   }
 
   function esc(t) {
     var d = document.createElement('div');
     d.textContent = t;
     return d.innerHTML;
+  }
+
+  function getDomain(url) {
+    try { return new URL(url).hostname; } catch(e) { return ''; }
   }
 
   function isDarkMode() {
@@ -218,7 +251,7 @@
       var score = r.score !== undefined ? Math.round(r.score) : null;
       html += '<div class="aoogle-result aoogle-fade-in">' +
         '<div class="aoogle-result-header">' +
-        '<img class="aoogle-result-favicon" src="https://www.google.com/s2/favicons?domain=' + encodeURIComponent(r.url) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' +
+        '<img class="aoogle-result-favicon" src="https://icons.duckduckgo.com/ip3/' + getDomain(r.url) + '.ico" alt="" loading="lazy" onerror="this.style.display=\'none\'">' +
         '<div class="aoogle-result-body">' +
         '<a class="aoogle-result-title" href="' + esc(r.url) + '" target="_blank" rel="noopener" title="' + esc(r.title) + '">' + esc(r.title) + '</a>' +
         '<div class="aoogle-result-url" title="' + esc(domain) + '">' + esc(domain) + '</div>' +
@@ -265,6 +298,7 @@
   function init() {
     createSidebar();
     doSearch();
+    listenForUrlChanges();
   }
 
   if (document.readyState === 'loading') {

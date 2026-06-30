@@ -52,8 +52,19 @@
   },
   "browser_specific_settings": {
     "gecko": {
-      "id": "aoogle-sidebar@example.com",
-      "strict_min_version": "91.0"
+      "id": "{a1b2c3d4-e5f6-7890-abcd-ef1234567890}",
+      "strict_min_version": "91.0",
+      "data_collection_permissions": {
+        "required": ["search_queries"],
+        "collected_data": [
+          {
+            "name": "search_queries",
+            "description": "Search queries are sent to the aoogle API to retrieve search results. No personal information is collected, stored, or shared with third parties."
+          }
+        ],
+        "data_usage": "Search queries are used solely to fetch and display search results from the aoogle search engine. No data is stored, logged, or shared.",
+        "data_shared_with_third_parties": false
+      }
     }
   }
 }
