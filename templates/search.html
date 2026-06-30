@@ -140,6 +140,11 @@
         .info-box .ib-facts td{padding:4px 0;font-size:13px;vertical-align:top;color:var(--text)}
         .info-box .ib-facts td:first-child{color:var(--text3);white-space:nowrap;padding-right:12px;font-weight:500}
 
+        .result-actions{user-select:none}
+        .three-dots:hover{background:var(--hover-bg)!important;color:var(--text)!important}
+        .report-option:hover{background:var(--hover-bg)!important}
+        .report-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#323232;color:#fff;padding:10px 24px;border-radius:24px;font-size:13px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.3);transition:opacity .3s;opacity:0;pointer-events:none}
+        .report-toast.show{opacity:1}
         @media(max-width:900px){
             .results-layout{flex-direction:column;gap:0}
             .results-sidebar{width:100%}
@@ -273,7 +278,7 @@
                     {% else %}About {{ total_results }} results{% endif %}
                 </div>
                 {% for result in results %}
-                    <div class="result-card {{ 'reddit-result' if 'reddit' in result.url else '' }}">
+                    <div class="result-card {{ 'reddit-result' if 'reddit' in result.url else '' }}" data-url="{{ result.url }}" data-title="{{ result.title }}">
                         <div class="result-url">
                             <img src="{{ result.favicon }}" alt="" class="result-favicon" onerror="this.style.display='none'">
                             {{ result.display_url }}
@@ -284,6 +289,14 @@
                             <span class="result-category">{{ result.category }}</span>
                             {% if result.date %}<span class="result-date">{{ result.date }}</span>{% endif %}
                             <span class="result-score">{{ result.score }}</span>
+                            <span class="result-actions" style="position:relative;margin-left:auto">
+                                <button class="three-dots" onclick="toggleReportMenu(this)" title="More" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:2px 6px;border-radius:50%;line-height:1">&#x22EE;</button>
+                                <div class="report-menu" style="display:none;position:absolute;right:0;top:100%;background:var(--bg2);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px var(--shadow2);z-index:300;min-width:180px;padding:4px 0;margin-top:2px">
+                                    <div class="report-option" onclick="reportResult(this)" style="padding:8px 14px;cursor:pointer;font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px" onmouseover="this.style.background='var(--hover-bg)'" onmouseout="this.style.background=''">
+                                        <span style="font-size:14px">&#x26A0;</span> Report low quality
+                                    </div>
+                                </div>
+                            </span>
                         </div>
                     </div>
                 {% endfor %}
@@ -321,7 +334,49 @@
     </div>
     {% endif %}
 
+    <div class="report-toast" id="report-toast"></div>
+
     <script>
+        function toggleReportMenu(btn){
+            var menu=btn.nextElementSibling;
+            var isOpen=menu.style.display==='block';
+            document.querySelectorAll('.report-menu').forEach(function(m){m.style.display='none'});
+            if(!isOpen) menu.style.display='block';
+        }
+        document.addEventListener('click',function(e){
+            if(!e.target.classList.contains('three-dots')){
+                document.querySelectorAll('.report-menu').forEach(function(m){m.style.display='none'});
+            }
+        });
+        function reportResult(el){
+            var card=el.closest('.result-card');
+            var url=card.getAttribute('data-url');
+            var title=card.getAttribute('data-title');
+            var q=document.getElementById('rs-input')?document.getElementById('rs-input').value:'';
+            var menu=el.closest('.report-menu');
+            menu.style.display='none';
+            showToast('Reporting...');
+            fetch('/api/report',{
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({url:url,title:title,query:q})
+            }).then(function(r){return r.json()}).then(function(d){
+                if(d.status==='ok'){
+                    showToast('Reported. Thank you for helping improve search quality.');
+                }else{
+                    showToast('Failed to submit report.');
+                }
+            }).catch(function(){
+                showToast('Failed to submit report.');
+            });
+        }
+        function showToast(msg){
+            var t=document.getElementById('report-toast');
+            t.textContent=msg;
+            t.classList.add('show');
+            clearTimeout(t._timer);
+            t._timer=setTimeout(function(){t.classList.remove('show')},3000);
+        }
         var LUCKY_QUERIES = ['cute baby animals','inspirational quotes','beautiful landscapes','fun facts about space','wholesome stories','amazing nature photography','happy news today','acts of kindness','interesting science discoveries','beautiful libraries around the world','hidden gems in europe','best free online courses','healthy easy recipes','mind blowing photography','underwater sea life','starry night sky wallpaper','world map with all countries','learn something new every day','positive affirmations','beautiful gardens to visit'];
 
         document.addEventListener('DOMContentLoaded',function(){
