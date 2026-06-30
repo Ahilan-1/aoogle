@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% if query %}{{ query }} - {% endif %}aoogle Images</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#4285f4">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <style>
         :root {
             --apple-gray: #86868b;
@@ -235,6 +238,7 @@
             if(p==='1')setDark(true);
             else if(p===null&&window.matchMedia('(prefers-color-scheme:dark)').matches)setDark(true);
         })();
+        if('serviceWorker'in navigator)navigator.serviceWorker.register('/static/sw.js');
     </script>
 </body>
 </html>

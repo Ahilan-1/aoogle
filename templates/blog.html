@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>aoogle vs other search engines - aoogle blog</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#4285f4">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <style>
         :root {
             --bg:#fff; --bg2:#f8f9fa; --text:#222; --text2:#545454;
@@ -563,6 +566,7 @@
             for(var i=0;i<panels.length;i++)panels[i].classList.remove('active');
             document.getElementById(id).classList.add('active');
         }
+        if('serviceWorker'in navigator)navigator.serviceWorker.register('/static/sw.js');
     </script>
 </body>
 </html>

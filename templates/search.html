@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>{% if query %}{{ query }} - {% endif %}aoogle</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#4285f4">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <style>
         :root {
             --bg:#fff; --bg2:#fff; --bg3:#f8f9fa; --text:#222; --text2:#545454;
@@ -469,6 +472,7 @@
             if(el) el.textContent = count + ' results';
         }
         applyFilter('all');
+        if('serviceWorker'in navigator)navigator.serviceWorker.register('/static/sw.js');
     </script>
 </body>
 </html>

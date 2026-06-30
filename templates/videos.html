@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>{% if query %}{{ query }} - {% endif %}aoogle Videos</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#4285f4">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <style>
         :root{--bg:#fff;--bg2:#fff;--text:#222;--text2:#545454;--text3:#70757a;--text4:#808080;--link:#1a0dab;--link-v:#609;--border:#dfe1e5;--border2:#ebebeb;--border3:#e0e0e0;--border4:#dadce0;--nav-active:#1a73e8;--cm:#4285f4;--cr:#ea4335;--cy:#fbbc05;--cg:#34a853;--shadow:rgba(32,33,36,.28);--card-bg:#fff;--hover-bg:#f1f3f4;--input-bg:#fff}
         .dark-mode{--bg:#202124;--bg2:#303134;--text:#e8eaed;--text2:#bdc1c6;--text3:#9aa0a6;--text4:#9aa0a6;--link:#8ab4f8;--link-v:#c58af9;--border:#5f6368;--border2:#3c4043;--border3:#5f6368;--border4:#5f6368;--nav-active:#8ab4f8;--shadow:rgba(0,0,0,.28);--card-bg:#303134;--hover-bg:#3c4043;--input-bg:#303134}
@@ -99,7 +102,8 @@
     <script>
         function setDark(v){document.body.classList.toggle('dark-mode',v);var b=document.getElementById('dm-btn');if(b)b.innerHTML=v?'&#x2600;':'&#x263D;';try{localStorage.setItem('aoogle-dark',v?'1':'0')}catch(e){}}
         function toggleDark(){setDark(!document.body.classList.contains('dark-mode'))}
-        (function(){var p=null;try{p=localStorage.getItem('aoogle-dark')}catch(e){}if(p==='1')setDark(true);else if(p===null&&window.matchMedia('(prefers-color-scheme:dark)').matches)setDark(true);})();
+        (function(){var p=null;try{p=localStorage.getItem('aoogle-dark')}catch(e){}if(p==='1')setDark(true);else if(p===null&&window.matchMedia('(prefers-color-scheme:dark)').matches)setDark(true);        })();
+        if('serviceWorker'in navigator)navigator.serviceWorker.register('/static/sw.js');
     </script>
 </body>
 </html>
