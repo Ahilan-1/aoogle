@@ -1472,13 +1472,27 @@ class ImprovedSearch:
             idx = text.find(marker)
             if idx == -1:
                 return None
-            brace_start = text.find('{', idx)
+            eq = text.find('=', idx)
+            if eq == -1:
+                return None
+            brace_start = text.find('{', eq)
             if brace_start == -1:
                 return None
             depth = 0
+            in_str = False
+            esc = False
             for i in range(brace_start, len(text)):
                 ch = text[i]
-                if ch == '{':
+                if in_str:
+                    if esc:
+                        esc = False
+                    elif ch == '\\':
+                        esc = True
+                    elif ch == '"':
+                        in_str = False
+                elif ch == '"':
+                    in_str = True
+                elif ch == '{':
                     depth += 1
                 elif ch == '}':
                     depth -= 1
@@ -1494,7 +1508,14 @@ class ImprovedSearch:
             if not raw:
                 raw = extract_json(r.text, 'window["ytInitialData"]')
             if not raw:
-                return videos
+                # Fallback: older /browse endpoint or re-crawl
+                r2 = self.session.get(f'https://www.youtube.com/results?search_query={query}', headers={**self._get_headers(), 'Accept-Language': 'en-US,en;q=0.5'}, timeout=15)
+                if r2 and r2.status_code == 200:
+                    raw = extract_json(r2.text, 'ytInitialData')
+                if not raw:
+                    raw = extract_json(r2.text, 'window["ytInitialData"]') if r2 else None
+                if not raw:
+                    return videos
             data = json.loads(raw)
             c = data
             for key in ['contents', 'twoColumnSearchResultsRenderer', 'primaryContents', 'sectionListRenderer', 'contents']:
