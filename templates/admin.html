@@ -110,6 +110,21 @@
             </div>
         </div>
 
+        <div class="card" style="border-left:4px solid #c5221f">
+            <div class="card-title">
+                Urgent Announcement
+                {% if announcement %}<span class="badge" style="background:#c5221f;color:#fff">active</span>{% endif %}
+            </div>
+            <div style="padding:16px 20px">
+                <form method="POST" action="/admin/announcement" style="display:flex;gap:8px;flex-wrap:wrap">
+                    <textarea name="announcement" placeholder="e.g. Search is slower than usual due to high traffic. We're working on it." style="flex:1;min-width:300px;padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:14px;outline:none;font-family:arial,sans-serif" rows="2">{{ announcement }}</textarea>
+                    <button type="submit" class="btn btn-approve" style="padding:8px 16px">Set</button>
+                    {% if announcement %}<button type="submit" class="btn btn-deny" name="announcement" value="" style="padding:8px 16px">Clear</button>{% endif %}
+                </form>
+                {% if announcement %}<p style="font-size:13px;color:#c5221f;margin:8px 0 0">Currently showing as red banner: <strong>{{ announcement }}</strong></p>{% endif %}
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-title">
                 Pending Reports

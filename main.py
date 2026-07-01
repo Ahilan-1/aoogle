@@ -550,7 +550,7 @@ class DataManager:
         if loaded:
             self.data = loaded
         else:
-            self.data = {"reports": [], "blacklist": {}, "total_searches": 0, "celebration": ""}
+            self.data = {"reports": [], "blacklist": {}, "total_searches": 0, "celebration": "", "announcement": ""}
             _save_json(self.data)
 
     def add_report(self, url, title, query, domain):
@@ -640,6 +640,15 @@ class DataManager:
     def set_celebration(self, text):
         with self._lock:
             self.data['celebration'] = text
+            _save_json(self.data)
+
+    def get_announcement(self):
+        with self._lock:
+            return self.data.get('announcement', '')
+
+    def set_announcement(self, text):
+        with self._lock:
+            self.data['announcement'] = text
             _save_json(self.data)
 
     def flush(self):
@@ -1944,14 +1953,26 @@ class ImprovedSearch:
         t.start()
         return [], "running"
 
+    def _is_relevant_image(self, title, src_url, query):
+        """Check if an image result is relevant to the query."""
+        q_lower = query.lower().strip()
+        if not q_lower:
+            return True
+        q_words = [w for w in q_lower.split() if len(w) > 2]
+        if not q_words:
+            return True
+        text = (title.lower() + ' ' + src_url.lower())
+        return any(w in text for w in q_words)
+
     def search_images(self, query):
         images = []
         seen_urls = set()
+        query_keywords = [w.lower() for w in query.split() if len(w) > 2]
 
-        # Primary: ddgs metasearch (fastest, most reliable)
+        # Primary: ddgs metasearch
         if ddgs_available:
             try:
-                ddgs_results = DDGS(timeout=5).images(query, max_results=30, backend='auto')
+                ddgs_results = DDGS(timeout=5).images(query, max_results=50)
                 for item in ddgs_results:
                     img_url = item.get('image', '')
                     if not img_url or img_url in seen_urls:
@@ -1961,14 +1982,17 @@ class ImprovedSearch:
                     thumb = item.get('thumbnail', '') or img_url
                     src = item.get('url', '') or '#'
                     dom = urlparse(src).netloc if src != '#' else ''
+                    if query_keywords and not self._is_relevant_image(title, src, query):
+                        app.logger.debug(f"Skipping irrelevant image: {title}")
+                        continue
                     images.append({'thumbnail': thumb, 'title': title or dom or query, 'source_url': src, 'source_domain': dom or 'image'})
                     if len(images) >= 50:
                         break
             except Exception as e:
                 app.logger.error(f"DDGS images: {e}")
 
-        # Fallback 1: Bing scrape
-        if len(images) < 6:
+        # Fallback 1: Bing scrape (only if ddgs returned too few)
+        if len(images) < 20:
             try:
                 r = self.session.get('https://www.bing.com/images/search', params={'q': query, 'form': 'HDRSC2'}, headers=self._get_headers(), timeout=10)
                 if r and r.status_code == 200:
@@ -1988,6 +2012,8 @@ class ImprovedSearch:
                             purl = d.get('purl', '')
                             dom = urlparse(purl).netloc if purl else ''
                             turl = (d.get('turl', '') or '').split('&pid')[0] or murl
+                            if query_keywords and not self._is_relevant_image(title, purl, query):
+                                continue
                             images.append({'thumbnail': turl, 'title': title[:100] or dom or query, 'source_url': purl or '#', 'source_domain': dom or 'image'})
                             if len(images) >= 50:
                                 break
@@ -1996,8 +2022,8 @@ class ImprovedSearch:
             except Exception as e:
                 app.logger.error(f"Bing images: {e}")
 
-        # Fallback 2: DDG VQD (usually blocked)
-        if len(images) < 6:
+        # Fallback 2: DDG VQD (usually blocked on Railway)
+        if len(images) < 10:
             try:
                 def extract_vqd(html):
                     for p in [r'vqd=([\d-]+)&', r'vqd=([\d-]+)', r'"vqd":"([\d-]+)"', r"'vqd':\s*'([\d-]+)'"]:
@@ -2005,10 +2031,10 @@ class ImprovedSearch:
                         if m:
                             return m.group(1)
                     return None
-                r = self.session.get('https://duckduckgo.com/', params={'q': query, 'iax': 'images', 'ia': 'images'}, headers=self._get_headers(), timeout=10)
+                r = self.session.get('https://duckduckgo.com/', params={'q': query, 'iax': 'images', 'ia': 'images'}, headers=self._get_headers(), timeout=8)
                 vqd = extract_vqd(r.text) if r and r.status_code == 200 else None
                 if vqd:
-                    api_resp = self.session.get('https://duckduckgo.com/i.js', params={'q': query, 'o': 'json', 'vqd': vqd, 'f': ',,,'}, headers={**self._get_headers(), 'Referer': 'https://duckduckgo.com/'}, timeout=10)
+                    api_resp = self.session.get('https://duckduckgo.com/i.js', params={'q': query, 'o': 'json', 'vqd': vqd, 'f': ',,,'}, headers={**self._get_headers(), 'Referer': 'https://duckduckgo.com/'}, timeout=8)
                     if api_resp and api_resp.status_code == 200:
                         for item in api_resp.json().get('results', []):
                             try:
@@ -2020,6 +2046,8 @@ class ImprovedSearch:
                                 thumb = item.get('thumbnail', '') or img_url
                                 src = item.get('url', '') or '#'
                                 dom = urlparse(src).netloc if src != '#' else ''
+                                if query_keywords and not self._is_relevant_image(title, src, query):
+                                    continue
                                 images.append({'thumbnail': thumb, 'title': title or dom or query, 'source_url': src, 'source_domain': dom or 'image'})
                                 if len(images) >= 50:
                                     break
@@ -2421,7 +2449,8 @@ search_engine = ImprovedSearch()
 
 @app.route('/')
 def home():
-    return render_template('search.html', celebration=data_manager.get_celebration(), poneglyph=request.args.get('poneglyph') == '1')
+    announcement = data_manager.get_announcement()
+    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, poneglyph=request.args.get('poneglyph') == '1')
 
 @app.route('/search')
 def search():
@@ -2432,8 +2461,9 @@ def search():
         filter_type = 'general'
     poneglyph = request.args.get('poneglyph') == '1'
 
+    announcement = data_manager.get_announcement()
     if not query:
-        return render_template('search.html', celebration=data_manager.get_celebration(), poneglyph=poneglyph)
+        return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, poneglyph=poneglyph)
 
     crisis = detect_crisis(query)
 
@@ -2447,7 +2477,8 @@ def search():
             page=1,
             total_results=len(LIFE_RESOURCES),
             info_box=None,
-            poneglyph=poneglyph
+            poneglyph=poneglyph,
+            announcement=announcement
         )
 
     notice = detect_notice(query)
@@ -2460,7 +2491,8 @@ def search():
             page=1,
             total_results=0,
             info_box=None,
-            poneglyph=poneglyph
+            poneglyph=poneglyph,
+            announcement=announcement
         )
 
     try:
@@ -2473,7 +2505,8 @@ def search():
                     poneglyph=True,
                     pg_loading=True,
                     results=[],
-                    error=None
+                    error=None,
+                    announcement=announcement
                 )
         else:
             results, total_results = search_engine.search(query, page, filter_type)
@@ -2504,7 +2537,8 @@ def search():
             page=page,
             total_results=total_results,
             info_box=get_info_box(query),
-            poneglyph=poneglyph
+            poneglyph=poneglyph,
+            announcement=announcement
         )
 
     except Exception as e:
@@ -2514,7 +2548,8 @@ def search():
             'search.html',
             query=query,
             notice=notice,
-            error="An error occurred while processing your search. Please try again."
+            error="An error occurred while processing your search. Please try again.",
+            announcement=announcement
         )
 
 @app.route('/api/search')
@@ -2883,7 +2918,8 @@ def admin_dashboard():
     blacklist = data_manager.get_blacklist()
     total_searches = data_manager.get_total_searches()
     celebration = data_manager.get_celebration()
-    return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches, celebration=celebration)
+    announcement = data_manager.get_announcement()
+    return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches, celebration=celebration, announcement=announcement)
 
 @app.route('/admin/reports/<int:report_id>/approve', methods=['POST'])
 def admin_approve_report(report_id):
@@ -2915,6 +2951,14 @@ def admin_celebration():
         return jsonify({"error": "Unauthorized"}), 401
     text = request.form.get('celebration', '').strip()
     data_manager.set_celebration(text)
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/announcement', methods=['POST'])
+def admin_announcement():
+    if not session.get('admin_logged_in'):
+        return jsonify({"error": "Unauthorized"}), 401
+    text = request.form.get('announcement', '').strip()
+    data_manager.set_announcement(text)
     return redirect(url_for('admin_dashboard'))
 
 if __name__ == "__main__":
