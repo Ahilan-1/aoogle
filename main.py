@@ -1950,37 +1950,26 @@ class ImprovedSearch:
         images = []
         seen_urls = set()
 
-        def extract_vqd(html):
-            for p in [r'vqd=([\d-]+)&', r'vqd=([\d-]+)', r'"vqd":"([\d-]+)"', r"'vqd':\s*'([\d-]+)'"]:
-                m = re.search(p, html)
-                if m:
-                    return m.group(1)
-            return None
+        # Primary: ddgs metasearch (fastest, most reliable)
+        if ddgs_available:
+            try:
+                ddgs_results = DDGS().images(query, max_results=30, backend='auto')
+                for item in ddgs_results:
+                    img_url = item.get('image', '')
+                    if not img_url or img_url in seen_urls:
+                        continue
+                    seen_urls.add(img_url)
+                    title = (item.get('title', '') or '')[:100]
+                    thumb = item.get('thumbnail', '') or img_url
+                    src = item.get('url', '') or '#'
+                    dom = urlparse(src).netloc if src != '#' else ''
+                    images.append({'thumbnail': thumb, 'title': title or dom or query, 'source_url': src, 'source_domain': dom or 'image'})
+                    if len(images) >= 50:
+                        break
+            except Exception as e:
+                app.logger.error(f"DDGS images: {e}")
 
-        try:
-            r = self.session.get('https://duckduckgo.com/', params={'q': query, 'iax': 'images', 'ia': 'images'}, headers=self._get_headers(), timeout=10)
-            vqd = extract_vqd(r.text) if r and r.status_code == 200 else None
-            if vqd:
-                api_resp = self.session.get('https://duckduckgo.com/i.js', params={'q': query, 'o': 'json', 'vqd': vqd, 'f': ',,,'}, headers={**self._get_headers(), 'Referer': 'https://duckduckgo.com/'}, timeout=10)
-                if api_resp and api_resp.status_code == 200:
-                    for item in api_resp.json().get('results', []):
-                        try:
-                            img_url = item.get('image', '')
-                            if not img_url or img_url in seen_urls:
-                                continue
-                            seen_urls.add(img_url)
-                            title = (item.get('title', '') or '')[:100]
-                            thumb = item.get('thumbnail', '') or img_url
-                            src = item.get('url', '') or '#'
-                            dom = urlparse(src).netloc if src != '#' else ''
-                            images.append({'thumbnail': thumb, 'title': title or dom or query, 'source_url': src, 'source_domain': dom or 'image'})
-                            if len(images) >= 50:
-                                break
-                        except:
-                            continue
-        except Exception as e:
-            app.logger.error(f"DDG images: {e}")
-
+        # Fallback 1: Bing scrape
         if len(images) < 6:
             try:
                 r = self.session.get('https://www.bing.com/images/search', params={'q': query, 'form': 'HDRSC2'}, headers=self._get_headers(), timeout=10)
@@ -2009,133 +1998,48 @@ class ImprovedSearch:
             except Exception as e:
                 app.logger.error(f"Bing images: {e}")
 
-        if len(images) < 6 and ddgs_available:
+        # Fallback 2: DDG VQD (usually blocked)
+        if len(images) < 6:
             try:
-                ddgs_results = DDGS().images(query, max_results=15, backend='auto')
-                for item in ddgs_results:
-                    img_url = item.get('image', '')
-                    if not img_url or img_url in seen_urls:
-                        continue
-                    seen_urls.add(img_url)
-                    title = (item.get('title', '') or '')[:100]
-                    thumb = item.get('thumbnail', '') or img_url
-                    src = item.get('url', '') or '#'
-                    dom = urlparse(src).netloc if src != '#' else ''
-                    images.append({'thumbnail': thumb, 'title': title or dom or query, 'source_url': src, 'source_domain': dom or 'image'})
-                    if len(images) >= 50:
-                        break
+                def extract_vqd(html):
+                    for p in [r'vqd=([\d-]+)&', r'vqd=([\d-]+)', r'"vqd":"([\d-]+)"', r"'vqd':\s*'([\d-]+)'"]:
+                        m = re.search(p, html)
+                        if m:
+                            return m.group(1)
+                    return None
+                r = self.session.get('https://duckduckgo.com/', params={'q': query, 'iax': 'images', 'ia': 'images'}, headers=self._get_headers(), timeout=10)
+                vqd = extract_vqd(r.text) if r and r.status_code == 200 else None
+                if vqd:
+                    api_resp = self.session.get('https://duckduckgo.com/i.js', params={'q': query, 'o': 'json', 'vqd': vqd, 'f': ',,,'}, headers={**self._get_headers(), 'Referer': 'https://duckduckgo.com/'}, timeout=10)
+                    if api_resp and api_resp.status_code == 200:
+                        for item in api_resp.json().get('results', []):
+                            try:
+                                img_url = item.get('image', '')
+                                if not img_url or img_url in seen_urls:
+                                    continue
+                                seen_urls.add(img_url)
+                                title = (item.get('title', '') or '')[:100]
+                                thumb = item.get('thumbnail', '') or img_url
+                                src = item.get('url', '') or '#'
+                                dom = urlparse(src).netloc if src != '#' else ''
+                                images.append({'thumbnail': thumb, 'title': title or dom or query, 'source_url': src, 'source_domain': dom or 'image'})
+                                if len(images) >= 50:
+                                    break
+                            except:
+                                continue
             except Exception as e:
-                app.logger.error(f"DDGS images: {e}")
+                app.logger.error(f"DDG images fallback: {e}")
 
         return images[:50]
 
     def search_videos(self, query):
         videos = []
+        seen_ids = set()
 
-        def extract_json(text):
-            m = re.search(r'ytInitialData\s*=\s*(\{)', text)
-            if not m:
-                return None
-            brace_start = m.start(1)
-            depth = 0
-            in_str = False
-            esc = False
-            for i in range(brace_start, len(text)):
-                ch = text[i]
-                if in_str:
-                    if esc:
-                        esc = False
-                    elif ch == '\\':
-                        esc = True
-                    elif ch == '"':
-                        in_str = False
-                elif ch == '"':
-                    in_str = True
-                elif ch == '{':
-                    depth += 1
-                elif ch == '}':
-                    depth -= 1
-                    if depth == 0:
-                        return text[brace_start:i+1]
-            return None
-
-        def raw_to_json(raw):
+        # Primary: ddgs metasearch (fastest, most reliable)
+        if ddgs_available:
             try:
-                return json.loads(raw)
-            except json.JSONDecodeError:
-                raw = re.sub(r"(?<!\\)'", '"', raw)
-                raw = re.sub(r',\s*}', '}', raw)
-                raw = re.sub(r',\s*]', ']', raw)
-                raw = re.sub(r'\bundefined\b', 'null', raw)
-                raw = re.sub(r'\bNaN\b', 'null', raw)
-                try:
-                    return json.loads(raw)
-                except json.JSONDecodeError:
-                    app.logger.error(f"YouTube JSON parse failed, raw[:200]: {raw[:200]}")
-                    raise
-
-        def fetch_page(query):
-            r = self.session.get('https://www.youtube.com/results', params={'search_query': query}, headers={**self._get_headers(), 'Accept-Language': 'en-US,en;q=0.5'}, timeout=15)
-            if r and r.status_code == 200:
-                raw = extract_json(r.text)
-                if raw:
-                    return raw
-            r2 = self.session.get(f'https://www.youtube.com/results?search_query={query}', headers={**self._get_headers(), 'Accept-Language': 'en-US,en;q=0.5'}, timeout=15)
-            if r2 and r2.status_code == 200:
-                raw = extract_json(r2.text)
-                if raw:
-                    return raw
-            return None
-
-        for attempt in range(2):
-            try:
-                raw = fetch_page(query)
-                if not raw:
-                    continue
-                data = raw_to_json(raw)
-                c = data
-                for key in ['contents', 'twoColumnSearchResultsRenderer', 'primaryContents', 'sectionListRenderer', 'contents']:
-                    c = c.get(key, {}) if isinstance(c, dict) else {}
-                for section in c if isinstance(c, list) else []:
-                    items = (section.get('itemSectionRenderer', {}) if isinstance(section, dict) else {}).get('contents', [])
-                    for item in items:
-                        vr = item.get('videoRenderer', {}) if isinstance(item, dict) else {}
-                        if not vr:
-                            continue
-                        vid = vr.get('videoId', '')
-                        if not vid:
-                            continue
-                        tr = vr.get('title', {}).get('runs', [])
-                        title = ''.join(t.get('text', '') for t in tr) if tr else vr.get('title', {}).get('simpleText', '')
-                        thumbs = vr.get('thumbnail', {}).get('thumbnails', [])
-                        thumb = thumbs[-1]['url'] if thumbs else ''
-                        videos.append({
-                            'id': vid,
-                            'title': title[:120],
-                            'url': f'https://www.youtube.com/watch?v={vid}',
-                            'thumbnail': thumb,
-                            'duration': vr.get('lengthText', {}).get('simpleText', ''),
-                            'views': vr.get('viewCountText', {}).get('simpleText', '') or (vr.get('viewCountText', {}).get('runs', [{}])[0].get('text', '') if vr.get('viewCountText', {}).get('runs') else ''),
-                            'published': vr.get('publishedTimeText', {}).get('simpleText', ''),
-                            'channel': (vr.get('ownerText', {}).get('runs', []) or vr.get('shortBylineText', {}).get('runs', []) or [{}])[0].get('text', ''),
-                            'channel_url': '',
-                        })
-                        ch_id = ((vr.get('ownerText', {}).get('runs', []) or vr.get('shortBylineText', {}).get('runs', []) or [{}])[0].get('navigationEndpoint', {}) or {}).get('browseEndpoint', {}) or {}
-                        ch_id = ch_id.get('browseId', '')
-                        if ch_id:
-                            videos[-1]['channel_url'] = f'https://www.youtube.com/channel/{ch_id}'
-                        if len(videos) >= 20:
-                            break
-                    if len(videos) >= 20:
-                        break
-            except Exception as e:
-                app.logger.error(f"YouTube search error: {e}")
-            if videos:
-                break
-        if len(videos) < 6 and ddgs_available:
-            try:
-                ddgs_results = DDGS().videos(query, max_results=15, backend='auto')
-                seen_ids = {v['id'] for v in videos if v.get('id')}
+                ddgs_results = DDGS().videos(query, max_results=30, backend='auto')
                 for item in ddgs_results:
                     vid = item.get('content', '')
                     if not vid:
@@ -2155,10 +2059,115 @@ class ImprovedSearch:
                         'channel': '',
                         'channel_url': '',
                     })
-                    if len(videos) >= 20:
+                    if len(videos) >= 30:
                         break
             except Exception as e:
                 app.logger.error(f"DDGS videos: {e}")
+
+        # Fallback: YouTube scrape
+        if len(videos) < 6:
+            def extract_json(text):
+                m = re.search(r'ytInitialData\s*=\s*(\{)', text)
+                if not m:
+                    return None
+                brace_start = m.start(1)
+                depth = 0
+                in_str = False
+                esc = False
+                for i in range(brace_start, len(text)):
+                    ch = text[i]
+                    if in_str:
+                        if esc:
+                            esc = False
+                        elif ch == '\\':
+                            esc = True
+                        elif ch == '"':
+                            in_str = False
+                    elif ch == '"':
+                        in_str = True
+                    elif ch == '{':
+                        depth += 1
+                    elif ch == '}':
+                        depth -= 1
+                        if depth == 0:
+                            return text[brace_start:i+1]
+                return None
+
+            def raw_to_json(raw):
+                try:
+                    return json.loads(raw)
+                except json.JSONDecodeError:
+                    raw = re.sub(r"(?<!\\)'", '"', raw)
+                    raw = re.sub(r',\s*}', '}', raw)
+                    raw = re.sub(r',\s*]', ']', raw)
+                    raw = re.sub(r'\bundefined\b', 'null', raw)
+                    raw = re.sub(r'\bNaN\b', 'null', raw)
+                    try:
+                        return json.loads(raw)
+                    except json.JSONDecodeError:
+                        app.logger.error(f"YouTube JSON parse failed, raw[:200]: {raw[:200]}")
+                        raise
+
+            def fetch_page(query):
+                r = self.session.get('https://www.youtube.com/results', params={'search_query': query}, headers={**self._get_headers(), 'Accept-Language': 'en-US,en;q=0.5'}, timeout=15)
+                if r and r.status_code == 200:
+                    raw = extract_json(r.text)
+                    if raw:
+                        return raw
+                r2 = self.session.get(f'https://www.youtube.com/results?search_query={query}', headers={**self._get_headers(), 'Accept-Language': 'en-US,en;q=0.5'}, timeout=15)
+                if r2 and r2.status_code == 200:
+                    raw = extract_json(r2.text)
+                    if raw:
+                        return raw
+                return None
+
+            for attempt in range(2):
+                try:
+                    raw = fetch_page(query)
+                    if not raw:
+                        continue
+                    data = raw_to_json(raw)
+                    c = data
+                    for key in ['contents', 'twoColumnSearchResultsRenderer', 'primaryContents', 'sectionListRenderer', 'contents']:
+                        c = c.get(key, {}) if isinstance(c, dict) else {}
+                    for section in c if isinstance(c, list) else []:
+                        items = (section.get('itemSectionRenderer', {}) if isinstance(section, dict) else {}).get('contents', [])
+                        for item in items:
+                            vr = item.get('videoRenderer', {}) if isinstance(item, dict) else {}
+                            if not vr:
+                                continue
+                            vid = vr.get('videoId', '')
+                            if not vid or vid in seen_ids:
+                                continue
+                            seen_ids.add(vid)
+                            tr = vr.get('title', {}).get('runs', [])
+                            title = ''.join(t.get('text', '') for t in tr) if tr else vr.get('title', {}).get('simpleText', '')
+                            thumbs = vr.get('thumbnail', {}).get('thumbnails', [])
+                            thumb = thumbs[-1]['url'] if thumbs else ''
+                            videos.append({
+                                'id': vid,
+                                'title': title[:120],
+                                'url': f'https://www.youtube.com/watch?v={vid}',
+                                'thumbnail': thumb,
+                                'duration': vr.get('lengthText', {}).get('simpleText', ''),
+                                'views': vr.get('viewCountText', {}).get('simpleText', '') or (vr.get('viewCountText', {}).get('runs', [{}])[0].get('text', '') if vr.get('viewCountText', {}).get('runs') else ''),
+                                'published': vr.get('publishedTimeText', {}).get('simpleText', ''),
+                                'channel': (vr.get('ownerText', {}).get('runs', []) or vr.get('shortBylineText', {}).get('runs', []) or [{}])[0].get('text', ''),
+                                'channel_url': '',
+                            })
+                            ch_id = ((vr.get('ownerText', {}).get('runs', []) or vr.get('shortBylineText', {}).get('runs', []) or [{}])[0].get('navigationEndpoint', {}) or {}).get('browseEndpoint', {}) or {}
+                            ch_id = ch_id.get('browseId', '')
+                            if ch_id:
+                                videos[-1]['channel_url'] = f'https://www.youtube.com/channel/{ch_id}'
+                            if len(videos) >= 30:
+                                break
+                        if len(videos) >= 30:
+                            break
+                except Exception as e:
+                    app.logger.error(f"YouTube search error: {e}")
+                if videos:
+                    break
+
         return videos
 
     def get_suggestions(self, query):
