@@ -43,7 +43,7 @@ if os.path.exists(env_path):
                 key, val = line.split('=', 1)
                 os.environ.setdefault(key.strip(), val.strip())
 
-app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24).hex())
+app.secret_key = os.environ.get('SECRET_KEY', 'arlong-secret-key-change-in-prod')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Admin@123')
 
 @app.after_request
@@ -2951,7 +2951,8 @@ def admin_remove_blacklist():
 def admin_celebration():
     if not session.get('admin_logged_in'):
         return jsonify({"error": "Unauthorized"}), 401
-    text = request.form.get('celebration', '').strip()
+    values = request.form.getlist('celebration')
+    text = values[-1].strip() if values else ''
     data_manager.set_celebration(text)
     return redirect(url_for('admin_dashboard'))
 
@@ -2959,7 +2960,8 @@ def admin_celebration():
 def admin_announcement():
     if not session.get('admin_logged_in'):
         return jsonify({"error": "Unauthorized"}), 401
-    text = request.form.get('announcement', '').strip()
+    values = request.form.getlist('announcement')
+    text = values[-1].strip() if values else ''
     data_manager.set_announcement(text)
     return redirect(url_for('admin_dashboard'))
 
