@@ -1376,7 +1376,7 @@ class ImprovedSearch:
                 if not ddgs_available:
                     return []
                 try:
-                    raw = DDGS(timeout=5).text(query, max_results=50, backend='auto')
+                    raw = DDGS(timeout=5).text(query, max_results=50, backend='auto', safesearch='on')
                     results = []
                     for r in raw:
                         title = r.get('title', '')
@@ -1451,7 +1451,7 @@ class ImprovedSearch:
         # 0. DDGS metasearch (fastest, uses multiple engines)
         if ddgs_available:
             try:
-                raw = DDGS(timeout=5).text(query, max_results=30, backend='auto')
+                raw = DDGS(timeout=5).text(query, max_results=30, backend='auto', safesearch='on')
                 for r in raw:
                     title = r.get('title', '')
                     href = r.get('href', '')
@@ -1621,7 +1621,7 @@ class ImprovedSearch:
             # Strategy 0: DDGS metasearch (fastest, multiple engines)
             if ddgs_available and len(results) < 10:
                 try:
-                    raw = DDGS(timeout=5).text(query, max_results=30, backend='auto')
+                    raw = DDGS(timeout=5).text(query, max_results=30, backend='auto', safesearch='on')
                     for r in raw:
                         title = r.get('title', '')
                         href = r.get('href', '')
@@ -1972,7 +1972,7 @@ class ImprovedSearch:
         # Primary: ddgs metasearch
         if ddgs_available:
             try:
-                ddgs_results = DDGS(timeout=5).images(query, max_results=50)
+                ddgs_results = DDGS(timeout=5).images(query, max_results=50, safesearch='on')
                 for item in ddgs_results:
                     img_url = item.get('image', '')
                     if not img_url or img_url in seen_urls:
@@ -2065,7 +2065,7 @@ class ImprovedSearch:
         # Primary: ddgs metasearch (fastest, most reliable)
         if ddgs_available:
             try:
-                ddgs_results = DDGS(timeout=5).videos(query, max_results=30, backend='auto')
+                ddgs_results = DDGS(timeout=5).videos(query, max_results=30, backend='auto', safesearch='on')
                 for item in ddgs_results:
                     vid = item.get('content', '')
                     if not vid:
@@ -2074,11 +2074,13 @@ class ImprovedSearch:
                     if vid_id in seen_ids:
                         continue
                     seen_ids.add(vid_id)
+                    images = item.get('images', {}) or {}
+                    thumb = images.get('medium', '') or images.get('small', '') or images.get('large', '') or ''
                     videos.append({
                         'id': vid_id,
                         'title': (item.get('title', '') or '')[:120],
                         'url': vid,
-                        'thumbnail': item.get('image', '') or '',
+                        'thumbnail': thumb,
                         'duration': item.get('duration', '') or '',
                         'views': '',
                         'published': '',
