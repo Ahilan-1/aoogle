@@ -658,12 +658,10 @@ class ImprovedSearch:
         except:
             self.user_agent = type('SimpleUA',(),{'random':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36','__getitem__':lambda s,k:s.random})()
         self.executor = ThreadPoolExecutor(max_workers=5)
-        self.search_urls = [
-            "https://html.duckduckgo.com/html/",
-        ]
+        self.search_urls = []
         if ddgs_available:
             self.ddgs = DDGS()
-            self.search_urls.insert(0, "ddgs://text")
+            self.search_urls.append("ddgs://text")
         else:
             self.ddgs = None
         if not redis_client:
@@ -1369,7 +1367,7 @@ class ImprovedSearch:
                 if not ddgs_available:
                     return []
                 try:
-                    raw = DDGS().text(query, max_results=50, backend='auto')
+                    raw = DDGS(timeout=5).text(query, max_results=50, backend='auto')
                     results = []
                     for r in raw:
                         title = r.get('title', '')
@@ -1444,7 +1442,7 @@ class ImprovedSearch:
         # 0. DDGS metasearch (fastest, uses multiple engines)
         if ddgs_available:
             try:
-                raw = DDGS().text(query, max_results=30, backend='auto')
+                raw = DDGS(timeout=5).text(query, max_results=30, backend='auto')
                 for r in raw:
                     title = r.get('title', '')
                     href = r.get('href', '')
@@ -1569,7 +1567,7 @@ class ImprovedSearch:
                 future = self.executor.submit(self._search_single_engine, search_url, query, page)
                 futures.append(future)
 
-            for future in as_completed(futures):
+            for future in as_completed(futures, timeout=15):
                 try:
                     current_results = future.result()
                     results.extend(current_results)
@@ -1580,7 +1578,7 @@ class ImprovedSearch:
                     continue
 
             if not results:
-                app.logger.warning("Primary DDG search failed, trying fallback sources...")
+                app.logger.warning("Primary search failed, trying fallback sources...")
                 results = self._search_fallback(query)
 
             if results:
@@ -1614,7 +1612,7 @@ class ImprovedSearch:
             # Strategy 0: DDGS metasearch (fastest, multiple engines)
             if ddgs_available and len(results) < 10:
                 try:
-                    raw = DDGS().text(query, max_results=30, backend='auto')
+                    raw = DDGS(timeout=5).text(query, max_results=30, backend='auto')
                     for r in raw:
                         title = r.get('title', '')
                         href = r.get('href', '')
@@ -1953,7 +1951,7 @@ class ImprovedSearch:
         # Primary: ddgs metasearch (fastest, most reliable)
         if ddgs_available:
             try:
-                ddgs_results = DDGS().images(query, max_results=30, backend='auto')
+                ddgs_results = DDGS(timeout=5).images(query, max_results=30, backend='auto')
                 for item in ddgs_results:
                     img_url = item.get('image', '')
                     if not img_url or img_url in seen_urls:
@@ -2039,7 +2037,7 @@ class ImprovedSearch:
         # Primary: ddgs metasearch (fastest, most reliable)
         if ddgs_available:
             try:
-                ddgs_results = DDGS().videos(query, max_results=30, backend='auto')
+                ddgs_results = DDGS(timeout=5).videos(query, max_results=30, backend='auto')
                 for item in ddgs_results:
                     vid = item.get('content', '')
                     if not vid:
