@@ -639,6 +639,9 @@ class DataManager:
 
     def set_celebration(self, text):
         with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
             self.data['celebration'] = text
             _save_json(self.data)
 
@@ -648,6 +651,9 @@ class DataManager:
 
     def set_announcement(self, text):
         with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
             self.data['announcement'] = text
             _save_json(self.data)
 
