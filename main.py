@@ -2179,7 +2179,7 @@ class ImprovedSearch:
         if cached_suggestions:
             return cached_suggestions
 
-        # DuckDuckGo suggest API
+        # 1. DuckDuckGo suggest API (may be blocked on some hosts)
         try:
             r = self.session.get(
                 'https://duckduckgo.com/ac/',
@@ -2193,8 +2193,27 @@ class ImprovedSearch:
                     if isinstance(suggestions, list) and suggestions:
                         self._save_to_cache(cache_key, suggestions, expire_time=1800)
                         return suggestions
-        except Exception:
-            pass
+        except Exception as e:
+            app.logger.debug(f"DDG suggest failed: {e}")
+
+        # 2. Google suggest API (fallback, works on most hosts)
+        try:
+            r = self.session.get(
+                'https://suggestqueries.google.com/complete/search',
+                params={'q': query, 'client': 'firefox', 'hl': 'en'},
+                timeout=3
+            )
+            if r and r.status_code == 200 and r.text.strip():
+                data = r.json()
+                if isinstance(data, list) and len(data) >= 2:
+                    suggestions = data[1]
+                    if isinstance(suggestions, list):
+                        suggestions = [s[0] if isinstance(s, list) else s for s in suggestions]
+                        if suggestions:
+                            self._save_to_cache(cache_key, suggestions, expire_time=1800)
+                            return suggestions
+        except Exception as e:
+            app.logger.debug(f"Google suggest failed: {e}")
 
         return []
 
