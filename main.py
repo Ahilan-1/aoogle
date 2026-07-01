@@ -1369,7 +1369,7 @@ class ImprovedSearch:
                 if not ddgs_available:
                     return []
                 try:
-                    raw = DDGS().text(query, max_results=30, backend='auto')
+                    raw = DDGS().text(query, max_results=50, backend='auto')
                     results = []
                     for r in raw:
                         title = r.get('title', '')
@@ -1444,7 +1444,7 @@ class ImprovedSearch:
         # 0. DDGS metasearch (fastest, uses multiple engines)
         if ddgs_available:
             try:
-                raw = DDGS().text(query, max_results=20, backend='auto')
+                raw = DDGS().text(query, max_results=30, backend='auto')
                 for r in raw:
                     title = r.get('title', '')
                     href = r.get('href', '')
@@ -1456,7 +1456,7 @@ class ImprovedSearch:
                         title=title, url=href, snippet=body[:300],
                         category='general', domain=urlparse(href).netloc
                     ))
-                    if len(results) >= 20:
+                    if len(results) >= 30:
                         break
             except Exception as e:
                 app.logger.error(f"Fallback DDGS error: {e}")
@@ -1552,47 +1552,51 @@ class ImprovedSearch:
         return results
 
     def search(self, query, page=1, filter_type='general'):
-        """Main search method with fallback and error handling"""
-        cache_key = self._get_cache_key(query, page)
-        cached_results = self._get_from_cache(cache_key)
+        """Main search method with pagination and fallback"""
+        per_page = 10
+        cache_key = self._get_cache_key(f"{query}_{filter_type}_all", 1)
+        cached_all = self._get_from_cache(cache_key)
+        all_results = None
 
-        if cached_results:
-            return cached_results
+        if cached_all:
+            all_results = cached_all
+        else:
+            results = []
+            errors = []
 
-        results = []
-        errors = []
+            futures = []
+            for search_url in self.search_urls:
+                future = self.executor.submit(self._search_single_engine, search_url, query, page)
+                futures.append(future)
 
-        # Submit tasks to the executor
-        futures = []
-        for search_url in self.search_urls:
-            future = self.executor.submit(self._search_single_engine, search_url, query, page)
-            futures.append(future)
+            for future in as_completed(futures):
+                try:
+                    current_results = future.result()
+                    results.extend(current_results)
+                    if len(results) >= 50:
+                        break
+                except Exception as e:
+                    errors.append(str(e))
+                    continue
 
-        # Collect results as they complete
-        for future in as_completed(futures):
-            try:
-                current_results = future.result()
-                results.extend(current_results)
-                if len(results) >= 50:
-                    break
-            except Exception as e:
-                errors.append(str(e))
-                continue
+            if not results:
+                app.logger.warning("Primary DDG search failed, trying fallback sources...")
+                results = self._search_fallback(query)
 
-        if not results:
-            app.logger.warning("Primary DDG search failed, trying fallback sources...")
-            results = self._search_fallback(query)
+            if results:
+                ranked_results = self._rank_results(query, results, filter_type)
+                all_results = [result.to_dict() for result in ranked_results]
+                self._save_to_cache(cache_key, all_results)
 
-        if not results:
-            return []
+        if not all_results:
+            return [], 0
 
-        ranked_results = self._rank_results(query, results, filter_type)
-        serialized_results = [result.to_dict() for result in ranked_results]
+        total = len(all_results)
+        start = (page - 1) * per_page
+        end = start + per_page
+        page_results = all_results[start:end]
 
-        if serialized_results:
-            self._save_to_cache(cache_key, serialized_results)
-
-        return serialized_results
+        return page_results, total
 
     def _extract_ddg_url(self, url):
         if url.startswith('//duckduckgo.com/l/') or 'duckduckgo.com/l/' in url:
@@ -1610,7 +1614,7 @@ class ImprovedSearch:
             # Strategy 0: DDGS metasearch (fastest, multiple engines)
             if ddgs_available and len(results) < 10:
                 try:
-                    raw = DDGS().text(query, max_results=20, backend='auto')
+                    raw = DDGS().text(query, max_results=30, backend='auto')
                     for r in raw:
                         title = r.get('title', '')
                         href = r.get('href', '')
@@ -1624,7 +1628,7 @@ class ImprovedSearch:
                             category='general', domain=parsed.netloc,
                             favicon=f'https://www.google.com/s2/favicons?domain={parsed.netloc}&sz=16'
                         ))
-                        if len(results) >= 20:
+                        if len(results) >= 30:
                             break
                 except Exception as e:
                     app.logger.error(f"PG DDGS error: {e}")
@@ -2446,7 +2450,7 @@ def search():
                     error=None
                 )
         else:
-            results = search_engine.search(query, page, filter_type)
+            results, total_results = search_engine.search(query, page, filter_type)
 
         search_stats.record()
         data_manager.increment_total_searches()
@@ -2472,7 +2476,7 @@ def search():
             news_box=news_box,
             notice=notice,
             page=page,
-            total_results=len(results),
+            total_results=total_results,
             info_box=get_info_box(query),
             poneglyph=poneglyph
         )
@@ -2537,14 +2541,14 @@ def api_search():
         return resp
 
     try:
-        results = search_engine.search(query, page)
+        results, total_results = search_engine.search(query, page)
         search_stats.record()
         data_manager.increment_total_searches()
 
         data = {
             "query": query,
             "page": page,
-            "total_results": len(results),
+            "total_results": total_results,
             "results": results,
             "info_box": get_info_box(query)
         }
