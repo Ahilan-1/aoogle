@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>API Docs - aoogle</title>
+    <title>API Docs - arlong</title>
     <style>
         :root {
             --bg:#fff; --text:#202124; --text2:#5f6368; --text3:#70757a;
@@ -19,12 +19,24 @@
         .top{position:sticky;top:0;z-index:100;background:var(--bg);border-bottom:1px solid var(--border)}
         .top-inner{display:flex;align-items:center;gap:12px;max-width:820px;margin:0 auto;padding:10px 16px}
         .ml{font-size:24px;font-family:'Product Sans',Arial,sans-serif;letter-spacing:-1px;line-height:1;flex-shrink:0}
-        .ml span:nth-child(1){color:var(--cm)}
-        .ml span:nth-child(2){color:var(--cr)}
-        .ml span:nth-child(3){color:var(--cy)}
-        .ml span:nth-child(4){color:var(--cm)}
-        .ml span:nth-child(5){color:var(--cg)}
-        .ml span:nth-child(6){color:var(--cr)}
+        .ml span {
+            background: linear-gradient(to top, #0066cc, #3399ff 50%, var(--text) 50%);
+            background-size: 100% 200%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            animation: arlong-wave 4s ease-in-out infinite;
+        }
+        .ml span:nth-child(1) { animation-delay: 0s; }
+        .ml span:nth-child(2) { animation-delay: 0.15s; }
+        .ml span:nth-child(3) { animation-delay: 0.3s; }
+        .ml span:nth-child(4) { animation-delay: 0.45s; }
+        .ml span:nth-child(5) { animation-delay: 0.6s; }
+        .ml span:nth-child(6) { animation-delay: 0.75s; }
+        @keyframes arlong-wave {
+            0%, 100% { background-position: 0 45%; }
+            50% { background-position: 0 55%; }
+        }
         .nav{display:flex;overflow-x:auto;margin-left:8px}
         .nav a{padding:10px 14px 8px;font-size:13px;color:var(--text3);border-bottom:3px solid transparent;white-space:nowrap}
         .nav a.active{color:var(--cm);border-bottom-color:var(--cm)}
@@ -98,7 +110,7 @@
 <body>
 <div class="top">
     <div class="top-inner">
-        <a href="/" class="ml"><span>a</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span></a>
+        <a href="/" class="ml"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></a>
         <div class="nav">
             <a href="/">Search</a>
             <a href="/images">Images</a>
@@ -141,7 +153,7 @@
     <pre>{
   <span class="nl">"query"</span>: <span class="s2">"python programming"</span>,
   <span class="nl">"page"</span>: <span class="mi">1</span>,
-  <span class="nl">"total_results"</span>: <span class="mi">25</span>,
+  <span class="nl">"total_results"</span>: <span class="mi">50</span>,
 
   <span class="c1">// Knowledge panel (present for known entities)</span>
   <span class="nl">"info_box"</span>: {
@@ -239,7 +251,7 @@
 <span class="n">console</span><span class="o">.</span><span class="nf">log</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">results</span><span class="p">);</span></pre>
 
     <h3>LLM function tool definition</h3>
-    <pre><span class="k">aoogle_search_tool</span> <span class="o">=</span> <span class="p">{</span>
+    <pre><span class="k">arlong_search_tool</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"function"</span><span class="p">,</span>
     <span class="s2">"function"</span><span class="p">:</span> <span class="p">{</span>
         <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"web_search"</span><span class="p">,</span>
@@ -259,7 +271,7 @@
 
     <h3>Python CLI tool</h3>
     <pre><span class="c1">#!/usr/bin/env python3</span>
-<span class="c1">"""aoogle-cli — terminal search client"""</span>
+<span class="c1">"""arlong-cli — terminal search client"""</span>
 <span class="kn">import</span> <span class="nn">sys</span><span class="o">,</span> <span class="nn">requests</span>
 
 <span class="k">BASE</span> <span class="o">=</span> <span class="s2">"https://aoogle-production.up.railway.app/api/search"</span>
@@ -286,7 +298,7 @@
         <span class="n">data</span> <span class="o">=</span> <span class="nf">search</span><span class="p">(</span><span class="s2">" "</span><span class="o">.</span><span class="nf">join</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">:]))</span>
         <span class="nf">show</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
         <span class="k">return</span>
-    <span class="nf">print</span><span class="p">(</span><span class="s2">"aoogle CLI — type a query or 'q' to quit"</span><span class="p">)</span>
+    <span class="nf">print</span><span class="p">(</span><span class="s2">"arlong CLI — type a query or 'q' to quit"</span><span class="p">)</span>
     <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">q</span> <span class="o">=</span> <span class="nf">input</span><span class="p">(</span><span class="s2">"\n> "</span><span class="p">)</span><span class="o">.</span><span class="nf">strip</span><span class="p">()</span>
@@ -298,7 +310,7 @@
 <span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
     <span class="nf">main</span><span class="p">()</span></pre>
 
-    <p style="font-size:13px;color:var(--text3);margin:4px 0 20px">Save as <code>aoogle-cli.py</code>. Run <code>python aoogle-cli.py your search</code> for a one-shot search, or <code>python aoogle-cli.py</code> for interactive mode.</p>
+    <p style="font-size:13px;color:var(--text3);margin:4px 0 20px">Save as <code>arlong-cli.py</code>. Run <code>python arlong-cli.py your search</code> for a one-shot search, or <code>python arlong-cli.py</code> for interactive mode.</p>
 
     <div class="hr"></div>
 

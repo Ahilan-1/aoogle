@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% if query %}{{ query }} - {% endif %}aoogle Images</title>
+    <title>{% if query %}{{ query }} - {% endif %}arlong Images</title>
     <style>
         :root {
             --apple-gray: #86868b;
@@ -205,7 +205,7 @@
 
     <header class="header">
         <div class="header-inner">
-            <a href="/" class="logo">aoogle</a>
+            <a href="/" class="logo">arlong</a>
             <form class="search-box" action="/images" method="GET">
                 <input type="text" name="q" class="search-input" value="{{ query if query else '' }}" required autocomplete="off" placeholder="Search images...">
                 <button type="submit" class="search-button">
@@ -253,11 +253,11 @@
             document.body.classList.toggle('dark-mode',v);
             var b=document.getElementById('dm-btn');
             if(b)b.innerHTML=v?'&#x2600;':'&#x263D;';
-            try{localStorage.setItem('aoogle-dark',v?'1':'0')}catch(e){}
+            try{localStorage.setItem('arlong-dark',v?'1':'0')}catch(e){}
         }
         function toggleDark(){setDark(!document.body.classList.contains('dark-mode'))}
         (function(){
-            var p=null;try{p=localStorage.getItem('aoogle-dark')}catch(e){}
+            var p=null;try{p=localStorage.getItem('arlong-dark')}catch(e){}
             if(p==='1')setDark(true);
             else if(p===null&&window.matchMedia('(prefers-color-scheme:dark)').matches)setDark(true);
         })();

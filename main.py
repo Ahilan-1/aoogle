@@ -7,7 +7,7 @@ from logging.handlers import RotatingFileHandler
 import time
 import random
 import json
-from urllib.parse import urlparse, quote_plus
+from urllib.parse import urlparse, quote_plus, parse_qs, unquote
 try:
     import redis
     redis_available = True
@@ -25,6 +25,11 @@ import hashlib
 import re
 import threading
 import os
+try:
+    from ddgs import DDGS
+    ddgs_available = True
+except ImportError:
+    ddgs_available = False
 
 app = Flask(__name__)
 
@@ -96,7 +101,7 @@ if redis_available:
         app.logger.warning("Redis not available, falling back to in-memory cache")
 
 class SearchResult:
-    def __init__(self, title, url, snippet, category='general', date=None, favicon=None):
+    def __init__(self, title, url, snippet, category='general', date=None, favicon=None, domain=None):
         self.title = title
         self.url = url
         self.snippet = snippet
@@ -104,6 +109,7 @@ class SearchResult:
         self.date = date
         self.favicon = favicon or f"https://www.google.com/s2/favicons?domain={url}"
         self.score = 0
+        self.domain = domain or urlparse(url).netloc if url else ''
 
     def to_dict(self):
         return {
@@ -115,7 +121,8 @@ class SearchResult:
             'date': self.date,
             'favicon': self.favicon,
             'score': self.score,
-            'type': 'regular'
+            'type': 'regular',
+            'domain': self.domain
         }
 
 
@@ -543,7 +550,7 @@ class DataManager:
         if loaded:
             self.data = loaded
         else:
-            self.data = {"reports": [], "blacklist": {}, "total_searches": 0}
+            self.data = {"reports": [], "blacklist": {}, "total_searches": 0, "celebration": ""}
             _save_json(self.data)
 
     def add_report(self, url, title, query, domain):
@@ -626,11 +633,22 @@ class DataManager:
         with self._lock:
             self.data['total_searches'] = self.data.get('total_searches', 0) + 1
 
+    def get_celebration(self):
+        with self._lock:
+            return self.data.get('celebration', '')
+
+    def set_celebration(self, text):
+        with self._lock:
+            self.data['celebration'] = text
+            _save_json(self.data)
+
     def flush(self):
         with self._lock:
             _save_json(self.data)
 
 data_manager = DataManager()
+pg_progress = {}
+pg_lock = threading.Lock()
 
 class ImprovedSearch:
     def __init__(self):
@@ -643,6 +661,11 @@ class ImprovedSearch:
         self.search_urls = [
             "https://html.duckduckgo.com/html/",
         ]
+        if ddgs_available:
+            self.ddgs = DDGS()
+            self.search_urls.insert(0, "ddgs://text")
+        else:
+            self.ddgs = None
         if not redis_client:
             self.in_memory_cache = {}
             self.cache_lock = threading.Lock()
@@ -677,13 +700,24 @@ class ImprovedSearch:
                 self.in_memory_cache[key] = (data, time.time() + expire_time)
 
     def _get_headers(self):
-        """Generate random headers for requests"""
+        """Generate realistic browser headers to avoid detection"""
+        accept_values = [
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        ]
         return {
             'User-Agent': self.user_agent.random,
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept': random.choice(accept_values),
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate',
             'DNT': '1',
             'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0',
         }
 
     def _fetch_with_retry(self, url, params, max_retries=2, backoff_factor=0.3):
@@ -1224,7 +1258,7 @@ class ImprovedSearch:
 
         deduplicated.sort(key=lambda x: x.score, reverse=True)
 
-        return deduplicated[:25]
+        return deduplicated[:50]
 
     def _parse_duckduckgo_results(self, html):
         results = []
@@ -1331,16 +1365,58 @@ class ImprovedSearch:
 
     def _search_single_engine(self, search_url, query, page):
         try:
-            if 'duckduckgo' in search_url:
-                response = self.session.post(
-                    search_url,
-                    data={'q': query},
-                    headers=self._get_headers(),
-                    timeout=10,
-                    allow_redirects=True
-                )
-                if response and response.text:
-                    return self._parse_duckduckgo_results(response.text)
+            if search_url == 'ddgs://text':
+                if not ddgs_available:
+                    return []
+                try:
+                    raw = DDGS().text(query, max_results=30, backend='auto')
+                    results = []
+                    for r in raw:
+                        title = r.get('title', '')
+                        href = r.get('href', '')
+                        body = r.get('body', '')
+                        if not title or not href:
+                            continue
+                        parsed = urlparse(href)
+                        results.append(SearchResult(
+                            title=title, url=href, snippet=body[:300],
+                            category='general', date=None, domain=parsed.netloc
+                        ))
+                    return results
+                except Exception as e:
+                    app.logger.error(f"DDGS search error: {e}")
+                    return []
+            elif 'duckduckgo' in search_url:
+                all_results = []
+                offsets = [0, 30, 60]
+                for i, offset in enumerate(offsets):
+                    try:
+                        data = {'q': query}
+                        if offset > 0:
+                            data['s'] = str(offset)
+                        response = self.session.post(
+                            search_url,
+                            data=data,
+                            headers=self._get_headers(),
+                            timeout=8,
+                            allow_redirects=True
+                        )
+                        if response and response.status_code == 200 and response.text:
+                            page_results = self._parse_duckduckgo_results(response.text)
+                            all_results.extend(page_results)
+                            if len(page_results) < 3:
+                                break
+                        elif response and response.status_code == 202:
+                            app.logger.warning(f"DDG CAPTCHA block for query: {query[:30]}")
+                            break
+                        else:
+                            break
+                    except Exception as e:
+                        app.logger.error(f"DDG page {i} error: {str(e)}")
+                        continue
+                    if len(all_results) >= 20:
+                        break
+                return all_results
             else:
                 params = {
                     'q': query,
@@ -1359,6 +1435,121 @@ class ImprovedSearch:
             app.logger.error(f"Search error on {search_url}: {str(e)}")
             return []
         return []
+
+    def _search_fallback(self, query):
+        """Fallback search using alternative sources when DDG is blocked."""
+        results = []
+        seen = set()
+
+        # 0. DDGS metasearch (fastest, uses multiple engines)
+        if ddgs_available:
+            try:
+                raw = DDGS().text(query, max_results=20, backend='auto')
+                for r in raw:
+                    title = r.get('title', '')
+                    href = r.get('href', '')
+                    body = r.get('body', '')
+                    if not title or not href or href in seen:
+                        continue
+                    seen.add(href)
+                    results.append(SearchResult(
+                        title=title, url=href, snippet=body[:300],
+                        category='general', domain=urlparse(href).netloc
+                    ))
+                    if len(results) >= 20:
+                        break
+            except Exception as e:
+                app.logger.error(f"Fallback DDGS error: {e}")
+
+        # 1. DDG Instant Answer API (works without CAPTCHA)
+        if len(results) < 10:
+            try:
+                r = self.session.get('https://api.duckduckgo.com/', params={
+                    'q': query, 'format': 'json', 'no_html': 1, 'skip_disambig': 1
+                }, headers=self._get_headers(), timeout=8)
+                if r and r.status_code == 200:
+                    data = r.json()
+                    if data.get('AbstractURL') and data.get('AbstractText'):
+                        url = data['AbstractURL']
+                        if url not in seen:
+                            seen.add(url)
+                            results.append(SearchResult(
+                                title=data.get('Heading', query)[:80],
+                                url=url, snippet=data.get('AbstractText', '')[:200],
+                                category='general', domain=urlparse(url).netloc
+                            ))
+                    for topic in data.get('RelatedTopics', []):
+                        if isinstance(topic, dict) and topic.get('FirstURL'):
+                            url = topic['FirstURL']
+                            if url in seen:
+                                continue
+                            seen.add(url)
+                            text = topic.get('Text', '')
+                            title = text.split(' - ')[0] if ' - ' in text else text[:80]
+                            results.append(SearchResult(
+                                title=title, url=url, snippet=text[:200],
+                                category='general', domain=urlparse(url).netloc
+                            ))
+                            if len(results) >= 15:
+                                break
+            except Exception as e:
+                app.logger.error(f"Fallback DDG API error: {e}")
+
+        # 2. Wikipedia API (free, no key needed)
+        if len(results) < 10:
+            try:
+                r = self.session.get('https://en.wikipedia.org/w/api.php', params={
+                    'action': 'query', 'list': 'search', 'srsearch': query,
+                    'format': 'json', 'srlimit': 15
+                }, headers=self._get_headers(), timeout=8)
+                if r and r.status_code == 200:
+                    data = r.json()
+                    for item in data.get('query', {}).get('search', []):
+                        title = item.get('title', '')
+                        url = f'https://en.wikipedia.org/wiki/{quote_plus(title.replace(" ", "_"))}'
+                        if url in seen:
+                            continue
+                        seen.add(url)
+                        raw = item.get('snippet', '')
+                        snippet = BeautifulSoup(raw, 'html.parser').get_text(strip=True)[:200]
+                        results.append(SearchResult(
+                            title=title, url=url, snippet=snippet,
+                            category='general', domain='en.wikipedia.org'
+                        ))
+                        if len(results) >= 25:
+                            break
+            except Exception as e:
+                app.logger.error(f"Fallback Wikipedia error: {e}")
+
+        # 3. Wayback Machine as last resort
+        if len(results) < 5:
+            try:
+                r = self.session.get('https://archive.org/advancedsearch.php', params={
+                    'q': query, 'output': 'json', 'rows': 10,
+                    'fl': 'identifier,title,description,url'
+                }, headers=self._get_headers(), timeout=15)
+                if r and r.status_code == 200:
+                    data = r.json()
+                    for item in data.get('response', {}).get('docs', []):
+                        id_ = item.get('identifier', '')
+                        title = item.get('title', '') or id_
+                        if not id_:
+                            continue
+                        url = f'https://archive.org/details/{id_}'
+                        if url in seen:
+                            continue
+                        seen.add(url)
+                        desc_raw = item.get('description', '') or ''
+                        if isinstance(desc_raw, list):
+                            desc_raw = ' '.join(str(s) for s in desc_raw)
+                        results.append(SearchResult(
+                            title=title, url=url, snippet=str(desc_raw)[:200],
+                            category='general', domain='archive.org'
+                        ))
+            except Exception as e:
+                app.logger.error(f"Fallback Wayback error: {e}")
+
+        return results
 
     def search(self, query, page=1, filter_type='general'):
         """Main search method with fallback and error handling"""
@@ -1382,23 +1573,374 @@ class ImprovedSearch:
             try:
                 current_results = future.result()
                 results.extend(current_results)
-                if len(results) >= 5:  # We have enough results
+                if len(results) >= 50:
                     break
             except Exception as e:
                 errors.append(str(e))
                 continue
 
-        if not results and errors:
-            app.logger.error("\n".join(errors))
+        if not results:
+            app.logger.warning("Primary DDG search failed, trying fallback sources...")
+            results = self._search_fallback(query)
+
+        if not results:
             return []
 
         ranked_results = self._rank_results(query, results, filter_type)
         serialized_results = [result.to_dict() for result in ranked_results]
 
-        # Cache the results
-        self._save_to_cache(cache_key, serialized_results)
+        if serialized_results:
+            self._save_to_cache(cache_key, serialized_results)
 
         return serialized_results
+
+    def _extract_ddg_url(self, url):
+        if url.startswith('//duckduckgo.com/l/') or 'duckduckgo.com/l/' in url:
+            parsed = urlparse(url if '://' in url else 'https:' + url)
+            params = parse_qs(parsed.query)
+            if 'uddg' in params:
+                return unquote(params['uddg'][0])
+        return url
+
+    def _pg_scrape_results(self, query):
+        """Scrape web results using multiple backends."""
+        results = []
+        seen = set()
+        try:
+            # Strategy 0: DDGS metasearch (fastest, multiple engines)
+            if ddgs_available and len(results) < 10:
+                try:
+                    raw = DDGS().text(query, max_results=20, backend='auto')
+                    for r in raw:
+                        title = r.get('title', '')
+                        href = r.get('href', '')
+                        body = r.get('body', '')
+                        if not title or not href or href in seen:
+                            continue
+                        seen.add(href)
+                        parsed = urlparse(href)
+                        results.append(SearchResult(
+                            title=title, url=href, snippet=body[:300],
+                            category='general', domain=parsed.netloc,
+                            favicon=f'https://www.google.com/s2/favicons?domain={parsed.netloc}&sz=16'
+                        ))
+                        if len(results) >= 20:
+                            break
+                except Exception as e:
+                    app.logger.error(f"PG DDGS error: {e}")
+
+            # Strategy 1: DDG Instant Answer API (most relevant results)
+            try:
+                r = self.session.get('https://api.duckduckgo.com/', params={
+                    'q': query, 'format': 'json', 'no_html': 1, 'skip_disambig': 1
+                }, headers=self._get_headers(), timeout=8)
+                if r and r.status_code == 200:
+                    data = r.json()
+                    if data.get('AbstractURL') and data.get('AbstractText'):
+                        url = data['AbstractURL']
+                        if url not in seen:
+                            seen.add(url)
+                            results.append(SearchResult(
+                                title=data.get('Heading', query)[:80], url=url,
+                                snippet=data.get('AbstractText', '')[:300],
+                                category='general', domain=urlparse(url).netloc
+                            ))
+                    for topic in data.get('RelatedTopics', []):
+                        if isinstance(topic, dict) and topic.get('FirstURL'):
+                            url = topic['FirstURL']
+                            if url in seen:
+                                continue
+                            seen.add(url)
+                            text = topic.get('Text', '')
+                            title = text.split(' - ')[0] if ' - ' in text else text[:80]
+                            results.append(SearchResult(
+                                title=title, url=url, snippet=text[:300],
+                                category='general', domain=urlparse(url).netloc
+                            ))
+                            if len(results) >= 20:
+                                break
+            except Exception as e:
+                app.logger.error(f"PG DDG API error: {e}")
+
+            # Strategy 2: Wayback Machine text search (reliable for censored content)
+            if len(results) < 10:
+                try:
+                    wm_q = f'title:({query}) OR description:({query})'
+                    r = self.session.get('https://archive.org/advancedsearch.php', params={
+                        'q': wm_q, 'output': 'json', 'rows': 30,
+                        'fl': 'identifier,title,description,url'
+                    }, headers=self._get_headers(), timeout=15)
+                    if r and r.status_code == 200:
+                        data = r.json()
+                        for item in data.get('response', {}).get('docs', []):
+                            id_ = item.get('identifier', '')
+                            title = item.get('title', '') or id_
+                            desc_raw = item.get('description', '') or ''
+                            if isinstance(desc_raw, list):
+                                desc_raw = ' '.join(str(s) for s in desc_raw)
+                            desc = str(desc_raw)[:300]
+                            if not id_:
+                                continue
+                            url = f'https://archive.org/details/{id_}'
+                            if url in seen:
+                                continue
+                            seen.add(url)
+                            results.append(SearchResult(
+                                title=title, url=url, snippet=desc, category='general',
+                                domain='archive.org',
+                                favicon='https://www.google.com/s2/favicons?domain=archive.org&sz=16'
+                            ))
+                except Exception as e:
+                    app.logger.error(f"PG Wayback text error: {e}")
+
+            # Strategy 4: Try DDG HTML (handles 202 gracefully)
+            if len(results) < 10:
+                try:
+                    data = {'q': query}
+                    r = self.session.post('https://html.duckduckgo.com/html/', data=data,
+                        headers={**self._get_headers(), 'Content-Type': 'application/x-www-form-urlencoded'}, timeout=8)
+                    if r and r.status_code == 200:
+                        soup = BeautifulSoup(r.text, 'html.parser')
+                        for a in soup.select('.result__a'):
+                            url = self._extract_ddg_url(a.get('href', ''))
+                            title = a.get_text(strip=True)
+                            if not url or url in seen:
+                                continue
+                            seen.add(url)
+                            snippet_el = a.find_next(class_='result__snippet')
+                            snippet = snippet_el.get_text(strip=True) if snippet_el else ''
+                            parsed = urlparse(url)
+                            results.append(SearchResult(
+                                url=url, title=title, snippet=snippet, category='general',
+                                domain=parsed.netloc,
+                                favicon=f'https://www.google.com/s2/favicons?domain={parsed.netloc}&sz=16'
+                            ))
+                except Exception:
+                    pass
+
+        except Exception as e:
+            app.logger.error(f"PG scrape error: {e}")
+        return results[:30], seen
+
+    def _pg_scrape_site(self, query, site):
+        out = []
+        seen_urls = set()
+        try:
+            # Strategy 1: Wayback Machine advanced search with title boost
+            try:
+                wm_query = f'title:({query}) AND ({site})'
+                r = self.session.get('https://archive.org/advancedsearch.php', params={
+                    'q': wm_query, 'output': 'json', 'rows': 5,
+                    'fl': 'identifier,title,description,url'
+                }, headers=self._get_headers(), timeout=15)
+                if r and r.status_code == 200:
+                    data = r.json()
+                    for item in data.get('response', {}).get('docs', []):
+                        id_ = item.get('identifier', '')
+                        title = item.get('title', '') or id_
+                        desc_raw = item.get('description', '') or ''
+                        if isinstance(desc_raw, list):
+                            desc_raw = ' '.join(str(s) for s in desc_raw)
+                        desc = str(desc_raw)[:200]
+                        if not id_:
+                            continue
+                        url = f'https://archive.org/details/{id_}'
+                        if url in seen_urls:
+                            continue
+                        seen_urls.add(url)
+                        parsed = urlparse(url)
+                        out.append(SearchResult(
+                            title=title, url=url, snippet=desc, category='general',
+                            domain=parsed.netloc,
+                            favicon=f'https://www.google.com/s2/favicons?domain={parsed.netloc}&sz=16'
+                        ))
+            except Exception:
+                pass
+
+            # Strategy 2: Wayback Machine CDX (URL-based search for the domain)
+            if len(out) < 3:
+                try:
+                    r = self.session.get(f'https://web.archive.org/cdx/search/cdx',
+                        params={'url': f'{site}/*', 'output': 'json', 'limit': 10,
+                                'fl': 'original,timestamp,title', 'filter': f'title:{query}'},
+                        headers=self._get_headers(), timeout=10)
+                    if r and r.status_code == 200:
+                        rows = r.json()
+                        if len(rows) > 1:
+                            for row in rows[1:]:
+                                if len(row) >= 3:
+                                    url, ts, title = row[0], row[1], row[2]
+                                    if not url or not title:
+                                        continue
+                                    wm_url = f'https://web.archive.org/web/{ts}/{url}'
+                                    if wm_url in seen_urls:
+                                        continue
+                                    seen_urls.add(wm_url)
+                                    parsed = urlparse(url)
+                                    out.append(SearchResult(
+                                        title=str(title)[:100], url=wm_url,
+                                        snippet=f'Archived from {url}',
+                                        category='general', domain=parsed.netloc,
+                                        favicon=f'https://www.google.com/s2/favicons?domain={parsed.netloc}&sz=16'
+                                    ))
+                except Exception:
+                    pass
+
+            # Strategy 3: Direct site scrape for supported sites
+            if len(out) < 3:
+                try:
+                    site_search_urls = {
+                        'wikileaks.org': 'https://search.wikileaks.org/',
+                        'eff.org': 'https://www.eff.org/search',
+                        'archive.org': 'https://archive.org/search',
+                        'pastebin.com': 'https://www.pastebin.com/search',
+                    }
+                    search_url = site_search_urls.get(site)
+                    if search_url:
+                        r = self.session.get(search_url, params={'q': query},
+                            headers=self._get_headers(), timeout=8)
+                        if r and r.status_code == 200:
+                            soup = BeautifulSoup(r.text, 'html.parser')
+                            links = []
+                            for a in soup.find_all('a', href=True):
+                                href = a['href']
+                                text = a.get_text(strip=True)
+                                if text and len(text) > 10 and href.startswith('http'):
+                                    links.append((href, text))
+                            for url, title in links[:8]:
+                                if url in seen_urls:
+                                    continue
+                                seen_urls.add(url)
+                                parsed = urlparse(url)
+                                if parsed.netloc and site in parsed.netloc:
+                                    out.append(SearchResult(
+                                        title=title[:100], url=url, snippet='',
+                                        category='general', domain=parsed.netloc,
+                                        favicon=f'https://www.google.com/s2/favicons?domain={parsed.netloc}&sz=16'
+                                    ))
+                except Exception:
+                    pass
+
+            # Strategy 4: Try Bing (may be blocked but worth a try)
+            if len(out) < 2:
+                try:
+                    r = self.session.get('https://www.bing.com/search',
+                        params={'q': f'site:{site} {query}', 'count': '5'},
+                        headers=self._get_headers(), timeout=8)
+                    if r and r.status_code == 200:
+                        soup = BeautifulSoup(r.text, 'html.parser')
+                        for li in soup.find_all('li', class_='b_algo'):
+                            title_elem = li.find('h2')
+                            if not title_elem:
+                                continue
+                            link = title_elem.find('a')
+                            if not link or not link.get('href'):
+                                continue
+                            url = link['href']
+                            title = title_elem.get_text(strip=True)
+                            if not url or not title:
+                                continue
+                            if url in seen_urls:
+                                continue
+                            seen_urls.add(url)
+                            snippet_elem = li.find(['p', 'div'], class_=['b_caption', 'b_lineclamp2'])
+                            snippet = snippet_elem.get_text(strip=True) if snippet_elem else ''
+                            parsed = urlparse(url)
+                            out.append(SearchResult(
+                                title=title, url=url, snippet=snippet, category='general',
+                                domain=parsed.netloc,
+                                favicon=f'https://www.google.com/s2/favicons?domain={parsed.netloc}&sz=16'
+                            ))
+                            if len(out) >= 5:
+                                break
+                except Exception:
+                    pass
+        except Exception as e:
+            app.logger.error(f"PG site search {site} error: {e}")
+        return out
+
+    def _pg_update_progress(self, query, results, seen, completed, total):
+        with pg_lock:
+            if query in pg_progress:
+                pg_progress[query]['results'] = [r.to_dict() for r in results]
+                pg_progress[query]['found'] = len(results)
+                pg_progress[query]['sources_completed'] = completed
+                pg_progress[query]['total_sources'] = total
+
+    def _pg_search_bg(self, query):
+        try:
+            results = []
+            seen = set()
+
+            hidden_sites = [
+                'wikileaks.org', 'theintercept.com', 'propublica.org',
+                'icij.org', 'archive.org', 'pastebin.com',
+                'globaleaks.org', 'freedom.press', 'eff.org',
+                'cryptome.org', 'epic.org', 'rsf.org',
+                'archive.ph', 'distributeddenialofknowledge.org',
+                'thesvn.org',
+            ]
+            total_sources = 1 + len(hidden_sites)
+
+            # Get initial web results from available sources
+            web_results, web_seen = self._pg_scrape_results(query)
+            results.extend(web_results)
+            seen.update(web_seen)
+            self._pg_update_progress(query, results, seen, 1, total_sources)
+
+            futures = {self.executor.submit(self._pg_scrape_site, query, s): s for s in hidden_sites}
+            done = 1
+            for future in as_completed(futures):
+                if len(results) >= 50:
+                    break
+                done += 1
+                for sr in future.result():
+                    if sr.url in seen:
+                        continue
+                    seen.add(sr.url)
+                    results.append(sr)
+                self._pg_update_progress(query, results, seen, done, total_sources)
+
+            cache_key = f"pg:{query}"
+            if results:
+                self._save_to_cache(cache_key, [r.to_dict() for r in results])
+
+            with pg_lock:
+                if query in pg_progress:
+                    pg_progress[query]['status'] = 'done'
+                    pg_progress[query]['results'] = [r.to_dict() for r in results]
+                    pg_progress[query]['found'] = len(results)
+        except Exception as e:
+            app.logger.error(f"PG background error: {e}")
+            with pg_lock:
+                if query in pg_progress:
+                    pg_progress[query]['status'] = 'error'
+
+    def search_poneglyph(self, query):
+        cache_key = f"pg:{query}"
+        cached_results = self._get_from_cache(cache_key)
+        if cached_results:
+            return cached_results, "done"
+
+        hidden_sites = [
+            'wikileaks.org', 'theintercept.com', 'propublica.org',
+            'icij.org', 'archive.org', 'pastebin.com',
+            'globaleaks.org', 'freedom.press', 'eff.org',
+            'cryptome.org', 'epic.org', 'rsf.org',
+            'archive.ph', 'distributeddenialofknowledge.org',
+            'thesvn.org',
+        ]
+        total = 1 + len(hidden_sites)
+
+        with pg_lock:
+            if query in pg_progress and pg_progress[query]['status'] == 'running':
+                return [], "running"
+            pg_progress[query] = {"results": [], "found": 0, "status": "running", "sources_completed": 0, "total_sources": total}
+
+        t = threading.Thread(target=self._pg_search_bg, args=(query,))
+        t.daemon = True
+        t.start()
+        return [], "running"
 
     def search_images(self, query):
         images = []
@@ -1463,21 +2005,34 @@ class ImprovedSearch:
             except Exception as e:
                 app.logger.error(f"Bing images: {e}")
 
+        if len(images) < 6 and ddgs_available:
+            try:
+                ddgs_results = DDGS().images(query, max_results=15, backend='auto')
+                for item in ddgs_results:
+                    img_url = item.get('image', '')
+                    if not img_url or img_url in seen_urls:
+                        continue
+                    seen_urls.add(img_url)
+                    title = (item.get('title', '') or '')[:100]
+                    thumb = item.get('thumbnail', '') or img_url
+                    src = item.get('url', '') or '#'
+                    dom = urlparse(src).netloc if src != '#' else ''
+                    images.append({'thumbnail': thumb, 'title': title or dom or query, 'source_url': src, 'source_domain': dom or 'image'})
+                    if len(images) >= 50:
+                        break
+            except Exception as e:
+                app.logger.error(f"DDGS images: {e}")
+
         return images[:50]
 
     def search_videos(self, query):
         videos = []
 
-        def extract_json(text, marker):
-            idx = text.find(marker)
-            if idx == -1:
+        def extract_json(text):
+            m = re.search(r'ytInitialData\s*=\s*(\{)', text)
+            if not m:
                 return None
-            eq = text.find('=', idx)
-            if eq == -1:
-                return None
-            brace_start = text.find('{', eq)
-            if brace_start == -1:
-                return None
+            brace_start = m.start(1)
             depth = 0
             in_str = False
             esc = False
@@ -1500,60 +2055,106 @@ class ImprovedSearch:
                         return text[brace_start:i+1]
             return None
 
-        try:
+        def raw_to_json(raw):
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                raw = re.sub(r"(?<!\\)'", '"', raw)
+                raw = re.sub(r',\s*}', '}', raw)
+                raw = re.sub(r',\s*]', ']', raw)
+                raw = re.sub(r'\bundefined\b', 'null', raw)
+                raw = re.sub(r'\bNaN\b', 'null', raw)
+                try:
+                    return json.loads(raw)
+                except json.JSONDecodeError:
+                    app.logger.error(f"YouTube JSON parse failed, raw[:200]: {raw[:200]}")
+                    raise
+
+        def fetch_page(query):
             r = self.session.get('https://www.youtube.com/results', params={'search_query': query}, headers={**self._get_headers(), 'Accept-Language': 'en-US,en;q=0.5'}, timeout=15)
-            if not r or r.status_code != 200:
-                return videos
-            raw = extract_json(r.text, 'ytInitialData')
-            if not raw:
-                raw = extract_json(r.text, 'window["ytInitialData"]')
-            if not raw:
-                # Fallback: older /browse endpoint or re-crawl
-                r2 = self.session.get(f'https://www.youtube.com/results?search_query={query}', headers={**self._get_headers(), 'Accept-Language': 'en-US,en;q=0.5'}, timeout=15)
-                if r2 and r2.status_code == 200:
-                    raw = extract_json(r2.text, 'ytInitialData')
+            if r and r.status_code == 200:
+                raw = extract_json(r.text)
+                if raw:
+                    return raw
+            r2 = self.session.get(f'https://www.youtube.com/results?search_query={query}', headers={**self._get_headers(), 'Accept-Language': 'en-US,en;q=0.5'}, timeout=15)
+            if r2 and r2.status_code == 200:
+                raw = extract_json(r2.text)
+                if raw:
+                    return raw
+            return None
+
+        for attempt in range(2):
+            try:
+                raw = fetch_page(query)
                 if not raw:
-                    raw = extract_json(r2.text, 'window["ytInitialData"]') if r2 else None
-                if not raw:
-                    return videos
-            data = json.loads(raw)
-            c = data
-            for key in ['contents', 'twoColumnSearchResultsRenderer', 'primaryContents', 'sectionListRenderer', 'contents']:
-                c = c.get(key, {}) if isinstance(c, dict) else {}
-            for section in c if isinstance(c, list) else []:
-                items = (section.get('itemSectionRenderer', {}) if isinstance(section, dict) else {}).get('contents', [])
-                for item in items:
-                    vr = item.get('videoRenderer', {}) if isinstance(item, dict) else {}
-                    if not vr:
-                        continue
-                    vid = vr.get('videoId', '')
-                    if not vid:
-                        continue
-                    tr = vr.get('title', {}).get('runs', [])
-                    title = ''.join(t.get('text', '') for t in tr) if tr else vr.get('title', {}).get('simpleText', '')
-                    thumbs = vr.get('thumbnail', {}).get('thumbnails', [])
-                    thumb = thumbs[-1]['url'] if thumbs else ''
-                    videos.append({
-                        'id': vid,
-                        'title': title[:120],
-                        'url': f'https://www.youtube.com/watch?v={vid}',
-                        'thumbnail': thumb,
-                        'duration': vr.get('lengthText', {}).get('simpleText', ''),
-                        'views': vr.get('viewCountText', {}).get('simpleText', '') or (vr.get('viewCountText', {}).get('runs', [{}])[0].get('text', '') if vr.get('viewCountText', {}).get('runs') else ''),
-                        'published': vr.get('publishedTimeText', {}).get('simpleText', ''),
-                        'channel': (vr.get('ownerText', {}).get('runs', []) or vr.get('shortBylineText', {}).get('runs', []) or [{}])[0].get('text', ''),
-                        'channel_url': '',
-                    })
-                    ch_id = ((vr.get('ownerText', {}).get('runs', []) or vr.get('shortBylineText', {}).get('runs', []) or [{}])[0].get('navigationEndpoint', {}) or {}).get('browseEndpoint', {}) or {}
-                    ch_id = ch_id.get('browseId', '')
-                    if ch_id:
-                        videos[-1]['channel_url'] = f'https://www.youtube.com/channel/{ch_id}'
+                    continue
+                data = raw_to_json(raw)
+                c = data
+                for key in ['contents', 'twoColumnSearchResultsRenderer', 'primaryContents', 'sectionListRenderer', 'contents']:
+                    c = c.get(key, {}) if isinstance(c, dict) else {}
+                for section in c if isinstance(c, list) else []:
+                    items = (section.get('itemSectionRenderer', {}) if isinstance(section, dict) else {}).get('contents', [])
+                    for item in items:
+                        vr = item.get('videoRenderer', {}) if isinstance(item, dict) else {}
+                        if not vr:
+                            continue
+                        vid = vr.get('videoId', '')
+                        if not vid:
+                            continue
+                        tr = vr.get('title', {}).get('runs', [])
+                        title = ''.join(t.get('text', '') for t in tr) if tr else vr.get('title', {}).get('simpleText', '')
+                        thumbs = vr.get('thumbnail', {}).get('thumbnails', [])
+                        thumb = thumbs[-1]['url'] if thumbs else ''
+                        videos.append({
+                            'id': vid,
+                            'title': title[:120],
+                            'url': f'https://www.youtube.com/watch?v={vid}',
+                            'thumbnail': thumb,
+                            'duration': vr.get('lengthText', {}).get('simpleText', ''),
+                            'views': vr.get('viewCountText', {}).get('simpleText', '') or (vr.get('viewCountText', {}).get('runs', [{}])[0].get('text', '') if vr.get('viewCountText', {}).get('runs') else ''),
+                            'published': vr.get('publishedTimeText', {}).get('simpleText', ''),
+                            'channel': (vr.get('ownerText', {}).get('runs', []) or vr.get('shortBylineText', {}).get('runs', []) or [{}])[0].get('text', ''),
+                            'channel_url': '',
+                        })
+                        ch_id = ((vr.get('ownerText', {}).get('runs', []) or vr.get('shortBylineText', {}).get('runs', []) or [{}])[0].get('navigationEndpoint', {}) or {}).get('browseEndpoint', {}) or {}
+                        ch_id = ch_id.get('browseId', '')
+                        if ch_id:
+                            videos[-1]['channel_url'] = f'https://www.youtube.com/channel/{ch_id}'
+                        if len(videos) >= 20:
+                            break
                     if len(videos) >= 20:
                         break
-                if len(videos) >= 20:
-                    break
-        except Exception as e:
-            app.logger.error(f"YouTube search error: {e}")
+            except Exception as e:
+                app.logger.error(f"YouTube search error: {e}")
+            if videos:
+                break
+        if len(videos) < 6 and ddgs_available:
+            try:
+                ddgs_results = DDGS().videos(query, max_results=15, backend='auto')
+                seen_ids = {v['id'] for v in videos if v.get('id')}
+                for item in ddgs_results:
+                    vid = item.get('content', '')
+                    if not vid:
+                        continue
+                    vid_id = vid.split('v=')[-1].split('&')[0] if 'v=' in vid else vid
+                    if vid_id in seen_ids:
+                        continue
+                    seen_ids.add(vid_id)
+                    videos.append({
+                        'id': vid_id,
+                        'title': (item.get('title', '') or '')[:120],
+                        'url': vid,
+                        'thumbnail': item.get('image', '') or '',
+                        'duration': item.get('duration', '') or '',
+                        'views': '',
+                        'published': '',
+                        'channel': '',
+                        'channel_url': '',
+                    })
+                    if len(videos) >= 20:
+                        break
+            except Exception as e:
+                app.logger.error(f"DDGS videos: {e}")
         return videos
 
     def get_suggestions(self, query):
@@ -1567,23 +2168,22 @@ class ImprovedSearch:
         if cached_suggestions:
             return cached_suggestions
 
+        # DuckDuckGo suggest API
         try:
-            params = {
-                'client': 'chrome',
-                'q': query
-            }
-            response = self._fetch_with_retry(
-                'https://suggestqueries.google.com/complete/search',
-                params
+            r = self.session.get(
+                'https://duckduckgo.com/ac/',
+                params={'q': query, 'type': 'list'},
+                timeout=3
             )
-
-            if response and response.status_code == 200:
-                suggestions = json.loads(response.text)[1]
-                self._save_to_cache(cache_key, suggestions, expire_time=1800)
-                return suggestions
-
-        except Exception as e:
-            app.logger.error(f"Suggestion error: {str(e)}")
+            if r and r.status_code == 200 and r.text.strip():
+                data = r.json()
+                if isinstance(data, list) and len(data) >= 2:
+                    suggestions = data[1]
+                    if isinstance(suggestions, list) and suggestions:
+                        self._save_to_cache(cache_key, suggestions, expire_time=1800)
+                        return suggestions
+        except Exception:
+            pass
 
         return []
 
@@ -1791,7 +2391,7 @@ search_engine = ImprovedSearch()
 
 @app.route('/')
 def home():
-    return render_template('search.html')
+    return render_template('search.html', celebration=data_manager.get_celebration(), poneglyph=request.args.get('poneglyph') == '1')
 
 @app.route('/search')
 def search():
@@ -1800,9 +2400,10 @@ def search():
     filter_type = request.args.get('filter', 'general')
     if filter_type not in ('general', 'shopping', 'official', 'tutorials', 'discussions', 'academic'):
         filter_type = 'general'
+    poneglyph = request.args.get('poneglyph') == '1'
 
     if not query:
-        return render_template('search.html')
+        return render_template('search.html', celebration=data_manager.get_celebration(), poneglyph=poneglyph)
 
     crisis = detect_crisis(query)
 
@@ -1815,7 +2416,8 @@ def search():
             notice={'type': 'redirect', 'message': 'You matter. Here are resources that may help.'},
             page=1,
             total_results=len(LIFE_RESOURCES),
-            info_box=None
+            info_box=None,
+            poneglyph=poneglyph
         )
 
     notice = detect_notice(query)
@@ -1827,11 +2429,25 @@ def search():
             notice=notice,
             page=1,
             total_results=0,
-            info_box=None
+            info_box=None,
+            poneglyph=poneglyph
         )
 
     try:
-        results = search_engine.search(query, page, filter_type)
+        if poneglyph:
+            results, pg_status = search_engine.search_poneglyph(query)
+            if pg_status == 'running':
+                return render_template(
+                    'search.html',
+                    query=query,
+                    poneglyph=True,
+                    pg_loading=True,
+                    results=[],
+                    error=None
+                )
+        else:
+            results = search_engine.search(query, page, filter_type)
+
         search_stats.record()
         data_manager.increment_total_searches()
 
@@ -1839,7 +2455,7 @@ def search():
 
         news_box = None
         news_intent = detect_news(query)
-        if news_intent:
+        if news_intent and not poneglyph:
             news_items = [r for r in results if r.get('category') == 'news'][:6]
             if news_items:
                 news_box = {
@@ -1857,7 +2473,8 @@ def search():
             notice=notice,
             page=page,
             total_results=len(results),
-            info_box=get_info_box(query)
+            info_box=get_info_box(query),
+            poneglyph=poneglyph
         )
 
     except Exception as e:
@@ -2188,6 +2805,13 @@ def internal_error(error):
     app.logger.error(f"Internal server error: {str(error)}")
     return render_template('search.html', error="An internal error occurred. Please try again."), 500
 
+@app.route('/api/pg-progress')
+def api_pg_progress():
+    query = request.args.get('q', '').strip()
+    with pg_lock:
+        p = pg_progress.get(query, {})
+    return jsonify(p)
+
 @app.route('/api/report', methods=['POST'])
 def api_report():
     data = request.get_json(force=True, silent=True) or {}
@@ -2228,7 +2852,8 @@ def admin_dashboard():
     reports = data_manager.get_all_reports()
     blacklist = data_manager.get_blacklist()
     total_searches = data_manager.get_total_searches()
-    return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches)
+    celebration = data_manager.get_celebration()
+    return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches, celebration=celebration)
 
 @app.route('/admin/reports/<int:report_id>/approve', methods=['POST'])
 def admin_approve_report(report_id):
@@ -2252,6 +2877,14 @@ def admin_remove_blacklist():
     domain = request.form.get('domain', '')
     if domain:
         data_manager.remove_from_blacklist(domain)
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/celebration', methods=['POST'])
+def admin_celebration():
+    if not session.get('admin_logged_in'):
+        return jsonify({"error": "Unauthorized"}), 401
+    text = request.form.get('celebration', '').strip()
+    data_manager.set_celebration(text)
     return redirect(url_for('admin_dashboard'))
 
 if __name__ == "__main__":
