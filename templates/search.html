@@ -42,6 +42,15 @@
         .pg-toggle .pg-label{font-weight:500;letter-spacing:.3px}
         .pg-toggle .pg-label.active{color:#4fc3f7}
         .pg-icon{font-size:16px}
+        .pg-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:10000;justify-content:center;align-items:center}
+        .pg-overlay.show{display:flex}
+        .pg-popup{background:var(--bg2);border:1px solid var(--border);max-width:480px;width:90%;padding:24px;position:relative}
+        .pg-popup h2{margin:0 0 12px;font-size:18px;font-weight:400;color:var(--text)}
+        .pg-popup p{margin:0 0 10px;font-size:13px;line-height:1.6;color:var(--text2)}
+        .pg-popup .badge{display:inline-block;font-size:11px;padding:2px 8px;border:1px solid #0288d1;color:#4fc3f7;margin-bottom:14px;letter-spacing:1px}
+        .pg-popup ul{margin:10px 0;padding:0 0 0 18px;font-size:13px;color:var(--text2);line-height:1.8}
+        .pg-popup .close-btn{display:block;margin-top:16px;padding:8px 20px;background:transparent;border:1px solid var(--border);color:var(--text);cursor:pointer;font-size:13px}
+        .pg-popup .close-btn:hover{background:var(--bg3)}
         .pg-loading{display:none;position:fixed;top:0;left:0;width:100%;height:3px;z-index:9999;background:var(--bg3)}
         .pg-loading .bar{height:100%;width:0;background:linear-gradient(90deg,#0288d1,#4fc3f7,#0288d1);background-size:200% 100%;animation:pg-fill 8s ease-in-out forwards,pg-shine 1s linear infinite}
         @keyframes pg-fill{0%{width:5%}30%{width:35%}60%{width:60%}85%{width:80%}100%{width:90%}}
@@ -240,86 +249,97 @@
     {% if poneglyph %}
     <style>
         .pg-loading{display:block}.pg-lab{display:block}
-        body{background:#0d1117!important}
-        body.iceberg{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--text:#e6edf3;--text2:#8b949e;--text3:#8b949e;--border:#30363d;--border2:#21262d;--link:#58a6ff}
-        body.iceberg .result-card{border-left-color:#0288d1;padding-left:12px;margin-bottom:18px}
-        body.iceberg .result-url{color:#4fc3f7}
-        body.iceberg .result-title{color:#81d4fa}
-        body.iceberg .result-snippet{color:#b0bec5}
-        body.iceberg .rs-input{border-color:#0288d1}
-        .pg-counter{text-align:center;font-size:13px;color:#4fc3f7;margin-top:8px;font-family:monospace}
-        .pg-results{max-width:700px;margin:60px auto;padding:0 16px}
-        .pg-results .result-card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:14px 16px;margin-bottom:12px;border-left:3px solid #0288d1}
-        .pg-results .result-card .result-url{color:#4fc3f7;font-size:13px}
-        .pg-results .result-card .result-title{color:#81d4fa;font-size:16px;font-weight:500}
-        .pg-results .result-card .result-snippet{color:#8b949e;font-size:13px;margin-top:4px}
+        .pg-counter{text-align:center;font-size:13px;color:var(--text2);margin-top:8px}
         .pg-status{margin-top:20px;text-align:center}
-        .pg-status .pg-source{display:inline-block;padding:4px 10px;margin:3px;border-radius:12px;font-size:11px;background:#21262d;color:#8b949e;border:1px solid #30363d}
+        .pg-status .pg-source{display:inline-block;padding:4px 10px;margin:3px;font-size:11px;background:var(--bg2);color:var(--text2);border:1px solid var(--border)}
         .pg-status .pg-source.done{color:#4fc3f7;border-color:#0288d1}
+        #pg-lab{font-size:14px;text-align:center;padding:12px;color:var(--text2);border-bottom:1px solid var(--border)}
     </style>
     <script>
         document.body.classList.add('iceberg');
         {% if pg_loading %}
         (function(){
-            var loading = document.getElementById('pg-loading');
-            var lab = document.getElementById('pg-lab');
-            if(lab){lab.textContent='Initiating deep search...';lab.style.display='block'}
-            if(loading) loading.style.display='block';
-            var q = '{{ query|e }}';
-            var resultsContainer = document.getElementById('pg-dynamic-results');
-            var counter = document.getElementById('pg-counter');
-            var statusContainer = document.getElementById('pg-status-list');
-            var POLL_INTERVAL = 2500;
-            var SOURCE_NAMES = [
-                'DDG Page 1','DDG Page 2','DDG Page 3',
-                'Wikileaks','Intercept','ProPublica','ICIJ',
-                'Archive','Pastebin','Globaleaks','Freedom Press',
-                'EFF','Cryptome','EPIC','RSF'
-            ];
-            function poll(){
-                fetch('/api/pg-progress?q='+encodeURIComponent(q)).then(function(r){return r.json()}).then(function(d){
-                    if(d.status === 'running' || d.status === 'done'){
-                        if(d.found > 0 && resultsContainer){
-                            resultsContainer.innerHTML = '';
-                            (d.results || []).forEach(function(r){
-                                var card = document.createElement('div');
-                                card.className = 'result-card';
-                                card.innerHTML = '<div class="result-url">'+r.domain+'</div>' +
-                                    '<a href="'+r.url+'" class="result-title" target="_blank">'+r.title+'</a>' +
-                                    '<div class="result-snippet">'+(r.snippet || '')+'</div>';
-                                resultsContainer.appendChild(card);
-                            });
+            function initPG(){
+                var loading = document.getElementById('pg-loading');
+                var lab = document.getElementById('pg-lab');
+                if(lab){lab.textContent='[PG] Initializing deep search...';lab.style.display='block'}
+                if(loading) loading.style.display='block';
+                var q = '{{ query|e }}';
+                var resultsContainer = document.getElementById('pg-dynamic-results');
+                var counter = document.getElementById('pg-counter');
+                var statusContainer = document.getElementById('pg-status-list');
+                if(!resultsContainer){setTimeout(initPG,200);return}
+                var POLL_INTERVAL = 2500;
+                var SOURCE_NAMES = [
+                    'Web Sources','Wikileaks','Intercept','ProPublica','ICIJ',
+                    'Archive.org','Pastebin','Globaleaks','Freedom Press',
+                    'EFF','Cryptome','EPIC','RSF',
+                    'Archive.ph','DDoK','The SVN'
+                ];
+                function renderResults(d){
+                    if(!d || !resultsContainer) return;
+                    try {
+                        resultsContainer.innerHTML = '';
+                        var items = d.results || [];
+                        for(var i = 0; i < items.length; i++){
+                            var r = items[i];
+                            if(!r || !r.url) continue;
+                            var card = document.createElement('div');
+                            card.className = 'result-card';
+                            var domain = r.domain || r.display_url || '';
+                            var snippet = r.snippet;
+                            if(typeof snippet === 'object') snippet = '';
+                            var safeDomain = (domain||'').replace(/[<>"&]/g,'');
+                            var safeTitle = (r.title||'').replace(/[<>"&]/g,'');
+                            var safeSnippet = (snippet||'').replace(/[<>"&]/g,'');
+                            card.innerHTML = '<div class="result-url">' + safeDomain + '</div>' +
+                                '<a href="' + r.url + '" class="result-title" target="_blank">' + safeTitle + '</a>' +
+                                '<div class="result-snippet">' + safeSnippet + '</div>';
+                            resultsContainer.appendChild(card);
                         }
-                        if(counter) counter.textContent = d.found + ' results found from ' + d.sources_completed + '/' + d.total_sources + ' sources';
-                        if(statusContainer){
-                            statusContainer.innerHTML = '';
-                            var completed = d.sources_completed || 0;
-                            SOURCE_NAMES.forEach(function(name, i){
-                                var el = document.createElement('span');
-                                el.className = 'pg-source' + (i < completed ? ' done' : '');
-                                el.textContent = name;
-                                statusContainer.appendChild(el);
-                            });
-                        }
-                        if(lab){
-                            if(d.status === 'done'){
-                                lab.textContent = 'Search complete! ' + d.found + ' results.';
-                                if(loading) loading.style.display = 'none';
-                            } else {
-                                lab.textContent = 'Searching... ' + d.sources_completed + '/' + d.total_sources + ' sources done';
+                    } catch(e){ console.error('PG render error:', e); }
+                }
+                function poll(){
+                    fetch('/api/pg-progress?q='+encodeURIComponent(q)).then(function(r){return r.json()}).then(function(d){
+                        if(d && (d.status === 'running' || d.status === 'done')){
+                            if(d.found > 0) renderResults(d);
+                            if(counter) counter.textContent = d.found + ' results from ' + (d.sources_completed||0) + '/' + (d.total_sources||0) + ' sources';
+                            if(statusContainer){
+                                statusContainer.innerHTML = '';
+                                var completed = d.sources_completed || 0;
+                                SOURCE_NAMES.forEach(function(name, i){
+                                    var el = document.createElement('span');
+                                    el.className = 'pg-source' + (i < completed ? ' done' : '');
+                                    el.textContent = name;
+                                    statusContainer.appendChild(el);
+                                });
                             }
+                            if(lab){
+                                if(d.status === 'done'){
+                                    lab.textContent = '[PG] Complete - ' + d.found + ' results';
+                                    if(loading) loading.style.display = 'none';
+                                    if(d.found > 0 && resultsContainer && resultsContainer.children.length === 0){
+                                        setTimeout(function(){ window.location.replace(window.location.href); }, 500);
+                                    }
+                                } else {
+                                    lab.textContent = '[PG] Searching... ' + (d.sources_completed||0) + '/' + (d.total_sources||0) + ' sources';
+                                }
+                            }
+                            if(d.status === 'running') setTimeout(poll, POLL_INTERVAL);
+                        } else {
+                            setTimeout(poll, POLL_INTERVAL);
                         }
-                        if(d.status === 'running') setTimeout(poll, POLL_INTERVAL);
-                    }
-                }).catch(function(){setTimeout(poll, POLL_INTERVAL)});
+                    }).catch(function(){setTimeout(poll, POLL_INTERVAL)});
+                }
+                setTimeout(poll, 1000);
             }
-            setTimeout(poll, 1000);
+            if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',initPG)}else{initPG()}
         })();
         {% endif %}
     </script>
     {% endif %}
 
-    {% set is_home = not results and not error and not pg_loading %}
+    {% set is_home = not query and not error and not pg_loading %}
     {% if is_home %}
     <div class="homepage">
         <div class="glogo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></div>
@@ -336,7 +356,7 @@
                     <button type="button" id="lucky-btn">I'm Feeling Lucky</button>
                 </div>
                 <label class="pg-toggle">
-                    <input type="checkbox" id="hp-pg" onchange="togglePoneglyph(this.checked)">
+                    <input type="checkbox" id="hp-pg" onclick="showPGPopup();this.checked=false">
                     <span class="slider"></span>
                     <span class="pg-label">Poneglyph Search</span>
                     <span class="pg-icon">&#x1F30A;</span>
@@ -564,39 +584,13 @@
         document.addEventListener('DOMContentLoaded',function(){
             var b=document.getElementById('lucky-btn');
             if(b){b.addEventListener('click',function(){window.location='/search?q='+encodeURIComponent(LUCKY_QUERIES[Math.floor(Math.random()*LUCKY_QUERIES.length)])})}
-            var PG_STEPS = [
-                'Searching DuckDuckGo...',
-                'Searching Wikileaks...',
-                'Searching free press archives...',
-                'Searching Pastebin & hidden forums...',
-                'Searching Internet Archive...',
-                'Compiling results...'
-            ];
-            function showPGProgress(){
-                var lab = document.getElementById('pg-lab');
-                if(!lab) return;
-                lab.style.display = 'block';
-                lab.textContent = PG_STEPS[0];
-                var i = 1;
-                var iv = setInterval(function(){
-                    if(i < PG_STEPS.length){
-                        lab.textContent = PG_STEPS[i];
-                        i++;
-                    } else {
-                        lab.textContent = 'Almost there...';
-                        clearInterval(iv);
-                    }
-                }, 4000);
-            }
+
             var hf=document.getElementById('hp-form');
             if(hf){hf.addEventListener('submit',function(e){
                 var pg = this.querySelector('input[name="poneglyph"]');
                 if(pg && pg.value === '1'){
                     e.preventDefault();
-                    document.getElementById('pg-loading').style.display='block';
-                    showPGProgress();
-                    var q = this.querySelector('input[name="q"]').value;
-                    setTimeout(function(){window.location='/search?q='+encodeURIComponent(q)+'&poneglyph=1'}, 800);
+                    showPGPopup();
                 }
             })}
         });
@@ -668,38 +662,32 @@
         }
         applyFilter('all');
 
-        function togglePoneglyph(on){
-            var forms = document.querySelectorAll('form[action="/search"]');
-            forms.forEach(function(f){
-                var existing = f.querySelector('input[name="poneglyph"]');
-                if(on){
-                    if(!existing){
-                        var inp = document.createElement('input');
-                        inp.type = 'hidden';
-                        inp.name = 'poneglyph';
-                        inp.value = '1';
-                        f.appendChild(inp);
-                    }
-                } else {
-                    if(existing) existing.remove();
-                }
-            });
-            var labels = document.querySelectorAll('.pg-label');
-            labels.forEach(function(l){l.classList.toggle('active',on)});
-            var toggles = document.querySelectorAll('.pg-toggle input');
-            toggles.forEach(function(t){t.checked = on});
-            var hp = document.querySelector('.homepage');
-            if(hp){
-                var g = hp.querySelector('.glogo');
-                if(g) g.style.opacity = on ? '0.7' : '';
-                var s = hp.querySelector('.slogan');
-                if(s) s.style.color = on ? '#4fc3f7' : '';
-            }
+        function showPGPopup(){
+            var o = document.getElementById('pg-overlay');
+            if(o) o.classList.add('show');
         }
-        (function(){
-            var params = new URLSearchParams(window.location.search);
-            if(params.get('poneglyph') === '1') togglePoneglyph(true);
-        })();
+        function closePGPopup(){
+            var o = document.getElementById('pg-overlay');
+            if(o) o.classList.remove('show');
+        }
+        document.addEventListener('click',function(e){
+            if(e.target && e.target.id === 'pg-overlay') closePGPopup();
+        });
     </script>
+    <div class="pg-overlay" id="pg-overlay">
+        <div class="pg-popup">
+            <div class="badge">COMING SOON</div>
+            <h2>Poneglyph Search</h2>
+            <p>Poneglyph is a deep search mode that scans hidden networks, censored archives, and restricted sources — content traditional search engines won't show you.</p>
+            <ul>
+                <li>Scans 15+ hidden knowledge archives</li>
+                <li>Includes Wikileaks, EFF, Cryptome, and more</li>
+                <li>Searches Pastebin, Internet Archive, and dark web mirrors</li>
+                <li>Finds content removed or buried by mainstream engines</li>
+            </ul>
+            <p style="margin-top:12px;color:var(--text3);font-size:12px">This feature is currently under development and will be available soon.</p>
+            <button class="close-btn" onclick="closePGPopup()">Close</button>
+        </div>
+    </div>
 </body>
 </html>
