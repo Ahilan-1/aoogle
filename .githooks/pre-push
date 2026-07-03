@@ -1,0 +1,8 @@
+#!/bin/sh
+echo "=== [pre-push] Running full test suite ==="
+python -m pytest tests/ -v --tb=long
+if [ $? -ne 0 ]; then
+    echo "=== [FAIL] Tests failed. Push blocked. Fix and recommit. ==="
+    exit 1
+fi
+echo "=== [OK] All tests passed. Push allowed. ==="

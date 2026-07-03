@@ -1,0 +1,8 @@
+#!/bin/sh
+echo "=== [pre-commit] Running tests ==="
+python -m pytest tests/ -v --tb=short
+if [ $? -ne 0 ]; then
+    echo "=== [FAIL] Tests failed. Commit blocked. ==="
+    exit 1
+fi
+echo "=== [OK] All tests passed. ==="

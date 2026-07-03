@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Changelogs - arlong</title>
+    <style>
+        :root{--bg:#fff;--text:#222;--text2:#545454;--text3:#70757a;--link:#1a0dab;--border:#dfe1e5;--blue:#1a73e8;--green:#137333}
+        *,*::before,*::after{box-sizing:border-box}
+        body{margin:0;padding:0;font-family:arial,sans-serif;color:var(--text);background:var(--bg);font-size:14px;line-height:1.6}
+        a{color:var(--link);text-decoration:none}
+        a:hover{text-decoration:underline}
+        .bar{background:#fafafa;border-bottom:1px solid #ebebeb;padding:12px 0;text-align:center;font-size:13px;color:var(--text3)}
+        .bar a{color:var(--text3);margin:0 10px}
+        .bar a:hover{color:#333}
+        .wrap{max-width:720px;margin:0 auto;padding:40px 20px 80px}
+        h1{font-size:28px;font-weight:400;margin:0 0 4px}
+        .sub{font-size:14px;color:var(--text3);margin-bottom:40px}
+        .version{border-left:3px solid var(--blue);padding:0 0 0 20px;margin:32px 0}
+        .version h2{font-size:22px;font-weight:500;margin:0 0 4px;color:var(--text)}
+        .version .date{font-size:13px;color:var(--text3);margin-bottom:16px}
+        .version .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:8px;font-weight:500;margin-bottom:12px}
+        .version .tag.major{background:#e6f4ea;color:var(--green);border:1px solid #b8e6c0}
+        .version ul{padding-left:20px;margin:0 0 8px}
+        .version ul li{font-size:14px;color:#444;margin-bottom:6px;line-height:1.7}
+        .version ul li strong{color:var(--text)}
+        .version ul li .new{color:var(--green);font-weight:600;font-size:11px;background:#e6f4ea;padding:1px 6px;border-radius:4px;margin-right:4px}
+        .version ul li .fix{color:#c5221f;font-weight:600;font-size:11px;background:#fce8e6;padding:1px 6px;border-radius:4px;margin-right:4px}
+        @media(max-width:640px){
+            h1{font-size:22px}.wrap{padding:24px 16px 60px}.bar a{margin:0 6px;font-size:12px}
+            .version{padding-left:14px}
+        }
+    </style>
+</head>
+<body>
+    <div class="bar">
+        <a href="/">Home</a> &middot;
+        <a href="/about">How it works</a> &middot;
+        <a href="/policy">Policies</a> &middot;
+        <a href="/privacy">Privacy</a>
+    </div>
+    <div class="wrap">
+        <h1>Changelogs</h1>
+        <div class="sub">Every update to arlong, from the beginning.</div>
+
+        <div class="version">
+            <span class="tag major">v1.0</span>
+            <h2>Initial release</h2>
+            <div class="date">July 2025</div>
+            <ul>
+                <li><span class="new">NEW</span> <strong>Meta search engine</strong> - Pulls results from DuckDuckGo and Bing, re-ranked by a transparent multi-factor scoring algorithm.</li>
+                <li><span class="new">NEW</span> <strong>80+ bang shortcuts</strong> - Type <code>!g python</code> to search Google, <code>!wiki Python</code> for Wikipedia, <code>!re python</code> for Reddit, and more.</li>
+                <li><span class="new">NEW</span> <strong>Multi-factor result scoring</strong> - Every result ranked by title match, snippet relevance, domain authority, content quality, freshness, category relevance, URL quality, and more.</li>
+                <li><span class="new">NEW</span> <strong>AI content detection</strong> - Automatic detection and penalization of AI-generated, keyword-stuffed, and low-effort content.</li>
+                <li><span class="new">NEW</span> <strong>Content quality filters</strong> - Filter results by General, Tutorials, Discussions, Documentation, or News.</li>
+                <li><span class="new">NEW</span> <strong>Knowledge panels</strong> - Wikipedia-based info boxes for people, places, and topics.</li>
+                <li><span class="new">NEW</span> <strong>Live stats dashboard</strong> - Real-time search activity at <a href="/stats">/stats</a>.</li>
+                <li><span class="new">NEW</span> <strong>No-logging architecture</strong> - Zero query logging, zero IP storage, zero cookies. Designed so compliance with data requests is technically impossible.</li>
+                <li><span class="new">NEW</span> <strong>Zero tracking</strong> - No Google Analytics, no Facebook Pixel, no fingerprinting, no session recording.</li>
+                <li><span class="new">NEW</span> <strong>Dark mode</strong> - Toggle with the moon/sun button in the top-right corner.</li>
+                <li><span class="new">NEW</span> <strong>Image search</strong> - Search images via Bing at <a href="/images">/images</a>.</li>
+                <li><span class="new">NEW</span> <strong>Video search</strong> - Search videos via DuckDuckGo and YouTube at <a href="/videos">/videos</a>.</li>
+                <li><span class="new">NEW</span> <strong>Autocomplete suggestions</strong> - Real-time search suggestions as you type.</li>
+                <li><span class="new">NEW</span> <strong>Bang autocomplete</strong> - Type <code>!</code> to see and select from 80+ bang shortcuts with favicons.</li>
+                <li><span class="new">NEW</span> <strong>Manual site submission</strong> - Submit your website for manual review at <a href="/submit">/submit</a>.</li>
+                <li><span class="new">NEW</span> <strong>Transparent scoring</strong> - Every result shows its category and quality score. See <a href="/about">how it works</a>.</li>
+                <li><span class="new">NEW</span> <strong>Free API</strong> - Tokenless, no-registration search API at <a href="/docs">/docs</a>.</li>
+                <li><span class="new">NEW</span> <strong>Crisis detection</strong> - Queries expressing self-harm or suicidal ideation return crisis resources.</li>
+                <li><span class="new">NEW</span> <strong>NSFW filtering</strong> - Adult content queries are blocked and redirected to support resources.</li>
+                <li><span class="new">NEW</span> <strong>Result reporting</strong> - Report low-quality results via the three-dot menu on any result.</li>
+                <li><span class="new">NEW</span> <strong>Admin dashboard</strong> - Manage reports, blacklist domains, and view stats.</li>
+                <li><span class="new">NEW</span> <strong>Browser extensions</strong> - Chrome and Firefox extensions available for quick access.</li>
+                <li><span class="new">NEW</span> <strong>Reddit boost</strong> - Real Reddit threads get a relevance boost on discussion-type queries.</li>
+                <li><span class="new">NEW</span> <strong>Poneglyph Search (coming soon)</strong> - Deep search mode for hidden networks, censored archives, and restricted sources.</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

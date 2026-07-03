@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=360">
+<title>arlong Settings</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#fff;--bg2:#f8f9fa;--bg3:#f1f3f4;--text:#202124;--text2:#5f6368;--text3:#70757a;--border:#dadce0;--border2:#e8eaed;--blue:#1a73e8;--shadow:rgba(0,0,0,0.10);--hover:#f1f3f4}
+@media(prefers-color-scheme:dark){
+:root{--bg:#202124;--bg2:#303134;--bg3:#3c4043;--text:#e8eaed;--text2:#bdc1c6;--text3:#9aa0a6;--border:#5f6368;--border2:#3c4043;--blue:#8ab4f8;--shadow:rgba(0,0,0,0.4);--hover:#3c4043}
+}
+body{width:340px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;font-size:14px;color:var(--text);background:var(--bg);overflow-x:hidden}
+.container{padding:16px}
+.logo-row{display:flex;align-items:center;gap:8px;margin-bottom:16px}
+.logo{font-family:'Product Sans',Arial,sans-serif;font-size:22px;letter-spacing:-1px;font-weight:700}
+.logo span{background:linear-gradient(to top,#0066cc,#3399ff 50%,var(--text) 50%);background-size:100% 200%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:arlong-wave 4s ease-in-out infinite}
+.logo span:nth-child(1){animation-delay:0s}
+.logo span:nth-child(2){animation-delay:0.15s}
+.logo span:nth-child(3){animation-delay:0.3s}
+.logo span:nth-child(4){animation-delay:0.45s}
+.logo span:nth-child(5){animation-delay:0.6s}
+.logo span:nth-child(6){animation-delay:0.75s}
+@keyframes arlong-wave{0%,100%{background-position:0 45%}50%{background-position:0 55%}}
+.brand-text{font-size:16px;font-weight:700;color:var(--text)}
+.field{margin-bottom:14px}
+label{display:block;font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px}
+select{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text);background:var(--bg2);outline:none;cursor:pointer;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2370757a' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px}
+select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(26,115,232,0.15)}
+.footer{border-top:1px solid var(--border2);padding-top:12px;margin-top:4px;font-size:11px;color:var(--text3);text-align:center}
+.status-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px}
+.status-dot.online{background:#34a853}
+.status-dot.offline{background:#c5221f}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo-row">
+    <div class="logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></div>
+    <span class="brand-text">arlong</span>
+  </div>
+
+  <div class="field">
+    <label for="fallbackEngine">Fallback Search Engine</label>
+    <select id="fallbackEngine">
+      <option value="google">Google</option>
+      <option value="bing">Bing</option>
+      <option value="duckduckgo">DuckDuckGo</option>
+      <option value="yahoo">Yahoo</option>
+      <option value="brave">Brave Search</option>
+      <option value="ecosia">Ecosia</option>
+      <option value="qwant">Qwant</option>
+      <option value="baidu">Baidu</option>
+      <option value="yandex">Yandex</option>
+      <option value="searx">Searx</option>
+    </select>
+  </div>
+
+  <div class="footer">
+    <span id="statusDot" class="status-dot"></span>
+    <span id="statusText">arlong Sidebar</span>
+  </div>
+</div>
+<script src="popup.js"></script>
+</body>
+</html>

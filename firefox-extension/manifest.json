@@ -1,12 +1,31 @@
 {
   "manifest_version": 2,
-  "name": "aoogle Sidebar",
-  "version": "1.0",
-  "description": "Shows aoogle search results in a sidebar when you search on other search engines.",
+  "name": "arlong Sidebar",
+  "version": "1.2",
+  "description": "arlong search engine sidebar with customizable fallback search",
   "permissions": [
     "storage",
+    "tabs",
+    "omnibox",
     "https://aoogle-production.up.railway.app/*",
-    "http://localhost:5000/*"
+    "http://localhost:5000/*",
+    "https://www.google.com/*",
+    "https://google.com/*",
+    "https://www.bing.com/*",
+    "https://bing.com/*",
+    "https://duckduckgo.com/*",
+    "https://search.yahoo.com/*",
+    "https://yandex.com/*",
+    "https://yandex.ru/*",
+    "https://www.baidu.com/*",
+    "https://baidu.com/*",
+    "https://search.brave.com/*",
+    "https://www.ecosia.org/*",
+    "https://ecosia.org/*",
+    "https://www.qwant.com/*",
+    "https://qwant.com/*",
+    "https://www.searx.be/*",
+    "https://searx.be/*"
   ],
   "background": {
     "scripts": ["background.js"]
@@ -38,12 +57,25 @@
     }
   ],
   "browser_action": {
-    "default_title": "aoogle Sidebar",
+    "default_popup": "popup.html",
+    "default_title": "arlong Sidebar",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
+  },
+  "omnibox": {
+    "keyword": "arl"
+  },
+  "search_provider": {
+    "name": "arlong",
+    "keyword": "arlong",
+    "search_url": "https://aoogle-production.up.railway.app/search?q={searchTerms}",
+    "favicon_url": "https://aoogle-production.up.railway.app/static/arlong.png",
+    "suggest_url": "https://aoogle-production.up.railway.app/suggest?q={searchTerms}",
+    "encoding": "UTF-8",
+    "is_default": false
   },
   "icons": {
     "16": "icons/icon16.png",
@@ -59,10 +91,10 @@
         "collected_data": [
           {
             "name": "search_queries",
-            "description": "Search queries are sent to the aoogle API to retrieve search results. No personal information is collected, stored, or shared with third parties."
+            "description": "Search queries are sent to the arlong API to retrieve search results. No personal information is collected, stored, or shared with third parties."
           }
         ],
-        "data_usage": "Search queries are used solely to fetch and display search results from the aoogle search engine. No data is stored, logged, or shared.",
+        "data_usage": "Search queries are used solely to fetch and display search results from the arlong search engine. No data is stored, logged, or shared.",
         "data_shared_with_third_parties": false
       }
     }

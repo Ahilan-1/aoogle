@@ -32,6 +32,21 @@
 
         .glogo{text-align:center;font-size:72px;font-family:'Product Sans',Arial,sans-serif;letter-spacing:-2px}
         .slogan{font-size:14px;color:var(--text3);margin-top:4px;letter-spacing:.3px;font-family:Georgia,serif;font-style:italic}
+        .bottom-links{text-align:center;margin-top:36px;font-size:12px;color:var(--text3);line-height:2}
+        .bottom-links a{color:var(--text3);margin:0 8px}
+        .bottom-links a:hover{color:var(--text)}
+        .bottom-links .sep{color:var(--border3);margin:0 2px}
+        .mob-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--border);z-index:999;padding:6px 0 8px;justify-content:space-around;font-size:11px;box-shadow:0 -2px 8px var(--shadow2)}
+        .mob-nav a{display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--text3);padding:4px 8px;min-width:50px;text-decoration:none}
+        .mob-nav a:hover{color:var(--text);text-decoration:none}
+        .mob-nav a.active{color:var(--nav-active)}
+        .mob-nav .m-icon{font-size:18px;line-height:1}
+        .mob-nav .m-label{font-size:10px}
+        @media(max-width:640px){.mob-nav{display:flex}.bottom-links{margin-bottom:60px}.homepage{padding-bottom:70px}}
+        .bang-suggest .sug-item{display:flex;align-items:center;gap:8px}
+        .bang-suggest .sug-item img{width:16px;height:16px;border-radius:50%;flex-shrink:0}
+        .bang-suggest .sug-item .bang-key{font-weight:600;color:var(--cm);min-width:28px}
+        .bang-suggest .sug-item .bang-domain{color:var(--text3);font-size:12px;margin-left:auto}
         .poneglyph-mode .slogan{color:#4fc3f7}
         .pg-toggle{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:14px;font-size:13px;color:var(--text3);cursor:pointer;user-select:none}
         .pg-toggle input{display:none}
@@ -369,10 +384,15 @@
                 </label>
             </form>
         </div>
-        <div class="about-link">
-            <a href="/about">How it works</a> &middot;
-            <a href="/blog">Blog</a> &middot;
-            <a href="/docs">API</a>
+        <div class="bottom-links">
+            <a href="/about">How it works</a><span class="sep">|</span>
+            <a href="/policy">Policies</a><span class="sep">|</span>
+            <a href="/privacy">Privacy</a><span class="sep">|</span>
+            <a href="/faq">FAQ</a><span class="sep">|</span>
+            <a href="/submit">Submit your site</a><span class="sep">|</span>
+            <a href="/docs">API</a><span class="sep">|</span>
+            <a href="/blog">Blog</a><span class="sep">|</span>
+            <a href="/changelogs">Changelogs</a>
         </div>
     </div>
 
@@ -622,6 +642,30 @@
             else if(p===null&&window.matchMedia('(prefers-color-scheme:dark)').matches)setDark(true);
         })();
 
+        var BANG_LIST = [];
+        function loadBangList(){
+            fetch('/api/bangs').then(function(r){return r.json()}).then(function(data){BANG_LIST=data}).catch(function(){})
+        }
+        loadBangList();
+        function getBangSuggestions(val){
+            if(val.indexOf('!') >= 0){
+                var lastBang = val.lastIndexOf('!');
+                var prefix = val.substring(0, lastBang);
+                var bangPart = val.substring(lastBang + 1).toLowerCase();
+                if(bangPart.length <= 20){
+                    var matches = [];
+                    for(var i=0;i<BANG_LIST.length;i++){
+                        var b = BANG_LIST[i];
+                        if(b.bang.substring(1).indexOf(bangPart) === 0){
+                            matches.push({type:'bang',bang:b.bang,domain:b.domain,favicon:b.favicon,prefix:prefix});
+                        }
+                        if(matches.length >= 10) break;
+                    }
+                    if(matches.length > 0) return matches;
+                }
+            }
+            return null;
+        }
         function setupSuggestions(inputId,boxId){
             var input=document.getElementById(inputId),box=document.getElementById(boxId);
             if(!input||!box)return;
@@ -629,6 +673,30 @@
             input.addEventListener('input',function(){
                 clearTimeout(timer);
                 var val=this.value.trim();
+                if(val.length<2&&val.indexOf('!')<0){box.classList.remove('show');return}
+                var bangMatches = getBangSuggestions(val);
+                if(bangMatches){
+                    currentData=bangMatches;box.innerHTML='';box.className='suggestions-box show bang-suggest';
+                    for(var i=0;i<bangMatches.length;i++){
+                        var m=bangMatches[i];
+                        var d=document.createElement('div');d.className='sug-item';
+                        d.innerHTML='<img src="'+m.favicon+'" alt="" onerror="this.style.display=\'none\'">'+
+                            '<span class="bang-key">'+m.bang+'</span>'+
+                            '<span>'+m.domain+'</span>'+
+                            '<span class="bang-domain">&#x2197;</span>';
+                        (function(bang,pfx){
+                            d.addEventListener('click',function(){
+                                input.value=(pfx?pfx+' ':'')+bang+' ';
+                                box.classList.remove('show');
+                                input.focus();
+                            });
+                        })(m.bang,m.prefix);
+                        d.addEventListener('mouseenter',function(){activeIndex=i;box.querySelectorAll('.sug-item').forEach(function(el,j){el.style.background=j===activeIndex?'var(--hover-bg)':''})});
+                        box.appendChild(d);
+                    }
+                    return;
+                }
+                box.className='suggestions-box';
                 if(val.length<2){box.classList.remove('show');return}
                 timer=setTimeout(function(){
                     fetch('/suggest?q='+encodeURIComponent(val)).then(function(r){return r.json()}).then(function(data){
@@ -652,8 +720,8 @@
                 }
                 var items=box.querySelectorAll('.sug-item');
                 if(!items.length)return;
-                if(e.key==='ArrowDown'){e.preventDefault();activeIndex=Math.min(activeIndex+1,items.length-1);items.forEach(function(el,i){el.style.background=i===activeIndex?'var(--hover-bg)':''});if(items[activeIndex])input.value=currentData[activeIndex]}
-                if(e.key==='ArrowUp'){e.preventDefault();activeIndex=Math.max(activeIndex-1,-1);items.forEach(function(el,i){el.style.background=i===activeIndex?'var(--hover-bg)':''});if(activeIndex>=0)input.value=currentData[activeIndex]}
+                if(e.key==='ArrowDown'){e.preventDefault();activeIndex=Math.min(activeIndex+1,items.length-1);items.forEach(function(el,i){el.style.background=i===activeIndex?'var(--hover-bg)':''});if(items[activeIndex])input.value=typeof currentData[activeIndex]==='object'?(currentData[activeIndex].prefix?currentData[activeIndex].prefix+' ':'')+currentData[activeIndex].bang+' ':currentData[activeIndex]}
+                if(e.key==='ArrowUp'){e.preventDefault();activeIndex=Math.max(activeIndex-1,-1);items.forEach(function(el,i){el.style.background=i===activeIndex?'var(--hover-bg)':''});if(activeIndex>=0)input.value=typeof currentData[activeIndex]==='object'?(currentData[activeIndex].prefix?currentData[activeIndex].prefix+' ':'')+currentData[activeIndex].bang+' ':currentData[activeIndex]}
             });
             document.addEventListener('click',function(e){if(!box.contains(e.target)&&e.target!==input)box.classList.remove('show')})
         }
@@ -688,6 +756,14 @@
             if(e.target && e.target.id === 'pg-overlay') closePGPopup();
         });
     </script>
+    <div class="mob-nav">
+        <a href="/" class="active"><span class="m-icon">&#x1F50D;</span><span class="m-label">Search</span></a>
+        <a href="/about"><span class="m-icon">&#x1F4CA;</span><span class="m-label">How it works</span></a>
+        <a href="/policy"><span class="m-icon">&#x1F6E1;</span><span class="m-label">Policies</span></a>
+        <a href="/privacy"><span class="m-icon">&#x1F464;</span><span class="m-label">Privacy</span></a>
+        <a href="/faq"><span class="m-icon">&#x2753;</span><span class="m-label">FAQ</span></a>
+        <a href="/submit"><span class="m-icon">&#x1F4E7;</span><span class="m-label">Submit</span></a>
+    </div>
     <div class="pg-overlay" id="pg-overlay">
         <div class="pg-popup">
             <div class="badge">COMING SOON</div>
@@ -703,5 +779,38 @@
             <button class="close-btn" onclick="closePGPopup()">Close</button>
         </div>
     </div>
+
+    <div class="pg-overlay" id="cl-popup">
+        <div class="pg-popup" style="max-width:520px">
+            <div class="badge" style="border-color:var(--green);color:var(--green)">NEW</div>
+            <h2>Welcome to arlong v1.0</h2>
+            <p style="margin-bottom:12px">A privacy-first meta search engine with zero tracking, transparent scoring, and 80+ bang shortcuts.</p>
+            <ul>
+                <li><strong>No logging</strong> - Queries, IPs, and cookies never stored.</li>
+                <li><strong>Transparent scoring</strong> - Every result ranked by visible signals.</li>
+                <li><strong>80+ bangs</strong> - <code>!g</code>, <code>!wiki</code>, <code>!re</code>, and more.</li>
+                <li><strong>AI content detection</strong> - Auto-penalizes low-effort content.</li>
+                <li><strong>Live stats</strong> - Real-time dashboard at /stats.</li>
+            </ul>
+            <a href="/changelogs" class="close-btn" style="display:inline-block;text-decoration:none;text-align:center;margin-bottom:8px">View full changelog</a>
+            <button class="close-btn" onclick="closeCLPopup()">Got it</button>
+        </div>
+    </div>
+
+    <script>
+        function closeCLPopup(){
+            document.getElementById('cl-popup').classList.remove('show');
+            try{localStorage.setItem('arlong-cl-seen','1')}catch(e){}
+        }
+        document.addEventListener('DOMContentLoaded',function(){
+            if(!window.location.pathname||window.location.pathname==='/'||window.location.pathname==='/search'){
+                var seen = false;
+                try{seen = localStorage.getItem('arlong-cl-seen') === '1'}catch(e){}
+                if(!seen){
+                    document.getElementById('cl-popup').classList.add('show');
+                }
+            }
+        });
+    </script>
 </body>
 </html>

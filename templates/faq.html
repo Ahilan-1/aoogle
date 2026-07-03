@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FAQ - arlong</title>
+    <style>
+        :root{--bg:#fff;--text:#222;--text2:#545454;--text3:#70757a;--link:#1a0dab;--link-v:#609;--border:#dfe1e5;--border2:#ebebeb;--cm:#1a73e8}
+        *,*::before,*::after{box-sizing:border-box}
+        body{margin:0;padding:0;font-family:arial,sans-serif;color:var(--text);background:var(--bg)}
+        a{color:var(--link);text-decoration:none}
+        a:hover{text-decoration:underline}
+        .bar{background:#fafafa;border-bottom:1px solid var(--border2);padding:12px 0;text-align:center;font-size:13px;color:var(--text3)}
+        .bar a{color:var(--text3);margin:0 10px}
+        .bar a:hover{color:#333}
+        .wrap{max-width:680px;margin:0 auto;padding:40px 20px 80px}
+        h1{font-size:28px;font-weight:400;margin:0 0 4px}
+        .sub{font-size:14px;color:var(--text3);margin-bottom:36px}
+        .faq-item{border-bottom:1px solid var(--border2);padding:18px 0}
+        .faq-q{font-size:16px;font-weight:500;color:var(--text);cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none}
+        .faq-q:hover{color:var(--cm)}
+        .faq-q .arrow{font-size:12px;color:var(--text3);transition:transform .2s}
+        .faq-q.open .arrow{transform:rotate(180deg)}
+        .faq-a{font-size:14px;line-height:1.7;color:#444;margin-top:10px;display:none;padding-right:20px}
+        .faq-a.show{display:block}
+        .faq-a ul{margin:8px 0;padding-left:20px}
+        .faq-a ul li{margin-bottom:4px}
+        @media(max-width:640px){
+            h1{font-size:22px}
+            .wrap{padding:24px 16px 60px}
+            .bar a{margin:0 6px;font-size:12px}
+        }
+    </style>
+</head>
+<body>
+    <div class="bar">
+        <a href="/">Home</a> &middot;
+        <a href="/about">How it works</a> &middot;
+        <a href="/policy">Policies</a> &middot;
+        <a href="/privacy">Privacy</a> &middot;
+        <a href="/submit">Submit your site</a>
+    </div>
+    <div class="wrap">
+        <h1>Frequently asked questions</h1>
+        <div class="sub">Everything you might wonder about arlong</div>
+
+        <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">What is arlong? <span class="arrow">&#x25BC;</span></div>
+            <div class="faq-a">arlong is a meta search engine. It sends your query to public web indexes, collects the raw results, then re-ranks them using a multi-factor scoring algorithm. No ads, no tracking, no AI summaries, no sponsored slots. Everything is transparent and open about how scoring works.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">How is this different from Google? <span class="arrow">&#x25BC;</span></div>
+            <div class="faq-a">Google has the best index — no denying that. But their results are influenced by SEO, advertising, and commercial interests. We take a different approach:
+                <ul>
+                    <li>No ads in search results, ever</li>
+                    <li>No AI summaries generated about you or your query</li>
+                    <li>No tracking, no profiles, no data collection</li>
+                    <li>Content farms and AI-generated sites are heavily penalized</li>
+                    <li>Community content (Reddit, dev.to) gets boosted on discussion queries</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">Do you track me? <span class="arrow">&#x25BC;</span></div>
+            <div class="faq-a">No. We operate a strict no-logging policy. Search queries are never written to disk or associated with any identifier. We don't use cookies, analytics, fingerprinting, or any tracking technology. There is nothing to hand over if asked. See our <a href="/privacy">full privacy policy here</a>.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">What are "bangs" (!g, !wiki, etc.)? <span class="arrow">&#x25BC;</span></div>
+            <div class="faq-a">Bangs let you search other sites directly from arlong. Type <code>!g python</code> to search Google, <code>!wiki Python</code> to search Wikipedia, <code>!ch hello</code> to ask ChatGPT, <code>!re python</code> to search Reddit, and <code>!you tutorial</code> to search YouTube. There are <strong>80+ bang shortcuts</strong> — try typing <code>!</code> in the search box to see them all.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">Where do the search results come from? <span class="arrow">&#x25BC;</span></div>
+            <div class="faq-a">We primarily use DuckDuckGo's search results (via the DDG API and HTML endpoint). We also supplement with Bing (for images), YouTube (for videos), and fallback sources like Wikipedia and the Wayback Machine when needed. We don't maintain our own web crawl index — we re-rank what's already out there.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">Can I submit my website? <span class="arrow">&#x25BC;</span></div>
+            <div class="faq-a">Yes. We manually review website submissions. Email <a href="mailto:ahilan290@gmail.com">ahilan290@gmail.com</a> or DM <a href="https://www.reddit.com/user/PeaceThrough/" target="_blank">u/PeaceThrough</a> on Reddit with your domain and description. We review based on content quality, originality, and value. See our <a href="/submit">submission page</a> for full details.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">What is Poneglyph Search? <span class="arrow">&#x25BC;</span></div>
+            <div class="faq-a">Poneglyph is a deep search mode that scans hidden networks, censored archives, and restricted sources — content traditional search engines won't show you. It searches Wikileaks, Archive.org, EFF, Cryptome, Pastebin, and more. This feature is currently in development.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">Is there an API? <span class="arrow">&#x25BC;</span></div>
+            <div class="faq-a">Yes. Free, tokenless search API for agents, CLI tools, and LLMs. No registration or API key needed. <code>GET /api/search?q=your+query</code> with a rate limit of 125 requests per hour per IP. Full documentation at <a href="/docs">/docs</a>.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">How do I support the project? <span class="arrow">&#x25BC;</span></div>
+            <div class="faq-a">Share it with someone who cares about privacy. Use it instead of Google for a day and see how it feels. Report low-quality results using the three-dot menu on any search result. If you're a developer, contribute on GitHub. We don't take donations or run ads — the project stays free because it's designed to be cheap to run.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-q" onclick="toggleFaq(this)">Can I run my own instance? <span class="arrow">&#x25BC;</span></div>
+            <div class="faq-a">The source code is available on <a href="https://github.com/Ahilan-1/aoogle" target="_blank">GitHub</a>. It's Flask-based and ready for any WSGI server. A <code>vercel.json</code> is included for Vercel deployment. You'll need Python 3, Flask, and the dependencies in <code>requirements.txt</code>.</div>
+        </div>
+    </div>
+
+    <script>
+        function toggleFaq(el) {
+            el.classList.toggle('open');
+            var answer = el.nextElementSibling;
+            answer.classList.toggle('show');
+        }
+    </script>
+</body>
+</html>

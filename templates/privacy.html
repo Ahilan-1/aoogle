@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy policy - arlong</title>
+    <style>
+        :root{--bg:#fff;--text:#222;--text2:#545454;--text3:#70757a;--link:#1a0dab;--border:#dfe1e5;--blue:#1a73e8;--green:#137333}
+        *,*::before,*::after{box-sizing:border-box}
+        body{margin:0;padding:0;font-family:arial,sans-serif;color:var(--text);background:var(--bg);font-size:14px;line-height:1.6}
+        a{color:var(--link);text-decoration:none}
+        a:hover{text-decoration:underline}
+        .bar{background:#fafafa;border-bottom:1px solid #ebebeb;padding:12px 0;text-align:center;font-size:13px;color:var(--text3)}
+        .bar a{color:var(--text3);margin:0 10px}
+        .bar a:hover{color:#333}
+        .wrap{max-width:720px;margin:0 auto;padding:40px 20px 80px}
+        h1{font-size:28px;font-weight:400;margin:0 0 4px}
+        .sub{font-size:14px;color:var(--text3);margin-bottom:40px}
+        h2{font-size:20px;font-weight:500;margin:44px 0 12px;color:var(--text)}
+        h3{font-size:16px;font-weight:500;margin:28px 0 8px;color:var(--text)}
+        h4{font-size:14px;font-weight:600;margin:20px 0 6px;color:var(--text)}
+        p{font-size:14px;color:#444;margin:0 0 14px;line-height:1.7}
+        ul{padding-left:20px;margin:0 0 20px}
+        ul li{font-size:14px;color:#444;margin-bottom:6px;line-height:1.7}
+        .highlight-box{border-left:3px solid var(--blue);background:#f8f9fa;padding:16px 20px;margin:20px 0;border-radius:0 8px 8px 0}
+        .highlight-box p{margin:0 0 6px}
+        .highlight-box p:last-child{margin:0}
+        .highlight-box.green{border-left-color:var(--green)}
+        .highlight-box.green strong{color:var(--green)}
+        .data-table{width:100%;border-collapse:collapse;margin:16px 0 24px;font-size:14px}
+        .data-table th,.data-table td{padding:10px 14px;text-align:left;border-bottom:1px solid #eee;vertical-align:top}
+        .data-table th{background:#f8f9fa;font-weight:500;color:var(--text);white-space:nowrap}
+        .data-table td{color:#444;line-height:1.6}
+        .data-table .yes{color:var(--green);font-weight:600}
+        .data-table .no{color:#c5221f;font-weight:600}
+        .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:500;margin:0 2px}
+        .tag.collected{background:#e6f4ea;color:var(--green)}
+        .tag.not-collected{background:#fce8e6;color:#c5221f}
+        .tag.partial{background:#fef7e0;color:#e37400}
+        @media(max-width:640px){
+            h1{font-size:22px}.wrap{padding:24px 16px 60px}.bar a{margin:0 6px;font-size:12px}
+            .data-table th,.data-table td{padding:8px 10px;font-size:13px}
+        }
+    </style>
+</head>
+<body>
+    <div class="bar">
+        <a href="/">Home</a> &middot;
+        <a href="/about">How it works</a> &middot;
+        <a href="/policy">Policies</a> &middot;
+        <a href="/submit">Submit your site</a>
+    </div>
+    <div class="wrap">
+        <h1>Privacy policy</h1>
+        <div class="sub">Exactly what data we collect, what we don't, and why you can trust it.</div>
+
+        <p><strong>arlong</strong> is a privacy-first search engine. Our design philosophy is simple: if we don't collect the data, we can't lose it, sell it, or be forced to hand it over. This page documents every piece of data that does &mdash; and does not &mdash; touch our systems.</p>
+
+        <div class="highlight-box green">
+            <p><strong>Short version:</strong> We collect almost nothing. No IPs, no user agents, no search histories, no cookies, no fingerprints. You are a ghost to us, and we intend to keep it that way.</p>
+        </div>
+
+        <h2>What we collect</h2>
+        <p>The only data we persist is <strong>aggregate, anonymized statistics</strong> used for our live dashboard. No individual search can be identified, linked, or reconstructed.</p>
+
+        <table class="data-table">
+            <tr>
+                <th>Data point</th>
+                <th>Collected?</th>
+                <th>Details</th>
+            </tr>
+            <tr>
+                <td>Total searches per hour</td>
+                <td><span class="yes">Yes</span></td>
+                <td>A single integer counter incremented once per search. No association with any user, IP, or query. Reset every hour. Used for the public stats page.</td>
+            </tr>
+            <tr>
+                <td>Search query text</td>
+                <td><span class="no">No</span></td>
+                <td>Queries are sent to upstream search providers (DuckDuckGo, Bing) and are never written to disk, database, or log files by arlong.</td>
+            </tr>
+            <tr>
+                <td>IP address</td>
+                <td><span class="no">No</span></td>
+                <td>Never logged, never stored, never processed. Your IP exists only transiently in server memory during the request and is discarded immediately after the response is sent.</td>
+            </tr>
+            <tr>
+                <td>User-agent string</td>
+                <td><span class="no">No</span></td>
+                <td>Never logged or stored. We do not parse, record, or analyze browser fingerprints.</td>
+            </tr>
+            <tr>
+                <td>Session cookies</td>
+                <td><span class="no">No</span></td>
+                <td>No tracking cookies, no persistent sessions. A session cookie is set <em>only</em> for the admin panel and <em>never</em> for regular visitors.</td>
+            </tr>
+            <tr>
+                <td>Referring URL</td>
+                <td><span class="no">No</span></td>
+                <td>Referrer headers are never logged or stored.</td>
+            </tr>
+            <tr>
+                <td>Timestamps</td>
+                <td><span class="no">No</span></td>
+                <td>Individual search timestamps are not recorded. The hourly counter resets without any per-request timing data.</td>
+            </tr>
+            <tr>
+                <td>Browser fingerprint</td>
+                <td><span class="no">No</span></td>
+                <td>We do not run any fingerprinting scripts, canvas fingerprinting, or device identification of any kind.</td>
+            </tr>
+            <tr>
+                <td>Error logs</td>
+                <td><span class="tag partial">Partial</span></td>
+                <td>When something breaks, we log the error message and a timestamp. These logs contain <strong>no user-identifiable information</strong> &mdash; no IPs, no queries, no headers. Used solely to diagnose and fix bugs.</td>
+            </tr>
+        </table>
+
+        <h2>What "no logging" really means</h2>
+        <p>Most search engines claim they "anonymize" your data after a period of time. That means they <em>do</em> collect it first, then try to strip identifiers later. That is <strong>not</strong> what we do.</p>
+
+        <div class="highlight-box">
+            <p><strong>No logging means the data never exists in the first place.</strong></p>
+        </div>
+
+        <p>Here is the technical reality of how our no-logging policy works at every layer of the stack:</p>
+
+        <h3>Application layer (Python / Flask)</h3>
+        <p>Our Flask application does not call <code>logging.info()</code> or any equivalent for incoming requests. The standard Flask request logging that most websites enable by default is explicitly disabled. Search queries are passed directly to upstream providers in memory and never touch a write buffer, database connection, or file handle.</p>
+
+        <h3>Web server layer (Gunicorn / Vercel)</h3>
+        <p>We run with <strong>access logging disabled</strong>. The web server is configured to never write access logs. This means no raw request lines, no status codes paired with IPs, no user-agent strings persisted at the infrastructure level. If your hosting provider or load balancer generates logs (e.g., Vercel's edge logs), those logs contain only ephemeral metadata with no query content and are subject to their infrastructure policies &mdash; we do not read, store, or export them.</p>
+
+        <h3>Database layer</h3>
+        <p>There is no database of searches. Our data storage (S3 and local JSON files) contains only:</p>
+        <ul>
+            <li>The web crawl index (URLs, titles, snippets &mdash; public data from crawled pages)</li>
+            <li>Aggregate hourly stats counters (a single integer per hour with no link to any request)</li>
+            <li>Domain blacklists and user-submitted reports (manually curated, no personal data)</li>
+        </ul>
+        <p>There is no table, collection, or file that maps a search query to a user, IP, or time.</p>
+
+        <h3>Upstream requests</h3>
+        <p>When you search, arlong fetches results from DuckDuckGo and Bing on your behalf. We do <strong>not</strong> add tracking parameters, unique identifiers, or custom headers to these requests. The upstream providers see a request from our server, not from you. We use a rotating pool of user-agent strings to blend in with regular traffic, further protecting your anonymity.</p>
+
+        <h2>How we collect stats data</h2>
+        <p>The only persistent data we collect is the <strong>hourly search count</strong> displayed on our <a href="/stats">live stats page</a>. Here is exactly how that works:</p>
+
+        <ul>
+            <li><strong>What is stored:</strong> A single JSON object mapping hour-of-day (0 through 23) to a count. For example: <code>{"14": 47, "15": 53}</code> means 47 searches were made during the 14:00 hour and 53 during the 15:00 hour.</li>
+            <li><strong>How it is incremented:</strong> Every time the <code>/search</code> endpoint is called, an in-memory counter for the current hour is incremented by one. That counter is periodically flushed to disk/S3.</li>
+            <li><strong>What it does NOT store:</strong> No query text, no IP, no user-agent, no timestamp, no session ID, no referrer. The counter is a bare integer with zero context.</li>
+            <li><strong>Granularity:</strong> Per-minute counters exist in memory for the real-time dashboard but are aggregated to hourly before persistence. Per-minute data is lost on server restart and is never written to disk.</li>
+            <li><strong>Why we collect it:</strong> To show users that the search engine is active and to help us understand traffic patterns for capacity planning. No personal data is needed for this.</li>
+        </ul>
+
+        <div class="highlight-box">
+            <p><strong>Can the stats data identify you?</strong> No. A count of "47 searches at 14:00" cannot be reverse-engineered to know what was searched, who searched it, or even whether the same person searched twice. It is a number, nothing more.</p>
+        </div>
+
+        <h2>What data we explicitly NEVER collect</h2>
+        <p>To be absolutely clear, here is a comprehensive list of data that <strong>never</strong> enters our systems:</p>
+        <ul>
+            <li>Search queries or search history</li>
+            <li>IP addresses (IPv4 or IPv6)</li>
+            <li>Browser user-agent strings</li>
+            <li>Device fingerprints or canvas fingerprints</li>
+            <li>Session or persistent cookies (for regular visitors)</li>
+            <li>Referring URLs or clickstream data</li>
+            <li>Geolocation data (IP geolocation is never performed)</li>
+            <li>Browser language or timezone settings</li>
+            <li>Screen resolution or color depth</li>
+            <li>Installed fonts or browser plugins</li>
+            <li>Touchscreen or hardware capabilities</li>
+            <li>Advertising IDs or device IDs</li>
+            <li>Email addresses (unless you email us directly for support)</li>
+            <li>Payment information (we accept no payments for search or submissions)</li>
+            <li>Social media profiles or connections</li>
+            <li>Contact lists or address books</li>
+            <li>Any biometric or health data</li>
+            <li>Any data from cookies set by third parties</li>
+        </ul>
+
+        <h2>Legal compliance</h2>
+        <p>We designed arlong to make compliance with legal data requests <strong>technically impossible</strong> because we do not possess the data to hand over.</p>
+        <ul>
+            <li><strong>No search history to subpoena.</strong> We simply do not have it.</li>
+            <li><strong>No IP logs to monitor.</strong> They never existed.</li>
+            <li><strong>No user accounts to de-anonymize.</strong> We don't have accounts.</li>
+            <li><strong>No personal data to export.</strong> GDPR Article 20 data portability requests are trivially fulfilled: there is no data to port.</li>
+            <li><strong>No data to delete.</strong> GDPR Article 17 right to erasure is trivially fulfilled: there is nothing to erase.</li>
+        </ul>
+        <p>If we ever receive a legal request (court order, subpoena, national security letter), we will <strong>challenge it</strong> to the fullest extent possible. Because we designed the system to log nothing, we can honestly certify that there is no responsive data to produce.</p>
+
+        <h2>Changes to this policy</h2>
+        <p>If we ever change how data is collected (which is unlikely, given our design principles), we will update this page and note the date of the last change. We will never retroactively change how your data is treated without explicit notice.</p>
+        <p><em>Last updated: July 2025</em></p>
+
+        <h2>Contact</h2>
+        <p>If you have questions about this privacy policy, our data practices, or would like to report a privacy concern, please email us at <a href="mailto:ahilan290@gmail.com">ahilan290@gmail.com</a> or reach out on Reddit at <a href="https://www.reddit.com/user/PeaceThrough/" target="_blank">u/PeaceThrough</a>.</p>
+
+    </div>
+</body>
+</html>

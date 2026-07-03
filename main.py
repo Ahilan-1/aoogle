@@ -241,6 +241,110 @@ PLATFORM_DOMAINS = {
     'rottentomatoes': 'rottentomatoes.com',
 }
 
+BANG_REDIRECTS = {
+    'g': 'https://www.google.com/search?q={}',
+    'ch': 'https://chatgpt.com/?q={}',
+    'ge': 'https://gemini.google.com/search?q={}',
+    'wiki': 'https://en.wikipedia.org/wiki/{}',
+    'w': 'https://en.wikipedia.org/w/index.php?search={}',
+    're': 'https://www.reddit.com/search/?q={}',
+    'red': 'https://www.reddit.com/r/{}',
+    'you': 'https://www.youtube.com/results?search_query={}',
+    'yt': 'https://www.youtube.com/results?search_query={}',
+    'b': 'https://www.youtube.com/results?search_query={}',
+    'gi': 'https://www.google.com/search?tbm=isch&q={}',
+    'map': 'https://www.google.com/maps/search/{}',
+    'maps': 'https://www.google.com/maps/search/{}',
+    'news': 'https://news.google.com/search?q={}',
+    'a': 'https://www.amazon.com/s?k={}',
+    'so': 'https://stackoverflow.com/search?q={}',
+    'gh': 'https://github.com/search?q={}&type=repositories',
+    'npm': 'https://www.npmjs.com/search?q={}',
+    'pypi': 'https://pypi.org/search/?q={}',
+    'ddg': 'https://duckduckgo.com/?q={}',
+    'bing': 'https://www.bing.com/search?q={}',
+    'yhoo': 'https://search.yahoo.com/search?p={}',
+    'imdb': 'https://www.imdb.com/find?q={}',
+    'rt': 'https://www.rottentomatoes.com/search?search={}',
+    'twit': 'https://twitter.com/search?q={}',
+    'fb': 'https://www.facebook.com/search/top?q={}',
+    'ig': 'https://www.instagram.com/explore/tags/{}/',
+    'li': 'https://www.linkedin.com/search/results/all/?keywords={}',
+    'pin': 'https://www.pinterest.com/search/pins/?q={}',
+    'qu': 'https://www.quora.com/search?q={}',
+    'md': 'https://medium.com/search?q={}',
+    'dev': 'https://dev.to/search?q={}',
+    'hn': 'https://news.ycombinator.com/submitted?id={}',
+    'ph': 'https://www.producthunt.com/search?q={}',
+    'tf': 'https://www.tensorflow.org/search?q={}',
+    'py': 'https://docs.python.org/3/search.html?q={}',
+    'mdn': 'https://developer.mozilla.org/en-US/search?q={}',
+    'js': 'https://developer.mozilla.org/en-US/search?q={}',
+    'react': 'https://react.dev/search?q={}',
+    'vue': 'https://vuejs.org/search?q={}',
+    'ang': 'https://angular.io/search?q={}',
+    'tw': 'https://tailwindcss.com/search?q={}',
+    'verge': 'https://www.theverge.com/search?q={}',
+    'wi': 'https://www.wired.com/search?q={}',
+    'tc': 'https://techcrunch.com/search/{}',
+    'ars': 'https://arstechnica.com/search?q={}',
+    'sch': 'https://scholar.google.com/scholar?q={}',
+    'arx': 'https://arxiv.org/search/?query={}&searchtype=all',
+    'pm': 'https://pubmed.ncbi.nlm.nih.gov/?term={}',
+    'doi': 'https://doi.org/{}',
+    'dr': 'https://drive.google.com/drive/search?q={}',
+    'keep': 'https://keep.google.com/u/0/#search/text={}',
+    'fl': 'https://www.flightaware.com/live/findflight?q={}',
+    'wb': 'https://www.wolframalpha.com/input/?i={}',
+    'urb': 'https://www.urbandictionary.com/define.php?term={}',
+    'et': 'https://www.etymonline.com/search?q={}',
+    'dict': 'https://www.merriam-webster.com/dictionary/{}',
+    'th': 'https://www.thesaurus.com/browse/{}',
+    'gl': 'https://www.google.com/search?tbm=shop&q={}',
+    'eb': 'https://www.ebay.com/sch/i.html?_nkw={}',
+    'wa': 'https://www.walmart.com/search?q={}',
+    'bb': 'https://www.bestbuy.com/site/searchpage.jsp?st={}',
+    'ct': 'https://www.coursera.org/search?query={}',
+    'ud': 'https://www.udemy.com/courses/search/?q={}',
+    'edx': 'https://www.edx.org/search?q={}',
+    'khan': 'https://www.khanacademy.org/search?page_search_query={}',
+    'se': 'https://stackexchange.com/search?q={}',
+    'su': 'https://superuser.com/search?q={}',
+    'au': 'https://askubuntu.com/search?q={}',
+    'sp': 'https://open.spotify.com/search/{}',
+    'nf': 'https://www.netflix.com/search?q={}',
+    'tr': 'https://www.tripadvisor.com/Search?q={}',
+    'tik': 'https://www.tiktok.com/search?q={}',
+    'hulu': 'https://www.hulu.com/search?q={}',
+}
+
+BANG_PATTERN = re.compile(r'^\s*!(\w{1,20})(?:\s+(.+))?\s*$', re.IGNORECASE)
+
+
+def parse_bang(query):
+    if not query:
+        return None, query
+    stripped = query.strip()
+    if not stripped.startswith('!'):
+        return None, query
+    m = BANG_PATTERN.match(stripped)
+    if not m:
+        return None, query
+    bang_key = m.group(1).lower()
+    search_term = (m.group(2) or '').strip()
+    if bang_key in BANG_REDIRECTS:
+        return bang_key, search_term
+    return None, query
+
+
+def get_bang_redirect(query):
+    bang_key, search_term = parse_bang(query)
+    if not bang_key:
+        return None
+    template = BANG_REDIRECTS[bang_key]
+    return template.format(quote_plus(search_term) if search_term else '')
+
+
 AD_DOMAINS = {
     'oneclearwinner.com', 'taboola.com', 'outbrain.com', 'revcontent.com',
     'mgid.com', 'exoclick.com', 'popads.net', 'propellerads.com',
@@ -2364,11 +2468,103 @@ KNOWLEDGE_PANELS = {
     },
 }
 
-def get_info_box(query):
+WIKI_CACHE = {}
+WIKI_CACHE_LOCK = threading.Lock()
+WIKI_CACHE_TTL = 86400
+
+
+def get_wikipedia_panel(query):
+    query_lower = query.lower().strip()
+    if not query_lower or len(query_lower) < 3:
+        return None
+    cache_key = f"wiki_panel:{query_lower}"
+    with WIKI_CACHE_LOCK:
+        cached = WIKI_CACHE.get(cache_key)
+        if cached and time.time() < cached['expires']:
+            return cached['data']
+    try:
+        params = {
+            'action': 'query',
+            'format': 'json',
+            'titles': query_lower,
+            'prop': 'extracts|pageimages|info',
+            'exintro': 1,
+            'explaintext': 1,
+            'pithumbsize': 300,
+            'inprop': 'url',
+            'redirects': 1,
+        }
+        headers = {'User-Agent': 'arlong-search/1.0 (https://aoogle-production.up.railway.app; search@arlong.app)'}
+        r = requests.get('https://en.wikipedia.org/w/api.php', params=params, headers=headers, timeout=5)
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        pages = data.get('query', {}).get('pages', {})
+        if not pages:
+            return None
+        page = next(iter(pages.values()))
+        if 'missing' in page or not page.get('extract'):
+            return None
+        title = page.get('title', query)
+        extract = page.get('extract', '')[:400]
+        thumb_url = None
+        thumb = page.get('thumbnail')
+        if thumb:
+            thumb_url = thumb.get('source')
+        page_url = page.get('fullurl', f'https://en.wikipedia.org/wiki/{title.replace(" ", "_")}')
+        panel = {
+            'title': title,
+            'image': thumb_url,
+            'type': 'Wikipedia article',
+            'description': extract,
+            'facts': [
+                ('Source', 'Wikipedia'),
+                ('Read more', page_url),
+            ],
+        }
+        with WIKI_CACHE_LOCK:
+            WIKI_CACHE[cache_key] = {'data': panel, 'expires': time.time() + WIKI_CACHE_TTL}
+        return panel
+    except Exception:
+        return None
+
+
+def get_wiki_panel_from_results(results):
+    if not results:
+        return None
+    wiki_url = None
+    wiki_title = None
+    for r in results[:5]:
+        domain = (r.get('domain') or '').lower()
+        url = (r.get('url') or '').lower()
+        if 'wikipedia.org' in domain or 'wikipedia.org' in url:
+            wiki_url = r.get('url')
+            wiki_title = r.get('title')
+            break
+    if not wiki_url or not wiki_title:
+        return None
+    page_title = wiki_title.replace(' - Wikipedia', '').replace(' – Wikipedia', '').strip()
+    panel = get_wikipedia_panel(page_title)
+    if not panel:
+        return None
+    desc = panel.get('description', '') or ''
+    if len(desc.strip()) < 20 and not panel.get('image'):
+        return None
+    return panel
+
+
+def get_info_box(query, results=None):
+    if results:
+        wiki_panel = get_wiki_panel_from_results(results)
+        if wiki_panel:
+            return wiki_panel
     query_lower = query.lower().strip()
     for key, panel in KNOWLEDGE_PANELS.items():
         if key in query_lower:
             return panel
+    wiki_panel = get_wikipedia_panel(query)
+    if wiki_panel:
+        return wiki_panel
     return None
 
 def detect_news(query):
@@ -2503,6 +2699,10 @@ def search():
             announcement=announcement
         )
 
+    bang_url = get_bang_redirect(query)
+    if bang_url:
+        return redirect(bang_url)
+
     try:
         if poneglyph:
             results, pg_status = search_engine.search_poneglyph(query)
@@ -2544,7 +2744,7 @@ def search():
             notice=notice,
             page=page,
             total_results=total_results,
-            info_box=get_info_box(query),
+            info_box=get_info_box(query, results),
             poneglyph=poneglyph,
             announcement=announcement
         )
@@ -2868,6 +3068,66 @@ def crisis():
 @app.route('/health')
 def health():
     return 'ok', 200
+
+
+@app.route('/policy')
+def policy():
+    return render_template('policy.html')
+
+
+@app.route('/privacy')
+def privacy():
+    return render_template('privacy.html')
+
+
+@app.route('/submit')
+def submit_site():
+    return render_template('submit.html')
+
+
+@app.route('/faq')
+def faq():
+    return render_template('faq.html')
+
+
+@app.route('/changelogs')
+def changelogs():
+    return render_template('changelogs.html')
+
+
+@app.route('/robots.txt')
+def robots_txt():
+    lines = [
+        'User-agent: *',
+        'Allow: /',
+        'Disallow: /admin',
+        'Disallow: /admin/',
+        '',
+        'Sitemap: https://aoogle-production.up.railway.app/sitemap.xml',
+        '',
+        '# aoogle - a meta search engine',
+        '# No tracking, no logging, no ads.',
+    ]
+    return app.response_class(
+        response='\n'.join(lines),
+        status=200,
+        mimetype='text/plain'
+    )
+
+
+@app.route('/api/bangs')
+def api_bangs():
+    bang_list = []
+    for key, url in BANG_REDIRECTS.items():
+        domain = urlparse(url).netloc
+        favicon = f'https://www.google.com/s2/favicons?domain={domain}&sz=16'
+        bang_list.append({
+            'bang': f'!{key}',
+            'domain': domain,
+            'url': url,
+            'favicon': favicon,
+        })
+    return jsonify(sorted(bang_list, key=lambda x: x['bang']))
 
 @app.errorhandler(404)
 def not_found_error(error):
