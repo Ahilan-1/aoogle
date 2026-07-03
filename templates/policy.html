@@ -32,7 +32,7 @@
 <body>
     <div class="bar">
         <a href="/">Home</a> &middot;
-        <a href="/poneglyph" style="color:#d32f2f;font-weight:600">Poneglyph</a> &middot;
+        <a href="/poneglyph" class="pg-link" style="color:#d32f2f;font-weight:600">Poneglyph</a> &middot;
         <a href="/about">How it works</a> &middot;
         <a href="/privacy">Privacy</a> &middot;
         <a href="/submit">Submit your site</a>
@@ -101,5 +101,8 @@
         </ul>
         <p>There is nothing you can "optimize" here except writing genuinely useful content. We specifically designed the scoring to resist SEO gaming -- keyword stuffing, excessive internal linking, and AI-generated fluff all trigger negative scores.</p>
     </div>
+<script>
+(function(){var v=null;try{v=localStorage.getItem('arlong-pg-visible')}catch(e){}if(v==='0'){document.querySelectorAll('.pg-link').forEach(function(e){e.style.display='none'})}})();
+</script>
 </body>
 </html>

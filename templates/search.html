@@ -385,19 +385,18 @@
                     <input type="submit" value="Search">
                     <button type="button" id="lucky-btn">I'm Feeling Lucky</button>
                 </div>
-                <label class="pg-toggle">
-                    <input type="checkbox" id="hp-pg" onclick="showPGPopup();this.checked=false">
+                <div id="pg-toggle-wrap">
+                <label class="pg-toggle" onclick="window.location.href='/poneglyph'" style="cursor:pointer">
                     <span class="slider"></span>
                     <span class="pg-label">Poneglyph Search</span>
-                    <span class="pg-icon">&#x1F30A;</span>
                 </label>
+                </div>
             </form>
         </div>
         <div class="bottom-links">
             <a href="/about">How it works</a><span class="sep">|</span>
             <a href="/policy">Policies</a><span class="sep">|</span>
             <a href="/privacy">Privacy</a><span class="sep">|</span>
-            <a href="/poneglyph" style="color:#d32f2f;font-weight:600">Poneglyph</a><span class="sep">|</span>
             <a href="/faq">FAQ</a><span class="sep">|</span>
             <a href="/benchmark">Benchmark</a><span class="sep">|</span>
             <a href="/submit">Submit your site</a><span class="sep">|</span>
@@ -766,41 +765,27 @@
         }
         applyFilter('all');
 
-        function showPGPopup(){
-            var o = document.getElementById('pg-overlay');
-            if(o) o.classList.add('show');
+        function initPGVisibility(){
+            var vis = null;
+            try{vis = localStorage.getItem('arlong-pg-visible')}catch(e){}
+            if(vis === '0'){
+                var wrap = document.getElementById('pg-toggle-wrap');
+                if(wrap) wrap.style.display = 'none';
+                var links = document.querySelectorAll('.pg-link');
+                for(var i=0;i<links.length;i++) links[i].style.display = 'none';
+            }
         }
-        function closePGPopup(){
-            var o = document.getElementById('pg-overlay');
-            if(o) o.classList.remove('show');
-        }
-        document.addEventListener('click',function(e){
-            if(e.target && e.target.id === 'pg-overlay') closePGPopup();
-        });
+        initPGVisibility();
     </script>
     <div class="mob-nav">
         <a href="/" class="active"><span class="m-icon">&#x1F50D;</span><span class="m-label">Search</span></a>
-        <a href="/poneglyph"><span class="m-icon">&#x1F30A;</span><span class="m-label">Poneglyph</span></a>
+        <a href="/poneglyph" class="pg-link"><span class="m-label">[PG]</span></a>
         <a href="/about"><span class="m-icon">&#x1F4CA;</span><span class="m-label">About</span></a>
         <a href="/privacy"><span class="m-icon">&#x1F464;</span><span class="m-label">Privacy</span></a>
         <a href="/faq"><span class="m-icon">&#x2753;</span><span class="m-label">FAQ</span></a>
         <a href="/settings"><span class="m-icon">&#x2699;</span><span class="m-label">Settings</span></a>
     </div>
-    <div class="pg-overlay" id="pg-overlay">
-        <div class="pg-popup">
-            <div class="badge">COMING SOON</div>
-            <h2>Poneglyph Search</h2>
-            <p>Poneglyph is a deep search mode that scans hidden networks, censored archives, and restricted sources — content traditional search engines won't show you.</p>
-            <ul>
-                <li>Scans 15+ hidden knowledge archives</li>
-                <li>Includes Wikileaks, EFF, Cryptome, and more</li>
-                <li>Searches Pastebin, Internet Archive, and dark web mirrors</li>
-                <li>Finds content removed or buried by mainstream engines</li>
-            </ul>
-            <p style="margin-top:12px;color:var(--text3);font-size:12px">This feature is currently under development and will be available soon.</p>
-            <button class="close-btn" onclick="closePGPopup()">Close</button>
-        </div>
-    </div>
+    <div class="pg-overlay" id="pg-overlay" style="display:none"></div>
 
     <div class="pg-overlay" id="cl-popup" data-version="1.1">
         <div class="pg-popup">

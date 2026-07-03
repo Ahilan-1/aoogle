@@ -110,6 +110,21 @@
             <strong>How ML Ranking works:</strong> For each result, the model extracts 20 features (term overlap, BM25, TF-IDF, readability, title/URL structure) and predicts a relevance score. The model was trained on <strong>ORCAS</strong> (18.8M real Bing clicks) + MS MARCO document corpus using XGBoost LambdaMART optimized for NDCG. See <a href="/changelogs">changelogs</a> for details.
         </div>
 
+        <h2>Navigation</h2>
+
+        <div class="setting-group">
+            <div class="toggle-row">
+                <div class="toggle-label">
+                    <h3>Poneglyph Deep Search</h3>
+                    <div class="label-desc">Show Poneglyph toggle on homepage and nav links. Hides Poneglyph completely from the interface when disabled.</div>
+                </div>
+                <div class="toggle-wrap">
+                    <span class="toggle" id="pg-vis-toggle"></span>
+                </div>
+            </div>
+            <div id="pg-vis-status" class="status-badge on"><span class="dot"></span> Enabled</div>
+        </div>
+
         <h2>About</h2>
         <p style="font-size:13px;color:var(--text3);line-height:1.6">All settings are stored locally in your browser (localStorage). No data is sent to our servers. Clearing your browser data will reset these preferences.</p>
     </div>
@@ -143,6 +158,7 @@
         document.addEventListener('DOMContentLoaded',function(){
             setupToggle('eca-toggle','eca-status','arlong-eca',null);
             setupToggle('ml-toggle','ml-status','arlong-ml','ml-mode-select');
+            setupToggle('pg-vis-toggle','pg-vis-status','arlong-pg-visible',null);
 
             var mode=getVal('arlong-ml-mode')||'blend_light';
             var rbs=document.querySelectorAll('input[name="ml-mode"]');

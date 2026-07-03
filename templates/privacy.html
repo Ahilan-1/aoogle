@@ -46,7 +46,7 @@
 <body>
     <div class="bar">
         <a href="/">Home</a> &middot;
-        <a href="/poneglyph" style="color:#d32f2f;font-weight:600">Poneglyph</a> &middot;
+        <a href="/poneglyph" class="pg-link" style="color:#d32f2f;font-weight:600">Poneglyph</a> &middot;
         <a href="/about">How it works</a> &middot;
         <a href="/policy">Policies</a> &middot;
         <a href="/submit">Submit your site</a>
@@ -201,5 +201,8 @@
         <p>If you have questions about this privacy policy, our data practices, or would like to report a privacy concern, please email us at <a href="mailto:ahilan290@gmail.com">ahilan290@gmail.com</a> or reach out on Reddit at <a href="https://www.reddit.com/user/PeaceThrough/" target="_blank">u/PeaceThrough</a>.</p>
 
     </div>
+<script>
+(function(){var v=null;try{v=localStorage.getItem('arlong-pg-visible')}catch(e){}if(v==='0'){document.querySelectorAll('.pg-link').forEach(function(e){e.style.display='none'})}})();
+</script>
 </body>
 </html>

@@ -148,7 +148,7 @@
 <body>
     <div class="bar">
         <a href="/">arlong</a> &middot;
-        <a href="/poneglyph" style="color:#d32f2f;font-weight:600">Poneglyph</a> &middot; <a href="/search">Web</a> &middot; <a href="/images">Images</a>
+        <a href="/poneglyph" class="pg-link" style="color:#d32f2f;font-weight:600">Poneglyph</a> &middot; <a href="/search">Web</a> &middot; <a href="/images">Images</a>
     </div>
 
     <div class="wrap">
@@ -254,5 +254,8 @@
         document.getElementById(id).classList.add('active');
     }
     </script>
+<script>
+(function(){var v=null;try{v=localStorage.getItem('arlong-pg-visible')}catch(e){}if(v==='0'){document.querySelectorAll('.pg-link').forEach(function(e){e.style.display='none'})}})();
+</script>
 </body>
 </html>
