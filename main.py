@@ -782,10 +782,9 @@ class ImprovedSearch:
             self.ddgs = DDGS()
             self.search_urls.append("ddgs://text")
         else:
-            self.ddgs = None
-        if not redis_client:
-            self.in_memory_cache = {}
-            self.cache_lock = threading.Lock()
+            self.ddgs = DDGS() if ddgs_available else None
+        self.in_memory_cache = {}
+        self.cache_lock = threading.Lock()
 
     def _get_cache_key(self, query, page):
         """Generate unique cache key for query"""
@@ -794,27 +793,32 @@ class ImprovedSearch:
     def _get_from_cache(self, key):
         """Retrieve results from cache"""
         if redis_client:
-            cached = redis_client.get(key)
-            if cached:
-                return json.loads(cached)
-        else:
-            with self.cache_lock:
-                entry = self.in_memory_cache.get(key)
-                if entry:
-                    data, expire_time = entry
-                    if time.time() < expire_time:
-                        return data
-                    else:
-                        del self.in_memory_cache[key]
+            try:
+                cached = redis_client.get(key)
+                if cached:
+                    return json.loads(cached)
+            except Exception:
+                pass
+        with self.cache_lock:
+            entry = self.in_memory_cache.get(key)
+            if entry:
+                data, expire_time = entry
+                if time.time() < expire_time:
+                    return data
+                else:
+                    del self.in_memory_cache[key]
         return None
 
     def _save_to_cache(self, key, data, expire_time=3600):
         """Save results to cache"""
         if redis_client:
-            redis_client.setex(key, expire_time, json.dumps(data))
-        else:
-            with self.cache_lock:
-                self.in_memory_cache[key] = (data, time.time() + expire_time)
+            try:
+                redis_client.setex(key, expire_time, json.dumps(data))
+                return
+            except Exception:
+                pass
+        with self.cache_lock:
+            self.in_memory_cache[key] = (data, time.time() + expire_time)
 
     def _get_headers(self):
         """Generate realistic browser headers to avoid detection"""

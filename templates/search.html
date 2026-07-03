@@ -802,7 +802,7 @@
         </div>
     </div>
 
-    <div class="pg-overlay" id="cl-popup">
+    <div class="pg-overlay" id="cl-popup" data-version="1.1">
         <div class="pg-popup">
             <div class="badge">v1.1</div>
             <h2>Welcome to arlong</h2>
@@ -820,15 +820,16 @@
     </div>
 
     <script>
+        var CL_VERSION = '1.1';
         function closeCLPopup(){
             document.getElementById('cl-popup').classList.remove('show');
-            try{localStorage.setItem('arlong-cl-seen','1')}catch(e){}
+            try{localStorage.setItem('arlong-cl-seen', CL_VERSION)}catch(e){}
         }
         document.addEventListener('DOMContentLoaded',function(){
             if(!window.location.pathname||window.location.pathname==='/'||window.location.pathname==='/search'){
-                var seen = false;
-                try{seen = localStorage.getItem('arlong-cl-seen') === '1'}catch(e){}
-                if(!seen){
+                var seen = null;
+                try{seen = localStorage.getItem('arlong-cl-seen')}catch(e){}
+                if(seen !== CL_VERSION){
                     document.getElementById('cl-popup').classList.add('show');
                 }
             }
