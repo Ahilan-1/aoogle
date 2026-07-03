@@ -97,7 +97,9 @@ redis_client = None
 if redis_available:
     try:
         redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+        redis_client.ping()
     except:
+        redis_client = None
         app.logger.warning("Redis not available, falling back to in-memory cache")
 
 class SearchResult:
