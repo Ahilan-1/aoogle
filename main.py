@@ -2274,6 +2274,119 @@ class ImprovedSearch:
             app.logger.error(f"PG Deep Archive error: {e}")
         return out[:10]
 
+    def _pg_deep_search_1337x(self, query):
+        out = []
+        try:
+            q = quote_plus(query.replace(' ', '+'))
+            r = self.session.get(f'https://1337x.to/search/{q}/1/',
+                headers={**self._get_headers(), 'Referer': 'https://1337x.to/'}, timeout=12)
+            if r and r.status_code == 200:
+                soup = BeautifulSoup(r.text, 'html.parser')
+                for tr in soup.select('table.table tbody tr')[:10]:
+                    tds = tr.find_all('td')
+                    if len(tds) < 2:
+                        continue
+                    a = tds[0].find('a')
+                    if not a or not a.get('href'):
+                        continue
+                    href = a['href']
+                    if href.startswith('/'):
+                        href = 'https://1337x.to' + href
+                    title = a.get_text(strip=True)[:120]
+                    seed_el = tr.find('td', class_='seeds') or tds[-2] if len(tds) >= 3 else None
+                    seeds = seed_el.get_text(strip=True) if seed_el else '?'
+                    snippet = f'Torrent | Seeds: {seeds}'
+                    out.append(SearchResult(
+                        title=title, url=href, snippet=snippet,
+                        category='torrent', domain='1337x.to',
+                        favicon='https://www.google.com/s2/favicons?domain=1337x.to&sz=16'
+                    ))
+        except Exception as e:
+            app.logger.error(f"PG Deep 1337x error: {e}")
+        return out
+
+    def _pg_deep_search_ddosecrets(self, query):
+        out = []
+        try:
+            q = quote_plus(query)
+            r = self.session.get(f'https://ddosecrets.com/search?q={q}',
+                headers=self._get_headers(), timeout=12)
+            if r and r.status_code == 200:
+                soup = BeautifulSoup(r.text, 'html.parser')
+                for a in soup.select('a[href*="/wiki/"]')[:10]:
+                    href = a.get('href', '')
+                    title = a.get_text(strip=True)[:120]
+                    if not title or not href or 'index.php' in href:
+                        continue
+                    if href.startswith('/'):
+                        href = 'https://ddosecrets.com' + href
+                    out.append(SearchResult(
+                        title=title, url=href, snippet='DDoSecrets leaked dataset',
+                        category='leak', domain='ddosecrets.com',
+                        favicon='https://www.google.com/s2/favicons?domain=ddosecrets.com&sz=16'
+                    ))
+        except Exception as e:
+            app.logger.error(f"PG Deep DDoSecrets error: {e}")
+        return out
+
+    def _pg_deep_search_torrentz(self, query):
+        out = []
+        try:
+            q = quote_plus(query)
+            r = self.session.get(f'https://torrentz2.nz/search?q={q}',
+                headers=self._get_headers(), timeout=10)
+            if r and r.status_code == 200:
+                soup = BeautifulSoup(r.text, 'html.parser')
+                for dl in soup.select('dl')[:10]:
+                    a = dl.find('dt')
+                    if not a:
+                        continue
+                    a = a.find('a')
+                    if not a or not a.get('href'):
+                        continue
+                    href = a['href']
+                    if href.startswith('/'):
+                        href = 'https://torrentz2.nz' + href
+                    elif not href.startswith('http'):
+                        continue
+                    title = a.get_text(strip=True)[:120]
+                    dd = dl.find('dd')
+                    raw = dd.get_text(strip=True) if dd else ''
+                    parts = raw.split('MB') if 'MB' in raw else raw.split('GB') if 'GB' in raw else [raw]
+                    snippet = f'Torrent | Size: {parts[0].strip()[-20:].strip()}MB' if len(parts) > 1 else 'Torrent'
+                    out.append(SearchResult(
+                        title=title, url=href, snippet=snippet,
+                        category='torrent', domain='torrentz2.nz',
+                        favicon='https://www.google.com/s2/favicons?domain=torrentz2.nz&sz=16'
+                    ))
+        except Exception as e:
+            app.logger.error(f"PG Deep Torrentz2 error: {e}")
+        return out
+
+    def _pg_deep_search_icij(self, query):
+        out = []
+        try:
+            q = quote_plus(query)
+            r = self.session.get(f'https://offshoreleaks.icij.org/search?q={q}',
+                headers=self._get_headers(), timeout=12)
+            if r and r.status_code == 200:
+                soup = BeautifulSoup(r.text, 'html.parser')
+                for a in soup.select('a[href*="/nodes/"]')[:10]:
+                    href = a.get('href', '')
+                    if not href.startswith('http'):
+                        href = 'https://offshoreleaks.icij.org' + href
+                    title = a.get_text(strip=True)[:120]
+                    if not title or not href:
+                        continue
+                    out.append(SearchResult(
+                        title=title, url=href, snippet='ICIJ Offshore Leaks Database entry',
+                        category='leak', domain='offshoreleaks.icij.org',
+                        favicon='https://www.google.com/s2/favicons?domain=icij.org&sz=16'
+                    ))
+        except Exception as e:
+            app.logger.error(f"PG Deep ICIJ error: {e}")
+        return out[:10]
+
     def _pg_deep_update_progress(self, query, results, seen, completed, total):
         with pg_deep_lock:
             if query in pg_deep_progress:
