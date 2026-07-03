@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 *.log
 *.pkl
+!ml_ranking/model.pkl
+!ml_ranking/feature_names.pkl
 venv/
 .vscode/
 .DS_Store

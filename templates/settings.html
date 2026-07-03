@@ -131,10 +131,11 @@
             var active=getVal(key);
             if(active&&active!=='0'){t.classList.add('on');s.className='status-badge on';s.innerHTML='<span class="dot"></span> Enabled';if(mc)mc.style.display='block'}
             t.onclick=function(){
-                var on=!(active&&active!=='0');active=on?'blend_light':'0';setVal(key,active);
-                if(on){t.classList.add('on');s.className='status-badge on';s.innerHTML='<span class="dot"></span> Enabled';if(mc)mc.style.display='block'}
-                else{t.classList.remove('on');s.className='status-badge off';s.innerHTML='<span class="dot"></span> Disabled';if(mc)mc.style.display='none'}
-                if(mc){var rb=mc.querySelector('input[value="'+active+'"]');if(rb)rb.checked=true}
+                var on=!(active&&active!=='0');
+                if(on){setVal(key,'1');t.classList.add('on');s.className='status-badge on';s.innerHTML='<span class="dot"></span> Enabled';if(mc)mc.style.display='block'}
+                else{setVal(key,'0');t.classList.remove('on');s.className='status-badge off';s.innerHTML='<span class="dot"></span> Disabled';if(mc)mc.style.display='none'}
+                active=on?'1':'0';
+                if(mc){var mode=getVal('arlong-ml-mode')||'blend_light';var rb=mc.querySelector('input[value="'+mode+'"]');if(rb)rb.checked=true}
             }
         }
 
@@ -149,6 +150,10 @@
             mc.addEventListener('change',function(e){
                 if(e.target.name==='ml-mode'){
                     setVal('arlong-ml-mode',e.target.value);
+                    setVal('arlong-ml','1');
+                    document.getElementById('ml-toggle').classList.add('on');
+                    var ms=document.getElementById('ml-status');
+                    ms.className='status-badge on';ms.innerHTML='<span class="dot"></span> Enabled';
                 }
             });
         });
