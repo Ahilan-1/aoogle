@@ -1715,6 +1715,52 @@ class ImprovedSearch:
 
         return page_results, total
 
+    def ml_rerank(self, query, results, mode='blend_light'):
+        try:
+            from ml_ranking import get_ranker
+            ranker = get_ranker()
+            if not ranker.available:
+                return results
+            top = [r for r in results[:20]]
+            if not top:
+                return results
+            docs = []
+            for r in top:
+                title = r.get('title', '') or ''
+                snippet = r.get('snippet', '') or ''
+                url = r.get('url', '') or ''
+                docs.append({'title': title, 'snippet': snippet, 'url': url})
+            scores = ranker.predict(query, docs)
+
+            heur_scores = [r.get('score', 0) for r in top]
+            min_h, max_h = min(heur_scores), max(heur_scores)
+            min_m, max_m = min(scores), max(scores)
+            h_range = max_h - min_h if max_h > min_h else 1
+            m_range = max_m - min_m if max_m > min_m else 1
+
+            for i, r in enumerate(top):
+                ml_score = scores[i] if i < len(scores) else 0.0
+                old_score = r.get('score', 0)
+
+                if mode == 'blend_strong':
+                    new_score = old_score + ml_score
+                elif mode == 'pure_ml':
+                    ml_norm = (ml_score - min_m) / m_range
+                    new_score = ml_norm * 100
+                elif mode == 'norm_50':
+                    h_norm = (old_score - min_h) / h_range
+                    m_norm = (ml_score - min_m) / m_range
+                    new_score = (h_norm * 50 + m_norm * 50)
+                else:
+                    new_score = old_score + ml_score * 0.15
+
+                r['score'] = round(new_score, 2)
+                r['ml_score'] = round(ml_score, 4)
+            results.sort(key=lambda x: x.get('score', 0), reverse=True)
+        except Exception as e:
+            app.logger.error(f"ML rerank error: {e}")
+        return results
+
     def _extract_ddg_url(self, url):
         if url.startswith('//duckduckgo.com/l/') or 'duckduckgo.com/l/' in url:
             parsed = urlparse(url if '://' in url else 'https:' + url)
@@ -2654,7 +2700,8 @@ search_engine = ImprovedSearch()
 @app.route('/')
 def home():
     announcement = data_manager.get_announcement()
-    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, poneglyph=request.args.get('poneglyph') == '1')
+    ml_val = request.args.get('ml', '')
+    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, poneglyph=request.args.get('poneglyph') == '1', ml_rank=bool(ml_val) and ml_val != '0')
 
 @app.route('/search')
 def search():
@@ -2664,6 +2711,7 @@ def search():
     if filter_type not in ('general', 'shopping', 'official', 'tutorials', 'discussions', 'academic'):
         filter_type = 'general'
     poneglyph = request.args.get('poneglyph') == '1'
+    ml_rank = request.args.get('ml', '')
 
     announcement = data_manager.get_announcement()
     if not query:
@@ -2719,6 +2767,9 @@ def search():
         else:
             results, total_results = search_engine.search(query, page, filter_type)
 
+        if ml_rank and ml_rank != '0' and results:
+            results = search_engine.ml_rerank(query, results, ml_rank)
+
         search_stats.record()
         data_manager.increment_total_searches()
 
@@ -2742,6 +2793,7 @@ def search():
             safety_info=safety_info,
             news_box=news_box,
             notice=notice,
+            ml_rank=ml_rank,
             page=page,
             total_results=total_results,
             info_box=get_info_box(query, results),
@@ -3095,6 +3147,11 @@ def changelogs():
     return render_template('changelogs.html')
 
 
+@app.route('/settings')
+def settings():
+    return render_template('settings.html')
+
+
 @app.route('/robots.txt')
 def robots_txt():
     lines = [
@@ -3230,6 +3287,250 @@ def admin_announcement():
     text = values[-1].strip() if values else ''
     data_manager.set_announcement(text)
     return redirect(url_for('admin_dashboard'))
+
+@app.route('/benchmark')
+def benchmark():
+    query = request.args.get('q', '').strip()
+    results_data = None
+    metrics = None
+    conclusion = None
+
+    if query:
+        try:
+            search_engine = ImprovedSearch()
+            modes = ['none', 'blend_light', 'blend_strong', 'pure_ml', 'norm_50']
+            mode_labels = {
+                'none': 'arlong (no ML)',
+                'blend_light': 'Blend (subtle)',
+                'blend_strong': 'Blend (strong)',
+                'pure_ml': 'Pure ML',
+                'norm_50': 'Normalized 50/50',
+            }
+
+            raw_results, _ = search_engine.search(query, page=1)
+            if not raw_results:
+                raw_results = []
+
+            mode_results = {}
+            timings = {}
+            for mode in modes:
+                t0 = time.time()
+                if mode == 'none':
+                    mode_results['none'] = [dict(r) for r in raw_results[:10]]
+                else:
+                    ranked = search_engine.ml_rerank(query, [dict(r) for r in raw_results], mode)
+                    mode_results[mode] = ranked[:10]
+                timings[mode] = round(time.time() - t0, 3)
+
+            ddg_results = []
+            ddg_time = 0
+            if ddgs_available:
+                try:
+                    t0 = time.time()
+                    raw_ddg = DDGS(timeout=8).text(query, max_results=10, backend='auto', safesearch='on')
+                    ddg_time = round(time.time() - t0, 3)
+                    for i, r in enumerate(raw_ddg):
+                        href = r.get('href', '') or ''
+                        if not href or href.startswith('//') or not href.startswith('http'):
+                            continue
+                        parsed = urlparse(href)
+                        if not parsed.netloc:
+                            continue
+                        ddg_results.append({
+                            'title': r.get('title', ''),
+                            'url': href,
+                            'display_url': href[:60] + ('...' if len(href) > 60 else ''),
+                            'snippet': r.get('body', ''),
+                            'domain': parsed.netloc,
+                            'score': round(100.0 - len(ddg_results) * 8, 2),
+                        })
+                        if len(ddg_results) >= 10:
+                            break
+                except Exception as e:
+                    app.logger.error(f"Benchmark DDG error: {e}")
+
+            baseline_pos = {r['url']: i for i, r in enumerate(mode_results['none'])}
+
+            def with_rank_info(results, baseline_pos_map):
+                enriched = []
+                for i, r in enumerate(results):
+                    url = r['url']
+                    if url in baseline_pos_map:
+                        r['pos_change'] = baseline_pos_map[url] - i
+                    else:
+                        r['pos_change'] = None
+                    if not r.get('domain'):
+                        r['domain'] = urlparse(url).netloc
+                    enriched.append(r)
+                return enriched
+
+            def rbo_score(a, b, p=0.9):
+                urls_a = [r['url'] for r in a]
+                urls_b = [r['url'] for r in b]
+                if not urls_a or not urls_b:
+                    return 0
+                sa, sb = set(), set()
+                overlap = 0
+                weighted = 0
+                min_len = min(len(urls_a), len(urls_b))
+                for k in range(min_len):
+                    sa.add(urls_a[k])
+                    sb.add(urls_b[k])
+                    overlap = len(sa & sb)
+                    weighted += overlap * (p ** (k + 1))
+                return round((1 - p) / p * weighted, 3)
+
+            def jaccard(a, b):
+                urls_a = {r['url'] for r in a}
+                urls_b = {r['url'] for r in b}
+                if not urls_a or not urls_b:
+                    return 0
+                return round(len(urls_a & urls_b) / len(urls_a | urls_b), 3)
+
+            def avg_pos_shift(a, b):
+                pos_a = {r['url']: i for i, r in enumerate(a)}
+                pos_b = {r['url']: i for i, r in enumerate(b)}
+                shifts = [abs(pos_a[u] - pos_b[u]) for u in pos_a if u in pos_b]
+                return round(sum(shifts) / max(len(shifts), 1), 2)
+
+            def avg_score_diff(a, b):
+                scores_a = {r['url']: r.get('score', 0) for r in a}
+                scores_b = {r['url']: r.get('score', 0) for r in b}
+                common = set(scores_a.keys()) & set(scores_b.keys())
+                if not common:
+                    return 0
+                diffs = [scores_b[u] - scores_a[u] for u in common]
+                return round(sum(diffs) / len(diffs), 2)
+
+            def pos_changes(results, baseline_pos_map):
+                changes = []
+                for i, r in enumerate(results):
+                    url = r['url']
+                    if url in baseline_pos_map:
+                        changes.append(baseline_pos_map[url] - i)
+                return changes
+
+            def _score_stats(results):
+                scores = [r.get('score', 0) for r in results if r.get('score') is not None]
+                if not scores:
+                    return {'min': 0, 'max': 0, 'mean': 0, 'std': 0}
+                n = len(scores)
+                mean_s = sum(scores) / n
+                std_s = (sum((s - mean_s) ** 2 for s in scores) / n) ** 0.5
+                return {'min': round(min(scores), 2), 'max': round(max(scores), 2), 'mean': round(mean_s, 2), 'std': round(std_s, 2)}
+
+            def _build_entry(key, label, results_list, timing):
+                r = results_list
+                changes = pos_changes(r, baseline_pos)
+                n_up = sum(1 for c in changes if c and c > 0)
+                n_down = sum(1 for c in changes if c and c < 0)
+                n_new = sum(1 for i, rr in enumerate(r) if rr['url'] not in baseline_pos)
+                return {
+                    'label': label,
+                    'key': key,
+                    'results': with_rank_info(r, baseline_pos),
+                    'timing': timing,
+                    'jaccard_vs_none': jaccard(r, mode_results['none']),
+                    'rbo_vs_none': rbo_score(r, mode_results['none']),
+                    'avg_pos_shift_vs_none': avg_pos_shift(r, mode_results['none']),
+                    'avg_score_diff_vs_none': avg_score_diff(mode_results['none'], r) if r else None,
+                    'changed_positions': len(changes),
+                    'moved_up': n_up,
+                    'moved_down': n_down,
+                    'new_results': n_new,
+                    'score_stats': _score_stats(r),
+                    'scores': [r2.get('score', 0) for r2 in r],
+                }
+
+            comparison = []
+            for mode in modes:
+                comparison.append(_build_entry(mode, mode_labels[mode], mode_results[mode], timings[mode]))
+            comparison.append(_build_entry('ddg', 'DuckDuckGo', ddg_results, ddg_time))
+
+            results_data = comparison
+
+            all_results_map = {}
+            for mode in modes:
+                all_results_map[mode] = mode_results[mode]
+            all_results_map['ddg'] = ddg_results
+
+            all_labels = [m['label'] for m in comparison]
+            all_keys = [m['key'] for m in comparison]
+            pairwise = []
+            pairwise_rbo = []
+            for i, k1 in enumerate(all_keys):
+                r1 = all_results_map.get(k1, [])
+                jrow = []
+                rborow = []
+                for j, k2 in enumerate(all_keys):
+                    r2 = all_results_map.get(k2, [])
+                    jrow.append(jaccard(r1, r2))
+                    rborow.append(rbo_score(r1, r2))
+                pairwise.append({'label': all_labels[i], 'row': jrow})
+                pairwise_rbo.append({'label': all_labels[i], 'row': rborow})
+
+            def _find_best_mode(metric_key, higher=True):
+                valid = [(m, m.get(metric_key, 0)) for m in comparison if m.get(metric_key) is not None]
+                if not valid:
+                    return None, 0
+                sorted_m = sorted(valid, key=lambda x: x[1], reverse=higher)
+                return sorted_m[0]
+
+            best_jaccard_mode, best_jaccard = _find_best_mode('jaccard_vs_none', higher=True)
+            best_rbo_mode, best_rbo = _find_best_mode('rbo_vs_none', higher=True)
+            most_aggressive, most_changes = _find_best_mode('changed_positions', higher=True)
+            fastest_ml = min([m for m in comparison if m['key'] not in ('none', 'ddg')], key=lambda m: m['timing'])
+
+            conclusion_parts = []
+            if best_rbo_mode and best_rbo_mode['key'] not in ('none',):
+                conclusion_parts.append(
+                    f"{best_rbo_mode['label']} preserves ranking closest to the baseline (RBO={best_rbo_mode['rbo_vs_none']}), "
+                    f"meaning it makes the most conservative changes to the original order."
+                )
+            if most_aggressive and most_aggressive['key'] not in ('none',):
+                conclusion_parts.append(
+                    f"{most_aggressive['label']} is the most aggressive — it changes the most positions "
+                    f"({most_aggressive['changed_positions']} of 10) vs baseline."
+                )
+            fastest_ml_label = fastest_ml['label'] if fastest_ml else 'blend modes'
+            conclusion_parts.append(
+                f"{fastest_ml_label} is the fastest ML mode at {fastest_ml['timing']}s."
+            )
+
+            for m in comparison:
+                if m['key'] == 'ddg':
+                    j = m['jaccard_vs_none']
+                    rbo = m['rbo_vs_none']
+                    if j is not None and rbo is not None:
+                        conclusion_parts.append(
+                            f"DuckDuckGo shares only {int(j*100)}% URL overlap (RBO={rbo}) with arlong's baseline, "
+                            f"confirming that different engines return fundamentally different sets of results."
+                        )
+
+            conclusion = ' '.join(conclusion_parts)
+
+            metrics = {
+                'total_raw': len(raw_results),
+                'modes_tested': len(comparison),
+                'has_ddg': len(ddg_results) > 0,
+                'pairwise_jaccard': pairwise,
+                'pairwise_rbo': pairwise_rbo,
+                'scores_chart': {
+                    'labels': [m['label'] for m in comparison],
+                    'means': [m['score_stats']['mean'] for m in comparison],
+                    'maxs': [m['score_stats']['max'] for m in comparison],
+                    'mins': [m['score_stats']['min'] for m in comparison],
+                },
+            }
+
+            for m in comparison:
+                m['results'] = m['results'][:10]
+
+        except Exception as e:
+            import traceback
+            app.logger.error(f"Benchmark error: {e}\n{traceback.format_exc()}")
+
+    return render_template('benchmark.html', query=query, results=results_data, metrics=metrics, conclusion=conclusion)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

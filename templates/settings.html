@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - arlong</title>
+    <style>
+        :root{--bg:#fff;--text:#222;--text2:#545454;--text3:#70757a;--link:#1a0dab;--border:#dfe1e5;--blue:#1a73e8;--green:#137333}
+        *,*::before,*::after{box-sizing:border-box}
+        body{margin:0;padding:0;font-family:arial,sans-serif;color:var(--text);background:var(--bg);font-size:14px;line-height:1.6}
+        a{color:var(--link);text-decoration:none}
+        a:hover{text-decoration:underline}
+        .bar{background:#fafafa;border-bottom:1px solid #ebebeb;padding:12px 0;text-align:center;font-size:13px;color:var(--text3)}
+        .bar a{color:var(--text3);margin:0 10px}
+        .bar a:hover{color:#333}
+        .wrap{max-width:680px;margin:0 auto;padding:40px 20px 80px}
+        h1{font-size:28px;font-weight:400;margin:0 0 4px}
+        .sub{font-size:14px;color:var(--text3);margin-bottom:40px}
+        h2{font-size:18px;font-weight:500;margin:32px 0 4px;color:var(--text)}
+        .setting-group{border:1px solid #eee;border-radius:10px;padding:20px 24px;margin-bottom:16px}
+        .setting-group .desc{font-size:13px;color:var(--text3);line-height:1.6;margin:4px 0 0}
+        .setting-group .beta-tag{display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:6px;background:#fef7e0;color:#e37400;border:1px solid #f9e0a0;margin-left:6px;vertical-align:middle;letter-spacing:.5px}
+        .setting-group .new-tag{display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:6px;background:#e6f4ea;color:var(--green);border:1px solid #b8e6c0;margin-left:6px;vertical-align:middle;letter-spacing:.5px}
+        .toggle-row{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+        .toggle-label{flex:1}
+        .toggle-label h3{font-size:15px;font-weight:500;margin:0 0 2px;color:var(--text)}
+        .toggle-label .label-desc{font-size:13px;color:var(--text3);line-height:1.5}
+        .toggle-wrap{flex-shrink:0;padding-top:2px}
+        .toggle{position:relative;width:44px;height:24px;background:var(--border);border-radius:12px;cursor:pointer;transition:background .2s;display:block}
+        .toggle.on{background:var(--blue)}
+        .toggle::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+        .toggle.on::after{transform:translateX(20px)}
+        .status-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:500;padding:3px 10px;border-radius:10px;margin-top:8px}
+        .status-badge.off{background:#f1f3f4;color:var(--text3)}
+        .status-badge.on{background:#e6f4ea;color:var(--green)}
+        .status-badge.unavail{background:#fce8e6;color:#c5221f}
+        .status-badge .dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+        .status-badge.off .dot{background:var(--text3)}
+        .status-badge.on .dot{background:var(--green)}
+        .status-badge.unavail .dot{background:#c5221f}
+        .note{border-left:3px solid var(--blue);background:#f8f9fa;padding:14px 18px;margin:24px 0;border-radius:0 8px 8px 0;font-size:13px;color:#444;line-height:1.6}
+        .note strong{color:var(--text)}
+        .saved-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#323232;color:#fff;padding:10px 24px;border-radius:24px;font-size:13px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.3);transition:opacity .3s;opacity:0;pointer-events:none}
+        .saved-toast.show{opacity:1}
+        @media(max-width:640px){
+            h1{font-size:22px}.wrap{padding:24px 16px 60px}.bar a{margin:0 6px;font-size:12px}
+            .setting-group{padding:16px}.toggle-row{flex-wrap:wrap}
+        }
+    </style>
+</head>
+<body>
+    <div class="bar">
+        <a href="/">Home</a> &middot;
+        <a href="/about">How it works</a> &middot;
+        <a href="/policy">Policies</a>
+    </div>
+    <div class="wrap">
+        <h1>Settings</h1>
+        <div class="sub">Customize your search experience</div>
+
+        <h2>Enhancements</h2>
+
+        <div class="setting-group">
+            <div class="toggle-row">
+                <div class="toggle-label">
+                    <h3>Enhanced content analysis <span class="beta-tag">BETA</span></h3>
+                    <div class="label-desc">Fetches full page content of each result and analyzes readability, keyword density, and content structure for improved ranking. May increase search time slightly.</div>
+                </div>
+                <div class="toggle-wrap">
+                    <span class="toggle" id="eca-toggle" onclick="toggleECA()"></span>
+                </div>
+            </div>
+            <div id="eca-status" class="status-badge off"><span class="dot"></span> Disabled</div>
+        </div>
+
+        <div class="setting-group">
+            <div class="toggle-row">
+                <div class="toggle-label">
+                    <h3>ML-Powered Ranking <span class="new-tag">NEW</span></h3>
+                    <div class="label-desc">Uses an XGBoost LambdaMART model trained on ORCAS (18M real Bing clicks) + MS MARCO to predict query-document relevance.</div>
+                </div>
+                <div class="toggle-wrap">
+                    <span class="toggle" id="ml-toggle"></span>
+                </div>
+            </div>
+            <div id="ml-status" class="status-badge off"><span class="dot"></span> Disabled</div>
+            <div id="ml-mode-select" style="margin-top:14px;display:none;padding-top:14px;border-top:1px solid #eee">
+                <div style="font-size:13px;font-weight:500;margin-bottom:10px;color:var(--text)">Ranking mode</div>
+                <label class="mode-opt" data-mode="blend_light" style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:4px">
+                    <input type="radio" name="ml-mode" value="blend_light" checked style="margin-top:2px">
+                    <div><strong>Blend (subtle)</strong><br><span style="font-size:12px;color:var(--text3)">ML score lightly blended into existing ranking. Small adjustments to positions 3-10.</span></div>
+                </label>
+                <label class="mode-opt" data-mode="blend_strong" style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:4px">
+                    <input type="radio" name="ml-mode" value="blend_strong">
+                    <div><strong>Blend (strong)</strong><br><span style="font-size:12px;color:var(--text3)">ML score weighted equally with heuristic score. Can reorder top results.</span></div>
+                </label>
+                <label class="mode-opt" data-mode="pure_ml" style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:4px">
+                    <input type="radio" name="ml-mode" value="pure_ml">
+                    <div><strong>Pure ML</strong><br><span style="font-size:12px;color:var(--text3)">Replace heuristic ranking entirely with model-predicted relevance. Most aggressive.</span></div>
+                </label>
+                <label class="mode-opt" data-mode="norm_50" style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:4px">
+                    <input type="radio" name="ml-mode" value="norm_50">
+                    <div><strong>Normalized 50/50</strong><br><span style="font-size:12px;color:var(--text3)">Both scores normalized to 0-1, blended equally. Fair mix regardless of scale.</span></div>
+                </label>
+            </div>
+        </div>
+
+        <div class="note">
+            <strong>How ML Ranking works:</strong> For each result, the model extracts 20 features (term overlap, BM25, TF-IDF, readability, title/URL structure) and predicts a relevance score. The model was trained on <strong>ORCAS</strong> (18.8M real Bing clicks) + MS MARCO document corpus using XGBoost LambdaMART optimized for NDCG. See <a href="/changelogs">changelogs</a> for details.
+        </div>
+
+        <h2>About</h2>
+        <p style="font-size:13px;color:var(--text3);line-height:1.6">All settings are stored locally in your browser (localStorage). No data is sent to our servers. Clearing your browser data will reset these preferences.</p>
+    </div>
+
+    <div class="saved-toast" id="saved-toast"></div>
+
+    <script>
+        function getVal(k){try{return localStorage.getItem(k)||''}catch(e){return ''}}
+        function setVal(k,v){
+            try{localStorage.setItem(k,v)}catch(e){}
+            showToast('Saved')
+        }
+        function showToast(m){
+            var t=document.getElementById('saved-toast');t.textContent=m;t.classList.add('show');
+            setTimeout(function(){t.classList.remove('show')},2000)
+        }
+
+        function setupToggle(id, statusId, key, modeContainerId){
+            var t=document.getElementById(id),s=document.getElementById(statusId),mc=document.getElementById(modeContainerId);
+            var active=getVal(key);
+            if(active&&active!=='0'){t.classList.add('on');s.className='status-badge on';s.innerHTML='<span class="dot"></span> Enabled';if(mc)mc.style.display='block'}
+            t.onclick=function(){
+                var on=!(active&&active!=='0');active=on?'blend_light':'0';setVal(key,active);
+                if(on){t.classList.add('on');s.className='status-badge on';s.innerHTML='<span class="dot"></span> Enabled';if(mc)mc.style.display='block'}
+                else{t.classList.remove('on');s.className='status-badge off';s.innerHTML='<span class="dot"></span> Disabled';if(mc)mc.style.display='none'}
+                if(mc){var rb=mc.querySelector('input[value="'+active+'"]');if(rb)rb.checked=true}
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded',function(){
+            setupToggle('eca-toggle','eca-status','arlong-eca',null);
+            setupToggle('ml-toggle','ml-status','arlong-ml','ml-mode-select');
+
+            var mode=getVal('arlong-ml-mode')||'blend_light';
+            var rbs=document.querySelectorAll('input[name="ml-mode"]');
+            for(var i=0;i<rbs.length;i++){if(rbs[i].value===mode)rbs[i].checked=true}
+            var mc=document.getElementById('ml-mode-select');
+            mc.addEventListener('change',function(e){
+                if(e.target.name==='ml-mode'){
+                    setVal('arlong-ml-mode',e.target.value);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

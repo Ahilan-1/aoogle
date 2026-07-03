@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Benchmark - arlong</title>
+    <style>
+        :root{--bg:#fff;--text:#222;--text2:#545454;--text3:#70757a;--link:#1a0dab;--border:#dfe1e5;--blue:#1a73e8;--green:#137333;--orange:#e37400;--red:#d93025}
+        *,*::before,*::after{box-sizing:border-box}
+        body{margin:0;padding:0;font-family:arial,sans-serif;color:var(--text);background:var(--bg);font-size:14px;line-height:1.6}
+        a{color:var(--link);text-decoration:none}
+        a:hover{text-decoration:underline}
+        .bar{background:#fafafa;border-bottom:1px solid #ebebeb;padding:12px 0;text-align:center;font-size:13px;color:var(--text3)}
+        .bar a{color:var(--text3);margin:0 10px}
+        .bar a:hover{color:#333}
+        .wrap{max-width:1320px;margin:0 auto;padding:24px 16px 60px}
+
+        .header-center{text-align:center;margin-bottom:28px}
+        h1{font-size:26px;font-weight:400;margin:0 0 4px}
+        .sub{font-size:14px;color:var(--text3);margin-bottom:20px}
+
+        .search-form{max-width:520px;margin:0 auto 24px}
+        .search-form input[type=text]{width:100%;padding:12px 20px;font-size:16px;border:2px solid var(--border);border-radius:28px;outline:none;display:block;text-align:center}
+        .search-form input[type=text]:focus{border-color:var(--blue);text-align:left}
+
+        .tabs{display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;justify-content:center}
+        .tab{padding:8px 14px;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:var(--bg);color:var(--text3);white-space:nowrap}
+        .tab.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+        .tab:hover:not(.active){background:#f1f3f4}
+
+        .table-scroll{overflow-x:auto;margin-bottom:24px}
+        .results-table{width:100%;border-collapse:collapse;font-size:12px;min-width:700px}
+        .results-table th{padding:10px 6px 8px;background:#f8f9fa;border:1px solid var(--border);text-align:left;font-weight:500;color:var(--text2);position:sticky;top:0;z-index:2;vertical-align:top}
+        .results-table th .mode-label{font-weight:600;color:var(--text);font-size:13px}
+        .results-table th .mode-meta{display:block;font-size:10px;color:var(--text3);font-weight:400;margin-top:2px}
+        .results-table th .mode-timing{display:block;font-size:10px;color:var(--blue);font-weight:400;margin-top:1px}
+        .results-table td{padding:7px 6px;border:1px solid var(--border);vertical-align:top;max-width:240px;font-size:12px}
+        .results-table tr:hover td{background:#f8f9fa}
+        .results-table .rank{text-align:center;font-weight:500;color:var(--text3);width:28px;padding:6px 4px;font-size:13px}
+        .result-title{font-size:13px;color:var(--link);margin-bottom:2px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
+        .result-title:hover{text-decoration:underline}
+        .result-domain{font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
+        .result-score{font-size:11px;color:var(--text2);margin-top:2px}
+        .ml-score{font-size:10px;color:var(--orange)}
+        .empty-cell{color:var(--text3);font-style:italic;text-align:center;font-size:11px}
+        .pos-indicator{display:inline-block;font-size:11px;font-weight:600;margin-left:2px;width:14px;text-align:center}
+        .pos-up{color:var(--green)}
+        .pos-down{color:var(--red)}
+        .pos-new{color:var(--orange);font-weight:600;font-size:10px}
+        .pos-same{color:var(--text3)}
+
+        .conclusion-box{border:1px solid var(--border);border-radius:10px;padding:18px 22px;margin-bottom:24px;background:#fafafa;line-height:1.7}
+        .conclusion-box h3{margin:0 0 8px;font-size:15px;font-weight:600;color:var(--text)}
+        .conclusion-box p{margin:0;font-size:13px;color:var(--text2)}
+
+        .metrics-section{margin-top:24px}
+        .metrics-section h2{font-size:18px;font-weight:500;margin:0 0 12px}
+
+        .pairwise-table{font-size:12px;border-collapse:collapse;margin-bottom:20px}
+        .pairwise-table th,.pairwise-table td{padding:6px 10px;border:1px solid var(--border);text-align:center}
+        .pairwise-table th{background:#f8f9fa;font-weight:500}
+        .pairwise-table td.label{text-align:left;font-weight:500;white-space:nowrap}
+        .pairwise-table .high{background:#e6f4ea;color:var(--green);font-weight:600}
+        .pairwise-table .mid{background:#fef7e0;color:var(--orange)}
+        .pairwise-table .low{background:#f1f3f4;color:var(--text3)}
+
+        .stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:20px}
+        .stat-card{border:1px solid var(--border);border-radius:8px;padding:12px 16px;background:#fafafa}
+        .stat-card .stat-val{font-size:20px;font-weight:600;color:var(--text)}
+        .stat-card .stat-label{font-size:11px;color:var(--text3);margin-top:2px}
+        .stat-card .stat-val.green{color:var(--green)}
+        .stat-card .stat-val.red{color:var(--red)}
+        .stat-card .stat-val.orange{color:var(--orange)}
+
+        .summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-bottom:24px}
+        .summary-card{border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:#fafafa}
+        .summary-card .sc-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px}
+        .summary-card .sc-row{font-size:12px;color:var(--text2);margin:3px 0;display:flex;justify-content:space-between}
+        .summary-card .sc-row .sc-val{font-weight:500;color:var(--text)}
+
+        .badge{display:inline-block;padding:0 6px;border-radius:4px;font-size:10px;font-weight:600;line-height:18px}
+        .badge-green{background:#e6f4ea;color:var(--green)}
+        .badge-red{background:#fce8e6;color:var(--red)}
+        .badge-blue{background:#e8f0fe;color:var(--blue)}
+        .badge-orange{background:#fef7e0;color:var(--orange)}
+
+        .chart-wrap{overflow-x:auto;padding:10px 0}
+        .bar-chart{display:flex;flex-direction:column;gap:8px;min-width:500px}
+        .bar-row{display:flex;align-items:center;gap:8px}
+        .bar-label{width:120px;text-align:right;font-size:11px;color:var(--text2);flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .bar-group{display:flex;gap:2px;flex:1;align-items:center}
+        .bar{height:20px;border-radius:3px;min-width:2px;position:relative}
+        .bar-mean{background:var(--blue)}
+        .bar-max{background:var(--green);opacity:0.5}
+        .bar-val{font-size:10px;margin-left:4px;color:var(--text3);white-space:nowrap}
+
+        @media(max-width:900px){.results-table td{max-width:160px}.result-title{max-width:140px}.result-domain{max-width:140px}}
+        @media(max-width:640px){.results-table td{max-width:110px}.result-title{max-width:90px}.result-domain{max-width:90px}.bar-label{width:80px}}
+    </style>
+</head>
+<body>
+<div class="bar">
+    <a href="/">Home</a> &middot;
+    <a href="/search">Search</a> &middot;
+    <a href="/settings">Settings</a>
+</div>
+<div class="wrap">
+    <div class="header-center">
+        <h1>Search Benchmark</h1>
+        <div class="sub">Compare arlong ML ranking modes against Google, Bing, and DuckDuckGo.</div>
+    </div>
+
+    <div class="search-form">
+        <form method="GET" action="/benchmark">
+            <input type="text" name="q" placeholder="Enter a query..." value="{{ query }}"
+                   onkeydown="if(event.key==='Enter')this.form.submit()">
+        </form>
+    </div>
+
+    {% if query %}
+        {% if results %}
+        {% set has_engine = metrics and metrics.has_ddg %}
+
+        {% if conclusion %}
+        <div class="conclusion-box">
+            <h3>Analysis</h3>
+            <p>{{ conclusion }}</p>
+        </div>
+        {% endif %}
+
+        <div class="tabs" id="mode-tabs">
+            <span class="tab active" data-view="table">Results</span>
+            <span class="tab" data-view="summary">Summary</span>
+            <span class="tab" data-view="charts">Charts</span>
+            <span class="tab" data-view="overlap">Overlap</span>
+            <span class="tab" data-view="rbo">RBO</span>
+        </div>
+
+        <div class="view-section" id="view-table">
+            <div class="table-scroll">
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        {% for m in results %}
+                        <th>
+                            <span class="mode-label">{{ m.label }}</span>
+                            {% if m.timing %}
+                            <span class="mode-timing">{{ m.timing }}s</span>
+                            {% endif %}
+                            <span class="mode-meta">{{ m.results|length }} results</span>
+                        </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for i in range(10) %}
+                    <tr>
+                        <td class="rank">{{ i+1 }}</td>
+                        {% for m in results %}
+                        <td>
+                            {% if m.results and i < m.results|length %}
+                                {% set r = m.results[i] %}
+                                {% set change = r.pos_change %}
+                                <div style="display:flex;align-items:baseline;gap:2px">
+                                    <a href="{{ r.url }}" class="result-title" title="{{ r.title }}">{{ r.title[:60] }}</a>
+                                    {% if change is not none and change > 0 %}
+                                        <span class="pos-indicator pos-up" title="Moved up {{ change }}">&#9650;</span>
+                                    {% elif change is not none and change < 0 %}
+                                        <span class="pos-indicator pos-down" title="Moved down {{ -change }}">&#9660;</span>
+                                    {% elif change is not none and change == 0 %}
+                                        <span class="pos-indicator pos-same">&bull;</span>
+                                    {% elif change is none %}
+                                        <span class="pos-indicator pos-new" title="New result">&#9733;</span>
+                                    {% endif %}
+                                </div>
+                                <div class="result-domain">{{ r.domain or '' }}</div>
+                                <div class="result-score">score: {{ r.score }}
+                                {% if r.ml_score is defined and r.ml_score is not none %}
+                                    <span class="ml-score">| ml: {{ r.ml_score }}</span>
+                                {% endif %}
+                                </div>
+                            {% else %}
+                                <span class="empty-cell">&mdash;</span>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+
+        <div class="view-section" id="view-summary" style="display:none">
+            <div class="summary-grid">
+                {% for m in results %}
+                <div class="summary-card">
+                    <div class="sc-title">{{ m.label }}</div>
+                    {% if m.timing %}<div class="sc-row"><span>Time</span><span class="sc-val">{{ m.timing }}s</span></div>{% endif %}
+                    <div class="sc-row"><span>Overlap vs baseline</span><span class="sc-val">{{ m.jaccard_vs_none }}</span></div>
+                    <div class="sc-row"><span>Rank similarity (RBO)</span><span class="sc-val">{{ m.rbo_vs_none }}</span></div>
+                    <div class="sc-row"><span>Avg position shift</span><span class="sc-val">{{ m.avg_pos_shift_vs_none }}</span></div>
+                    {% if m.avg_score_diff_vs_none is not none %}
+                    <div class="sc-row"><span>Avg score diff</span><span class="sc-val {% if m.avg_score_diff_vs_none > 0 %}green{% elif m.avg_score_diff_vs_none < 0 %}red{% endif %}">{{ '%+.2f'|format(m.avg_score_diff_vs_none) }}</span></div>
+                    {% endif %}
+                    <div class="sc-row" style="margin-top:4px;gap:4px;display:flex;flex-wrap:wrap">
+                        {% if m.moved_up %}<span class="badge badge-green">&#9650; {{ m.moved_up }} up</span>{% endif %}
+                        {% if m.moved_down %}<span class="badge badge-red">&#9660; {{ m.moved_down }} down</span>{% endif %}
+                        {% if m.new_results %}<span class="badge badge-orange">&#9733; {{ m.new_results }} new</span>{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <h2>Comparison Table vs Baseline (no ML)</h2>
+            <table class="pairwise-table">
+                <thead><tr><th>Mode</th><th>Jaccard</th><th>RBO</th><th>Avg Pos Shift</th><th>Avg Score Diff</th><th>Moved &uarr;</th><th>Moved &darr;</th><th>New</th></tr></thead>
+                <tbody>
+                    {% for m in results %}
+                    <tr>
+                        <td class="label">{{ m.label }}</td>
+                        <td>{{ m.jaccard_vs_none }}</td>
+                        <td>{{ m.rbo_vs_none }}</td>
+                        <td>{{ m.avg_pos_shift_vs_none }}</td>
+                        <td>{{ m.avg_score_diff_vs_none if m.avg_score_diff_vs_none is not none else '-' }}</td>
+                        <td style="color:var(--green);font-weight:500">{{ m.moved_up }}</td>
+                        <td style="color:var(--red);font-weight:500">{{ m.moved_down }}</td>
+                        <td style="color:var(--orange);font-weight:500">{{ m.new_results }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="view-section" id="view-charts" style="display:none">
+            <h2>Score Distribution (Mean &amp; Max)</h2>
+            <p style="font-size:13px;color:var(--text3);margin-bottom:12px">Blue bars = mean score. Green overlay = max score.</p>
+            {% if metrics and metrics.scores_chart %}
+            {% set chart = metrics.scores_chart %}
+            {% set max_mean = chart.means|max %}
+            {% set max_all = chart.maxs|max %}
+            <div class="chart-wrap">
+                <div class="bar-chart">
+                    {% for i in range(chart.labels|length) %}
+                    {% set w_mean = (chart.means[i] / max_mean * 100)|round if max_mean > 0 else 0 %}
+                    {% set w_max = (chart.maxs[i] / max_all * 100)|round if max_all > 0 else 0 %}
+                    <div class="bar-row">
+                        <div class="bar-label" title="{{ chart.labels[i] }}">{{ chart.labels[i] }}</div>
+                        <div class="bar-group">
+                            <div class="bar bar-mean" style="width:{{ w_mean }}%"></div>
+                            <span class="bar-val">{{ chart.means[i] }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <h2 style="margin-top:24px">Min / Mean / Max per Mode</h2>
+            <table class="pairwise-table">
+                <thead><tr><th>Mode</th><th>Min</th><th>Mean</th><th>Max</th><th>Std</th></tr></thead>
+                <tbody>
+                    {% for m in results %}
+                    {% set s = m.score_stats %}
+                    <tr>
+                        <td class="label">{{ m.label }}</td>
+                        <td>{{ s.min }}</td>
+                        <td><strong>{{ s.mean }}</strong></td>
+                        <td>{{ s.max }}</td>
+                        <td>{{ s.std }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+        </div>
+
+        <div class="view-section" id="view-overlap" style="display:none">
+            <h2>Pairwise Overlap (Jaccard Similarity &mdash; top 10)</h2>
+            <p style="font-size:13px;color:var(--text3);margin-bottom:12px">Jaccard = |A &cap; B| / |A &cup; B|. Higher = more URL overlap. Green &ge; 0.5, Yellow &ge; 0.2, Gray &lt; 0.2.</p>
+            {% if metrics and metrics.pairwise_jaccard %}
+            <div class="table-scroll">
+            <table class="pairwise-table">
+                <thead><tr><th></th>{% for p in metrics.pairwise_jaccard %}<th>{{ p.label }}</th>{% endfor %}</tr></thead>
+                <tbody>
+                    {% for p in metrics.pairwise_jaccard %}
+                    <tr>
+                        <td class="label">{{ p.label }}</td>
+                        {% for val in p.row %}
+                        <td class="{% if val >= 0.5 %}high{% elif val >= 0.2 %}mid{% else %}low{% endif %}">{{ val }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% endif %}
+            <p style="font-size:12px;color:var(--text3)">Note: DuckDuckGo typically shows &lt; 0.2 overlap with arlong because they index different subsets of the web.</p>
+        </div>
+
+        <div class="view-section" id="view-rbo" style="display:none">
+            <h2>Rank-Biased Overlap (RBO &mdash; p=0.9)</h2>
+            <p style="font-size:13px;color:var(--text3);margin-bottom:12px">RBO measures ranking similarity with top-rank weighting. 1.0 = identical ranking. Green &ge; 0.7, Yellow &ge; 0.4, Gray &lt; 0.4.</p>
+            {% if metrics and metrics.pairwise_rbo %}
+            <div class="table-scroll">
+            <table class="pairwise-table">
+                <thead><tr><th></th>{% for p in metrics.pairwise_rbo %}<th>{{ p.label }}</th>{% endfor %}</tr></thead>
+                <tbody>
+                    {% for p in metrics.pairwise_rbo %}
+                    <tr>
+                        <td class="label">{{ p.label }}</td>
+                        {% for val in p.row %}
+                        <td class="{% if val >= 0.7 %}high{% elif val >= 0.4 %}mid{% else %}low{% endif %}">{{ val }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <p style="color:var(--text3);text-align:center;margin-top:20px">No results found for this query.</p>
+        {% endif %}
+    {% else %}
+    <div style="padding:30px 0;text-align:center;color:var(--text3)">
+        <p style="font-size:15px;margin-bottom:6px">Enter a query to compare ranking modes across search engines.</p>
+            <p style="font-size:13px">
+                arlong modes: no ML &middot; Blend (subtle) &middot; Blend (strong) &middot; Pure ML &middot; Normalized 50/50
+            </p>
+            <p style="font-size:13px">
+                External: DuckDuckGo (via DDGS)
+            </p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    document.querySelectorAll('.tab').forEach(function(tab){
+        tab.addEventListener('click',function(){
+            document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active')});
+            this.classList.add('active');
+            document.querySelectorAll('.view-section').forEach(function(v){v.style.display='none'});
+            var target=document.getElementById('view-'+this.getAttribute('data-view'));
+            if(target)target.style.display='block';
+        });
+    });
+</script>
+</body>
+</html>

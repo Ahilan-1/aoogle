@@ -54,7 +54,7 @@
         <h1>Privacy policy</h1>
         <div class="sub">Exactly what data we collect, what we don't, and why you can trust it.</div>
 
-        <p><strong>arlong</strong> is a privacy-first search engine. Our design philosophy is simple: if we don't collect the data, we can't lose it, sell it, or be forced to hand it over. This page documents every piece of data that does &mdash; and does not &mdash; touch our systems.</p>
+        <p><strong>arlong</strong> is a privacy-first search engine. Our design philosophy is simple: if we don't collect the data, we can't lose it, sell it, or be forced to hand it over. This page documents every piece of data that does - and does not - touch our systems.</p>
 
         <div class="highlight-box green">
             <p><strong>Short version:</strong> We collect almost nothing. No IPs, no user agents, no search histories, no cookies, no fingerprints. You are a ghost to us, and we intend to keep it that way.</p>
@@ -112,7 +112,7 @@
             <tr>
                 <td>Error logs</td>
                 <td><span class="tag partial">Partial</span></td>
-                <td>When something breaks, we log the error message and a timestamp. These logs contain <strong>no user-identifiable information</strong> &mdash; no IPs, no queries, no headers. Used solely to diagnose and fix bugs.</td>
+                <td>When something breaks, we log the error message and a timestamp. These logs contain <strong>no user-identifiable information</strong> - no IPs, no queries, no headers. Used solely to diagnose and fix bugs.</td>
             </tr>
         </table>
 
@@ -129,12 +129,12 @@
         <p>Our Flask application does not call <code>logging.info()</code> or any equivalent for incoming requests. The standard Flask request logging that most websites enable by default is explicitly disabled. Search queries are passed directly to upstream providers in memory and never touch a write buffer, database connection, or file handle.</p>
 
         <h3>Web server layer (Gunicorn / Vercel)</h3>
-        <p>We run with <strong>access logging disabled</strong>. The web server is configured to never write access logs. This means no raw request lines, no status codes paired with IPs, no user-agent strings persisted at the infrastructure level. If your hosting provider or load balancer generates logs (e.g., Vercel's edge logs), those logs contain only ephemeral metadata with no query content and are subject to their infrastructure policies &mdash; we do not read, store, or export them.</p>
+        <p>We run with <strong>access logging disabled</strong>. The web server is configured to never write access logs. This means no raw request lines, no status codes paired with IPs, no user-agent strings persisted at the infrastructure level. If your hosting provider or load balancer generates logs (e.g., Vercel's edge logs), those logs contain only ephemeral metadata with no query content and are subject to their infrastructure policies - we do not read, store, or export them.</p>
 
         <h3>Database layer</h3>
         <p>There is no database of searches. Our data storage (S3 and local JSON files) contains only:</p>
         <ul>
-            <li>The web crawl index (URLs, titles, snippets &mdash; public data from crawled pages)</li>
+            <li>The web crawl index (URLs, titles, snippets - public data from crawled pages)</li>
             <li>Aggregate hourly stats counters (a single integer per hour with no link to any request)</li>
             <li>Domain blacklists and user-submitted reports (manually curated, no personal data)</li>
         </ul>
