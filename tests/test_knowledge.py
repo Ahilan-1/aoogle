@@ -1,7 +1,7 @@
 """Tests for knowledge panels including Wikipedia integration."""
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from main import get_info_box, get_wikipedia_panel
+from main import get_info_box, get_wikipedia_panel, get_media_panel
 
 
 class TestStaticKnowledgePanels:
@@ -62,3 +62,44 @@ class TestWikipediaPanel:
         panel = get_info_box("Albert Einstein")
         if panel is not None:
             assert "Albert Einstein" in panel["title"] or "Einstein" in panel.get("description", "")
+
+
+class TestMediaPanel:
+    def test_movie_inception(self):
+        panel = get_media_panel("Inception")
+        assert panel is not None
+        assert panel["panel_type"] == "media"
+        assert panel["media_type"] == "movie"
+        assert "Inception" in panel["title"]
+        assert panel["rating"]
+        assert len(panel["cast"]) > 0
+
+    def test_tv_breaking_bad(self):
+        panel = get_media_panel("Breaking Bad")
+        assert panel is not None
+        assert panel["panel_type"] == "media"
+        assert panel["media_type"] == "tv"
+        assert "Breaking Bad" in panel["title"]
+        assert panel["rating"]
+        assert len(panel["cast"]) > 0
+
+    def test_unknown_returns_none(self):
+        assert get_media_panel("asdfghjklzxcvbnm") is None
+
+    def test_media_integrated_via_get_info_box(self):
+        panel = get_info_box("Inception cast")
+        if panel and panel.get("panel_type") == "media":
+            assert "Inception" in panel["title"]
+
+    def test_static_panel_still_wins_over_media(self):
+        panel = get_info_box("python programming")
+        assert panel is not None
+        assert panel.get("panel_type") != "media"
+        assert "Python" in panel["title"]
+
+    def test_tv_office_cast(self):
+        panel = get_media_panel("The Office cast")
+        assert panel is not None
+        assert panel["media_type"] == "tv"
+        assert len(panel["cast"]) > 0
+        assert len(panel["gallery"]) > 0

@@ -214,6 +214,37 @@
         .def-panel .dp-synonyms strong{color:var(--text3);font-weight:500}
         .def-panel .ib-type{font-size:14px;color:var(--cm);font-weight:500;margin-bottom:8px}
 
+        .media-panel .mp-main{display:flex;gap:14px;margin-bottom:10px}
+        .media-panel .mp-poster{width:90px;height:135px;object-fit:cover;border-radius:8px;flex-shrink:0;background:var(--bg3)}
+        .media-panel .mp-head{flex:1;min-width:0}
+        .media-panel .mp-title{font-size:18px!important;line-height:1.2}
+        .media-panel .mp-rating{display:flex;align-items:center;gap:4px;margin-top:6px}
+        .media-panel .mp-stars{color:#FBBC04;font-size:18px}
+        .media-panel .mp-score{font-size:15px;font-weight:500;color:var(--text)}
+        .media-panel .mp-votes{font-size:12px;color:var(--text3)}
+        .media-panel .mp-overview{font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:12px}
+        .media-panel .mp-section-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
+        .media-panel .mp-cast{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}
+        .media-panel .mp-cast-item{flex-shrink:0;width:72px;text-align:center}
+        .media-panel .mp-cast-photo{width:56px;height:56px;border-radius:50%;object-fit:cover;margin:0 auto 4px;display:block;background:var(--bg3)}
+        .media-panel .mp-cast-photo-placeholder{width:56px;height:56px;border-radius:50%;margin:0 auto 4px;display:flex;align-items:center;justify-content:center;background:var(--bg3);color:var(--text3);font-size:18px;font-weight:500}
+        .media-panel .mp-cast-name{font-size:11px;color:var(--text);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .media-panel .mp-cast-char{font-size:10px;color:var(--text3);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .media-panel .mp-watch{display:flex;flex-wrap:wrap;gap:8px}
+        .media-panel .mp-watch-item{display:flex;align-items:center;gap:6px;background:var(--bg3);padding:4px 10px 4px 4px;border-radius:20px;font-size:12px;color:var(--text)}
+        .media-panel .mp-watch-logo{width:24px;height:24px;border-radius:50%;object-fit:cover}
+        .media-panel .mp-watch-name{white-space:nowrap}
+        .media-panel .mp-gallery{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+        .media-panel .mp-gallery-img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:6px;background:var(--bg3)}
+        @media(max-width:640px){
+            .media-panel .mp-main{flex-direction:column;align-items:center;text-align:center}
+            .media-panel .mp-poster{width:120px;height:180px}
+            .media-panel .mp-rating{justify-content:center}
+            .media-panel .mp-cast{gap:6px}
+            .media-panel .mp-cast-item{width:64px}
+            .media-panel .mp-watch{justify-content:center}
+        }
+
         .result-actions{user-select:none}
         .three-dots:hover{background:var(--hover-bg)!important;color:var(--text)!important}
         .report-option:hover{background:var(--hover-bg)!important}
@@ -221,7 +252,7 @@
         .report-toast.show{opacity:1}
         @media(max-width:900px){
             .results-layout{flex-direction:column;gap:0}
-            .results-sidebar{width:100%}
+            .results-sidebar{width:100%;order:-1}
             .results-header .top-row{gap:8px}
             .homepage .search-box{width:100%}
         }
@@ -613,6 +644,74 @@
                 {% endif %}
                 {% if info_box.synonyms %}
                 <div class="dp-synonyms"><strong>Synonyms:</strong> {{ info_box.synonyms|join(', ') }}</div>
+                {% endif %}
+                {% if info_box.facts %}
+                <table class="ib-facts">
+                    {% for label, value in info_box.facts %}
+                    <tr><td>{{ label }}</td><td>{{ value }}</td></tr>
+                    {% endfor %}
+                </table>
+                {% endif %}
+            </div>
+            {% elif info_box.panel_type == 'media' %}
+            <div class="info-box media-panel">
+                <div class="mp-main">
+                    {% if info_box.image %}
+                    <img src="{{ info_box.image }}" alt="{{ info_box.title }}" class="mp-poster">
+                    {% endif %}
+                    <div class="mp-head">
+                        <div class="ib-title mp-title">{{ info_box.title }}</div>
+                        <div class="ib-type">{{ info_box.type }}</div>
+                        {% if info_box.rating %}
+                        <div class="mp-rating">
+                            <span class="mp-stars">&#9733;</span>
+                            <span class="mp-score">{{ info_box.rating }}</span>
+                            {% if info_box.vote_count %}
+                            <span class="mp-votes">({{ info_box.vote_count }})</span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if info_box.description %}
+                <div class="mp-overview">{{ info_box.description }}</div>
+                {% endif %}
+                {% if info_box.cast %}
+                <div class="mp-section-title">Cast</div>
+                <div class="mp-cast">
+                    {% for person in info_box.cast[:6] %}
+                    <div class="mp-cast-item">
+                        {% if person.photo %}
+                        <img src="{{ person.photo }}" alt="{{ person.name }}" class="mp-cast-photo" loading="lazy">
+                        {% else %}
+                        <div class="mp-cast-photo mp-cast-photo-placeholder">{{ person.name[:1] }}</div>
+                        {% endif %}
+                        <div class="mp-cast-name">{{ person.name }}</div>
+                        <div class="mp-cast-char">{{ person.character }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if info_box.watch_providers %}
+                <div class="mp-section-title">Where to Watch</div>
+                <div class="mp-watch">
+                    {% for p in info_box.watch_providers[:6] %}
+                    <div class="mp-watch-item">
+                        {% if p.logo %}
+                        <img src="{{ p.logo }}" alt="{{ p.name }}" class="mp-watch-logo" loading="lazy">
+                        {% endif %}
+                        <span class="mp-watch-name">{{ p.name }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if info_box.gallery %}
+                <div class="mp-section-title">Photos</div>
+                <div class="mp-gallery">
+                    {% for img in info_box.gallery[:4] %}
+                    <img src="{{ img }}" alt="" class="mp-gallery-img" loading="lazy">
+                    {% endfor %}
+                </div>
                 {% endif %}
                 {% if info_box.facts %}
                 <table class="ib-facts">

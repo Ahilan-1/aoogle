@@ -2232,6 +2232,11 @@ DEF_CACHE = {}
 DEF_CACHE_LOCK = threading.Lock()
 DEF_CACHE_TTL = 86400
 
+MEDIA_CACHE = {}
+MEDIA_CACHE_LOCK = threading.Lock()
+MEDIA_CACHE_TTL = 86400
+TMDB_IMG = 'https://image.tmdb.org/t/p'
+
 WMO_CODES = {
     0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast',
     45: 'Foggy', 48: 'Depositing rime fog',
@@ -2528,6 +2533,169 @@ def get_wiki_panel_from_results(results):
     return panel
 
 
+def get_media_panel(query):
+    api_key = os.environ.get('TMDB_API_KEY')
+    if not api_key:
+        return None
+    q = query.lower().strip()
+    cache_key = f"media:{q}"
+    with MEDIA_CACHE_LOCK:
+        cached = MEDIA_CACHE.get(cache_key)
+        if cached and time.time() < cached['expires']:
+            return cached['data']
+    search_q = re.sub(r'\b(cast|movie|film|tv|show|series|television|watch|stream|trailer|season|episode|director|where to)\b', '', q).strip()
+    if not search_q:
+        search_q = q
+    search_q = re.sub(r'\s+', ' ', search_q).strip()
+    headers = {'User-Agent': 'arlong-search/1.0 (https://aoogle-production.up.railway.app; search@arlong.app)'}
+    try:
+        # Try both movie and TV, pick best result
+        best_result = None
+        best_type = None
+        best_score = 0
+        for attempt_type in ['movie', 'tv']:
+            try:
+                r = requests.get(
+                    f'https://api.themoviedb.org/3/search/{attempt_type}',
+                    params={'api_key': api_key, 'query': search_q, 'language': 'en-US', 'page': 1},
+                    headers=headers, timeout=5
+                )
+                if r.status_code != 200:
+                    continue
+                data = r.json()
+                results_list = data.get('results', [])
+                if results_list:
+                    cand = results_list[0]
+                    score = (cand.get('vote_count', 0) or 0) + ((cand.get('popularity', 0) or 0) * 10)
+                    if score > best_score:
+                        best_score = score
+                        best_result = cand
+                        best_type = attempt_type
+            except Exception:
+                continue
+        if not best_result:
+            return None
+        vote_cnt_check = best_result.get('vote_count', 0) or 0
+        popularity = best_result.get('popularity', 0) or 0
+        if vote_cnt_check < 20 and popularity < 5:
+            return None
+        result = best_result
+        media_type = best_type
+        tmdb_id = result['id']
+        # Fetch details with credits, watch providers, and images
+        detail_r = requests.get(
+            f'https://api.themoviedb.org/3/{media_type}/{tmdb_id}',
+            params={
+                'api_key': api_key,
+                'language': 'en-US',
+                'append_to_response': 'credits,watch/providers,images'
+            },
+            headers=headers, timeout=5
+        )
+        if detail_r.status_code != 200:
+            return None
+        details = detail_r.json()
+        title = details.get('title') or details.get('name') or result.get('title') or result.get('name', '')
+        year = ''
+        if media_type == 'movie':
+            rd = details.get('release_date') or result.get('release_date', '')
+            if rd:
+                year = rd[:4]
+        else:
+            fd = details.get('first_air_date') or result.get('first_air_date', '')
+            if fd:
+                year = fd[:4]
+        overview = details.get('overview') or result.get('overview', '') or ''
+        overview = overview[:400]
+        vote_avg = details.get('vote_average') or result.get('vote_average', 0)
+        vote_cnt = details.get('vote_count') or result.get('vote_count', 0)
+        poster = details.get('poster_path') or result.get('poster_path', '')
+        poster_url = f'{TMDB_IMG}/w500{poster}' if poster else None
+        type_label = 'Movie' if media_type == 'movie' else 'TV Series'
+        if year:
+            type_label += f' ({year})'
+        # Cast
+        cast_list = []
+        credits = details.get('credits', {})
+        for person in (credits.get('cast', []) or [])[:8]:
+            name = person.get('name', '')
+            character = person.get('character', '')
+            profile = person.get('profile_path', '')
+            photo = f'{TMDB_IMG}/w185{profile}' if profile else None
+            cast_list.append({'name': name, 'character': character, 'photo': photo})
+        # Watch providers (flatrate only)
+        watch_list = []
+        providers_data = details.get('watch/providers', {})
+        results_providers = providers_data.get('results', {})
+        us_providers = results_providers.get('US', {})
+        for p in (us_providers.get('flatrate', []) or []):
+            logo = p.get('logo_path', '')
+            watch_list.append({
+                'name': p.get('provider_name', ''),
+                'logo': f'{TMDB_IMG}/original{logo}' if logo else None
+            })
+        # Gallery (backdrops)
+        gallery = []
+        images_data = details.get('images', {})
+        for bp in (images_data.get('backdrops', []) or [])[:4]:
+            fp = bp.get('file_path', '')
+            if fp:
+                gallery.append(f'{TMDB_IMG}/w780{fp}')
+        # Ratings display
+        rating_str = ''
+        if vote_avg and vote_avg > 0:
+            rating_str = f'{vote_avg:.1f}/10'
+        vote_str = ''
+        if vote_cnt and vote_cnt > 0:
+            if vote_cnt >= 1000:
+                vote_str = f'{vote_cnt/1000:.1f}K votes'
+            else:
+                vote_str = f'{vote_cnt} votes'
+        # Facts
+        facts = []
+        genres = details.get('genres', []) or []
+        if genres:
+            facts.append(('Genres', ', '.join(g['name'] for g in genres[:3])))
+        if media_type == 'movie':
+            runtime = details.get('runtime')
+            if runtime:
+                h, m = divmod(runtime, 60)
+                facts.append(('Runtime', f'{h}h {m}m' if h else f'{m}m'))
+            status = details.get('status', '')
+            if status:
+                facts.append(('Status', status))
+        else:
+            seasons = details.get('number_of_seasons', 0)
+            episodes = details.get('number_of_episodes', 0)
+            if seasons:
+                facts.append(('Seasons', str(seasons)))
+            if episodes:
+                facts.append(('Episodes', str(episodes)))
+            status = details.get('status', '')
+            if status:
+                facts.append(('Status', status))
+        panel = {
+            'panel_type': 'media',
+            'media_type': media_type,
+            'title': title,
+            'year': year,
+            'image': poster_url,
+            'type': type_label,
+            'description': overview,
+            'rating': rating_str,
+            'vote_count': vote_str,
+            'cast': cast_list,
+            'watch_providers': watch_list,
+            'gallery': gallery,
+            'facts': facts,
+        }
+        with MEDIA_CACHE_LOCK:
+            MEDIA_CACHE[cache_key] = {'data': panel, 'expires': time.time() + MEDIA_CACHE_TTL}
+        return panel
+    except Exception:
+        return None
+
+
 def get_info_box(query, results=None):
     weather = get_weather_panel(query)
     if weather:
@@ -2543,6 +2711,9 @@ def get_info_box(query, results=None):
     for key, panel in KNOWLEDGE_PANELS.items():
         if key in query_lower:
             return panel
+    media = get_media_panel(query)
+    if media:
+        return media
     wiki_panel = get_wikipedia_panel(query)
     if wiki_panel:
         return wiki_panel
