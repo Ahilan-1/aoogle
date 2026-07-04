@@ -92,6 +92,19 @@
             </div>
         </div>
 
+        <div class="setting-group">
+            <div class="toggle-row">
+                <div class="toggle-label">
+                    <h3>Loading Animation <span class="beta-tag">BETA</span></h3>
+                    <div class="label-desc">Shows a progress bar while search results are loading so you know the search is working.</div>
+                </div>
+                <div class="toggle-wrap">
+                    <span class="toggle" id="loading-toggle"></span>
+                </div>
+            </div>
+            <div id="loading-status" class="status-badge off"><span class="dot"></span> Disabled</div>
+        </div>
+
         <div class="note">
             <strong>How ML Ranking works:</strong> For each result, the model extracts 20 features (term overlap, BM25, TF-IDF, readability, title/URL structure) and predicts a relevance score. The model was trained on <strong>ORCAS</strong> (18.8M real Bing clicks) + MS MARCO document corpus using XGBoost LambdaMART optimized for NDCG. See <a href="/changelogs">changelogs</a> for details.
         </div>
@@ -128,6 +141,7 @@
 
         document.addEventListener('DOMContentLoaded',function(){
             setupToggle('ml-toggle','ml-status','arlong-ml','ml-mode-select');
+            setupToggle('loading-toggle','loading-status','arlong-loading');
 
             var mode=getVal('arlong-ml-mode')||'blend_light';
             var rbs=document.querySelectorAll('input[name="ml-mode"]');

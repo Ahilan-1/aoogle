@@ -292,6 +292,14 @@
             .usa-banner .ub-arlong{font-size:11px}
         }
     </style>
+    <script>
+        (function(){
+            var e=false;
+            try{e=localStorage.getItem('arlong-loading')==='1'}catch(ex){}
+            if(e&&window.location.pathname==='/search'&&window.location.search.indexOf('q=')>-1)
+                document.write('<style id="aload-s">#pg-loading{display:block!important}</style>');
+        })();
+    </script>
 </head>
 <body>
     <canvas id="fireworks-canvas"></canvas>
@@ -694,6 +702,30 @@
                     hp.classList.add('flag-mode');
                     var fb=document.getElementById('flag-btn');
                     if(fb){fb.style.display='flex'}
+                }
+            }
+
+            // Loading bar
+            var pg=document.getElementById('pg-loading');
+            if(pg){
+                var loadingEnabled=false;
+                try{loadingEnabled=localStorage.getItem('arlong-loading')==='1'}catch(e){}
+                var ls=document.getElementById('aload-s');
+                if(ls)ls.remove();
+                if(loadingEnabled){
+                    var hf=document.getElementById('hp-form'),rf=document.getElementById('rs-form');
+                    if(hf)hf.addEventListener('submit',function(){
+                        pg.style.display='block';
+                        pg.style.animation='none';
+                        pg.offsetHeight;
+                        pg.style.animation='';
+                    });
+                    if(rf)rf.addEventListener('submit',function(){
+                        pg.style.display='block';
+                        pg.style.animation='none';
+                        pg.offsetHeight;
+                        pg.style.animation='';
+                    });
                 }
             }
         });
