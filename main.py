@@ -661,6 +661,9 @@ class DataManager:
 
     def add_report(self, url, title, query, domain):
         with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
             ids = [r['id'] for r in self.data['reports']]
             next_id = max(ids) + 1 if ids else 1
             report = {
@@ -678,14 +681,23 @@ class DataManager:
 
     def get_pending_reports(self):
         with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
             return [r for r in self.data['reports'] if r['status'] == 'pending']
 
     def get_all_reports(self):
         with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
             return list(self.data['reports'])
 
     def approve_report(self, report_id, penalty=-30):
         with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
             for report in self.data['reports']:
                 if report['id'] == report_id and report['status'] == 'pending':
                     report['status'] = 'approved'
@@ -697,6 +709,9 @@ class DataManager:
 
     def deny_report(self, report_id):
         with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
             for report in self.data['reports']:
                 if report['id'] == report_id and report['status'] == 'pending':
                     report['status'] = 'denied'
@@ -706,10 +721,16 @@ class DataManager:
 
     def get_blacklist(self):
         with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
             return dict(self.data.get('blacklist', {}))
 
     def remove_from_blacklist(self, domain):
         with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
             if domain in self.data['blacklist']:
                 del self.data['blacklist'][domain]
                 _save_json(self.data)
@@ -718,6 +739,9 @@ class DataManager:
 
     def get_stats(self):
         with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
             reports = self.data['reports']
             pending = sum(1 for r in reports if r['status'] == 'pending')
             approved = sum(1 for r in reports if r['status'] == 'approved')
@@ -733,14 +757,24 @@ class DataManager:
 
     def get_total_searches(self):
         with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
             return self.data.get('total_searches', 0)
 
     def increment_total_searches(self):
         with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
             self.data['total_searches'] = self.data.get('total_searches', 0) + 1
+            _save_json(self.data)
 
     def get_celebration(self):
         with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
             return self.data.get('celebration', '')
 
     def set_celebration(self, text):
@@ -753,6 +787,9 @@ class DataManager:
 
     def get_announcement(self):
         with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
             return self.data.get('announcement', '')
 
     def set_announcement(self, text):
@@ -765,13 +802,13 @@ class DataManager:
 
     def flush(self):
         with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
             _save_json(self.data)
 
 data_manager = DataManager()
-pg_progress = {}
-pg_lock = threading.Lock()
-pg_deep_progress = {}
-pg_deep_lock = threading.Lock()
+
 
 class ImprovedSearch:
     def __init__(self):
@@ -1777,684 +1814,6 @@ class ImprovedSearch:
                 return unquote(params['uddg'][0])
         return url
 
-    def _pg_scrape_results(self, query):
-        """Scrape web results using multiple backends."""
-        results = []
-        seen = set()
-        try:
-            # Strategy 0: DDGS metasearch (fastest, multiple engines)
-            if ddgs_available and len(results) < 10:
-                try:
-                    raw = DDGS(timeout=5).text(query, max_results=30, backend='auto', safesearch='on')
-                    for r in raw:
-                        title = r.get('title', '')
-                        href = r.get('href', '')
-                        body = r.get('body', '')
-                        if not title or not href or href in seen:
-                            continue
-                        seen.add(href)
-                        parsed = urlparse(href)
-                        results.append(SearchResult(
-                            title=title, url=href, snippet=body[:300],
-                            category='general', domain=parsed.netloc,
-                            favicon=f'https://www.google.com/s2/favicons?domain={parsed.netloc}&sz=16'
-                        ))
-                        if len(results) >= 30:
-                            break
-                except Exception as e:
-                    app.logger.error(f"PG DDGS error: {e}")
-
-            # Strategy 1: DDG Instant Answer API (most relevant results)
-            try:
-                r = self.session.get('https://api.duckduckgo.com/', params={
-                    'q': query, 'format': 'json', 'no_html': 1, 'skip_disambig': 1
-                }, headers=self._get_headers(), timeout=8)
-                if r and r.status_code == 200:
-                    data = r.json()
-                    if data.get('AbstractURL') and data.get('AbstractText'):
-                        url = data['AbstractURL']
-                        if url not in seen:
-                            seen.add(url)
-                            results.append(SearchResult(
-                                title=data.get('Heading', query)[:80], url=url,
-                                snippet=data.get('AbstractText', '')[:300],
-                                category='general', domain=urlparse(url).netloc
-                            ))
-                    for topic in data.get('RelatedTopics', []):
-                        if isinstance(topic, dict) and topic.get('FirstURL'):
-                            url = topic['FirstURL']
-                            if url in seen:
-                                continue
-                            seen.add(url)
-                            text = topic.get('Text', '')
-                            title = text.split(' - ')[0] if ' - ' in text else text[:80]
-                            results.append(SearchResult(
-                                title=title, url=url, snippet=text[:300],
-                                category='general', domain=urlparse(url).netloc
-                            ))
-                            if len(results) >= 20:
-                                break
-            except Exception as e:
-                app.logger.error(f"PG DDG API error: {e}")
-
-            # Strategy 2: Wayback Machine text search (reliable for censored content)
-            if len(results) < 10:
-                try:
-                    wm_q = f'title:({query}) OR description:({query})'
-                    r = self.session.get('https://archive.org/advancedsearch.php', params={
-                        'q': wm_q, 'output': 'json', 'rows': 30,
-                        'fl': 'identifier,title,description,url'
-                    }, headers=self._get_headers(), timeout=15)
-                    if r and r.status_code == 200:
-                        data = r.json()
-                        for item in data.get('response', {}).get('docs', []):
-                            id_ = item.get('identifier', '')
-                            title = item.get('title', '') or id_
-                            desc_raw = item.get('description', '') or ''
-                            if isinstance(desc_raw, list):
-                                desc_raw = ' '.join(str(s) for s in desc_raw)
-                            desc = str(desc_raw)[:300]
-                            if not id_:
-                                continue
-                            url = f'https://archive.org/details/{id_}'
-                            if url in seen:
-                                continue
-                            seen.add(url)
-                            results.append(SearchResult(
-                                title=title, url=url, snippet=desc, category='general',
-                                domain='archive.org',
-                                favicon='https://www.google.com/s2/favicons?domain=archive.org&sz=16'
-                            ))
-                except Exception as e:
-                    app.logger.error(f"PG Wayback text error: {e}")
-
-            # Strategy 4: Try DDG HTML (handles 202 gracefully)
-            if len(results) < 10:
-                try:
-                    data = {'q': query}
-                    r = self.session.post('https://html.duckduckgo.com/html/', data=data,
-                        headers={**self._get_headers(), 'Content-Type': 'application/x-www-form-urlencoded'}, timeout=8)
-                    if r and r.status_code == 200:
-                        soup = BeautifulSoup(r.text, 'html.parser')
-                        for a in soup.select('.result__a'):
-                            url = self._extract_ddg_url(a.get('href', ''))
-                            title = a.get_text(strip=True)
-                            if not url or url in seen:
-                                continue
-                            seen.add(url)
-                            snippet_el = a.find_next(class_='result__snippet')
-                            snippet = snippet_el.get_text(strip=True) if snippet_el else ''
-                            parsed = urlparse(url)
-                            results.append(SearchResult(
-                                url=url, title=title, snippet=snippet, category='general',
-                                domain=parsed.netloc,
-                                favicon=f'https://www.google.com/s2/favicons?domain={parsed.netloc}&sz=16'
-                            ))
-                except Exception:
-                    pass
-
-        except Exception as e:
-            app.logger.error(f"PG scrape error: {e}")
-        return results[:30], seen
-
-    def _pg_scrape_site(self, query, site):
-        out = []
-        seen_urls = set()
-        try:
-            # Strategy 1: Wayback Machine advanced search with title boost
-            try:
-                wm_query = f'title:({query}) AND ({site})'
-                r = self.session.get('https://archive.org/advancedsearch.php', params={
-                    'q': wm_query, 'output': 'json', 'rows': 5,
-                    'fl': 'identifier,title,description,url'
-                }, headers=self._get_headers(), timeout=15)
-                if r and r.status_code == 200:
-                    data = r.json()
-                    for item in data.get('response', {}).get('docs', []):
-                        id_ = item.get('identifier', '')
-                        title = item.get('title', '') or id_
-                        desc_raw = item.get('description', '') or ''
-                        if isinstance(desc_raw, list):
-                            desc_raw = ' '.join(str(s) for s in desc_raw)
-                        desc = str(desc_raw)[:200]
-                        if not id_:
-                            continue
-                        url = f'https://archive.org/details/{id_}'
-                        if url in seen_urls:
-                            continue
-                        seen_urls.add(url)
-                        parsed = urlparse(url)
-                        out.append(SearchResult(
-                            title=title, url=url, snippet=desc, category='general',
-                            domain=parsed.netloc,
-                            favicon=f'https://www.google.com/s2/favicons?domain={parsed.netloc}&sz=16'
-                        ))
-            except Exception:
-                pass
-
-            # Strategy 2: Wayback Machine CDX (URL-based search for the domain)
-            if len(out) < 3:
-                try:
-                    r = self.session.get(f'https://web.archive.org/cdx/search/cdx',
-                        params={'url': f'{site}/*', 'output': 'json', 'limit': 10,
-                                'fl': 'original,timestamp,title', 'filter': f'title:{query}'},
-                        headers=self._get_headers(), timeout=10)
-                    if r and r.status_code == 200:
-                        rows = r.json()
-                        if len(rows) > 1:
-                            for row in rows[1:]:
-                                if len(row) >= 3:
-                                    url, ts, title = row[0], row[1], row[2]
-                                    if not url or not title:
-                                        continue
-                                    wm_url = f'https://web.archive.org/web/{ts}/{url}'
-                                    if wm_url in seen_urls:
-                                        continue
-                                    seen_urls.add(wm_url)
-                                    parsed = urlparse(url)
-                                    out.append(SearchResult(
-                                        title=str(title)[:100], url=wm_url,
-                                        snippet=f'Archived from {url}',
-                                        category='general', domain=parsed.netloc,
-                                        favicon=f'https://www.google.com/s2/favicons?domain={parsed.netloc}&sz=16'
-                                    ))
-                except Exception:
-                    pass
-
-            # Strategy 3: Direct site scrape for supported sites
-            if len(out) < 3:
-                try:
-                    site_search_urls = {
-                        'wikileaks.org': 'https://search.wikileaks.org/',
-                        'eff.org': 'https://www.eff.org/search',
-                        'archive.org': 'https://archive.org/search',
-                        'pastebin.com': 'https://www.pastebin.com/search',
-                    }
-                    search_url = site_search_urls.get(site)
-                    if search_url:
-                        r = self.session.get(search_url, params={'q': query},
-                            headers=self._get_headers(), timeout=8)
-                        if r and r.status_code == 200:
-                            soup = BeautifulSoup(r.text, 'html.parser')
-                            links = []
-                            for a in soup.find_all('a', href=True):
-                                href = a['href']
-                                text = a.get_text(strip=True)
-                                if text and len(text) > 10 and href.startswith('http'):
-                                    links.append((href, text))
-                            for url, title in links[:8]:
-                                if url in seen_urls:
-                                    continue
-                                seen_urls.add(url)
-                                parsed = urlparse(url)
-                                if parsed.netloc and site in parsed.netloc:
-                                    out.append(SearchResult(
-                                        title=title[:100], url=url, snippet='',
-                                        category='general', domain=parsed.netloc,
-                                        favicon=f'https://www.google.com/s2/favicons?domain={parsed.netloc}&sz=16'
-                                    ))
-                except Exception:
-                    pass
-
-            # Strategy 4: Try Bing (may be blocked but worth a try)
-            if len(out) < 2:
-                try:
-                    r = self.session.get('https://www.bing.com/search',
-                        params={'q': f'site:{site} {query}', 'count': '5'},
-                        headers=self._get_headers(), timeout=8)
-                    if r and r.status_code == 200:
-                        soup = BeautifulSoup(r.text, 'html.parser')
-                        for li in soup.find_all('li', class_='b_algo'):
-                            title_elem = li.find('h2')
-                            if not title_elem:
-                                continue
-                            link = title_elem.find('a')
-                            if not link or not link.get('href'):
-                                continue
-                            url = link['href']
-                            title = title_elem.get_text(strip=True)
-                            if not url or not title:
-                                continue
-                            if url in seen_urls:
-                                continue
-                            seen_urls.add(url)
-                            snippet_elem = li.find(['p', 'div'], class_=['b_caption', 'b_lineclamp2'])
-                            snippet = snippet_elem.get_text(strip=True) if snippet_elem else ''
-                            parsed = urlparse(url)
-                            out.append(SearchResult(
-                                title=title, url=url, snippet=snippet, category='general',
-                                domain=parsed.netloc,
-                                favicon=f'https://www.google.com/s2/favicons?domain={parsed.netloc}&sz=16'
-                            ))
-                            if len(out) >= 5:
-                                break
-                except Exception:
-                    pass
-        except Exception as e:
-            app.logger.error(f"PG site search {site} error: {e}")
-        return out
-
-    def _pg_update_progress(self, query, results, seen, completed, total):
-        with pg_lock:
-            if query in pg_progress:
-                pg_progress[query]['results'] = [r.to_dict() for r in results]
-                pg_progress[query]['found'] = len(results)
-                pg_progress[query]['sources_completed'] = completed
-                pg_progress[query]['total_sources'] = total
-
-    def _pg_search_bg(self, query):
-        try:
-            results = []
-            seen = set()
-
-            hidden_sites = [
-                'wikileaks.org', 'theintercept.com', 'propublica.org',
-                'icij.org', 'archive.org', 'pastebin.com',
-                'globaleaks.org', 'freedom.press', 'eff.org',
-                'cryptome.org', 'epic.org', 'rsf.org',
-                'archive.ph', 'distributeddenialofknowledge.org',
-                'thesvn.org',
-            ]
-            total_sources = 1 + len(hidden_sites)
-
-            # Get initial web results from available sources
-            web_results, web_seen = self._pg_scrape_results(query)
-            results.extend(web_results)
-            seen.update(web_seen)
-            self._pg_update_progress(query, results, seen, 1, total_sources)
-
-            futures = {self.executor.submit(self._pg_scrape_site, query, s): s for s in hidden_sites}
-            done = 1
-            for future in as_completed(futures):
-                if len(results) >= 50:
-                    break
-                done += 1
-                for sr in future.result():
-                    if sr.url in seen:
-                        continue
-                    seen.add(sr.url)
-                    results.append(sr)
-                self._pg_update_progress(query, results, seen, done, total_sources)
-
-            cache_key = f"pg:{query}"
-            if results:
-                self._save_to_cache(cache_key, [r.to_dict() for r in results])
-
-            with pg_lock:
-                if query in pg_progress:
-                    pg_progress[query]['status'] = 'done'
-                    pg_progress[query]['results'] = [r.to_dict() for r in results]
-                    pg_progress[query]['found'] = len(results)
-        except Exception as e:
-            app.logger.error(f"PG background error: {e}")
-            with pg_lock:
-                if query in pg_progress:
-                    pg_progress[query]['status'] = 'error'
-
-    def search_poneglyph(self, query):
-        cache_key = f"pg:{query}"
-        cached_results = self._get_from_cache(cache_key)
-        if cached_results:
-            return cached_results, "done"
-
-        hidden_sites = [
-            'wikileaks.org', 'theintercept.com', 'propublica.org',
-            'icij.org', 'archive.org', 'pastebin.com',
-            'globaleaks.org', 'freedom.press', 'eff.org',
-            'cryptome.org', 'epic.org', 'rsf.org',
-            'archive.ph', 'distributeddenialofknowledge.org',
-            'thesvn.org',
-        ]
-        total = 1 + len(hidden_sites)
-
-        with pg_lock:
-            if query in pg_progress and pg_progress[query]['status'] == 'running':
-                return [], "running"
-            pg_progress[query] = {"results": [], "found": 0, "status": "running", "sources_completed": 0, "total_sources": total}
-
-        t = threading.Thread(target=self._pg_search_bg, args=(query,))
-        t.daemon = True
-        t.start()
-        return [], "running"
-
-    # ---------------------------------------------------------------------------
-    # PONEGLYPH DEEP SEARCH - OSINT, leaks, torrents, dark web (clearnet mirrors)
-    # ---------------------------------------------------------------------------
-    def _pg_deep_search_ahmia(self, query):
-        out = []
-        try:
-            q = quote_plus(query)
-            r = self.session.get(f'https://ahmia.fi/search/?q={q}',
-                headers=self._get_headers(), timeout=12)
-            if r and r.status_code == 200:
-                soup = BeautifulSoup(r.text, 'html.parser')
-                for li in soup.select('li.result'):
-                    a = li.find('h4')
-                    if not a:
-                        a = li.find('a')
-                    if not a or not a.get('href'):
-                        continue
-                    href = a['href']
-                    if href.startswith('/'):
-                        href = 'https://ahmia.fi' + href
-                    title = a.get_text(strip=True)[:120]
-                    p = li.find('p')
-                    snippet = p.get_text(strip=True)[:300] if p else '(onion service)'
-                    parsed = urlparse(href)
-                    out.append(SearchResult(
-                        title=title, url=href, snippet=snippet,
-                        category='onion', domain=parsed.netloc or 'ahmia.fi',
-                        favicon='https://www.google.com/s2/favicons?domain=ahmia.fi&sz=16'
-                    ))
-        except Exception as e:
-            app.logger.error(f"PG Deep Ahmia error: {e}")
-        return out[:10]
-
-    def _pg_deep_search_wikileaks(self, query):
-        out = []
-        try:
-            r = self.session.post('https://search.wikileaks.org/',
-                data={'query': query, 'exact_phrase': '', 'include_subfolders': '1'},
-                headers=self._get_headers(), timeout=15)
-            if r and r.status_code == 200:
-                soup = BeautifulSoup(r.text, 'html.parser')
-                for row in soup.select('tr[class*="result"]'):
-                    cells = row.find_all('td')
-                    if len(cells) < 3:
-                        continue
-                    a = row.find('a', href=True)
-                    if not a:
-                        continue
-                    href = a['href']
-                    if not href.startswith('http'):
-                        continue
-                    title = a.get_text(strip=True)[:120] or 'WikiLeaks document'
-                    snippet_cell = cells[1] if len(cells) > 1 else None
-                    snippet = snippet_cell.get_text(strip=True)[:300] if snippet_cell else ''
-                    parsed = urlparse(href)
-                    out.append(SearchResult(
-                        title=title, url=href, snippet=snippet,
-                        category='leak', domain=parsed.netloc,
-                        favicon='https://www.google.com/s2/favicons?domain=wikileaks.org&sz=16'
-                    ))
-        except Exception as e:
-            app.logger.error(f"PG Deep WikiLeaks error: {e}")
-        return out[:10]
-
-    def _pg_deep_search_tpb(self, query):
-        out = []
-        try:
-            q = quote_plus(query)
-            r = self.session.get(f'https://apibay.org/q.php?q={q}&cat=0',
-                headers=self._get_headers(), timeout=10)
-            if r and r.status_code == 200:
-                data = r.json()
-                if isinstance(data, list):
-                    for item in data[:15]:
-                        name = item.get('name', '')
-                        info_hash = item.get('info_hash', '')
-                        seeders = int(item.get('seeders', 0))
-                        leechers = int(item.get('leechers', 0))
-                        size_b = int(item.get('size', 0))
-                        if not name or not info_hash:
-                            continue
-                        size_str = ''
-                        if size_b:
-                            for unit in ['B','KB','MB','GB','TB']:
-                                if size_b < 1024:
-                                    size_str = f'{size_b:.1f} {unit}'
-                                    break
-                                size_b /= 1024
-                        title = name[:120]
-                        url = f'magnet:?xt=urn:btih:{info_hash}&dn={quote_plus(name)}'
-                        snippet = f'Torrent | S: {seeders} L: {leechers} | Size: {size_str}'
-                        out.append(SearchResult(
-                            title=title, url=url, snippet=snippet,
-                            category='torrent', domain='torrent',
-                            favicon='https://www.google.com/s2/favicons?domain=thepiratebay.org&sz=16'
-                        ))
-        except Exception as e:
-            app.logger.error(f"PG Deep TPB error: {e}")
-        return out[:10]
-
-    def _pg_deep_search_pastebin(self, query):
-        out = []
-        try:
-            q = quote_plus(query)
-            r = self.session.get(f'https://pastebin.com/search?q={q}',
-                headers=self._get_headers(), timeout=12)
-            if r and r.status_code == 200:
-                soup = BeautifulSoup(r.text, 'html.parser')
-                for item in soup.select('.search-item'):
-                    a = item.find('a', href=True)
-                    if not a:
-                        continue
-                    href = a['href']
-                    if href.startswith('/'):
-                        href = 'https://pastebin.com' + href
-                    title = a.get_text(strip=True)[:120]
-                    snippet_el = item.find('div', class_='snippet') or item.find('p')
-                    snippet = snippet_el.get_text(strip=True)[:300] if snippet_el else ''
-                    parsed = urlparse(href)
-                    out.append(SearchResult(
-                        title=title, url=href, snippet=snippet,
-                        category='paste', domain=parsed.netloc,
-                        favicon='https://www.google.com/s2/favicons?domain=pastebin.com&sz=16'
-                    ))
-        except Exception as e:
-            app.logger.error(f"PG Deep Pastebin error: {e}")
-        return out[:10]
-
-    def _pg_deep_search_archive(self, query):
-        out = []
-        try:
-            wm_q = f'title:({query}) OR description:({query})'
-            r = self.session.get('https://archive.org/advancedsearch.php', params={
-                'q': wm_q, 'output': 'json', 'rows': 15,
-                'fl': 'identifier,title,description,url'
-            }, headers=self._get_headers(), timeout=15)
-            if r and r.status_code == 200:
-                data = r.json()
-                for item in data.get('response', {}).get('docs', []):
-                    id_ = item.get('identifier', '')
-                    title = item.get('title', '') or id_
-                    desc_raw = item.get('description', '') or ''
-                    if isinstance(desc_raw, list):
-                        desc_raw = ' '.join(str(s) for s in desc_raw)
-                    desc = str(desc_raw)[:300]
-                    if not id_:
-                        continue
-                    url = f'https://archive.org/details/{id_}'
-                    out.append(SearchResult(
-                        title=title, url=url, snippet=desc,
-                        category='archive', domain='archive.org',
-                        favicon='https://www.google.com/s2/favicons?domain=archive.org&sz=16'
-                    ))
-        except Exception as e:
-            app.logger.error(f"PG Deep Archive error: {e}")
-        return out[:10]
-
-    def _pg_deep_search_1337x(self, query):
-        out = []
-        try:
-            q = quote_plus(query.replace(' ', '+'))
-            r = self.session.get(f'https://1337x.to/search/{q}/1/',
-                headers={**self._get_headers(), 'Referer': 'https://1337x.to/'}, timeout=12)
-            if r and r.status_code == 200:
-                soup = BeautifulSoup(r.text, 'html.parser')
-                for tr in soup.select('table.table tbody tr')[:10]:
-                    tds = tr.find_all('td')
-                    if len(tds) < 2:
-                        continue
-                    a = tds[0].find('a')
-                    if not a or not a.get('href'):
-                        continue
-                    href = a['href']
-                    if href.startswith('/'):
-                        href = 'https://1337x.to' + href
-                    title = a.get_text(strip=True)[:120]
-                    seed_el = tr.find('td', class_='seeds') or tds[-2] if len(tds) >= 3 else None
-                    seeds = seed_el.get_text(strip=True) if seed_el else '?'
-                    snippet = f'Torrent | Seeds: {seeds}'
-                    out.append(SearchResult(
-                        title=title, url=href, snippet=snippet,
-                        category='torrent', domain='1337x.to',
-                        favicon='https://www.google.com/s2/favicons?domain=1337x.to&sz=16'
-                    ))
-        except Exception as e:
-            app.logger.error(f"PG Deep 1337x error: {e}")
-        return out
-
-    def _pg_deep_search_ddosecrets(self, query):
-        out = []
-        try:
-            q = quote_plus(query)
-            r = self.session.get(f'https://ddosecrets.com/search?q={q}',
-                headers=self._get_headers(), timeout=12)
-            if r and r.status_code == 200:
-                soup = BeautifulSoup(r.text, 'html.parser')
-                for a in soup.select('a[href*="/wiki/"]')[:10]:
-                    href = a.get('href', '')
-                    title = a.get_text(strip=True)[:120]
-                    if not title or not href or 'index.php' in href:
-                        continue
-                    if href.startswith('/'):
-                        href = 'https://ddosecrets.com' + href
-                    out.append(SearchResult(
-                        title=title, url=href, snippet='DDoSecrets leaked dataset',
-                        category='leak', domain='ddosecrets.com',
-                        favicon='https://www.google.com/s2/favicons?domain=ddosecrets.com&sz=16'
-                    ))
-        except Exception as e:
-            app.logger.error(f"PG Deep DDoSecrets error: {e}")
-        return out
-
-    def _pg_deep_search_torrentz(self, query):
-        out = []
-        try:
-            q = quote_plus(query)
-            r = self.session.get(f'https://torrentz2.nz/search?q={q}',
-                headers=self._get_headers(), timeout=10)
-            if r and r.status_code == 200:
-                soup = BeautifulSoup(r.text, 'html.parser')
-                for dl in soup.select('dl')[:10]:
-                    a = dl.find('dt')
-                    if not a:
-                        continue
-                    a = a.find('a')
-                    if not a or not a.get('href'):
-                        continue
-                    href = a['href']
-                    if href.startswith('/'):
-                        href = 'https://torrentz2.nz' + href
-                    elif not href.startswith('http'):
-                        continue
-                    title = a.get_text(strip=True)[:120]
-                    dd = dl.find('dd')
-                    raw = dd.get_text(strip=True) if dd else ''
-                    parts = raw.split('MB') if 'MB' in raw else raw.split('GB') if 'GB' in raw else [raw]
-                    snippet = f'Torrent | Size: {parts[0].strip()[-20:].strip()}MB' if len(parts) > 1 else 'Torrent'
-                    out.append(SearchResult(
-                        title=title, url=href, snippet=snippet,
-                        category='torrent', domain='torrentz2.nz',
-                        favicon='https://www.google.com/s2/favicons?domain=torrentz2.nz&sz=16'
-                    ))
-        except Exception as e:
-            app.logger.error(f"PG Deep Torrentz2 error: {e}")
-        return out
-
-    def _pg_deep_search_icij(self, query):
-        out = []
-        try:
-            q = quote_plus(query)
-            r = self.session.get(f'https://offshoreleaks.icij.org/search?q={q}',
-                headers=self._get_headers(), timeout=12)
-            if r and r.status_code == 200:
-                soup = BeautifulSoup(r.text, 'html.parser')
-                for a in soup.select('a[href*="/nodes/"]')[:10]:
-                    href = a.get('href', '')
-                    if not href.startswith('http'):
-                        href = 'https://offshoreleaks.icij.org' + href
-                    title = a.get_text(strip=True)[:120]
-                    if not title or not href:
-                        continue
-                    out.append(SearchResult(
-                        title=title, url=href, snippet='ICIJ Offshore Leaks Database entry',
-                        category='leak', domain='offshoreleaks.icij.org',
-                        favicon='https://www.google.com/s2/favicons?domain=icij.org&sz=16'
-                    ))
-        except Exception as e:
-            app.logger.error(f"PG Deep ICIJ error: {e}")
-        return out[:10]
-
-    def _pg_deep_update_progress(self, query, results, seen, completed, total):
-        with pg_deep_lock:
-            if query in pg_deep_progress:
-                pg_deep_progress[query]['results'] = [r.to_dict() for r in results]
-                pg_deep_progress[query]['found'] = len(results)
-                pg_deep_progress[query]['sources_completed'] = completed
-                pg_deep_progress[query]['total_sources'] = total
-
-    def _pg_deep_search_bg(self, query):
-        try:
-            all_results = []
-            seen = set()
-
-            sources = [
-                ('Ahmia (onion index)', lambda: self._pg_deep_search_ahmia(query)),
-                ('WikiLeaks', lambda: self._pg_deep_search_wikileaks(query)),
-                ('Torrents (TPB)', lambda: self._pg_deep_search_tpb(query)),
-                ('Pastebin', lambda: self._pg_deep_search_pastebin(query)),
-                ('Archive.org', lambda: self._pg_deep_search_archive(query)),
-            ]
-            total = len(sources)
-
-            for i, (name, fn) in enumerate(sources):
-                try:
-                    for sr in fn():
-                        if sr.url in seen:
-                            continue
-                        seen.add(sr.url)
-                        all_results.append(sr)
-                except Exception as e:
-                    app.logger.error(f"PG Deep source {name} error: {e}")
-                self._pg_deep_update_progress(query, all_results, seen, i + 1, total)
-                if len(all_results) >= 50:
-                    break
-
-            cache_key = f"pgd:{query}"
-            if all_results:
-                self._save_to_cache(cache_key, [r.to_dict() for r in all_results])
-
-            with pg_deep_lock:
-                if query in pg_deep_progress:
-                    pg_deep_progress[query]['status'] = 'done'
-                    pg_deep_progress[query]['results'] = [r.to_dict() for r in all_results]
-                    pg_deep_progress[query]['found'] = len(all_results)
-        except Exception as e:
-            app.logger.error(f"PG Deep background error: {e}")
-            with pg_deep_lock:
-                if query in pg_deep_progress:
-                    pg_deep_progress[query]['status'] = 'error'
-
-    def search_poneglyph_deep(self, query):
-        cache_key = f"pgd:{query}"
-        cached = self._get_from_cache(cache_key)
-        if cached:
-            return cached, "done"
-
-        with pg_deep_lock:
-            if query in pg_deep_progress and pg_deep_progress[query]['status'] == 'running':
-                return [], "running"
-            pg_deep_progress[query] = {
-                "results": [], "found": 0, "status": "running",
-                "sources_completed": 0, "total_sources": 5
-            }
-
-        t = threading.Thread(target=self._pg_deep_search_bg, args=(query,))
-        t.daemon = True
-        t.start()
-        return [], "running"
 
     def _is_relevant_image(self, title, src_url, query):
         """Check if an image result is relevant to the query."""
@@ -2865,6 +2224,229 @@ WIKI_CACHE = {}
 WIKI_CACHE_LOCK = threading.Lock()
 WIKI_CACHE_TTL = 86400
 
+WEATHER_CACHE = {}
+WEATHER_CACHE_LOCK = threading.Lock()
+WEATHER_CACHE_TTL = 1800
+
+DEF_CACHE = {}
+DEF_CACHE_LOCK = threading.Lock()
+DEF_CACHE_TTL = 86400
+
+WMO_CODES = {
+    0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast',
+    45: 'Foggy', 48: 'Depositing rime fog',
+    51: 'Light drizzle', 53: 'Moderate drizzle', 55: 'Dense drizzle',
+    56: 'Light freezing drizzle', 57: 'Dense freezing drizzle',
+    61: 'Slight rain', 63: 'Moderate rain', 65: 'Heavy rain',
+    66: 'Light freezing rain', 67: 'Heavy freezing rain',
+    71: 'Slight snow', 73: 'Moderate snow', 75: 'Heavy snow',
+    77: 'Snow grains',
+    80: 'Slight rain showers', 81: 'Moderate rain showers', 82: 'Violent rain showers',
+    85: 'Slight snow showers', 86: 'Heavy snow showers',
+    95: 'Thunderstorm', 96: 'Thunderstorm with slight hail', 99: 'Thunderstorm with heavy hail',
+}
+
+def get_weather_panel(query):
+    q = query.lower().strip()
+    weather_kw = ['weather', 'temperature', 'forecast', 'temp']
+    if not any(kw in q for kw in weather_kw):
+        return None
+
+    location = None
+    for prefix in ['weather in ', 'temperature in ', 'forecast in ', 'temp in ']:
+        if prefix in q:
+            location = q.split(prefix, 1)[1].strip()
+            break
+    if not location:
+        for suffix in [' weather', ' temperature', ' forecast', ' temp']:
+            if q.endswith(suffix):
+                location = q[:-len(suffix)].strip()
+                break
+    if not location:
+        for pattern in [r'^(?:what(?:\'s| is) the )?(weather|temperature|temp|forecast)(?:\s+(?:in|at|for)\s+(.+))?$',
+                        r'^(.+?)\s+(?:weather|temperature|forecast)$',
+                        r'^(?:how\s+is\s+the\s+)?(?:weather|temperature|forecast)\s+(?:in|at|for)\s+(.+)$',
+                        r'^(?:weather|temperature|forecast|temp)\s+(.+)$']:
+            import re
+            m = re.search(pattern, q)
+            if m:
+                groups = [g for g in m.groups() if g is not None]
+                loc = groups[-1] if groups else None
+                if isinstance(loc, str) and loc and loc not in ('weather', 'temperature', 'temp', 'forecast'):
+                    location = loc
+                    break
+
+    if not location:
+        try:
+            ip_r = requests.get('https://ip-api.com/json/', headers={'User-Agent': 'arlong-search/1.0'}, timeout=4)
+            if ip_r.status_code == 200:
+                ip_data = ip_r.json()
+                if ip_data.get('status') == 'success':
+                    loc_str = ', '.join(filter(None, [ip_data.get('city', ''), ip_data.get('countryCode', '')]))
+                    if loc_str:
+                        location = loc_str
+        except:
+            pass
+
+    if not location:
+        return None
+
+    cache_key = f'weather:{location.lower()}'
+    with WEATHER_CACHE_LOCK:
+        cached = WEATHER_CACHE.get(cache_key)
+        if cached and time.time() < cached['expires']:
+            return cached['data']
+
+    try:
+        from urllib.parse import quote_plus
+        import re
+        geo_r = requests.get(
+            f'https://geocoding-api.open-meteo.com/v1/search?name={quote_plus(location)}&count=1&language=en&format=json',
+            timeout=5)
+        if geo_r.status_code != 200:
+            return None
+        geo_data = geo_r.json()
+        results = geo_data.get('results')
+        if not results:
+            return None
+        lat = results[0]['latitude']
+        lon = results[0]['longitude']
+        loc_name = results[0].get('name', location)
+        country = results[0].get('country', '')
+        tz = results[0].get('timezone', 'auto')
+
+        wx_r = requests.get(
+            f'https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}'
+            f'&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m'
+            f'&daily=temperature_2m_max,temperature_2m_min&timezone={tz}&forecast_days=1',
+            timeout=5)
+        if wx_r.status_code != 200:
+            return None
+        wx = wx_r.json()
+        current = wx.get('current', {})
+        daily = wx.get('daily', {})
+
+        temp = current.get('temperature_2m')
+        feels_like = current.get('apparent_temperature')
+        humidity = current.get('relative_humidity_2m')
+        wind_speed = current.get('wind_speed_10m')
+        wmo_code = current.get('weather_code', 0)
+        high = daily.get('temperature_2m_max', [None])[0] if daily.get('temperature_2m_max') else None
+        low = daily.get('temperature_2m_min', [None])[0] if daily.get('temperature_2m_min') else None
+
+        condition = WMO_CODES.get(wmo_code, 'Unknown')
+
+        wx_icon = 'clear' if wmo_code == 0 else \
+                  'cloudy' if wmo_code in (1, 2, 3, 45, 48) else \
+                  'rainy' if wmo_code in (51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82) else \
+                  'snowy' if wmo_code in (71, 73, 75, 77, 85, 86) else \
+                  'stormy'
+
+        display_loc = loc_name
+        if country:
+            display_loc = f'{loc_name}, {country}'
+
+        facts = []
+        if feels_like is not None:
+            facts.append(('Feels like', f'{feels_like:.0f}°C'))
+        if humidity is not None:
+            facts.append(('Humidity', f'{humidity}%'))
+        if wind_speed is not None:
+            facts.append(('Wind', f'{wind_speed:.0f} km/h'))
+        if high is not None and low is not None:
+            facts.append(('High / Low', f'{high:.0f}°C / {low:.0f}°C'))
+
+        panel = {
+            'panel_type': 'weather',
+            'title': display_loc,
+            'type': 'Weather',
+            'image': wx_icon,
+            'description': '',
+            'temp': f'{temp:.0f}°C' if temp is not None else '',
+            'condition': condition,
+            'facts': facts,
+        }
+
+        with WEATHER_CACHE_LOCK:
+            WEATHER_CACHE[cache_key] = {'data': panel, 'expires': time.time() + WEATHER_CACHE_TTL}
+        return panel
+    except Exception:
+        return None
+
+
+def get_definition_panel(query):
+    q = query.lower().strip()
+    if not q or len(q) < 2:
+        return None
+
+    word = None
+    patterns = [
+        r'^define\s+(.+?)$',
+        r'^(.+?)\s+definition$',
+        r'^what\s+(?:does|is)\s+(.+?)\s+mean',
+        r'^meaning\s+of\s+(.+?)$',
+        r'^what\s+is\s+the\s+(?:definition|meaning)\s+of\s+(.+?)$',
+    ]
+    import re
+    for pat in patterns:
+        m = re.search(pat, q)
+        if m:
+            word = m.group(1).strip()
+            break
+
+    if not word or not word.replace(' ', '').isalpha():
+        return None
+
+    cache_key = f'def:{word.lower()}'
+    with DEF_CACHE_LOCK:
+        cached = DEF_CACHE.get(cache_key)
+        if cached and time.time() < cached['expires']:
+            return cached['data']
+
+    try:
+        from urllib.parse import quote_plus
+        r = requests.get(f'https://api.dictionaryapi.dev/api/v2/entries/en/{quote_plus(word)}', timeout=6)
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        if not data or not isinstance(data, list):
+            return None
+        entry = data[0]
+        entry_word = entry.get('word', word)
+        phonetic = entry.get('phonetic', '')
+        meanings = entry.get('meanings', [])
+        if not meanings:
+            return None
+
+        first = meanings[0]
+        part_of_speech = first.get('partOfSpeech', '')
+        defs = first.get('definitions', [])
+        if not defs:
+            return None
+        definition_text = defs[0].get('definition', '')
+        example = defs[0].get('example', '')
+        synonyms = defs[0].get('synonyms', [])[:3]
+
+        panel = {
+            'panel_type': 'definition',
+            'title': entry_word,
+            'type': part_of_speech,
+            'image': None,
+            'description': definition_text,
+            'phonetic': phonetic,
+            'example': example,
+            'synonyms': synonyms,
+            'facts': [
+                ('Source', 'Dictionary'),
+            ],
+        }
+
+        with DEF_CACHE_LOCK:
+            DEF_CACHE[cache_key] = {'data': panel, 'expires': time.time() + DEF_CACHE_TTL}
+        return panel
+    except Exception:
+        return None
+
 
 def get_wikipedia_panel(query):
     query_lower = query.lower().strip()
@@ -2947,6 +2529,12 @@ def get_wiki_panel_from_results(results):
 
 
 def get_info_box(query, results=None):
+    weather = get_weather_panel(query)
+    if weather:
+        return weather
+    definition = get_definition_panel(query)
+    if definition:
+        return definition
     if results:
         wiki_panel = get_wiki_panel_from_results(results)
         if wiki_panel:
@@ -3048,7 +2636,7 @@ search_engine = ImprovedSearch()
 def home():
     announcement = data_manager.get_announcement()
     ml_val = request.args.get('ml', '')
-    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, poneglyph=request.args.get('poneglyph') == '1', ml_rank=bool(ml_val) and ml_val != '0')
+    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, ml_rank=bool(ml_val) and ml_val != '0')
 
 @app.route('/search')
 def search():
@@ -3057,12 +2645,11 @@ def search():
     filter_type = request.args.get('filter', 'general')
     if filter_type not in ('general', 'shopping', 'official', 'tutorials', 'discussions', 'academic'):
         filter_type = 'general'
-    poneglyph = request.args.get('poneglyph') == '1'
     ml_rank = request.args.get('ml', '')
 
     announcement = data_manager.get_announcement()
     if not query:
-        return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, poneglyph=poneglyph)
+        return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement)
 
     crisis = detect_crisis(query)
 
@@ -3076,7 +2663,6 @@ def search():
             page=1,
             total_results=len(LIFE_RESOURCES),
             info_box=None,
-            poneglyph=poneglyph,
             announcement=announcement
         )
 
@@ -3090,7 +2676,6 @@ def search():
             page=1,
             total_results=0,
             info_box=None,
-            poneglyph=poneglyph,
             announcement=announcement
         )
 
@@ -3099,20 +2684,7 @@ def search():
         return redirect(bang_url)
 
     try:
-        if poneglyph:
-            results, pg_status = search_engine.search_poneglyph(query)
-            if pg_status == 'running':
-                return render_template(
-                    'search.html',
-                    query=query,
-                    poneglyph=True,
-                    pg_loading=True,
-                    results=[],
-                    error=None,
-                    announcement=announcement
-                )
-        else:
-            results, total_results = search_engine.search(query, page, filter_type)
+        results, total_results = search_engine.search(query, page, filter_type)
 
         if ml_rank and ml_rank != '0' and results:
             results = search_engine.ml_rerank(query, results, ml_rank)
@@ -3124,7 +2696,7 @@ def search():
 
         news_box = None
         news_intent = detect_news(query)
-        if news_intent and not poneglyph:
+        if news_intent:
             news_items = [r for r in results if r.get('category') == 'news'][:6]
             if news_items:
                 news_box = {
@@ -3144,7 +2716,6 @@ def search():
             page=page,
             total_results=total_results,
             info_box=get_info_box(query, results),
-            poneglyph=poneglyph,
             announcement=announcement
         )
 
@@ -3541,31 +3112,6 @@ def not_found_error(error):
 def internal_error(error):
     app.logger.error(f"Internal server error: {str(error)}")
     return render_template('search.html', error="An internal error occurred. Please try again."), 500
-
-@app.route('/api/pg-progress')
-def api_pg_progress():
-    query = request.args.get('q', '').strip()
-    with pg_lock:
-        p = pg_progress.get(query, {})
-    return jsonify(p)
-
-@app.route('/poneglyph')
-def poneglyph():
-    query = request.args.get('q', '').strip()
-    if not query:
-        return render_template('poneglyph.html', query='', results=None, pg_loading=False)
-
-    results, pg_status = search_engine.search_poneglyph_deep(query)
-    if pg_status == 'running':
-        return render_template('poneglyph.html', query=query, pg_loading=True, results=None)
-    return render_template('poneglyph.html', query=query, results=results or [], pg_loading=False)
-
-@app.route('/api/poneglyph-progress')
-def api_poneglyph_progress():
-    query = request.args.get('q', '').strip()
-    with pg_deep_lock:
-        p = pg_deep_progress.get(query, {})
-    return jsonify(p)
 
 @app.route('/api/report', methods=['POST'])
 def api_report():

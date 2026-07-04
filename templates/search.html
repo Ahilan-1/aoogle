@@ -200,7 +200,7 @@
         .suggestions-box .sug-item{padding:8px 20px;font-size:14px;color:var(--text);cursor:pointer;text-align:left}
         .suggestions-box .sug-item:hover{background:var(--hover-bg)}
 
-        .info-box{border:1px solid var(--border3);border-radius:8px;padding:18px;margin-bottom:22px;background:var(--card-bg)}
+        .info-box{border:1px solid var(--border3);border-radius:12px;padding:20px;margin-bottom:22px;background:var(--card-bg)}
         .info-box .ib-title{font-size:20px;font-weight:400;margin:0 0 4px;color:var(--text)}
         .info-box .ib-type{font-size:14px;color:var(--text3);margin-bottom:10px}
         .info-box .ib-img{width:100%;max-height:120px;object-fit:contain;margin-bottom:10px}
@@ -208,6 +208,21 @@
         .info-box .ib-facts{width:100%;border-collapse:collapse}
         .info-box .ib-facts td{padding:4px 0;font-size:13px;vertical-align:top;color:var(--text)}
         .info-box .ib-facts td:first-child{color:var(--text3);white-space:nowrap;padding-right:12px;font-weight:500}
+
+        .weather-panel .wp-main{display:flex;align-items:center;gap:16px;margin-bottom:12px}
+        .weather-panel .wp-temp{font-size:44px;font-weight:300;color:var(--text);line-height:1}
+        .weather-panel .wp-condition{font-size:15px;color:var(--text2);line-height:1.3}
+        .weather-panel .wp-condition .wp-cond-label{color:var(--text3);font-size:13px}
+        .weather-panel .wp-icon{width:48px;height:48px;flex-shrink:0}
+        .weather-panel .wp-icon svg{width:48px;height:48px}
+        .weather-panel .ib-type{margin-bottom:4px}
+        .weather-panel .ib-desc{margin-bottom:6px}
+
+        .def-panel .dp-phonetic{font-size:15px;color:var(--text3);margin-bottom:6px;font-style:italic}
+        .def-panel .dp-example{font-size:13px;color:var(--text3);margin-top:8px;padding:8px 12px;background:var(--bg3);border-radius:8px;line-height:1.4;border-left:3px solid var(--cm)}
+        .def-panel .dp-synonyms{font-size:13px;color:var(--text2);margin-top:6px}
+        .def-panel .dp-synonyms strong{color:var(--text3);font-weight:500}
+        .def-panel .ib-type{font-size:14px;color:var(--cm);font-weight:500;margin-bottom:8px}
 
         .result-actions{user-select:none}
         .three-dots:hover{background:var(--hover-bg)!important;color:var(--text)!important}
@@ -238,8 +253,11 @@
             .result-title{font-size:16px}
             .result-snippet{font-size:13px}
             .results-layout{padding:10px 12px 40px}
-            .news-box{padding:14px 16px}
-            .news-box .nb-item{gap:6px}
+            .info-box{padding:16px}
+            .weather-panel .wp-temp{font-size:36px}
+            .weather-panel .wp-icon{width:40px;height:40px}
+            .weather-panel .wp-icon svg{width:40px;height:40px}
+            .weather-panel .wp-main{gap:12px}
             .dm-toggle{top:8px;right:8px;width:32px;height:32px;font-size:14px}
         }
         @media(max-width:400px){
@@ -263,105 +281,38 @@
             .dm-toggle{right:max(16px,env(safe-area-inset-right,16px))}
             .results-layout{padding-left:max(16px,env(safe-area-inset-left,16px));padding-right:max(16px,env(safe-area-inset-right,16px))}
         }
+
+        #fireworks-canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
+        .homepage{position:relative;z-index:1}
+
+        .homepage.flag-mode .glogo{background:linear-gradient(90deg,#b22234 0%,#fff 40%,#3c3b6e 100%);-webkit-background-clip:text;background-clip:text;color:transparent;animation:none}
+        .homepage.flag-mode .glogo span{background:none!important;-webkit-background-clip:unset!important;background-clip:unset!important;color:inherit!important;animation:none!important;text-shadow:none!important}
+        .flag-toggle{position:fixed;bottom:16px;right:60px;z-index:999;width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:.15s;opacity:.5}
+        .flag-toggle:hover{opacity:1;background:var(--hover-bg);color:var(--text)}
+
+        .usa-banner{background:linear-gradient(135deg,#b22234 0%,#fff 50%,#3c3b6e 100%);border-radius:12px;padding:28px 24px;margin-bottom:20px;text-align:center;position:relative;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.1)}
+        .usa-banner::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(0deg,transparent,transparent 6px,rgba(255,255,255,.1) 6px,rgba(255,255,255,.1) 12px);pointer-events:none}
+        .usa-banner .ub-stars{font-size:28px;margin-bottom:8px;letter-spacing:4px}
+        .usa-banner .ub-title{font-size:26px;font-weight:700;color:#fff;margin:0 0 4px;text-shadow:0 2px 8px rgba(0,0,0,.3);position:relative}
+        .usa-banner .ub-sub{font-size:14px;color:rgba(255,255,255,.9);margin:0 0 8px;position:relative;font-style:italic}
+        .usa-banner .ub-year{font-size:48px;font-weight:800;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.3);position:relative;letter-spacing:2px}
+        .usa-banner .ub-arlong{font-size:13px;color:rgba(255,255,255,.7);margin-top:8px;position:relative}
+        .dark-mode .usa-banner{background:linear-gradient(135deg,#8b1a1a 0%,#303134 50%,#1a1a4e 100%);box-shadow:0 4px 20px rgba(0,0,0,.3)}
+        @media(max-width:600px){
+            .usa-banner{padding:16px 12px;border-radius:8px;margin:0 -4px 12px}
+            .usa-banner .ub-year{font-size:32px}
+            .usa-banner .ub-title{font-size:20px}
+            .usa-banner .ub-stars{font-size:20px;letter-spacing:2px}
+            .usa-banner .ub-sub{font-size:12px}
+            .usa-banner .ub-arlong{font-size:11px}
+        }
     </style>
 </head>
 <body>
+    <canvas id="fireworks-canvas"></canvas>
     <div class="pg-loading" id="pg-loading"><div class="bar"></div></div>
-    <div class="pg-lab" id="pg-lab"></div>
     <button class="dm-toggle" id="dm-btn" onclick="toggleDark()" aria-label="Toggle dark mode">&#x263D;</button>
-    {% if poneglyph %}
-    <style>
-        .pg-loading{display:block}.pg-lab{display:block}
-        .pg-counter{text-align:center;font-size:13px;color:var(--text2);margin-top:8px}
-        .pg-status{margin-top:20px;text-align:center}
-        .pg-status .pg-source{display:inline-block;padding:4px 10px;margin:3px;font-size:11px;background:var(--bg2);color:var(--text2);border:1px solid var(--border)}
-        .pg-status .pg-source.done{color:#4fc3f7;border-color:#0288d1}
-        #pg-lab{font-size:14px;text-align:center;padding:12px;color:var(--text2);border-bottom:1px solid var(--border)}
-    </style>
-    <script>
-        document.body.classList.add('iceberg');
-        {% if pg_loading %}
-        (function(){
-            function initPG(){
-                var loading = document.getElementById('pg-loading');
-                var lab = document.getElementById('pg-lab');
-                if(lab){lab.textContent='[PG] Initializing deep search...';lab.style.display='block'}
-                if(loading) loading.style.display='block';
-                var q = '{{ query|e }}';
-                var resultsContainer = document.getElementById('pg-dynamic-results');
-                var counter = document.getElementById('pg-counter');
-                var statusContainer = document.getElementById('pg-status-list');
-                if(!resultsContainer){setTimeout(initPG,200);return}
-                var POLL_INTERVAL = 2500;
-                var SOURCE_NAMES = [
-                    'Web Sources','Wikileaks','Intercept','ProPublica','ICIJ',
-                    'Archive.org','Pastebin','Globaleaks','Freedom Press',
-                    'EFF','Cryptome','EPIC','RSF',
-                    'Archive.ph','DDoK','The SVN'
-                ];
-                function renderResults(d){
-                    if(!d || !resultsContainer) return;
-                    try {
-                        resultsContainer.innerHTML = '';
-                        var items = d.results || [];
-                        for(var i = 0; i < items.length; i++){
-                            var r = items[i];
-                            if(!r || !r.url) continue;
-                            var card = document.createElement('div');
-                            card.className = 'result-card';
-                            var domain = r.domain || r.display_url || '';
-                            var snippet = r.snippet;
-                            if(typeof snippet === 'object') snippet = '';
-                            var safeDomain = (domain||'').replace(/[<>"&]/g,'');
-                            var safeTitle = (r.title||'').replace(/[<>"&]/g,'');
-                            var safeSnippet = (snippet||'').replace(/[<>"&]/g,'');
-                            card.innerHTML = '<div class="result-url">' + safeDomain + '</div>' +
-                                '<a href="' + r.url + '" class="result-title" target="_blank">' + safeTitle + '</a>' +
-                                '<div class="result-snippet">' + safeSnippet + '</div>';
-                            resultsContainer.appendChild(card);
-                        }
-                    } catch(e){ console.error('PG render error:', e); }
-                }
-                function poll(){
-                    fetch('/api/pg-progress?q='+encodeURIComponent(q)).then(function(r){return r.json()}).then(function(d){
-                        if(d && (d.status === 'running' || d.status === 'done')){
-                            if(d.found > 0) renderResults(d);
-                            if(counter) counter.textContent = d.found + ' results from ' + (d.sources_completed||0) + '/' + (d.total_sources||0) + ' sources';
-                            if(statusContainer){
-                                statusContainer.innerHTML = '';
-                                var completed = d.sources_completed || 0;
-                                SOURCE_NAMES.forEach(function(name, i){
-                                    var el = document.createElement('span');
-                                    el.className = 'pg-source' + (i < completed ? ' done' : '');
-                                    el.textContent = name;
-                                    statusContainer.appendChild(el);
-                                });
-                            }
-                            if(lab){
-                                if(d.status === 'done'){
-                                    lab.textContent = '[PG] Complete - ' + d.found + ' results';
-                                    if(loading) loading.style.display = 'none';
-                                    if(d.found > 0 && resultsContainer && resultsContainer.children.length === 0){
-                                        setTimeout(function(){ window.location.replace(window.location.href); }, 500);
-                                    }
-                                } else {
-                                    lab.textContent = '[PG] Searching... ' + (d.sources_completed||0) + '/' + (d.total_sources||0) + ' sources';
-                                }
-                            }
-                            if(d.status === 'running') setTimeout(poll, POLL_INTERVAL);
-                        } else {
-                            setTimeout(poll, POLL_INTERVAL);
-                        }
-                    }).catch(function(){setTimeout(poll, POLL_INTERVAL)});
-                }
-                setTimeout(poll, 1000);
-            }
-            if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',initPG)}else{initPG()}
-        })();
-        {% endif %}
-    </script>
-    {% endif %}
-
+    <button class="flag-toggle" id="flag-btn" title="Toggle flag colors" style="display:none">&#x1F1FA;&#x1F1F8;</button>
     {% if announcement %}
     <div style="background:#c5221f;color:#fff;text-align:center;padding:10px 20px;font-size:14px;font-weight:500;position:sticky;top:0;z-index:1000;box-shadow:0 2px 8px rgba(197,34,31,.3)">
         &#x26A0; {{ announcement }}
@@ -378,18 +329,12 @@
                 <input type="hidden" name="filter" value="{{ filter or 'general' }}">
                 <input type="hidden" name="ml" id="hp-ml" value="">
                 <div class="search-input-wrap">
-                    <input type="text" name="q" class="search-box" id="hp-search" required placeholder="" autocomplete="off">
+                    <input type="search" name="q" class="search-box" id="hp-search" required placeholder="" autocomplete="off" enterkeyhint="search">
                     <div class="suggestions-box" id="hp-suggest"></div>
                 </div>
                 <div class="buttons">
                     <input type="submit" value="Search">
                     <button type="button" id="lucky-btn">I'm Feeling Lucky</button>
-                </div>
-                <div id="pg-toggle-wrap">
-                <label class="pg-toggle" onclick="window.location.href='/poneglyph'" style="cursor:pointer">
-                    <span class="slider"></span>
-                    <span class="pg-label">Poneglyph Search</span>
-                </label>
                 </div>
             </form>
         </div>
@@ -416,8 +361,8 @@
                 <form action="/search" method="GET" id="rs-form">
                     <input type="hidden" name="filter" value="{{ filter or 'general' }}">
                     <input type="hidden" name="ml" id="rs-ml" value="">
-                    <input type="text" name="q" class="rs-input" id="rs-input" value="{{ query }}" autocomplete="off">
-                    <button type="submit" class="rs-submit" style="display:none">Search</button>
+                    <input type="search" name="q" class="rs-input" id="rs-input" value="{{ query }}" autocomplete="off" enterkeyhint="search">
+                    <button type="submit" class="rs-submit" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">Search</button>
                     <div class="suggestions-box" id="rs-suggest"></div>
                 </form>
             </div>
@@ -507,6 +452,21 @@
                 </div>
             {% endif %}
 
+            {% if query == "1776" %}
+                <div class="usa-banner">
+                    <div class="ub-stars">&#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733;</div>
+                    <div class="ub-year">1776</div>
+                    <div class="ub-title">Happy Independence Day, America!</div>
+                    <div class="ub-sub">&#x201C;Life, Liberty and the pursuit of Happiness.&#x201D;</div>
+                    <div style="margin:10px 0 0;position:relative">
+                        <div style="font-size:14px;color:#fff;line-height:1.6;text-shadow:0 1px 4px rgba(0,0,0,.2);font-style:italic">
+                            From arlong, wishing you a joyful 250th Independence Day. &#x1F30A;
+                        </div>
+                    </div>
+                    <div class="ub-arlong">&#x1F1FA;&#x1F1F8; arlong &#x00B7; celebrating freedom since 2025 &#x1F1FA;&#x1F1F8;</div>
+                </div>
+            {% endif %}
+
             {% if results %}
                 <div style="color:var(--text3);font-size:13px;margin-bottom:14px;">
                     {% if crisis_info %}You are not alone. These resources can help.
@@ -553,7 +513,9 @@
                         <a href="/search?q={{ query }}&page={{ page + 1 }}">Next</a>
                     {% endif %}
                 </div>
-            {% elif query and not error %}
+            {% endif %}
+
+            {% if not results and query and query != "1776" and not error %}
                 <div style="text-align:center;padding:60px 20px;color:var(--text3);font-size:16px;line-height:1.6">
                     <div style="font-size:40px;margin-bottom:16px;opacity:0.4">&#x1F50D;</div>
                     <div style="font-size:18px;font-weight:500;margin-bottom:8px;color:var(--text)">No results found</div>
@@ -564,6 +526,101 @@
 
         {% if info_box %}
         <aside class="results-sidebar">
+            {% if info_box.panel_type == 'weather' %}
+            <div class="info-box weather-panel">
+                <div class="ib-title">{{ info_box.title }}</div>
+                <div class="ib-type">{{ info_box.type }}</div>
+                <div class="wp-main">
+                    <div class="wp-icon">
+                        {% set wi = info_box.image or 'clear' %}
+                        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            {% if wi == 'clear' %}
+                            <circle cx="24" cy="24" r="10" fill="#FBBC04"/>
+                            <g stroke="#FBBC04" stroke-width="2" stroke-linecap="round">
+                                <line x1="24" y1="4" x2="24" y2="10"/>
+                                <line x1="24" y1="38" x2="24" y2="44"/>
+                                <line x1="4" y1="24" x2="10" y2="24"/>
+                                <line x1="38" y1="24" x2="44" y2="24"/>
+                                <line x1="9.9" y1="9.9" x2="14.1" y2="14.1"/>
+                                <line x1="33.9" y1="33.9" x2="38.1" y2="38.1"/>
+                                <line x1="9.9" y1="38.1" x2="14.1" y2="33.9"/>
+                                <line x1="33.9" y1="14.1" x2="38.1" y2="9.9"/>
+                            </g>
+                            {% elif wi == 'cloudy' %}
+                            <g fill="#9AA0A6">
+                                <circle cx="20" cy="26" r="10"/>
+                                <circle cx="30" cy="30" r="10"/>
+                                <circle cx="25" cy="22" r="8"/>
+                            </g>
+                            {% elif wi == 'rainy' %}
+                            <g fill="#9AA0A6">
+                                <circle cx="20" cy="22" r="10"/>
+                                <circle cx="30" cy="26" r="10"/>
+                                <circle cx="25" cy="18" r="8"/>
+                            </g>
+                            <g stroke="#4285F4" stroke-width="2" stroke-linecap="round">
+                                <line x1="16" y1="36" x2="14" y2="42"/>
+                                <line x1="24" y1="38" x2="22" y2="44"/>
+                                <line x1="32" y1="36" x2="30" y2="42"/>
+                            </g>
+                            {% elif wi == 'snowy' %}
+                            <g fill="#9AA0A6">
+                                <circle cx="20" cy="22" r="10"/>
+                                <circle cx="30" cy="26" r="10"/>
+                                <circle cx="25" cy="18" r="8"/>
+                            </g>
+                            <circle cx="16" cy="36" r="2" fill="#8AB4F8"/>
+                            <circle cx="24" cy="38" r="2" fill="#8AB4F8"/>
+                            <circle cx="32" cy="36" r="2" fill="#8AB4F8"/>
+                            <circle cx="20" cy="41" r="2" fill="#8AB4F8"/>
+                            {% elif wi == 'stormy' %}
+                            <g fill="#5F6368">
+                                <circle cx="20" cy="22" r="10"/>
+                                <circle cx="30" cy="26" r="10"/>
+                                <circle cx="25" cy="18" r="8"/>
+                            </g>
+                            <polygon points="20,28 18,38 24,38 22,48 32,34 26,34 28,28" fill="#FBBC04"/>
+                            {% endif %}
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="wp-temp">{{ info_box.temp }}</div>
+                        <div class="wp-condition">
+                            <span class="wp-cond-label">{{ info_box.condition }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% if info_box.facts %}
+                <table class="ib-facts">
+                    {% for label, value in info_box.facts %}
+                    <tr><td>{{ label }}</td><td>{{ value }}</td></tr>
+                    {% endfor %}
+                </table>
+                {% endif %}
+            </div>
+            {% elif info_box.panel_type == 'definition' %}
+            <div class="info-box def-panel">
+                <div class="ib-title">{{ info_box.title }}</div>
+                {% if info_box.phonetic %}
+                <div class="dp-phonetic">{{ info_box.phonetic }}</div>
+                {% endif %}
+                <div class="ib-type">{{ info_box.type }}</div>
+                <div class="ib-desc">{{ info_box.description }}</div>
+                {% if info_box.example %}
+                <div class="dp-example">{{ info_box.example }}</div>
+                {% endif %}
+                {% if info_box.synonyms %}
+                <div class="dp-synonyms"><strong>Synonyms:</strong> {{ info_box.synonyms|join(', ') }}</div>
+                {% endif %}
+                {% if info_box.facts %}
+                <table class="ib-facts">
+                    {% for label, value in info_box.facts %}
+                    <tr><td>{{ label }}</td><td>{{ value }}</td></tr>
+                    {% endfor %}
+                </table>
+                {% endif %}
+            </div>
+            {% else %}
             <div class="info-box">
                 <div class="ib-title">{{ info_box.title }}</div>
                 <div class="ib-type">{{ info_box.type }}</div>
@@ -579,6 +636,7 @@
                 </table>
                 {% endif %}
             </div>
+            {% endif %}
         </aside>
         {% endif %}
     </div>
@@ -630,9 +688,18 @@
         }
         var LUCKY_QUERIES = ['cute baby animals','inspirational quotes','beautiful landscapes','fun facts about space','wholesome stories','amazing nature photography','happy news today','acts of kindness','interesting science discoveries','beautiful libraries around the world','hidden gems in europe','best free online courses','healthy easy recipes','mind blowing photography','underwater sea life','starry night sky wallpaper','world map with all countries','learn something new every day','positive affirmations','beautiful gardens to visit'];
 
+        function isJuly4(){
+            var d=new Date();return d.getMonth()===6&&d.getDate()===4;
+        }
+
         document.addEventListener('DOMContentLoaded',function(){
             var b=document.getElementById('lucky-btn');
-            if(b){b.addEventListener('click',function(){window.location='/search?q='+encodeURIComponent(LUCKY_QUERIES[Math.floor(Math.random()*LUCKY_QUERIES.length)])})}
+            if(b){
+                b.textContent="\u{1F1FA}\u{1F1F8} 1776 \u{1F1FA}\u{1F1F8}";
+                b.addEventListener('click',function(){
+                    window.location='/search?q=1776';
+                })
+            }
 
             var hf=document.getElementById('hp-form');
             if(hf){hf.addEventListener('submit',function(e){
@@ -642,6 +709,92 @@
                     showPGPopup();
                 }
             })}
+
+            if(isJuly4()){
+                var hp=document.querySelector('.homepage');
+                if(hp){
+                    hp.classList.add('flag-mode');
+                    var fb=document.getElementById('flag-btn');
+                    if(fb){fb.style.display='flex'}
+                }
+            }
+        });
+
+        // Fireworks (homepage only, July 4)
+        (function(){
+            var canvas=document.getElementById('fireworks-canvas');
+            if(!canvas||!isJuly4()||!document.querySelector('.homepage')){if(canvas)canvas.style.display='none';return}
+            var ctx=canvas.getContext('2d');
+            var W,H;
+            function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight}
+            resize();window.addEventListener('resize',resize);
+            var particles=[],rockets=[],animId,fadeOut=false,fadeDone=false;
+            function rand(mn,mx){return Math.random()*(mx-mn)+mn}
+            function createRocket(){
+                rockets.push({x:rand(100,W-100),y:H,targetY:rand(50,H*0.35),speed:rand(3,6),trail:[]})
+            }
+            function createExplosion(x,y){
+                var count=~~rand(25,50),hue=Math.random()*360;
+                for(var i=0;i<count;i++){
+                    var a=rand(0,Math.PI*2),s=rand(1,5);
+                    particles.push({x:x,y:y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rand(25,70),maxLife:70,color:'hsl('+hue+',80%,60%)',size:rand(2,4)})
+                }
+                ['hsl(0,80%,50%)','hsl(0,0%,100%)','hsl(220,80%,40%)'].forEach(function(c){
+                    for(var i=0;i<8;i++){
+                        var a=rand(0,Math.PI*2),s=rand(2,4);
+                        particles.push({x:x,y:y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rand(30,60),maxLife:60,color:c,size:rand(2,3)})
+                    }
+                })
+            }
+            function clearCanvas(){
+                ctx.globalCompositeOperation='destination-out';
+                ctx.fillStyle='rgba(0,0,0,1)';
+                ctx.fillRect(0,0,W,H);
+            }
+            function animate(){
+                if(fadeDone){clearCanvas();return}
+                animId=requestAnimationFrame(animate);
+                ctx.globalCompositeOperation='destination-out';
+                ctx.fillStyle=fadeOut?'rgba(0,0,0,0.15)':'rgba(0,0,0,0.06)';
+                ctx.fillRect(0,0,W,H);
+                ctx.globalCompositeOperation='lighter';
+                for(var i=rockets.length-1;i>=0;i--){
+                    var r=rockets[i];r.y-=r.speed;
+                    r.trail.push({x:r.x+rand(-2,2),y:r.y});
+                    if(r.trail.length>10)r.trail.shift();
+                    for(var t=0;t<r.trail.length;t++){
+                        var a=t/r.trail.length;
+                        ctx.beginPath();ctx.arc(r.trail[t].x,r.trail[t].y,1.5*a,0,Math.PI*2);
+                        ctx.fillStyle='rgba(255,200,100,'+(a*0.4)+')';ctx.fill()
+                    }
+                    if(r.y<=r.targetY||r.y<10){createExplosion(r.x,r.y);rockets.splice(i,1)}
+                }
+                for(var i=particles.length-1;i>=0;i--){
+                    var p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vy+=0.04;p.life--;
+                    if(p.life<=0){particles.splice(i,1);continue}
+                    var a=p.life/p.maxLife;
+                    ctx.beginPath();ctx.arc(p.x,p.y,p.size*a,0,Math.PI*2);
+                    ctx.fillStyle=p.color.replace(')',','+a+')').replace('hsl','hsla');ctx.fill()
+                }
+                if(!fadeOut&&Math.random()<0.04&&rockets.length<4)createRocket()
+            }
+            for(var i=0;i<3;i++)setTimeout(createRocket,i*300);
+            animate();
+            // After 12s, fade out and clear
+            setTimeout(function(){
+                fadeOut=true;
+                setTimeout(function(){fadeDone=true;clearCanvas();if(animId)cancelAnimationFrame(animId);canvas.style.opacity='0'},2000)
+            },12000);
+        })();
+
+        // Flag toggle
+        document.addEventListener('DOMContentLoaded',function(){
+            var fb=document.getElementById('flag-btn');
+            if(!fb)return;
+            fb.addEventListener('click',function(){
+                var hp=document.querySelector('.homepage');
+                if(hp){hp.classList.toggle('flag-mode');fb.style.opacity=hp.classList.contains('flag-mode')?'1':'0.5'}
+            })
         });
 
         function setDark(v){
@@ -764,22 +917,9 @@
             if(el) el.textContent = count + ' results';
         }
         applyFilter('all');
-
-        function initPGVisibility(){
-            var vis = null;
-            try{vis = localStorage.getItem('arlong-pg-visible')}catch(e){}
-            if(vis === '0'){
-                var wrap = document.getElementById('pg-toggle-wrap');
-                if(wrap) wrap.style.display = 'none';
-                var links = document.querySelectorAll('.pg-link');
-                for(var i=0;i<links.length;i++) links[i].style.display = 'none';
-            }
-        }
-        initPGVisibility();
     </script>
     <div class="mob-nav">
         <a href="/" class="active"><span class="m-icon">&#x1F50D;</span><span class="m-label">Search</span></a>
-        <a href="/poneglyph" class="pg-link"><span class="m-label">[PG]</span></a>
         <a href="/about"><span class="m-icon">&#x1F4CA;</span><span class="m-label">About</span></a>
         <a href="/privacy"><span class="m-icon">&#x1F464;</span><span class="m-label">Privacy</span></a>
         <a href="/faq"><span class="m-icon">&#x2753;</span><span class="m-label">FAQ</span></a>

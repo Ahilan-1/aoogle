@@ -92,7 +92,7 @@
             <a href="/" class="mini-logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></a>
             <div class="rs-wrap">
                 <form action="/videos" method="GET">
-                    <input type="text" name="q" class="rs-input" value="{{ query if query else '' }}" required autocomplete="off" placeholder="Search videos...">
+                    <input type="search" name="q" class="rs-input" value="{{ query if query else '' }}" required autocomplete="off" placeholder="Search videos..." enterkeyhint="search">
                 </form>
             </div>
         </div>

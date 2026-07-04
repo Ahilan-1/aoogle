@@ -207,7 +207,7 @@
         <div class="header-inner">
             <a href="/" class="logo">arlong</a>
             <form class="search-box" action="/images" method="GET">
-                <input type="text" name="q" class="search-input" value="{{ query if query else '' }}" required autocomplete="off" placeholder="Search images...">
+                <input type="search" name="q" class="search-input" value="{{ query if query else '' }}" required autocomplete="off" placeholder="Search images..." enterkeyhint="search">
                 <button type="submit" class="search-button">
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                         <path d="M9 17A8 8 0 1 0 9 1a8 8 0 0 0 0 16zM19 19l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>

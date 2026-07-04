@@ -112,8 +112,7 @@
 
     <div class="search-form">
         <form method="GET" action="/benchmark">
-            <input type="text" name="q" placeholder="Enter a query..." value="{{ query }}"
-                   onkeydown="if(event.key==='Enter')this.form.submit()">
+            <input type="search" name="q" placeholder="Enter a query..." value="{{ query }}" enterkeyhint="search">
         </form>
     </div>
 

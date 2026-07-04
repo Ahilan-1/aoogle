@@ -35,7 +35,6 @@
 <body>
     <div class="bar">
         <a href="/">Home</a> &middot;
-        <a href="/poneglyph" class="pg-link" style="color:#d32f2f;font-weight:600">Poneglyph</a> &middot;
         <a href="/about">How it works</a> &middot;
         <a href="/policy">Policies</a> &middot;
         <a href="/privacy">Privacy</a> &middot;
@@ -84,11 +83,6 @@
         </div>
 
         <div class="faq-item">
-            <div class="faq-q" onclick="toggleFaq(this)">What is Poneglyph Search? <span class="arrow">&#x25BC;</span></div>
-            <div class="faq-a">Poneglyph is a deep search mode that scans hidden networks, censored archives, and restricted sources — content traditional search engines won't show you. It searches Wikileaks, Archive.org, EFF, Cryptome, Pastebin, and more. This feature is currently in development.</div>
-        </div>
-
-        <div class="faq-item">
             <div class="faq-q" onclick="toggleFaq(this)">Is there an API? <span class="arrow">&#x25BC;</span></div>
             <div class="faq-a">Yes. Free, tokenless search API for agents, CLI tools, and LLMs. No registration or API key needed. <code>GET /api/search?q=your+query</code> with a rate limit of 125 requests per hour per IP. Full documentation at <a href="/docs">/docs</a>.</div>
         </div>
@@ -112,7 +106,7 @@
         }
     </script>
 <script>
-(function(){var v=null;try{v=localStorage.getItem('arlong-pg-visible')}catch(e){}if(v==='0'){document.querySelectorAll('.pg-link').forEach(function(e){e.style.display='none'})}})();
+
 </script>
 </body>
 </html>
