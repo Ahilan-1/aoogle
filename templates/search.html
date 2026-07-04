@@ -308,9 +308,7 @@
     </div>
     <script>
         (function(){
-            var e=false;
-            try{e=localStorage.getItem('arlong-loading')==='1'}catch(ex){}
-            if(e&&window.location.pathname==='/search'&&window.location.search.indexOf('q=')>-1)
+            if(window.location.pathname==='/search'&&window.location.search.indexOf('q=')>-1)
                 document.getElementById('ao-loading').classList.add('show');
         })();
     </script>
@@ -716,10 +714,8 @@
                 }
             }
 
-            // Loading overlay with AJAX fetch
+            // Dynamic AJAX search with loading overlay
             var aol=document.getElementById('ao-loading');
-            var loadingEnabled=false;
-            try{loadingEnabled=localStorage.getItem('arlong-loading')==='1'}catch(e){}
             if(aol){
                 var alBar=aol.querySelector('.bar');
                 var alText=aol.querySelector('.al-text');
@@ -734,7 +730,6 @@
                     }
                     if(msg)alText.textContent=msg;
                     if(status)alStatus.textContent=status;
-                    // Animate dots
                     var c=0;
                     clearInterval(alDots._ti);
                     alDots._ti=setInterval(function(){c=(c+1)%4;alDots.textContent='.'.repeat(c)},400);
@@ -757,26 +752,22 @@
                         setTimeout(function(){window.location=url},1000);
                     });
                 }
-                if(loadingEnabled){
-                    // If overlay was shown by sync script (results page load), hide after 600ms
-                    if(aol.classList.contains('show')){
-                        setTimeout(hideOverlay,600);
-                    }
-                    function hookForm(form){
-                        if(!form)return;
-                        var orig=form.submit.bind(form);
-                        form.addEventListener('submit',function(e){e.preventDefault();doSearch(form)});
-                        form.submit=function(){
-                            var inp=form.querySelector('input[name="q"]');
-                            if(inp&&inp.value.trim()){doSearch(form);return}
-                            orig()
-                        };
-                    }
-                    hookForm(document.getElementById('hp-form'));
-                    hookForm(document.getElementById('rs-form'));
-                }else{
-                    hideOverlay();
+                // If overlay was shown by sync script (results page load), hide after 600ms
+                if(aol.classList.contains('show')){
+                    setTimeout(hideOverlay,600);
                 }
+                function hookForm(form){
+                    if(!form)return;
+                    var orig=form.submit.bind(form);
+                    form.addEventListener('submit',function(e){e.preventDefault();doSearch(form)});
+                    form.submit=function(){
+                        var inp=form.querySelector('input[name="q"]');
+                        if(inp&&inp.value.trim()){doSearch(form);return}
+                        orig()
+                    };
+                }
+                hookForm(document.getElementById('hp-form'));
+                hookForm(document.getElementById('rs-form'));
             }
         });
 
