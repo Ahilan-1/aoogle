@@ -45,6 +45,7 @@ if os.path.exists(env_path):
 
 app.secret_key = os.environ.get('SECRET_KEY', 'arlong-secret-key-change-in-prod')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Admin@123')
+AMAZON_ASSOCIATE_TAG = os.environ.get('AMAZON_ASSOCIATE_TAG', '')
 
 @app.after_request
 def add_cors_headers(response):
@@ -1525,13 +1526,16 @@ class ImprovedSearch:
             app.logger.error(f"Error parsing Bing HTML: {str(e)}")
         return results
 
-    def _search_single_engine(self, search_url, query, page):
+    def _search_single_engine(self, search_url, query, page, region=None):
         try:
             if search_url == 'ddgs://text':
                 if not ddgs_available:
                     return []
                 try:
-                    raw = DDGS(timeout=5).text(query, max_results=50, backend='auto', safesearch='on')
+                    ddgs_kwargs = dict(query=query, max_results=50, backend='auto', safesearch='on')
+                    if region:
+                        ddgs_kwargs['region'] = region
+                    raw = DDGS(timeout=5).text(**ddgs_kwargs)
                     results = []
                     for r in raw:
                         title = r.get('title', '')
@@ -1598,15 +1602,18 @@ class ImprovedSearch:
             return []
         return []
 
-    def _search_fallback(self, query):
-        """Fallback search using alternative sources when DDG is blocked."""
+    def _search_fallback(self, query, region=None):
+        """Fallback search when primary methods fail"""
         results = []
         seen = set()
 
         # 0. DDGS metasearch (fastest, uses multiple engines)
         if ddgs_available:
             try:
-                raw = DDGS(timeout=5).text(query, max_results=30, backend='auto', safesearch='on')
+                ddgs_kwargs = dict(query=query, max_results=30, backend='auto', safesearch='on')
+                if region:
+                    ddgs_kwargs['region'] = region
+                raw = DDGS(timeout=5).text(**ddgs_kwargs)
                 for r in raw:
                     title = r.get('title', '')
                     href = r.get('href', '')
@@ -1713,10 +1720,11 @@ class ImprovedSearch:
 
         return results
 
-    def search(self, query, page=1, filter_type='general'):
+    def search(self, query, page=1, filter_type='general', region=None):
         """Main search method with pagination and fallback"""
+        self._current_region = region
         per_page = 10
-        cache_key = self._get_cache_key(f"{query}_{filter_type}_all", 1)
+        cache_key = self._get_cache_key(f"{query}_{filter_type}_{region or 'all'}", 1)
         cached_all = self._get_from_cache(cache_key)
         all_results = None
 
@@ -1728,7 +1736,7 @@ class ImprovedSearch:
 
             futures = []
             for search_url in self.search_urls:
-                future = self.executor.submit(self._search_single_engine, search_url, query, page)
+                future = self.executor.submit(self._search_single_engine, search_url, query, page, region)
                 futures.append(future)
 
             for future in as_completed(futures, timeout=15):
@@ -1743,7 +1751,7 @@ class ImprovedSearch:
 
             if not results:
                 app.logger.warning("Primary search failed, trying fallback sources...")
-                results = self._search_fallback(query)
+                results = self._search_fallback(query, region)
 
             if results:
                 ranked_results = self._rank_results(query, results, filter_type)
@@ -2727,36 +2735,163 @@ def detect_news(query):
         return {'topic': q[12:].strip(), 'intent': 'news'}
     return None
 
-def get_shopping_panel(query, results):
-    if not results:
+_amazon_session = None
+_amazon_lock = threading.Lock()
+_amazon_cache = {}
+_amazon_cache_ttl = 600
+
+def _get_amazon_session():
+    global _amazon_session
+    if _amazon_session is None:
+        with _amazon_lock:
+            if _amazon_session is None:
+                s = requests.Session()
+                s.headers.update({
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Accept-Encoding': 'gzip, deflate',
+                    'DNT': '1',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1',
+                    'Sec-Fetch-Dest': 'document',
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Site': 'none',
+                    'Sec-Fetch-User': '?1',
+                })
+                _amazon_session = s
+    return _amazon_session
+
+def _amazon_affiliate_url(url):
+    if not AMAZON_ASSOCIATE_TAG:
+        return url
+    if 'amazon.com' not in url and 'amazon.' not in url:
+        return url
+    separator = '&' if '?' in url else '?'
+    return f"{url}{separator}tag={AMAZON_ASSOCIATE_TAG}"
+
+def fetch_amazon_products(query, max_products=12):
+    cache_key = query.lower().strip()
+    cached = _amazon_cache.get(cache_key)
+    if cached and (time.time() - cached['ts']) < _amazon_cache_ttl:
+        return cached['data']
+    try:
+        session = _get_amazon_session()
+        ua = UserAgent(fallback='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+        session.headers.update({'User-Agent': ua.random})
+        url = f'https://www.amazon.com/s?k={quote_plus(cache_key)}'
+        resp = session.get(url, timeout=10)
+        if resp.status_code != 200:
+            return None
+        soup = BeautifulSoup(resp.text, 'html.parser')
+        products = []
+        seen_asins = set()
+        for div in soup.select('[data-component-type="s-search-result"]'):
+            if len(products) >= max_products:
+                break
+            asin = div.get('data-asin', '')
+            if not asin or asin in seen_asins:
+                continue
+            title_el = div.select_one('h2 a.a-link-normal span') or div.select_one('h2 span')
+            if not title_el:
+                title_el = div.select_one('h2 a')
+            if not title_el:
+                continue
+            title = title_el.get_text(strip=True)
+            link_el = div.select_one('h2 a.a-link-normal') or div.select_one('h2 a')
+            if not link_el:
+                continue
+            href = link_el.get('href', '')
+            if not href:
+                continue
+            product_url = 'https://www.amazon.com' + href if href.startswith('/') else href
+            product_url = _amazon_affiliate_url(product_url)
+            img_el = div.select_one('img.s-image')
+            img = img_el.get('src', '') if img_el else ''
+            price_el = div.select_one('.a-price .a-offscreen') or div.select_one('.a-price-whole')
+            price = ''
+            if price_el:
+                raw = price_el.get_text(strip=True)
+                if raw:
+                    price = '$' + raw if not raw.startswith('$') else raw
+            if not price:
+                price_span = div.select_one('.a-price')
+                if price_span:
+                    whole = price_span.select_one('.a-price-whole')
+                    fraction = price_span.select_one('.a-price-fraction')
+                    if whole:
+                        w = whole.get_text(strip=True)
+                        f = fraction.get_text(strip=True) if fraction else '00'
+                        price = f'${w}.{f}'
+            rating_el = div.select_one('.a-star-small .a-icon-alt') or div.select_one('i.a-icon-star') or div.select_one('.a-icon-star')
+            rating = ''
+            if rating_el:
+                rt = rating_el.get_text(strip=True)
+                if rt:
+                    m = re.search(r'[\d.]+', rt)
+                    if m:
+                        rating = m.group()
+            seen_asins.add(asin)
+            products.append({
+                'title': title,
+                'url': product_url,
+                'price': price or None,
+                'image': img or None,
+                'source': 'Amazon',
+                'domain': 'amazon.com',
+                'rating': rating or None,
+                'asin': asin,
+            })
+        result = products if products else None
+        _amazon_cache[cache_key] = {'data': result, 'ts': time.time()}
+        return result
+    except Exception as e:
+        app.logger.warning(f"Amazon scraping error: {e}")
         return None
+
+def get_shopping_panel(query, results):
+    q_lower = query.lower().strip()
     shopping_kw = ['buy', 'price', 'deal', 'discount', 'cheap', 'shop', 'purchase',
                    'order', 'cost', 'under', 'sale', 'coupon', 'offer', 'affordable',
                    'best', 'top', 'review', 'cheap', 'budget', 'for', 'vs', 'pro',
                    'new', '2025', '2026', 'amazon', 'walmart', 'ebay', 'near me']
-    q_lower = query.lower().strip()
     is_shopping = any(kw in q_lower for kw in shopping_kw)
-    if not is_shopping:
-        shopping_count = sum(1 for r in results if r.get('category') == 'shopping')
-        if shopping_count < 2:
-            return None
+
+    # Try Amazon first for shopping queries
+    if is_shopping or (results and sum(1 for r in results if r.get('category') == 'shopping') >= 2):
+        amazon_products = fetch_amazon_products(query)
+        if amazon_products:
+            return {'panel_type': 'shopping', 'products': amazon_products}
+
+    if not results:
+        return None
 
     products = []
     seen = set()
 
     def add_product(r):
-        p = _result_to_product(r)
-        if p and r['url'] not in seen:
-            products.append(p)
-            seen.add(r['url'])
+        if r['url'] in seen:
+            return
+        seen.add(r['url'])
+        title = r.get('title', '') or ''
+        domain = (r.get('domain') or urlparse(r['url']).netloc).lower()
+        snippet = r.get('snippet', '') or ''
+        price = _extract_price(snippet) or _extract_price(title)
+        products.append({
+            'title': title,
+            'url': r['url'],
+            'price': price,
+            'image': None,
+            'source': _short_source(domain),
+            'domain': domain,
+            'rating': None,
+            'asin': None,
+        })
 
-    # Priority 1: Amazon, Walmart, eBay
     for r in results:
         domain = (r.get('domain') or urlparse(r['url']).netloc).lower()
         if 'amazon' in domain or 'walmart' in domain or 'ebay' in domain:
             add_product(r)
 
-    # Priority 2: Other known commerce domains
     commerce_domains = ['bestbuy', 'target', 'etsy', 'newegg', 'homedepot',
                         'lowes', 'costco', 'shopify', 'alibaba', 'aliexpress',
                         'bhphotovideo', 'microcenter', 'macys', 'kohls', 'nike',
@@ -2766,57 +2901,29 @@ def get_shopping_panel(query, results):
         if any(d in domain for d in commerce_domains):
             add_product(r)
 
-    # Priority 3: Shopping-categorized results
     for r in results:
         if r.get('category') == 'shopping':
             add_product(r)
 
-    # Priority 4: Any result mentioning a price
     for r in results:
         snippet = r.get('snippet', '') or ''
         title = r.get('title', '') or ''
         if _extract_price(snippet) or _extract_price(title):
             add_product(r)
 
-    # Priority 5: Query has shopping intent — use any top result as fallback
     if not products and is_shopping:
         for r in results[:10]:
             add_product(r)
 
-    if not products:
-        return None
-    return {'panel_type': 'shopping', 'products': products[:12]}
-
-def _result_to_product(r):
-    snippet = r.get('snippet', '') or ''
-    title = r.get('title', '') or ''
-    url = r['url']
-    domain = (r.get('domain') or urlparse(url).netloc).lower()
-    favicon = r.get('favicon', '') or ''
-    price = _extract_price(snippet) or _extract_price(title)
-    return {
-        'title': title,
-        'url': url,
-        'price': price,
-        'source': _short_source(domain),
-        'domain': domain,
-        'snippet': snippet[:150] if snippet else '',
-        'favicon': favicon
-    }
+    return {'panel_type': 'shopping', 'products': products[:12]} if products else None
 
 def _short_source(domain):
     domain = domain.replace('www.', '')
     name_map = {
-        'amazon': 'Amazon', 'amazon.com': 'Amazon',
-        'walmart': 'Walmart', 'walmart.com': 'Walmart',
-        'ebay': 'eBay', 'ebay.com': 'eBay',
-        'bestbuy': 'Best Buy', 'bestbuy.com': 'Best Buy',
-        'target': 'Target', 'target.com': 'Target',
-        'etsy': 'Etsy', 'etsy.com': 'Etsy',
-        'newegg': 'Newegg', 'newegg.com': 'Newegg',
-        'homedepot': 'Home Depot', 'homedepot.com': 'Home Depot',
-        'lowes': 'Lowe\'s', 'lowes.com': 'Lowe\'s',
-        'costco': 'Costco', 'costco.com': 'Costco',
+        'amazon': 'Amazon', 'walmart': 'Walmart', 'ebay': 'eBay',
+        'bestbuy': 'Best Buy', 'target': 'Target', 'etsy': 'Etsy',
+        'newegg': 'Newegg', 'homedepot': 'Home Depot', 'lowes': 'Lowe\'s',
+        'costco': 'Costco',
     }
     for k, v in name_map.items():
         if k in domain:
@@ -2926,6 +3033,7 @@ def search():
     if filter_type not in ('general', 'shopping', 'official', 'tutorials', 'discussions', 'academic'):
         filter_type = 'general'
     ml_rank = request.args.get('ml', '')
+    region = request.args.get('region', session.get('region', ''))
 
     announcement = data_manager.get_announcement()
     if not query:
@@ -2966,7 +3074,9 @@ def search():
         return redirect(bang_url)
 
     try:
-        results, total_results = search_engine.search(query, page, filter_type)
+        if region:
+            session['region'] = region
+        results, total_results = search_engine.search(query, page, filter_type, region or None)
 
         if ml_rank and ml_rank != '0' and results:
             results = search_engine.ml_rerank(query, results, ml_rank)
@@ -2999,6 +3109,7 @@ def search():
             total_results=total_results,
             info_box=get_info_box(query, results),
             shopping_products=get_shopping_panel(query, results),
+            region=region or session.get('region', ''),
             announcement=announcement
         )
 

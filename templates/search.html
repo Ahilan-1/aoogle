@@ -105,6 +105,9 @@
         .homepage .search-input-wrap{position:relative}
         .homepage .search-box{width:100%;height:44px;border:1px solid var(--border);border-radius:24px;padding:0 20px;font-size:16px;outline:none;transition:box-shadow .2s;background:var(--input-bg);color:var(--text)}
         .homepage .search-box:hover,.homepage .search-box:focus{box-shadow:0 1px 6px var(--shadow);border-color:transparent}
+        .homepage .loc-row{text-align:center;margin-top:12px}
+        .homepage .loc-select{padding:4px 28px 4px 12px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg3);color:var(--text);cursor:pointer;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2370757a' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center}
+        .homepage .loc-select:hover{border-color:var(--cm)}.homepage .loc-select:focus{outline:none;border-color:var(--cm)}
         .homepage .buttons{margin-top:24px;display:flex;justify-content:center;flex-wrap:wrap}
         .homepage .buttons input,.homepage .buttons button{background:var(--bg3);border:1px solid var(--bg3);border-radius:4px;color:var(--text);font-size:14px;margin:6px 4px;padding:0 16px;line-height:36px;height:36px;cursor:pointer;min-width:120px;font-family:arial,sans-serif;transition:.1s}
         .homepage .buttons input:hover,.homepage .buttons button:hover{box-shadow:0 1px 1px rgba(0,0,0,.1);border-color:var(--border)}
@@ -117,6 +120,8 @@
         .results-header .rs-wrap{flex:1;max-width:640px;position:relative}
         .results-header .rs-input{width:100%;height:40px;border:1px solid var(--border);border-radius:24px;padding:0 16px;font-size:14px;outline:none;transition:box-shadow .2s;background:var(--input-bg);color:var(--text)}
         .results-header .rs-input:focus{box-shadow:0 1px 6px var(--shadow)}
+        .rs-loc{padding:2px 22px 2px 8px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg3);color:var(--text);cursor:pointer;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%2370757a' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 4px center;margin-left:4px;vertical-align:middle;max-width:60px}
+        .rs-loc:hover{border-color:var(--cm)}.rs-loc:focus{outline:none;border-color:var(--cm)}
 
         .results-nav{max-width:1100px;margin:0 auto;padding:2px 0 0;display:flex;overflow-x:auto}
         .results-nav a{padding:10px 14px 8px;font-size:13px;color:var(--text3);display:inline-block;border-bottom:3px solid transparent;white-space:nowrap}
@@ -164,8 +169,8 @@
         .shop-panel .sp-card .sp-img img{width:100%;height:100%;object-fit:contain}
         .shop-panel .sp-card .sp-title{font-size:13px;font-weight:500;color:var(--text);line-height:1.3;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:3px}
         .shop-panel .sp-card .sp-price{font-size:17px;font-weight:700;color:#0288d1;margin-bottom:1px}
-        .shop-panel .sp-card .sp-snippet{font-size:11px;color:var(--text3);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:2px}
         .shop-panel .sp-card .sp-source{font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px}
+        .shop-panel .sp-card .sp-rating{color:#f39c12;font-size:11px;display:inline-flex;align-items:center;gap:2px;margin-right:4px}
         .shop-panel .sp-card .sp-source img{width:14px;height:14px;border-radius:50%}
         .shop-panel .sp-card a{text-decoration:none;color:inherit;display:block}
         .shop-panel .sp-card a:hover .sp-title{color:var(--link)}
@@ -418,6 +423,22 @@
                     <input type="search" name="q" class="search-box" id="hp-search" required placeholder="" autocomplete="off" enterkeyhint="search">
                     <div class="suggestions-box" id="hp-suggest"></div>
                 </div>
+                <div class="loc-row">
+                    <select name="region" class="loc-select">
+                        <option value="">All regions</option>
+                        <option value="us-en" {% if region == 'us-en' %}selected{% endif %}>United States</option>
+                        <option value="uk-en" {% if region == 'uk-en' %}selected{% endif %}>United Kingdom</option>
+                        <option value="ca-en" {% if region == 'ca-en' %}selected{% endif %}>Canada</option>
+                        <option value="de-de" {% if region == 'de-de' %}selected{% endif %}>Germany</option>
+                        <option value="fr-fr" {% if region == 'fr-fr' %}selected{% endif %}>France</option>
+                        <option value="jp-jp" {% if region == 'jp-jp' %}selected{% endif %}>Japan</option>
+                        <option value="in-en" {% if region == 'in-en' %}selected{% endif %}>India</option>
+                        <option value="au-en" {% if region == 'au-en' %}selected{% endif %}>Australia</option>
+                        <option value="br-pt" {% if region == 'br-pt' %}selected{% endif %}>Brazil</option>
+                        <option value="es-es" {% if region == 'es-es' %}selected{% endif %}>Spain</option>
+                        <option value="it-it" {% if region == 'it-it' %}selected{% endif %}>Italy</option>
+                    </select>
+                </div>
                 <div class="buttons">
                     <input type="submit" value="Search">
                     <button type="button" id="lucky-btn">I'm Feeling Lucky</button>
@@ -450,6 +471,20 @@
                     <input type="search" name="q" class="rs-input" id="rs-input" value="{{ query }}" autocomplete="off" enterkeyhint="search">
                     <button type="submit" class="rs-submit" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">Search</button>
                     <div class="suggestions-box" id="rs-suggest"></div>
+                    <select name="region" class="loc-select rs-loc">
+                        <option value="">All regions</option>
+                        <option value="us-en" {% if region == 'us-en' %}selected{% endif %}>US</option>
+                        <option value="uk-en" {% if region == 'uk-en' %}selected{% endif %}>UK</option>
+                        <option value="ca-en" {% if region == 'ca-en' %}selected{% endif %}>CA</option>
+                        <option value="de-de" {% if region == 'de-de' %}selected{% endif %}>DE</option>
+                        <option value="fr-fr" {% if region == 'fr-fr' %}selected{% endif %}>FR</option>
+                        <option value="jp-jp" {% if region == 'jp-jp' %}selected{% endif %}>JP</option>
+                        <option value="in-en" {% if region == 'in-en' %}selected{% endif %}>IN</option>
+                        <option value="au-en" {% if region == 'au-en' %}selected{% endif %}>AU</option>
+                        <option value="br-pt" {% if region == 'br-pt' %}selected{% endif %}>BR</option>
+                        <option value="es-es" {% if region == 'es-es' %}selected{% endif %}>ES</option>
+                        <option value="it-it" {% if region == 'it-it' %}selected{% endif %}>IT</option>
+                    </select>
                 </form>
             </div>
         </div>
@@ -553,11 +588,10 @@
                                 {% elif 'bestbuy' in dn %}<div class="sp-badge bestbuy">Best Buy</div>
                                 {% elif 'target' in dn %}<div class="sp-badge target">Target</div>
                                 {% elif 'etsy' in dn %}<div class="sp-badge etsy">Etsy</div>{% endif %}
-                                <div class="sp-img">{% if p.price %}&#x1F4B5;{% else %}&#x1F50D;{% endif %}</div>
+                                <div class="sp-img">{% if p.image %}<img src="{{ p.image }}" alt="" loading="lazy">{% endif %}</div>
                                 <div class="sp-title">{{ p.title }}</div>
-                                {% if p.price %}<div class="sp-price">{{ p.price }}</div>
-                                {% elif p.snippet %}<div class="sp-snippet">{{ p.snippet[:80] }}</div>{% endif %}
-                                <div class="sp-source">{% if p.favicon %}<img src="{{ p.favicon }}" alt="">{% endif %}{{ p.source }}</div>
+                                {% if p.price %}<div class="sp-price">{{ p.price }}</div>{% endif %}
+                                <div class="sp-source">{% if p.image %}<span class="sp-rating">{{ p.rating }}&#9733;</span>{% endif %}{{ p.source }}</div>
                             </a>
                         </div>
                         {% endfor %}
