@@ -157,6 +157,16 @@ QUERY_INTENTS = {
                      'direction', 'map', 'place', 'restaurant', 'cafe', 'hotel', 'hospital',
                      'pharmacy', 'gas station', 'bank', 'store near'],
     },
+    'academic': {
+        'keywords': ['paper', 'peer reviewed', 'peer-reviewed', 'study', 'doi', 'arxiv',
+                     'publication', 'research', 'journal', 'scholar', 'scholarly',
+                     'citation', 'cited', 'literature review', 'systematic review',
+                     'meta-analysis', 'conference paper', 'proceedings', 'preprint',
+                     'thesis', 'dissertation', 'academic', 'science direct',
+                     'springer', 'ieee', 'acm', 'nature', 'science magazine',
+                     'pubmed', 'pmc', 'medline', 'google scholar',
+                     'original research', 'primary literature', 'scientific paper'],
+    },
 }
 
 
@@ -248,6 +258,43 @@ PLATFORM_DOMAINS = {
     'spotify': 'spotify.com',
     'imdb': 'imdb.com',
     'rottentomatoes': 'rottentomatoes.com',
+}
+
+ACADEMIC_PRIMARY_DOMAINS = {
+    'nature.com', 'science.org', 'sciencedirect.com', 'sciencedirect.',
+    'springer.com', 'springerlink.com', 'acs.org', 'pubs.acs.org',
+    'wiley.com', 'onlinelibrary.wiley.com', 'tandfonline.com',
+    'oxfordjournals.org', 'academic.oup.com', 'cambridge.org',
+    'sagepub.com', 'annualreviews.org', 'cell.com', 'thelancet.com',
+    'nejm.org', 'bmj.com', 'plos.org', 'journals.plos.org',
+    'pubmed.ncbi.nlm.nih.gov', 'ncbi.nlm.nih.gov', 'pmc.ncbi.nlm.nih.gov',
+    'arxiv.org', 'ieee.org', 'ieeexplore.ieee.org', 'acm.org',
+    'dl.acm.org', 'researchgate.net', 'semanticscholar.org',
+    'scholar.google.com', 'core.ac.uk',     'citeseerx.ist.psu.edu',
+    'pubmedcentral.org', 'medrxiv.org', 'biorxiv.org', 'ssrn.com',
+    'frontiersin.org', 'mdpi.com', 'hindawi.com', 'peerj.com',
+    'jstor.org', 'sciencemag.org',
+    'pnas.org', 'royalsocietypublishing.org',
+    'iop.org', 'iopscience.iop.org', 'aps.org', 'journals.aps.org',
+    'aip.org', 'scitation.aip.org', 'spiedigitallibrary.org',
+    'liebertpub.com', 'karger.com', 'karger.ch',
+    'degruyter.com', 'brill.com', 'emerald.com', 'inderscience.com',
+}
+
+ACADEMIC_NEWS_BLOG_PENALTY_DOMAINS = {
+    'medium.com', 'blogger.com', 'blogspot.com', 'wordpress.com',
+    'substack.com', 'wixsite.com', 'weebly.com', 'hubpages.com',
+    'ezinearticles.com', 'articlesfactory.com',
+    'theverge.com', 'techcrunch.com', 'wired.com', 'arstechnica.com',
+    'cnet.com', 'engadget.com', 'gizmodo.com', 'mashable.com',
+    'zdnet.com', 'venturebeat.com', 'forbes.com', 'bloomberg.com',
+    'reuters.com', 'bbc.com', 'cnn.com', 'nytimes.com',
+    'washingtonpost.com', 'theguardian.com', 'theconversation.com',
+    'businessinsider.com', 'theatlantic.com', 'newscientist.com',
+    'sciencealert.com', 'livescience.com', 'iflscience.com',
+    'popularmechanics.com', 'popsci.com', 'sciencenews.org',
+    'cosmosmagazine.com', 'eurekalert.org', 'phys.org',
+    'science20.com', 'scitechdaily.com',
 }
 
 BANG_REDIRECTS = {
@@ -368,6 +415,31 @@ AD_DOMAINS = {
 AD_KEYWORDS = ['ad', 'sponsored', 'promoted', 'advertisement', 'paid',
                'partner', 'disclosure', 'affiliate', 'sponsor']
 
+# Load Blocklist Project blocklists (gambling, ads, crypto, drugs, fraud)
+BLOCKLIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'blocklist_domains.json')
+BLOCKLIST_DOMAINS = set()
+BLOCKLIST_COUNT = 0
+if os.path.exists(BLOCKLIST_FILE):
+    try:
+        with open(BLOCKLIST_FILE) as f:
+            bl_data = json.load(f)
+        BLOCKLIST_DOMAINS = set(bl_data.get('blocklist_domains', []))
+        BLOCKLIST_COUNT = len(BLOCKLIST_DOMAINS)
+        app.logger.info(f"Loaded {BLOCKLIST_COUNT} blocklisted domains")
+    except Exception as e:
+        app.logger.error(f"Failed to load blocklist: {e}")
+
+# Load Tranco top-1M domain authority
+TRANCO_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tranco_authority.json')
+TRANCO_AUTHORITY = {}
+if os.path.exists(TRANCO_FILE):
+    try:
+        with open(TRANCO_FILE) as f:
+            TRANCO_AUTHORITY = json.load(f)
+        app.logger.info(f"Loaded {len(TRANCO_AUTHORITY)} Tranco-ranked domains")
+    except Exception as e:
+        app.logger.error(f"Failed to load Tranco authority: {e}")
+
 
 class SearchBlocker:
     @staticmethod
@@ -385,6 +457,19 @@ class SearchBlocker:
             return True
         if any(ad_domain in url.lower() for ad_domain in AD_DOMAINS):
             return True
+        return False
+
+    @staticmethod
+    def is_blocklisted(url):
+        domain = urlparse(url).netloc.lower()
+        domain = re.sub(r'^www\.', '', domain)
+        if domain in BLOCKLIST_DOMAINS:
+            return True
+        parts = domain.split('.')
+        for i in range(1, len(parts) - 1):
+            parent = '.'.join(parts[i:])
+            if parent in BLOCKLIST_DOMAINS:
+                return True
         return False
 
 
@@ -414,6 +499,9 @@ class SearchIntent:
 
     def is_transactional(self):
         return 'transactional' in self.detected_intents
+
+    def wants_academic(self):
+        return 'academic' in self.detected_intents
 
 CRISIS_PREFIXES = [
     "i am in crisis", "i need help", "i want to die", "i want to kms",
@@ -1264,9 +1352,20 @@ class ImprovedSearch:
         domain = urlparse(url).netloc.lower()
         domain = re.sub(r'^www\.', '', domain)
 
+        # Check hardcoded domain authority first (authoritative overrides)
         for known_domain, authority in DOMAIN_AUTHORITY.items():
             if known_domain in domain or domain.endswith('.' + known_domain):
                 return authority
+
+        # Check Tranco list (top 1M ranked domains)
+        if TRANCO_AUTHORITY:
+            if domain in TRANCO_AUTHORITY:
+                return TRANCO_AUTHORITY[domain]
+            parts = domain.split('.')
+            for i in range(1, len(parts) - 1):
+                parent = '.'.join(parts[i:])
+                if parent in TRANCO_AUTHORITY:
+                    return max(TRANCO_AUTHORITY[parent] - 5, 5)
 
         return 8
 
@@ -1606,6 +1705,62 @@ class ImprovedSearch:
                 return 40
         return 0
 
+    def _score_academic_boost(self, query, intent, result):
+        if not intent.wants_academic():
+            return 0
+        domain = urlparse(result.url).netloc.lower()
+        domain = re.sub(r'^www\.', '', domain)
+        url_lower = result.url.lower()
+        title_lower = result.title.lower() if result.title else ''
+        snippet_lower = result.snippet.lower() if result.snippet else ''
+        body = title_lower + ' ' + snippet_lower
+        boost = 0
+
+        if any(acad_domain.strip('.') in domain for acad_domain in ACADEMIC_PRIMARY_DOMAINS):
+            boost += 50
+        if domain.endswith('.edu'):
+            boost += 40
+        if '.ac.' in domain:
+            boost += 35
+        if domain.endswith('.gov'):
+            boost += 30
+
+        if result.category == 'academic':
+            boost += 25
+
+        if any(d in url_lower for d in ['/doi/', '/abs/', '/pdf/', '/pub/', '/record/', '/articles/']):
+            boost += 15
+
+        if re.search(r'\b(doi|arxiv|pmc|pmid)\b', body):
+            boost += 15
+
+        if re.search(r'\b(pages?|pp\.|vol\.|no\.|volume|issue)\b', body):
+            boost += 10
+
+        if re.search(r'\b19\d{2}|20\d{2}\b', title_lower):
+            boost += 5
+
+        if any(d in domain for d in ['wikipedia.org']):
+            boost += 5
+
+        for blog_domain in ACADEMIC_NEWS_BLOG_PENALTY_DOMAINS:
+            if blog_domain in domain:
+                boost -= 35
+
+        if result.category == 'news' and not any(
+            src in domain for src in ['nature.com', 'science.org', 'sciencedirect.com',
+                                      'springer.com', 'wiley.com', 'pubmed.', 'ncbi.',
+                                      'cell.com', 'thelancet.com', 'nejm.org']
+        ):
+            boost -= 25
+
+        known_commentary = ['review of', 'editorial', 'opinion:', 'commentary', 'news & views',
+                            'perspective', 'what is', 'explainer', 'overview of']
+        if any(phrase in title_lower for phrase in known_commentary):
+            boost -= 20
+
+        return boost
+
     def _score_clickbait_penalty(self, title):
         title_lower = title.lower()
         penalty = 0
@@ -1767,6 +1922,7 @@ class ImprovedSearch:
             s += self._score_clickbait_penalty(result.title)
             s += self._score_title_naturalness(result.title)
             s += self._score_url_depth_penalty(result.url)
+            s += self._score_academic_boost(query, intent, result)
 
             domain = urlparse(result.url).netloc.lower()
             domain = re.sub(r'^www\.', '', domain)
@@ -1816,14 +1972,24 @@ class ImprovedSearch:
         deduplicated = []
         seen_titles = set()
         domain_count = {}
+        seen_base_urls = {}
+
+        def normalize_article_url(url):
+            u = urlparse(url)
+            path = re.sub(r'\.(pdf|html?|php|asp|aspx)$', '', u.path.rstrip('/'))
+            path = re.sub(r'/(print|full|fulltext|abstract|download|view)$', '', path)
+            path = re.sub(r'/(v[\d]+|abs|pdf|epdf)$', '', path)
+            path = re.sub(r'[?#].*$', '', path)
+            return u.netloc.lower() + path
 
         for r in scored:
             if SearchBlocker.is_ad(r.url, r.title, r.snippet):
                 continue
+            if SearchBlocker.is_blocklisted(r.url):
+                continue
 
             domain = urlparse(r.url).netloc.lower()
             domain = re.sub(r'^www\.', '', domain)
-            # Aggregate subdomains under parent domain (e.g. retail.sbi.bank.in -> sbi.bank.in)
             parts = domain.split('.')
             if len(parts) > 2:
                 domain = '.'.join(parts[-2:]) if len(parts[-1]) <= 3 and len(parts) > 2 else '.'.join(parts[-2:])
@@ -1832,6 +1998,12 @@ class ImprovedSearch:
             if title_norm in seen_titles:
                 continue
             seen_titles.add(title_norm)
+
+            base_url = normalize_article_url(r.url)
+            if base_url in seen_base_urls:
+                seen_base_urls[base_url] = max(seen_base_urls[base_url], r.score)
+                continue
+            seen_base_urls[base_url] = r.score
 
             if domain not in domain_count:
                 domain_count[domain] = 0
@@ -2091,15 +2263,18 @@ class ImprovedSearch:
                 future = self.executor.submit(self._search_single_engine, search_url, query, page, region)
                 futures.append(future)
 
-            for future in as_completed(futures, timeout=15):
-                try:
-                    current_results = future.result()
-                    results.extend(current_results)
-                    if len(results) >= 50:
-                        break
-                except Exception as e:
-                    errors.append(str(e))
-                    continue
+            try:
+                for future in as_completed(futures, timeout=20):
+                    try:
+                        current_results = future.result()
+                        results.extend(current_results)
+                        if len(results) >= 50:
+                            break
+                    except Exception as e:
+                        errors.append(str(e))
+                        continue
+            except TimeoutError:
+                app.logger.warning(f"Search timed out for query: {query[:50]}")
 
             if not results:
                 app.logger.warning("Primary search failed, trying fallback sources...")
@@ -3387,7 +3562,7 @@ search_engine = ImprovedSearch()
 def home():
     announcement = data_manager.get_announcement()
     ml_val = request.args.get('ml', '')
-    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, ml_rank=bool(ml_val) and ml_val != '0')
+    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, ml_rank=bool(ml_val) and ml_val != '0', blocked_count=BLOCKLIST_COUNT)
 
 @app.route('/search')
 def search():
@@ -3401,7 +3576,7 @@ def search():
 
     announcement = data_manager.get_announcement()
     if not query:
-        return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement)
+        return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT)
 
     crisis = detect_crisis(query)
 
@@ -3416,7 +3591,8 @@ def search():
             total_results=len(LIFE_RESOURCES),
             info_box=None,
             shopping_products=None,
-            announcement=announcement
+            announcement=announcement,
+            blocked_count=BLOCKLIST_COUNT
         )
 
     notice = detect_notice(query)
@@ -3430,7 +3606,8 @@ def search():
             total_results=0,
             info_box=None,
             shopping_products=None,
-            announcement=announcement
+            announcement=announcement,
+            blocked_count=BLOCKLIST_COUNT
         )
 
     bang_url = get_bang_redirect(query)
@@ -3496,7 +3673,8 @@ def search():
             info_box=get_info_box(query, results),
             shopping_products=get_shopping_panel(query, results),
             region=region or session.get('region', ''),
-            announcement=announcement
+            announcement=announcement,
+            blocked_count=BLOCKLIST_COUNT
         )
 
     except Exception as e:
@@ -3508,7 +3686,8 @@ def search():
             notice=notice,
             error="An error occurred while processing your search. Please try again.",
             shopping_products=None,
-            announcement=announcement
+            announcement=announcement,
+            blocked_count=BLOCKLIST_COUNT
         )
 
 @app.route('/api/search')

@@ -1,7 +1,11 @@
 import os
 import json
 import pickle
+import warnings
 import numpy as np
+
+# Suppress XGBoost pickle loading version warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='xgboost')
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model.pkl')
 FEATURES_PATH = os.path.join(os.path.dirname(__file__), 'feature_names.pkl')

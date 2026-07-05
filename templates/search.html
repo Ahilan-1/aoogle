@@ -437,6 +437,9 @@
             <a href="/changelogs">Changelogs</a><span class="sep">|</span>
             <a href="/settings">Settings</a>
         </div>
+        {% if blocked_count %}
+        <div class="about-link" style="margin-top:12px;font-size:12px">&#x1F6AB; <strong>{{ "{:,}".format(blocked_count) }}</strong> gambling, ad, crypto, drug &amp; fraud domains delisted</div>
+        {% endif %}
     </div>
 
     {% else %}
