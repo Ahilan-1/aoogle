@@ -1229,26 +1229,26 @@ class ImprovedSearch:
 
         exact_match_bonus = 0
         if query_lower in title_lower:
-            exact_match_bonus = 35
+            exact_match_bonus = 40
             title_start_ratio = title_lower.find(query_lower) / max(len(title_lower), 1)
             if title_start_ratio < 0.3:
-                exact_match_bonus += 10
+                exact_match_bonus += 15
 
         phrase_in_title = 0
         for i in range(len(query_terms)):
-            for j in range(i + 1, min(i + 4, len(query_terms) + 1)):
+            for j in range(i + 2, min(i + 5, len(query_terms) + 1)):
                 phrase = ' '.join(query_terms[i:j])
-                if len(phrase) > 2 and phrase in title_lower:
+                if len(phrase) > 4 and phrase in title_lower:
                     phrase_in_title = max(phrase_in_title, len(phrase.split()))
 
         matching_terms = sum(1 for t in query_terms if t in title_lower)
         term_ratio = matching_terms / max(len(query_terms), 1)
 
         score = exact_match_bonus
-        score += phrase_in_title * 7
+        score += phrase_in_title * 8
 
         if matching_terms == len(query_terms) and not exact_match_bonus:
-            score += 15
+            score += 20
 
         short_title_penalty = max(0, 8 - len(result.title.split())) * 1.5
         score -= short_title_penalty
@@ -1256,6 +1256,15 @@ class ImprovedSearch:
         title_is_list = bool(re.search(r'^\d+\s', title_lower))
         if title_is_list:
             score -= 5
+
+        # Age/year number detection — boost when query mentions age and title matches
+        age_nums = re.findall(r'\b(\d{1,2})\b', query_lower)
+        if age_nums and ('year' in query_lower or 'yr' in query_lower or 'old' in query_lower):
+            for num in age_nums:
+                if num in title_lower:
+                    score += 15
+                if f'{num} year' in title_lower or f'{num} yr' in title_lower:
+                    score += 25
 
         return max(0, score)
 
@@ -1265,12 +1274,9 @@ class ImprovedSearch:
 
         for known_domain, authority in DOMAIN_AUTHORITY.items():
             if known_domain in domain or domain.endswith('.' + known_domain):
-                return authority
+                return min(authority, 15)
 
-        tld = domain.rsplit('.', 1)[-1] if '.' in domain else ''
-        tld_scores = {'edu': 80, 'gov': 80, 'mil': 75, 'org': 60, 'io': 55,
-                      'int': 70, 'ac': 60, 'co': 45, 'com': 50, 'net': 45}
-        return tld_scores.get(tld, 40)
+        return 8
 
     def _score_url_quality(self, query, url):
         domain = urlparse(url).netloc.lower()
@@ -1319,10 +1325,10 @@ class ImprovedSearch:
 
         matching_terms = sum(1 for t in query_terms if t in snippet_lower)
         term_ratio = matching_terms / max(len(query_terms), 1)
-        score += term_ratio * 20
+        score += term_ratio * 25
 
         if query_lower in snippet_lower:
-            score += 15
+            score += 20
 
         snippet_word_count = len(snippet_lower.split())
         if 10 <= snippet_word_count <= 50:
@@ -1339,9 +1345,27 @@ class ImprovedSearch:
         if len(term_positions) > 1:
             proximity = max(term_positions) - min(term_positions)
             if proximity < 50:
-                score += 10
+                score += 12
             elif proximity < 100:
-                score += 5
+                score += 6
+
+        # Age/year detection in snippet
+        age_nums = re.findall(r'\b(\d{1,2})\b', query_lower)
+        if age_nums and ('year' in query_lower or 'yr' in query_lower or 'old' in query_lower):
+            for num in age_nums:
+                if num in snippet_lower:
+                    score += 10
+                if f'{num} year' in snippet_lower:
+                    score += 20
+                if 'minor' in snippet_lower or 'minor account' in snippet_lower:
+                    score += 15
+
+        # Long-tail phrase match in snippet
+        if len(query_terms) >= 3:
+            for i in range(len(query_terms) - 2):
+                phrase = ' '.join(query_terms[i:i+3])
+                if phrase in snippet_lower:
+                    score += 15
 
         return max(0, score)
 
@@ -1664,6 +1688,10 @@ class ImprovedSearch:
 
             domain = urlparse(r.url).netloc.lower()
             domain = re.sub(r'^www\.', '', domain)
+            # Aggregate subdomains under parent domain (e.g. retail.sbi.bank.in -> sbi.bank.in)
+            parts = domain.split('.')
+            if len(parts) > 2:
+                domain = '.'.join(parts[-2:]) if len(parts[-1]) <= 3 and len(parts) > 2 else '.'.join(parts[-2:])
             title_norm = r.title.lower().strip()
 
             if title_norm in seen_titles:
@@ -1674,16 +1702,19 @@ class ImprovedSearch:
                 domain_count[domain] = 0
             domain_count[domain] += 1
 
-            if domain_count[domain] > 3:
-                r.score *= 0.5
-            elif domain_count[domain] > 2:
-                r.score *= 0.7
+            if domain_count[domain] > 2:
+                continue
             elif domain_count[domain] > 1:
-                r.score *= 0.85
+                r.score *= 0.4
 
             deduplicated.append(r)
 
         deduplicated.sort(key=lambda x: x.score, reverse=True)
+
+        # Drop very low-scored results (likely irrelevant)
+        if deduplicated and deduplicated[0].score > 0:
+            threshold = deduplicated[0].score * 0.08
+            deduplicated = [r for r in deduplicated if r.score >= threshold]
 
         return deduplicated[:50]
 
