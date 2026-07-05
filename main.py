@@ -1052,120 +1052,19 @@ class KumoCrawler:
 
 kumo = KumoCrawler()
 
-# Entity detection for cross-entity penalty in ranking
+# Entity detection for cross-entity penalty in ranking (deprecated, kept for reference)
 BANK_ENTITIES = {
-    # India
-    'sbi': {'names': ['sbi', 'state bank of india'], 'domains': ['sbi.bank.in', 'sbi.in', 'onlinesbi.sbi']},
-    'axis': {'names': ['axis bank', 'axis'], 'domains': ['axisbank']},
-    'hdfc': {'names': ['hdfc', 'hdfc bank'], 'domains': ['hdfcbank']},
-    'icici': {'names': ['icici', 'icici bank'], 'domains': ['icicibank']},
-    'indian': {'names': ['indian bank', 'indianbank'], 'domains': ['indianbank']},
-    'pnb': {'names': ['pnb', 'punjab national bank'], 'domains': ['pnb']},
-    'bob': {'names': ['bob', 'bank of baroda'], 'domains': ['bankofbaroda']},
-    'canara': {'names': ['canara bank'], 'domains': ['canarabank']},
-    'kotak': {'names': ['kotak', 'kotak mahindra'], 'domains': ['kotak']},
-    'yesbank': {'names': ['yes bank'], 'domains': ['yesbank']},
-    'idbi': {'names': ['idbi', 'idbi bank'], 'domains': ['idbi']},
-    'union': {'names': ['union bank of india', 'union bank'], 'domains': ['unionbankofindia']},
-    'iob': {'names': ['indian overseas bank', 'iob'], 'domains': ['iob']},
-    'bom': {'names': ['bank of maharashtra', 'bom'], 'domains': ['bankofmaharashtra']},
-    'syndicate': {'names': ['syndicate bank'], 'domains': ['syndicatebank']},
-    # USA
-    'chase': {'names': ['chase', 'chase bank', 'jp morgan chase'], 'domains': ['chase.com', 'jpmorgan']},
-    'boa': {'names': ['bank of america', 'bofa'], 'domains': ['bankofamerica.com', 'bofa.com']},
-    'wells': {'names': ['wells fargo'], 'domains': ['wellsfargo.com']},
-    'citi': {'names': ['citi', 'citibank', 'citi bank'], 'domains': ['citibank.com', 'citi.com']},
-    'capitalone': {'names': ['capital one', 'capitalone'], 'domains': ['capitalone.com']},
-    'amex': {'names': ['american express', 'amex'], 'domains': ['americanexpress.com']},
-    'usbank': {'names': ['us bank', 'us bancorp'], 'domains': ['usbank.com']},
-    'pnc': {'names': ['pnc', 'pnc bank'], 'domains': ['pnc.com']},
-    'tdbank': {'names': ['td bank', 'td bank us'], 'domains': ['tdbank.com']},
-    'goldman': {'names': ['goldman sachs'], 'domains': ['goldmansachs.com']},
-    'morganstanley': {'names': ['morgan stanley'], 'domains': ['morganstanley.com']},
-    # UK / Europe
-    'hsbc': {'names': ['hsbc'], 'domains': ['hsbc.com', 'hsbc.co.uk']},
-    'barclays': {'names': ['barclays'], 'domains': ['barclays.com', 'barclays.co.uk']},
-    'lloyds': {'names': ['lloyds', 'lloyds bank'], 'domains': ['lloydsbank.com', 'lloydsbank.co.uk']},
-    'natwest': {'names': ['natwest', 'national westminster'], 'domains': ['natwest.com']},
-    'santander': {'names': ['santander'], 'domains': ['santander.com', 'santander.co.uk']},
-    'deutsche': {'names': ['deutsche bank'], 'domains': ['deutsche-bank.de', 'db.com']},
-    'ubs': {'names': ['ubs'], 'domains': ['ubs.com']},
-    'credit_suisse': {'names': ['credit suisse'], 'domains': ['credit-suisse.com']},
-    'bnp': {'names': ['bnp paribas'], 'domains': ['bnpparibas.com']},
-    'societe': {'names': ['societe generale'], 'domains': ['societegenerale.com']},
-    'ing': {'names': ['ing', 'ing bank'], 'domains': ['ing.com', 'ing.nl']},
-    # Canada
-    'rbc': {'names': ['rbc', 'royal bank of canada'], 'domains': ['rbc.com', 'royalbank.com']},
-    'td_canada': {'names': ['td canada trust', 'toronto dominion'], 'domains': ['td.com']},
-    'scotiabank': {'names': ['scotiabank', 'bank of nova scotia'], 'domains': ['scotiabank.com']},
-    'bmo': {'names': ['bmo', 'bank of montreal'], 'domains': ['bmo.com']},
-    'cibc': {'names': ['cibc', 'canadian imperial'], 'domains': ['cibc.com']},
-    # Australia / NZ
-    'commonwealth': {'names': ['commonwealth bank', 'commbank'], 'domains': ['commbank.com.au']},
-    'westpac': {'names': ['westpac'], 'domains': ['westpac.com.au']},
-    'anz': {'names': ['anz', 'australia new zealand'], 'domains': ['anz.com']},
-    'naba': {'names': ['nab', 'national australia bank'], 'domains': ['nab.com.au']},
-    # Singapore / Asia
-    'dbs': {'names': ['dbs', 'dbs bank'], 'domains': ['dbs.com']},
-    'ocbc': {'names': ['ocbc', 'ocbc bank'], 'domains': ['ocbc.com']},
-    'uob': {'names': ['uob', 'united overseas bank'], 'domains': ['uob.com.sg']},
-    'maybank': {'names': ['maybank'], 'domains': ['maybank.com']},
-    # Japan
-    'mizuho': {'names': ['mizuho'], 'domains': ['mizuho.com', 'mizuhobank.com']},
-    'mitsubishi': {'names': ['mitsubishi ufj', 'mufg'], 'domains': ['mufg.jp', 'bankofchina.com']},
-    'nomura': {'names': ['nomura'], 'domains': ['nomura.com']},
-    # China
-    'icbc': {'names': ['icbc', 'industrial commercial bank china'], 'domains': ['icbc.com.cn']},
-    'china_construction': {'names': ['china construction bank', 'ccb'], 'domains': ['ccb.com']},
-    'bank_of_china': {'names': ['bank of china', 'boc'], 'domains': ['bankofchina.com']},
-    # UAE / Middle East
-    'emirates_nbd': {'names': ['emirates nbd'], 'domains': ['emiratesnbd.com']},
-    'qnb': {'names': ['qnb', 'qatar national bank'], 'domains': ['qnb.com']},
-    'adcb': {'names': ['adcb', 'abu dhabi commercial bank'], 'domains': ['adcb.com']},
 }
 
 def _detect_query_entity(query):
-    q = query.lower()
-    for key, ent in BANK_ENTITIES.items():
-        for name in ent['names']:
-            if name in q:
-                return key
     return None
 
 def _detect_domain_entity(domain):
-    for key, ent in BANK_ENTITIES.items():
-        for dom_pattern in ent['domains']:
-            if dom_pattern in domain:
-                return key
     return None
 
 
 def _search_google(query, max_results=5, region=None):
-    try:
-        from googlesearch import search as google_search
-        from googlesearch import SearchResult
-        results = []
-        kwargs = dict(num_results=max_results, advanced=True, sleep_interval=0.5)
-        if region:
-            kwargs['region'] = region
-        raw = list(google_search(query, **kwargs))
-        serp_feature_titles = {'people also ask', 'people also viewed', 'related searches',
-                               'top stories', 'videos', 'shopping results', 'images'}
-        for r in raw[:max_results]:
-            title = (r.title or '').strip().lower()
-            if title in serp_feature_titles:
-                continue
-            if not r.url or 'google.com/search' in r.url or 'google.' in r.url and '/search' in r.url:
-                continue
-            parsed = urlparse(r.url)
-            results.append(SearchResult(
-                title=r.title, url=r.url, snippet=r.description[:300],
-                category='general', date=None, domain=parsed.netloc
-            ))
-        return results
-    except Exception as e:
-        app.logger.warning(f"Google search error: {e}")
-        return []
+    return []
 
 
 class ImprovedSearch:
@@ -1182,7 +1081,6 @@ class ImprovedSearch:
             self.search_urls.append("ddgs://text")
         else:
             self.ddgs = DDGS() if ddgs_available else None
-        self.search_urls.append("google://text")
         self.in_memory_cache = {}
         self.cache_lock = threading.Lock()
 
@@ -1360,16 +1258,6 @@ class ImprovedSearch:
                 if f'{num} year' in title_lower or f'{num} yr' in title_lower:
                     score += 25
 
-        # Penalize title that only matches brand/generic words but misses content words
-        brand_words = {'state', 'bank', 'of', 'india', 'sbi', 'the', 'a', 'an', 'in', 'for', 'to', 'and', 'or', 'is', 'are', 'on', 'at', 'by', 'with', 'from', 'as', 'be', 'has', 'have', 'do', 'does'}
-        content_words = [t for t in query_terms if t not in brand_words and len(t) > 2]
-        if content_words:
-            missing_content = sum(1 for t in content_words if t not in title_lower)
-            if missing_content == len(content_words):
-                score -= 20
-            elif missing_content > len(content_words) / 2:
-                score -= 10
-
         return max(0, score)
 
     def _score_domain_authority(self, url):
@@ -1378,7 +1266,7 @@ class ImprovedSearch:
 
         for known_domain, authority in DOMAIN_AUTHORITY.items():
             if known_domain in domain or domain.endswith('.' + known_domain):
-                return min(authority, 15)
+                return authority
 
         return 8
 
@@ -1718,6 +1606,144 @@ class ImprovedSearch:
                 return 40
         return 0
 
+    def _score_clickbait_penalty(self, title):
+        title_lower = title.lower()
+        penalty = 0
+        clickbait_patterns = [
+            r'you.won.t.believe', r'you.ll.never', r'blow.your.mind',
+            r'jaw.dropping', r'mind.blowing', r'shocking', r'incredible',
+            r'this.will', r'what.happens.when', r'the truth about',
+            r'why you should', r'(?<!\w)\d+\s+(reason|thing|fact|tip|trick|way|sign)',
+            r'you.need.to.know', r'you.need.to.see', r'will.surprise',
+            r'can.t.believe', r'don.t.ignore', r'stop.doing',
+            r'what.nobody.tells', r'secret', r'xposed', r'guaranteed',
+        ]
+        for pat in clickbait_patterns:
+            if re.search(pat, title_lower):
+                penalty -= 12
+                break
+        excl = title.count('!') + title.count('?')
+        if excl >= 2:
+            penalty -= 8
+        caps_words = sum(1 for w in title.split() if w.isupper() and len(w) > 1)
+        total_words = max(len(title.split()), 1)
+        if total_words >= 3 and caps_words / total_words > 0.5:
+            penalty -= 10
+        return max(-25, penalty)
+
+    def _score_answer_quality(self, query, snippet):
+        query_lower = query.lower().strip()
+        snippet_lower = snippet.lower().strip()
+        if not snippet_lower or not query_lower:
+            return 0
+        boost = 0
+        if query_lower.endswith('?'):
+            snippet_start = snippet_lower[:80]
+            if snippet_lower.startswith(query_lower[:-1].strip()):
+                boost += 20
+            answer_indicators = ['is a', 'is an', 'is the', 'are a', 'refers to', 'means',
+                                 'is defined as', 'can be described', 'is used for']
+            if any(ind in snippet_start for ind in answer_indicators):
+                boost += 15
+            if '?' not in snippet_start and snippet_start.rstrip().endswith(('.', '!', '?')):
+                boost += 10
+        query_terms = query_lower.split()
+        if len(query_terms) >= 2:
+            first_term_pos = snippet_lower.find(query_terms[0])
+            if first_term_pos >= 0:
+                proximity = 0
+                for t in query_terms[1:]:
+                    pos = snippet_lower.find(t, first_term_pos)
+                    if pos >= 0:
+                        proximity += pos - first_term_pos
+                if proximity < 60:
+                    boost += 12
+                elif proximity < 120:
+                    boost += 6
+        if len(snippet_lower) > 150 and snippet_lower.count('.') >= 2:
+            boost += 5
+        if re.search(r'\d+%|\$\d+|\d+ (year|month|day|hour|minute|person|people|time)', snippet_lower):
+            boost += 8
+        return min(30, boost)
+
+    def _score_title_naturalness(self, title):
+        title_lower = title.lower().strip()
+        penalty = 0
+        words = title_lower.split()
+        if len(words) <= 2:
+            return -15
+        pipe_count = title.count('|')
+        if pipe_count >= 3:
+            penalty -= 10
+        elif pipe_count >= 2:
+            penalty -= 5
+        hyphen_words = sum(1 for w in words if '-' in w)
+        if len(words) >= 3 and hyphen_words / len(words) > 0.4:
+            penalty -= 8
+        comma_separated = len(re.findall(r'\w+,\s+\w+', title))
+        if len(words) >= 4 and comma_separated >= 2:
+            penalty -= 10
+        if re.search(r'(?:^|\s)[A-Z]{2,}(?:\s|$)', title):
+            penalty -= 5
+        has_verb = any(w.endswith(('ed', 'ing', 's')) and len(w) > 3 for w in words)
+        has_preposition = any(w in title_lower for w in ['of', 'in', 'for', 'with', 'at', 'by', 'on', 'from'])
+        if not has_verb and not has_preposition and len(words) >= 4:
+            penalty -= 8
+        return max(-20, penalty)
+
+    def _score_url_depth_penalty(self, url):
+        path = urlparse(url).path.strip('/')
+        if not path:
+            return 0
+        segments = [s for s in path.split('/') if s and not s.startswith('#')]
+        depth = len(segments)
+        penalty = 0
+        if depth >= 6:
+            penalty = -15
+        elif depth >= 4:
+            penalty = -8
+        elif depth >= 3:
+            penalty = -3
+        hex_patterns = sum(1 for s in segments if re.match(r'^[0-9a-f]{8,}$', s))
+        if hex_patterns >= 1:
+            penalty -= 10
+        num_segments = sum(1 for s in segments if re.match(r'^\d+$', s))
+        if num_segments >= 2:
+            penalty -= 8
+        encoded_chars = path.count('%') + path.count('+') + path.count('_')
+        if encoded_chars > depth * 2:
+            penalty -= 5
+        return max(-20, penalty)
+
+    def _score_snippet_substance(self, snippet):
+        snippet_lower = snippet.lower().strip()
+        if not snippet_lower:
+            return 0
+        score = 0
+        word_count = len(snippet_lower.split())
+        if word_count < 20:
+            score -= 10
+        elif word_count < 40:
+            score -= 3
+        if word_count > 80:
+            score += 5
+        num_count = len(re.findall(r'\d+', snippet_lower))
+        if num_count >= 3:
+            score += 8
+        elif num_count >= 1:
+            score += 3
+        if '"' in snippet or '&ldquo;' in snippet:
+            score += 6
+        if re.search(r'https?://|\.com|\.org|\.gov', snippet_lower):
+            score += 4
+        stats_indicator = ['%', 'percent', 'according to', 'study found', 'research shows',
+                           'ranked', 'rated', 'survey', 'statistics', 'data shows']
+        if any(ind in snippet_lower for ind in stats_indicator):
+            score += 8
+        if snippet_lower.count('.') >= 3:
+            score += 4
+        return min(20, max(-15, score))
+
     def _rank_results(self, query, results, filter_type='general'):
         intent = SearchIntent(query)
         blacklist = data_manager.get_blacklist()
@@ -1736,19 +1762,17 @@ class ImprovedSearch:
             s += self._score_content_quality(result) * 0.11
             s += self._score_reddit_boost(query, intent, result) * 0.07
             s += self._score_navigational_domain_boost(query, result)
+            s += self._score_answer_quality(query, result.snippet) * 0.08
+            s += self._score_snippet_substance(result.snippet) * 0.07
+            s += self._score_clickbait_penalty(result.title)
+            s += self._score_title_naturalness(result.title)
+            s += self._score_url_depth_penalty(result.url)
 
             domain = urlparse(result.url).netloc.lower()
             domain = re.sub(r'^www\.', '', domain)
             for bl_domain, bl_penalty in blacklist.items():
                 if bl_domain in domain:
                     s += bl_penalty
-
-            # Entity mismatch penalty: if query names a specific bank/brand, penalize other banks/brands
-            query_entity = _detect_query_entity(query)
-            if query_entity:
-                result_entity = _detect_domain_entity(domain)
-                if result_entity and result_entity != query_entity:
-                    s -= 60
 
             s = max(0, s)
 
@@ -1866,72 +1890,6 @@ class ImprovedSearch:
             app.logger.error(f"Error parsing DuckDuckGo HTML: {str(e)}")
         return results
 
-    def _parse_google_results(self, html):
-        results = []
-        try:
-            soup = BeautifulSoup(html, 'html.parser')
-            for div in soup.find_all(['div', 'article'], {'class': ['g', 'result']}):
-                try:
-                    title_elem = div.find(['h3', 'h2', 'h1'])
-                    if not title_elem:
-                        continue
-                    title = title_elem.get_text(strip=True)
-
-                    link = div.find('a')
-                    if not link or not link.get('href'):
-                        continue
-                    url = link['href']
-                    if url.startswith('/url?q='):
-                        url = url.split('/url?q=')[1].split('&')[0]
-
-                    snippet_elem = div.find(['div', 'span'], {'class': ['VwiC3b', 'snippet', 'description']})
-                    snippet = snippet_elem.get_text(strip=True) if snippet_elem else ''
-
-                    if title and url and snippet:
-                        date = self._extract_date(snippet)
-                        category = self._categorize_result(url, title, snippet)
-                        result = SearchResult(title, url, snippet, category, date)
-                        results.append(result)
-
-                except Exception as e:
-                    app.logger.error(f"Error parsing Google result: {str(e)}")
-                    continue
-        except Exception as e:
-            app.logger.error(f"Error parsing Google HTML: {str(e)}")
-        return results
-
-    def _parse_bing_results(self, html):
-        results = []
-        try:
-            soup = BeautifulSoup(html, 'html.parser')
-            for li in soup.find_all('li', class_='b_algo'):
-                try:
-                    title_elem = li.find('h2')
-                    if not title_elem:
-                        continue
-                    title = title_elem.get_text(strip=True)
-
-                    link = title_elem.find('a')
-                    if not link or not link.get('href'):
-                        continue
-                    url = link['href']
-
-                    snippet_elem = li.find(['p', 'div'], class_=['b_caption', 'b_lineclamp2'])
-                    snippet = snippet_elem.get_text(strip=True) if snippet_elem else ''
-
-                    if title and url and snippet:
-                        date = self._extract_date(snippet)
-                        category = self._categorize_result(url, title, snippet)
-                        result = SearchResult(title, url, snippet, category, date)
-                        results.append(result)
-
-                except Exception as e:
-                    app.logger.error(f"Error parsing Bing result: {str(e)}")
-                    continue
-        except Exception as e:
-            app.logger.error(f"Error parsing Bing HTML: {str(e)}")
-        return results
-
     def _search_single_engine(self, search_url, query, page, region=None):
         try:
             if search_url == 'ddgs://text':
@@ -1957,12 +1915,6 @@ class ImprovedSearch:
                     return results
                 except Exception as e:
                     app.logger.error(f"DDGS search error: {e}")
-                    return []
-            elif search_url == 'google://text':
-                try:
-                    return _search_google(query, max_results=5, region=region)
-                except Exception as e:
-                    app.logger.error(f"Google search error: {e}")
                     return []
             elif 'duckduckgo' in search_url:
                 all_results = []
@@ -1996,19 +1948,7 @@ class ImprovedSearch:
                         break
                 return all_results
             else:
-                params = {
-                    'q': query,
-                    'start': (page - 1) * 10,
-                    'num': 10,
-                    'hl': 'en',
-                    'safe': 'active'
-                }
-                response = self._fetch_with_retry(search_url, params)
-                if response and response.text:
-                    if 'bing' in search_url:
-                        return self._parse_bing_results(response.text)
-                    else:
-                        return self._parse_google_results(response.text)
+                return []
         except Exception as e:
             app.logger.error(f"Search error on {search_url}: {str(e)}")
             return []
