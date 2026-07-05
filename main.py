@@ -2732,33 +2732,52 @@ def get_shopping_panel(query, results):
         return None
     shopping_kw = ['buy', 'price', 'deal', 'discount', 'cheap', 'shop', 'purchase',
                    'order', 'cost', 'under', 'sale', 'coupon', 'offer', 'affordable',
-                   'best', 'top', 'review', 'cheap', 'budget']
+                   'best', 'top', 'review', 'cheap', 'budget', 'for', 'vs', 'pro',
+                   'new', '2025', '2026', 'amazon', 'walmart', 'ebay', 'near me']
     q_lower = query.lower().strip()
     is_shopping = any(kw in q_lower for kw in shopping_kw)
     if not is_shopping:
         shopping_count = sum(1 for r in results if r.get('category') == 'shopping')
         if shopping_count < 2:
             return None
+
     products = []
     seen = set()
+
+    def add_product(r):
+        p = _result_to_product(r)
+        if p and r['url'] not in seen:
+            products.append(p)
+            seen.add(r['url'])
+
+    # Priority 1: Amazon, Walmart, eBay
     for r in results:
-        if r.get('category') == 'shopping' and r['url'] not in seen:
-            p = _result_to_product(r)
-            if p:
-                products.append(p)
-                seen.add(r['url'])
-    commerce_domains = ['amazon', 'walmart', 'bestbuy', 'ebay', 'target', 'etsy',
-                        'newegg', 'homedepot', 'lowes', 'costco', 'shopify', 'alibaba']
-    if len(products) < 8:
-        for r in results:
-            if r['url'] in seen:
-                continue
-            domain = (r.get('domain') or urlparse(r['url']).netloc).lower()
-            if any(d in domain for d in commerce_domains):
-                p = _result_to_product(r)
-                if p:
-                    products.append(p)
-                    seen.add(r['url'])
+        domain = (r.get('domain') or urlparse(r['url']).netloc).lower()
+        if 'amazon' in domain or 'walmart' in domain or 'ebay' in domain:
+            add_product(r)
+
+    # Priority 2: Other known commerce domains
+    commerce_domains = ['bestbuy', 'target', 'etsy', 'newegg', 'homedepot',
+                        'lowes', 'costco', 'shopify', 'alibaba', 'aliexpress',
+                        'bhphotovideo', 'microcenter', 'macys', 'kohls', 'nike',
+                        'adidas', 'gap', 'zara', 'harborfreight', 'acehardware']
+    for r in results:
+        domain = (r.get('domain') or urlparse(r['url']).netloc).lower()
+        if any(d in domain for d in commerce_domains):
+            add_product(r)
+
+    # Priority 3: Shopping-categorized results
+    for r in results:
+        if r.get('category') == 'shopping':
+            add_product(r)
+
+    # Priority 4: Any result mentioning a price
+    for r in results:
+        snippet = r.get('snippet', '') or ''
+        title = r.get('title', '') or ''
+        if _extract_price(snippet) or _extract_price(title):
+            add_product(r)
+
     if not products:
         return None
     return {'panel_type': 'shopping', 'products': products[:12]}
@@ -2766,20 +2785,48 @@ def get_shopping_panel(query, results):
 def _result_to_product(r):
     snippet = r.get('snippet', '') or ''
     title = r.get('title', '') or ''
+    url = r['url']
+    domain = (r.get('domain') or urlparse(url).netloc).lower()
+    favicon = r.get('favicon', '') or ''
     price = _extract_price(snippet) or _extract_price(title)
     return {
         'title': title,
-        'url': r['url'],
+        'url': url,
         'price': price,
-        'source': r.get('domain') or urlparse(r['url']).netloc,
-        'snippet': snippet[:120] if snippet else ''
+        'source': _short_source(domain),
+        'domain': domain,
+        'snippet': snippet[:150] if snippet else '',
+        'favicon': favicon
     }
 
+def _short_source(domain):
+    domain = domain.replace('www.', '')
+    name_map = {
+        'amazon': 'Amazon', 'amazon.com': 'Amazon',
+        'walmart': 'Walmart', 'walmart.com': 'Walmart',
+        'ebay': 'eBay', 'ebay.com': 'eBay',
+        'bestbuy': 'Best Buy', 'bestbuy.com': 'Best Buy',
+        'target': 'Target', 'target.com': 'Target',
+        'etsy': 'Etsy', 'etsy.com': 'Etsy',
+        'newegg': 'Newegg', 'newegg.com': 'Newegg',
+        'homedepot': 'Home Depot', 'homedepot.com': 'Home Depot',
+        'lowes': 'Lowe\'s', 'lowes.com': 'Lowe\'s',
+        'costco': 'Costco', 'costco.com': 'Costco',
+    }
+    for k, v in name_map.items():
+        if k in domain:
+            return v
+    parts = domain.split('.')
+    return parts[0].title() if parts else domain
+
 def _extract_price(text):
-    m = re.search(r'\$\s*\d+(?:\.\d{2})?', text)
+    m = re.search(r'\$\s*\d+(?:,\d{3})*(?:\.\d{2})?', text)
     if m:
         return m.group()
-    m = re.search(r'(?:USD|US\$)\s*\d+(?:\.\d{2})?', text, re.I)
+    m = re.search(r'(?:USD|US\$)\s*\d+(?:,\d{3})*(?:\.\d{2})?', text, re.I)
+    if m:
+        return m.group()
+    m = re.search(r'(?:price|from|only|just)\s*[:]?\s*\$?\s*\d+(?:\.\d{2})?', text, re.I)
     if m:
         return m.group()
     return None
