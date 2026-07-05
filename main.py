@@ -2778,6 +2778,11 @@ def get_shopping_panel(query, results):
         if _extract_price(snippet) or _extract_price(title):
             add_product(r)
 
+    # Priority 5: Query has shopping intent — use any top result as fallback
+    if not products and is_shopping:
+        for r in results[:10]:
+            add_product(r)
+
     if not products:
         return None
     return {'panel_type': 'shopping', 'products': products[:12]}

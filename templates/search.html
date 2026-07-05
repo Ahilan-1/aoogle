@@ -162,8 +162,9 @@
         .shop-panel .sp-card .sp-badge.etsy{background:#f45800;color:#fff}
         .shop-panel .sp-card .sp-img{width:100%;height:100px;object-fit:contain;margin-bottom:6px;border-radius:6px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--text4);overflow:hidden}
         .shop-panel .sp-card .sp-img img{width:100%;height:100%;object-fit:contain}
-        .shop-panel .sp-card .sp-title{font-size:13px;font-weight:500;color:var(--text);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:3px}
+        .shop-panel .sp-card .sp-title{font-size:13px;font-weight:500;color:var(--text);line-height:1.3;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:3px}
         .shop-panel .sp-card .sp-price{font-size:17px;font-weight:700;color:#0288d1;margin-bottom:1px}
+        .shop-panel .sp-card .sp-snippet{font-size:11px;color:var(--text3);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:2px}
         .shop-panel .sp-card .sp-source{font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px}
         .shop-panel .sp-card .sp-source img{width:14px;height:14px;border-radius:50%}
         .shop-panel .sp-card a{text-decoration:none;color:inherit;display:block}
@@ -552,9 +553,10 @@
                                 {% elif 'bestbuy' in dn %}<div class="sp-badge bestbuy">Best Buy</div>
                                 {% elif 'target' in dn %}<div class="sp-badge target">Target</div>
                                 {% elif 'etsy' in dn %}<div class="sp-badge etsy">Etsy</div>{% endif %}
-                                <div class="sp-img">{% if p.price %}&#x1F4B5;{% else %}&#x1F4E6;{% endif %}</div>
+                                <div class="sp-img">{% if p.price %}&#x1F4B5;{% else %}&#x1F50D;{% endif %}</div>
                                 <div class="sp-title">{{ p.title }}</div>
-                                {% if p.price %}<div class="sp-price">{{ p.price }}</div>{% endif %}
+                                {% if p.price %}<div class="sp-price">{{ p.price }}</div>
+                                {% elif p.snippet %}<div class="sp-snippet">{{ p.snippet[:80] }}</div>{% endif %}
                                 <div class="sp-source">{% if p.favicon %}<img src="{{ p.favicon }}" alt="">{% endif %}{{ p.source }}</div>
                             </a>
                         </div>
