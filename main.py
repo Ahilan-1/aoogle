@@ -26,6 +26,12 @@ import re
 import threading
 import os
 try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.triggers.interval import IntervalTrigger
+    scheduler_available = True
+except ImportError:
+    scheduler_available = False
+try:
     from ddgs import DDGS
     ddgs_available = True
 except ImportError:
@@ -909,6 +915,61 @@ class DataManager:
             if s['domain'] == domain:
                 return s
         return None
+
+    def store_crawled_pages(self, domain, pages):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('crawled_pages', [])
+            self.data['crawled_pages'] = [p for p in self.data['crawled_pages'] if p['domain'] != domain]
+            for page in pages:
+                entry = {
+                    'domain': domain,
+                    'url': page.get('url', ''),
+                    'title': page.get('title', '')[:300],
+                    'description': page.get('description', '')[:500],
+                    'text': page.get('text', '')[:5000],
+                    'indexed_at': datetime.now().isoformat(),
+                }
+                self.data['crawled_pages'].append(entry)
+            _save_json(self.data)
+
+    def get_all_crawled_pages(self):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            return list(self.data.get('crawled_pages', []))
+
+    def search_crawled_pages(self, query):
+        pages = self.get_all_crawled_pages()
+        if not pages or not query:
+            return []
+        query_terms = query.lower().split()
+        scored = []
+        for p in pages:
+            text = (p.get('title', '') + ' ' + p.get('description', '') + ' ' + p.get('text', '')).lower()
+            matches = sum(1 for t in query_terms if t in text)
+            if matches:
+                title = p.get('title', '')
+                snippet = p.get('description', '')[:200]
+                if not snippet:
+                    idx = text.find(query_terms[0])
+                    if idx > 0:
+                        snippet = p.get('text', '')[max(0, idx-50):idx+150]
+                scored.append({
+                    'title': title or p.get('url', ''),
+                    'url': p.get('url', ''),
+                    'snippet': snippet,
+                    'domain': p.get('domain', ''),
+                    'score': matches / len(query_terms) * 15,
+                    'engine': 'kumo',
+                    'category': 'general',
+                })
+        scored.sort(key=lambda x: x['score'], reverse=True)
+        return scored[:5]
+
 
 data_manager = DataManager()
 
@@ -1966,6 +2027,18 @@ class ImprovedSearch:
                 ranked_results = self._rank_results(query, results, filter_type)
                 all_results = [result.to_dict() for result in ranked_results]
                 self._save_to_cache(cache_key, all_results)
+
+        # Merge locally indexed crawled pages into results
+        if data_manager:
+            try:
+                crawled = data_manager.search_crawled_pages(query)
+                for c in crawled:
+                    c['type'] = 'regular'
+                    c['favicon'] = f"https://www.google.com/s2/favicons?domain={c.get('domain', '')}"
+                    c['display_url'] = c['url'][:60] + '...' if len(c['url']) > 60 else c['url']
+                    all_results.append(c)
+            except Exception as e:
+                app.logger.error(f"Crawled pages search error: {e}")
 
         if not all_results:
             return [], 0
@@ -3847,6 +3920,8 @@ def admin_crawl_site(domain):
         result = kumo.crawl_site(domain, site.get('sitemap_url'))
         pages = len(result.get('pages', []))
         data_manager.update_crawl_status(domain, 'completed' if pages > 0 else 'failed', pages)
+        if result.get('pages'):
+            data_manager.store_crawled_pages(domain, result['pages'])
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/announcement', methods=['POST'])
@@ -4137,6 +4212,8 @@ def submit_site():
                 result = kumo.crawl_site(domain, sitemap_url)
                 pages = len(result.get('pages', []))
                 data_manager.update_crawl_status(domain, 'completed' if pages > 0 else 'failed', pages)
+                if result.get('pages'):
+                    data_manager.store_crawled_pages(domain, result['pages'])
                 success = f"Crawled {domain} — found {pages} page(s)."
     return render_template('submit.html', error=error, success=success, announcement=data_manager.get_announcement())
 
@@ -4151,6 +4228,41 @@ def dashboard():
 @app.route('/claim')
 def claim_site():
     return render_template('claim.html', announcement=data_manager.get_announcement())
+
+
+def weekly_crawl_job():
+    with app.app_context():
+        sites = data_manager.get_submitted_sites()
+        if not sites:
+            app.logger.info("Weekly crawl: no submitted sites to crawl")
+            return
+        for site in sites:
+            domain = site['domain']
+            try:
+                data_manager.update_crawl_status(domain, 'crawling')
+                result = kumo.crawl_site(domain, site.get('sitemap_url'))
+                pages = len(result.get('pages', []))
+                data_manager.update_crawl_status(domain, 'completed' if pages > 0 else 'failed', pages)
+                if result.get('pages'):
+                    data_manager.store_crawled_pages(domain, result['pages'])
+                app.logger.info(f"Weekly crawl: {domain} — {pages} page(s)")
+            except Exception as e:
+                app.logger.error(f"Weekly crawl error for {domain}: {e}")
+                data_manager.update_crawl_status(domain, 'failed')
+
+
+if scheduler_available:
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(
+        weekly_crawl_job,
+        IntervalTrigger(weeks=1),
+        id='weekly_kumo_crawl',
+        name='Crawl all submitted sites weekly',
+        replace_existing=True,
+    )
+    scheduler.start()
+    app.logger.info("Weekly Kumo Crawler scheduler started")
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
