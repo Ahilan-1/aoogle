@@ -327,6 +327,24 @@
             .usa-banner .ub-sub{font-size:12px}
             .usa-banner .ub-arlong{font-size:11px}
         }
+        .netflix-intro{position:fixed;top:0;left:0;width:100%;height:100%;z-index:999999;background:#07101e;display:none;align-items:center;justify-content:center;flex-direction:column;transition:opacity .8s ease;overflow:hidden}
+        .netflix-intro.hide{opacity:0;pointer-events:none}
+        .netflix-intro .ni-waves{position:absolute;bottom:0;left:0;width:100%;height:120px;opacity:.15}
+        .netflix-intro .ni-waves svg{width:100%;height:100%}
+        .netflix-intro .ni-logo{position:relative;display:flex;gap:4px}
+        .netflix-intro .ni-logo span{font-family:'Product Sans',Arial,sans-serif;font-size:120px;font-weight:700;letter-spacing:-4px;display:inline-block;opacity:0;transform:scale(3) translateY(0);animation:ni-reveal .6s ease forwards;text-shadow:0 0 40px rgba(2,136,209,.3)}
+        .netflix-intro .ni-logo span:nth-child(1){color:#003d7a;animation-delay:.1s}
+        .netflix-intro .ni-logo span:nth-child(2){color:#0059b3;animation-delay:.2s}
+        .netflix-intro .ni-logo span:nth-child(3){color:#0077e6;animation-delay:.3s}
+        .netflix-intro .ni-logo span:nth-child(4){color:#1a8cff;animation-delay:.4s}
+        .netflix-intro .ni-logo span:nth-child(5){color:#4da6ff;animation-delay:.5s}
+        .netflix-intro .ni-logo span:nth-child(6){color:#80c1ff;animation-delay:.6s}
+        @keyframes ni-reveal{0%{opacity:0;transform:scale(3)}60%{opacity:1;transform:scale(1)}100%{opacity:1;transform:scale(1)}}
+        .netflix-intro .ni-subtitle{color:#4da6ff;font-size:15px;letter-spacing:8px;text-transform:uppercase;opacity:0;margin-top:16px;animation:ni-fadein 1.2s ease 1.4s forwards;font-weight:300;text-shadow:0 0 20px rgba(2,136,209,.2)}
+        @keyframes ni-fadein{to{opacity:1}}
+        .netflix-intro .ni-hint{display:none;color:rgba(77,166,255,.5);font-size:12px;letter-spacing:3px;margin-top:8px;font-weight:300;animation:ni-hint-pulse 2s ease-in-out infinite}
+        @keyframes ni-hint-pulse{0%,100%{opacity:.4}50%{opacity:1}}
+        @media(max-width:640px){.netflix-intro .ni-logo span{font-size:56px;letter-spacing:-2px}.netflix-intro .ni-logo{gap:2px}.netflix-intro .ni-subtitle{font-size:11px;letter-spacing:5px}.netflix-intro .ni-waves{height:60px}}
     </style>
 </head>
 <body>
@@ -337,6 +355,13 @@
         <div class="al-text">Searching the web<span class="al-dots"></span></div>
         <div class="al-status" id="al-status"></div>
     </div>
+    <div class="netflix-intro" id="netflix-intro">
+        <div class="ni-logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></div>
+        <div class="ni-subtitle">Sail the web</div>
+        <div class="ni-hint" id="ni-hint">Tap anywhere</div>
+        <div class="ni-waves"><svg viewBox="0 0 1440 120" preserveAspectRatio="none"><path d="M0,60 C240,120 480,0 720,60 C960,120 1200,0 1440,60 L1440,120 L0,120 Z" fill="#4da6ff"/><path d="M0,80 C240,110 480,50 720,80 C960,110 1200,50 1440,80 L1440,120 L0,120 Z" fill="#1a8cff" opacity=".5"/><path d="M0,95 C240,110 480,80 720,95 C960,110 1200,80 1440,95 L1440,120 L0,120 Z" fill="#0288d1" opacity=".3"/></svg></div>
+    </div>
+
     <script>
         (function(){
             if(window.location.pathname==='/search'&&window.location.search.indexOf('q=')>-1)
@@ -787,6 +812,10 @@
             clearTimeout(t._timer);
             t._timer=setTimeout(function(){t.classList.remove('show')},3000);
         }
+        function playSound(src){
+            try{var a=new Audio(src);a.volume=.5;a.play().catch(function(){})}catch(e){}
+        }
+
         var LUCKY_QUERIES = ['cute baby animals','inspirational quotes','beautiful landscapes','fun facts about space','wholesome stories','amazing nature photography','happy news today','acts of kindness','interesting science discoveries','beautiful libraries around the world','hidden gems in europe','best free online courses','healthy easy recipes','mind blowing photography','underwater sea life','starry night sky wallpaper','world map with all countries','learn something new every day','positive affirmations','beautiful gardens to visit'];
 
         function isJuly4(){
@@ -796,9 +825,8 @@
         document.addEventListener('DOMContentLoaded',function(){
             var b=document.getElementById('lucky-btn');
             if(b){
-                b.textContent="\u{1F1FA}\u{1F1F8} 1776 \u{1F1FA}\u{1F1F8}";
                 b.addEventListener('click',function(){
-                    window.location='/search?q=1776';
+                    window.location='/search?q='+encodeURIComponent(LUCKY_QUERIES[Math.floor(Math.random()*LUCKY_QUERIES.length)]);
                 })
             }
 
@@ -811,6 +839,42 @@
                     var fb=document.getElementById('flag-btn');
                     if(fb){fb.style.display='flex'}
                 }
+            }
+
+            // Netflix-style intro (homepage only, once per session)
+            var ni=document.getElementById('netflix-intro');
+            if(ni&&document.querySelector('.homepage')){
+                try{
+                    var played=sessionStorage.getItem('arlong-intro');
+                    if(!played){
+                        ni.style.display='flex';
+                        var isMobile=window.innerWidth<=640;
+                        var introAudio=new Audio('/static/introsound.mp3');
+                        introAudio.volume=.5;
+                        var hint=document.getElementById('ni-hint');
+                        var playPromise=introAudio.play();
+                        if(playPromise!==undefined){
+                            playPromise.catch(function(){
+                                if(hint)hint.style.display='block';
+                                var unlock=function(){
+                                    introAudio.play().catch(function(){});
+                                    if(hint)hint.style.display='none';
+                                    document.removeEventListener('click',unlock);
+                                    document.removeEventListener('touchstart',unlock);
+                                };
+                                document.addEventListener('click',unlock);
+                                document.addEventListener('touchstart',unlock);
+                            });
+                        }
+                        var introDone=function(){
+                            ni.classList.add('hide');
+                            setTimeout(function(){ni.style.display='none'},800);
+                            try{sessionStorage.setItem('arlong-intro','1')}catch(e){}
+                        };
+                        setTimeout(introDone,isMobile?5500:3800);
+                        introAudio.addEventListener('ended',introDone);
+                    }
+                }catch(e){}
             }
 
             // Dynamic AJAX search with loading overlay
@@ -843,6 +907,7 @@
                     setTimeout(function(){alText.textContent='Still searching';alStatus.textContent='Ranking sources'},3000);
                     fetch(url).then(function(r){return r.text()}).then(function(html){
                         hideOverlay();
+                        playSound('/static/searchsound.mp3');
                         document.open();
                         document.write(html);
                         document.close();
@@ -853,7 +918,10 @@
                 }
                 // If overlay was shown by sync script (results page load), hide after 600ms
                 if(aol.classList.contains('show')){
-                    setTimeout(hideOverlay,600);
+                    setTimeout(function(){
+                        hideOverlay();
+                        playSound('/static/searchsound.mp3');
+                    },600);
                 }
                 function hookForm(form){
                     if(!form)return;
