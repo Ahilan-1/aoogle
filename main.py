@@ -1052,6 +1052,93 @@ class KumoCrawler:
 
 kumo = KumoCrawler()
 
+# Entity detection for cross-entity penalty in ranking
+BANK_ENTITIES = {
+    # India
+    'sbi': {'names': ['sbi', 'state bank of india'], 'domains': ['sbi.bank.in', 'sbi.in', 'onlinesbi.sbi']},
+    'axis': {'names': ['axis bank', 'axis'], 'domains': ['axisbank']},
+    'hdfc': {'names': ['hdfc', 'hdfc bank'], 'domains': ['hdfcbank']},
+    'icici': {'names': ['icici', 'icici bank'], 'domains': ['icicibank']},
+    'indian': {'names': ['indian bank', 'indianbank'], 'domains': ['indianbank']},
+    'pnb': {'names': ['pnb', 'punjab national bank'], 'domains': ['pnb']},
+    'bob': {'names': ['bob', 'bank of baroda'], 'domains': ['bankofbaroda']},
+    'canara': {'names': ['canara bank'], 'domains': ['canarabank']},
+    'kotak': {'names': ['kotak', 'kotak mahindra'], 'domains': ['kotak']},
+    'yesbank': {'names': ['yes bank'], 'domains': ['yesbank']},
+    'idbi': {'names': ['idbi', 'idbi bank'], 'domains': ['idbi']},
+    'union': {'names': ['union bank of india', 'union bank'], 'domains': ['unionbankofindia']},
+    'iob': {'names': ['indian overseas bank', 'iob'], 'domains': ['iob']},
+    'bom': {'names': ['bank of maharashtra', 'bom'], 'domains': ['bankofmaharashtra']},
+    'syndicate': {'names': ['syndicate bank'], 'domains': ['syndicatebank']},
+    # USA
+    'chase': {'names': ['chase', 'chase bank', 'jp morgan chase'], 'domains': ['chase.com', 'jpmorgan']},
+    'boa': {'names': ['bank of america', 'bofa'], 'domains': ['bankofamerica.com', 'bofa.com']},
+    'wells': {'names': ['wells fargo'], 'domains': ['wellsfargo.com']},
+    'citi': {'names': ['citi', 'citibank', 'citi bank'], 'domains': ['citibank.com', 'citi.com']},
+    'capitalone': {'names': ['capital one', 'capitalone'], 'domains': ['capitalone.com']},
+    'amex': {'names': ['american express', 'amex'], 'domains': ['americanexpress.com']},
+    'usbank': {'names': ['us bank', 'us bancorp'], 'domains': ['usbank.com']},
+    'pnc': {'names': ['pnc', 'pnc bank'], 'domains': ['pnc.com']},
+    'tdbank': {'names': ['td bank', 'td bank us'], 'domains': ['tdbank.com']},
+    'goldman': {'names': ['goldman sachs'], 'domains': ['goldmansachs.com']},
+    'morganstanley': {'names': ['morgan stanley'], 'domains': ['morganstanley.com']},
+    # UK / Europe
+    'hsbc': {'names': ['hsbc'], 'domains': ['hsbc.com', 'hsbc.co.uk']},
+    'barclays': {'names': ['barclays'], 'domains': ['barclays.com', 'barclays.co.uk']},
+    'lloyds': {'names': ['lloyds', 'lloyds bank'], 'domains': ['lloydsbank.com', 'lloydsbank.co.uk']},
+    'natwest': {'names': ['natwest', 'national westminster'], 'domains': ['natwest.com']},
+    'santander': {'names': ['santander'], 'domains': ['santander.com', 'santander.co.uk']},
+    'deutsche': {'names': ['deutsche bank'], 'domains': ['deutsche-bank.de', 'db.com']},
+    'ubs': {'names': ['ubs'], 'domains': ['ubs.com']},
+    'credit_suisse': {'names': ['credit suisse'], 'domains': ['credit-suisse.com']},
+    'bnp': {'names': ['bnp paribas'], 'domains': ['bnpparibas.com']},
+    'societe': {'names': ['societe generale'], 'domains': ['societegenerale.com']},
+    'ing': {'names': ['ing', 'ing bank'], 'domains': ['ing.com', 'ing.nl']},
+    # Canada
+    'rbc': {'names': ['rbc', 'royal bank of canada'], 'domains': ['rbc.com', 'royalbank.com']},
+    'td_canada': {'names': ['td canada trust', 'toronto dominion'], 'domains': ['td.com']},
+    'scotiabank': {'names': ['scotiabank', 'bank of nova scotia'], 'domains': ['scotiabank.com']},
+    'bmo': {'names': ['bmo', 'bank of montreal'], 'domains': ['bmo.com']},
+    'cibc': {'names': ['cibc', 'canadian imperial'], 'domains': ['cibc.com']},
+    # Australia / NZ
+    'commonwealth': {'names': ['commonwealth bank', 'commbank'], 'domains': ['commbank.com.au']},
+    'westpac': {'names': ['westpac'], 'domains': ['westpac.com.au']},
+    'anz': {'names': ['anz', 'australia new zealand'], 'domains': ['anz.com']},
+    'naba': {'names': ['nab', 'national australia bank'], 'domains': ['nab.com.au']},
+    # Singapore / Asia
+    'dbs': {'names': ['dbs', 'dbs bank'], 'domains': ['dbs.com']},
+    'ocbc': {'names': ['ocbc', 'ocbc bank'], 'domains': ['ocbc.com']},
+    'uob': {'names': ['uob', 'united overseas bank'], 'domains': ['uob.com.sg']},
+    'maybank': {'names': ['maybank'], 'domains': ['maybank.com']},
+    # Japan
+    'mizuho': {'names': ['mizuho'], 'domains': ['mizuho.com', 'mizuhobank.com']},
+    'mitsubishi': {'names': ['mitsubishi ufj', 'mufg'], 'domains': ['mufg.jp', 'bankofchina.com']},
+    'nomura': {'names': ['nomura'], 'domains': ['nomura.com']},
+    # China
+    'icbc': {'names': ['icbc', 'industrial commercial bank china'], 'domains': ['icbc.com.cn']},
+    'china_construction': {'names': ['china construction bank', 'ccb'], 'domains': ['ccb.com']},
+    'bank_of_china': {'names': ['bank of china', 'boc'], 'domains': ['bankofchina.com']},
+    # UAE / Middle East
+    'emirates_nbd': {'names': ['emirates nbd'], 'domains': ['emiratesnbd.com']},
+    'qnb': {'names': ['qnb', 'qatar national bank'], 'domains': ['qnb.com']},
+    'adcb': {'names': ['adcb', 'abu dhabi commercial bank'], 'domains': ['adcb.com']},
+}
+
+def _detect_query_entity(query):
+    q = query.lower()
+    for key, ent in BANK_ENTITIES.items():
+        for name in ent['names']:
+            if name in q:
+                return key
+    return None
+
+def _detect_domain_entity(domain):
+    for key, ent in BANK_ENTITIES.items():
+        for dom_pattern in ent['domains']:
+            if dom_pattern in domain:
+                return key
+    return None
+
 
 def _search_google(query, max_results=5, region=None):
     try:
@@ -1062,7 +1149,14 @@ def _search_google(query, max_results=5, region=None):
         if region:
             kwargs['region'] = region
         raw = list(google_search(query, **kwargs))
+        serp_feature_titles = {'people also ask', 'people also viewed', 'related searches',
+                               'top stories', 'videos', 'shopping results', 'images'}
         for r in raw[:max_results]:
+            title = (r.title or '').strip().lower()
+            if title in serp_feature_titles:
+                continue
+            if not r.url or 'google.com/search' in r.url or 'google.' in r.url and '/search' in r.url:
+                continue
             parsed = urlparse(r.url)
             results.append(SearchResult(
                 title=r.title, url=r.url, snippet=r.description[:300],
@@ -1265,6 +1359,16 @@ class ImprovedSearch:
                     score += 15
                 if f'{num} year' in title_lower or f'{num} yr' in title_lower:
                     score += 25
+
+        # Penalize title that only matches brand/generic words but misses content words
+        brand_words = {'state', 'bank', 'of', 'india', 'sbi', 'the', 'a', 'an', 'in', 'for', 'to', 'and', 'or', 'is', 'are', 'on', 'at', 'by', 'with', 'from', 'as', 'be', 'has', 'have', 'do', 'does'}
+        content_words = [t for t in query_terms if t not in brand_words and len(t) > 2]
+        if content_words:
+            missing_content = sum(1 for t in content_words if t not in title_lower)
+            if missing_content == len(content_words):
+                score -= 20
+            elif missing_content > len(content_words) / 2:
+                score -= 10
 
         return max(0, score)
 
@@ -1638,6 +1742,13 @@ class ImprovedSearch:
             for bl_domain, bl_penalty in blacklist.items():
                 if bl_domain in domain:
                     s += bl_penalty
+
+            # Entity mismatch penalty: if query names a specific bank/brand, penalize other banks/brands
+            query_entity = _detect_query_entity(query)
+            if query_entity:
+                result_entity = _detect_domain_entity(domain)
+                if result_entity and result_entity != query_entity:
+                    s -= 60
 
             s = max(0, s)
 
