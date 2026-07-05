@@ -14,9 +14,18 @@
   .c-nav a{color:#1a73e8;text-decoration:none}
   .c-nav a:hover{text-decoration:underline}
   .c-card{background:#f8f9fa;border-radius:14px;padding:36px 32px;border:1px solid #e0e0e0}
-  .c-badge{display:inline-flex;align-items:center;gap:6px;background:#e8f5e9;color:#2e7d32;padding:4px 14px;border-radius:20px;font-size:13px;font-weight:600;margin-bottom:16px}
+  .c-badge{display:inline-flex;align-items:center;gap:6px;background:#e8f0fe;color:#1a73e8;padding:4px 14px;border-radius:20px;font-size:13px;font-weight:600;margin-bottom:16px}
+  .c-badge svg{width:16px;height:16px}
+  .c-badge svg .ck-bg{fill:#1a73e8}
+  .c-badge svg .ck-check{fill:none;stroke:#fff;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
   h1{font-size:26px;margin:0 0 8px}
   .c-sub{font-size:15px;color:#444;margin:0 0 24px;line-height:1.7}
+  .c-price-row{display:flex;gap:12px;margin:0 0 20px;flex-wrap:wrap}
+  .c-price-card{flex:1;min-width:160px;background:#fff;border-radius:10px;padding:14px 18px;border:1px solid #e0e0e0;text-align:center}
+  .c-price-card.popular{border-color:#1a73e8;border-width:2px}
+  .c-price-card .region{font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.5px}
+  .c-price-card .amt{font-size:24px;font-weight:700;color:#1a73e8}
+  .c-price-card .per{font-size:12px;color:#666}
   .c-email-box{background:#e8f0fe;border:1px solid #c6dafc;border-radius:10px;padding:18px 22px;margin:20px 0;text-align:center}
   .c-email-box .label{font-size:12px;color:#555;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
   .c-email-box .addr{font-size:22px;font-weight:700;color:#1a73e8}
@@ -41,9 +50,25 @@
   </div>
 
   <div class="c-card">
-    <div class="c-badge">arlong Verified</div>
+    <div class="c-badge">
+      <svg viewBox="0 0 24 24"><circle class="ck-bg" cx="12" cy="12" r="12"/><polyline class="ck-check" points="7,12.5 10.5,16 17,8.5"/></svg>
+      arlong Verified
+    </div>
     <h1>Claim your business</h1>
-    <p class="c-sub">Get a verified blue checkmark, a knowledge panel, and priority placement in search results for a flat $9/month. No auctions, no bidding, no tracking.</p>
+    <p class="c-sub">Get a verified blue checkmark, a knowledge panel with your business details, and priority placement in search results.</p>
+
+    <div class="c-price-row">
+      <div class="c-price-card">
+        <div class="region">India</div>
+        <div class="amt">₹50</div>
+        <div class="per">first month, then ₹100/month</div>
+      </div>
+      <div class="c-price-card popular">
+        <div class="region">USA &amp; International</div>
+        <div class="amt">$10</div>
+        <div class="per">month &middot; $100/year</div>
+      </div>
+    </div>
 
     <p style="font-size:14px;color:#333;margin:0 0 8px;font-weight:600">To apply, email us with the following details:</p>
 
@@ -68,16 +93,24 @@
       </div>
       <div class="c-item">
         <div class="c-num">4</div>
-        <div><strong>Contact email</strong><span>Your preferred contact email for billing and updates</span></div>
+        <div><strong>Phone number</strong><span>Your business phone number to display in the knowledge panel</span></div>
       </div>
       <div class="c-item">
         <div class="c-num">5</div>
+        <div><strong>Contact email</strong><span>Your preferred contact email for billing and updates</span></div>
+      </div>
+      <div class="c-item">
+        <div class="c-num">6</div>
         <div><strong>Sitemap URL</strong><span>Your sitemap.xml URL so Kumo Crawler can index your pages</span></div>
+      </div>
+      <div class="c-item">
+        <div class="c-num">7</div>
+        <div><strong>Region</strong><span>India (₹50/₹100) or USA/International ($10/month or $100/year)</span></div>
       </div>
     </div>
 
     <p style="font-size:13px;color:#666;margin:16px 0 0;padding-top:16px;border-top:1px solid #e0e0e0">
-      We'll review your application and get back to you within 48 hours. Once verified, your site gets a <strong>blue checkmark</strong>, a <strong>knowledge panel</strong>, and <strong>priority ranking</strong> in arlong search results.
+      We'll review your application and get back to you within 48 hours. Once verified, your site gets a <strong>blue checkmark</strong>, a <strong>knowledge panel</strong> with your phone and description, and <strong>priority ranking</strong> in arlong search results.
     </p>
   </div>
 

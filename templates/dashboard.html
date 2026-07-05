@@ -28,6 +28,7 @@
   .d-links{margin-top:16px;display:flex;gap:12px}
   .d-links a{color:#1a73e8;font-size:13px;text-decoration:none}
   .d-links a:hover{text-decoration:underline}
+  .d-phone{font-size:12px;color:#555}
 </style>
 </head>
 <body>
@@ -45,11 +46,13 @@
     <h2>Verified sites</h2>
     {% if verified_sites %}
     <table>
-      <tr><th>Domain</th><th>Name</th><th>Status</th><th>Since</th></tr>
+      <tr><th>Domain</th><th>Name</th><th>Phone</th><th>Region</th><th>Status</th><th>Since</th></tr>
       {% for s in verified_sites %}
       <tr>
         <td>{{ s.domain }}</td>
         <td>{{ s.name }}</td>
+        <td class="d-phone">{{ s.phone if s.phone else '—' }}</td>
+        <td>{{ s.region|upper if s.region else 'US' }}</td>
         <td><span class="d-badge active">{{ s.subscription }}</span></td>
         <td>{{ s.verified_at[:10] }}</td>
       </tr>
@@ -64,10 +67,11 @@
     <h2>Submitted sites (Kumo Crawler)</h2>
     {% if submitted_sites %}
     <table>
-      <tr><th>Domain</th><th>Status</th><th>Pages</th><th>Submitted</th></tr>
+      <tr><th>Domain</th><th>Name</th><th>Status</th><th>Pages</th><th>Submitted</th></tr>
       {% for s in submitted_sites %}
       <tr>
         <td>{{ s.domain }}</td>
+        <td>{{ s.name if s.name else '—' }}</td>
         <td><span class="d-badge {{ s.crawl_status }}">{{ s.crawl_status }}</span></td>
         <td>{{ s.pages_crawled }}</td>
         <td>{{ s.submitted_at[:10] }}</td>

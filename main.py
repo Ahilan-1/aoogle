@@ -810,7 +810,7 @@ class DataManager:
                 self.data = loaded
             _save_json(self.data)
 
-    def add_verified_site(self, domain, name, description, email):
+    def add_verified_site(self, domain, name, description, email, phone='', region='us', plan='monthly'):
         with self._lock:
             loaded = _load_json()
             if loaded:
@@ -818,15 +818,15 @@ class DataManager:
             self.data.setdefault('verified_sites', [])
             for site in self.data['verified_sites']:
                 if site['domain'] == domain:
-                    site['name'] = name
-                    site['description'] = description
-                    site['email'] = email
+                    site.update(name=name, description=description, email=email,
+                                phone=phone, region=region, plan=plan)
                     _save_json(self.data)
                     return site
             site = {
                 'domain': domain, 'name': name, 'description': description,
-                'email': email, 'verified_at': datetime.now().isoformat(),
-                'subscription': 'active', 'fee': 9
+                'email': email, 'phone': phone, 'region': region, 'plan': plan,
+                'verified_at': datetime.now().isoformat(),
+                'subscription': 'active',
             }
             self.data['verified_sites'].append(site)
             _save_json(self.data)
@@ -860,7 +860,8 @@ class DataManager:
             self.data['verified_sites'] = [s for s in self.data.get('verified_sites', []) if s['domain'] != domain]
             _save_json(self.data)
 
-    def add_submitted_site(self, domain, sitemap_url, email):
+    def add_submitted_site(self, domain, sitemap_url, robots_txt_url, email,
+                           name='', description='', phone='', category=''):
         with self._lock:
             loaded = _load_json()
             if loaded:
@@ -868,12 +869,12 @@ class DataManager:
             self.data.setdefault('submitted_sites', [])
             for site in self.data['submitted_sites']:
                 if site['domain'] == domain:
-                    site['sitemap_url'] = sitemap_url
-                    site['email'] = email
-                    _save_json(self.data)
-                    return site
+                    return None  # prevent resubmission
             site = {
-                'domain': domain, 'sitemap_url': sitemap_url, 'email': email,
+                'domain': domain, 'name': name, 'description': description,
+                'phone': phone, 'category': category,
+                'sitemap_url': sitemap_url, 'robots_txt_url': robots_txt_url,
+                'email': email,
                 'submitted_at': datetime.now().isoformat(),
                 'crawl_status': 'pending', 'pages_crawled': 0
             }
@@ -3820,8 +3821,11 @@ def admin_add_verified():
     name = request.form.get('name', '').strip()
     email = request.form.get('email', '').strip()
     description = request.form.get('description', '').strip()
+    phone = request.form.get('phone', '').strip()
+    region = request.form.get('region', 'us').strip()
+    plan = request.form.get('plan', 'monthly').strip()
     if domain and name:
-        data_manager.add_verified_site(domain, name, description, email)
+        data_manager.add_verified_site(domain, name, description, email, phone, region, plan)
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/verified/remove', methods=['POST'])
@@ -4112,19 +4116,28 @@ def submit_site():
     success = None
     if request.method == 'POST':
         domain = request.form.get('domain', '').strip().lower()
-        sitemap = request.form.get('sitemap', '').strip()
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        phone = request.form.get('phone', '').strip()
+        category = request.form.get('category', '').strip()
+        sitemap_url = request.form.get('sitemap_url', '').strip()
+        robots_txt_url = request.form.get('robots_txt_url', '').strip()
         email = request.form.get('email', '').strip()
-        if not domain or not email:
-            error = "Domain and email are required."
+        if not domain or not email or not sitemap_url or not robots_txt_url:
+            error = "Domain, email, sitemap URL, and robots.txt URL are required."
         else:
             domain = domain.replace('https://', '').replace('http://', '').replace('www.', '').split('/')[0]
-            if not sitemap:
-                sitemap = f'https://{domain}/sitemap.xml'
-            data_manager.add_submitted_site(domain, sitemap, email)
-            result = kumo.crawl_site(domain, sitemap)
-            pages = len(result.get('pages', []))
-            data_manager.update_crawl_status(domain, 'completed' if pages > 0 else 'failed', pages)
-            success = f"Crawled {domain} — found {pages} page(s)."
+            existing = data_manager.add_submitted_site(
+                domain, sitemap_url, robots_txt_url, email,
+                name=name, description=description, phone=phone, category=category
+            )
+            if existing is None:
+                error = f"{domain} has already been submitted."
+            else:
+                result = kumo.crawl_site(domain, sitemap_url)
+                pages = len(result.get('pages', []))
+                data_manager.update_crawl_status(domain, 'completed' if pages > 0 else 'failed', pages)
+                success = f"Crawled {domain} — found {pages} page(s)."
     return render_template('submit.html', error=error, success=success, announcement=data_manager.get_announcement())
 
 @app.route('/dashboard')
