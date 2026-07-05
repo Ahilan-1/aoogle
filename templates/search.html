@@ -72,6 +72,9 @@
         .iceberg .result-url{color:#4fc3f7}
         .iceberg .result-title{color:#81d4fa}
         .iceberg .result-snippet{color:#b0bec5}
+        .v-checkmark{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#2e7d32;color:#fff;font-size:10px;font-weight:700;margin-left:4px;vertical-align:middle;flex-shrink:0;line-height:1}
+        .verified-panel{border-left:4px solid #2e7d32}
+        .verified-panel .v-checkmark{width:20px;height:20px;font-size:13px;display:inline-flex;margin-right:4px}
         .iceberg .result-card{border-left:3px solid #0288d1;padding-left:12px;margin-bottom:18px}
         .iceberg .result-score{display:none}
         .iceberg .results-nav a.active{color:#4fc3f7;border-bottom-color:#4fc3f7}
@@ -625,6 +628,7 @@
                         <div class="result-url">
                             <img src="{{ result.favicon }}" alt="" class="result-favicon" onerror="this.style.display='none'">
                             {{ result.display_url }}
+                            {% if result.verified %}<span class="v-checkmark" title="Verified business">&#10003;</span>{% endif %}
                         </div>
                         <a href="{{ result.url }}" class="result-title" target="_blank">{{ result.title }}</a>
                         <div class="result-snippet">{{ result.snippet }}</div>
@@ -671,7 +675,16 @@
             {% endif %}
         </div>
 
-        {% if info_box %}
+        {% if verified_info %}
+        <aside class="results-sidebar">
+            <div class="info-box verified-panel">
+                <div class="ib-title"><span class="v-checkmark" style="font-size:18px;vertical-align:middle">&#10003;</span> {{ verified_info.name }}</div>
+                <div class="ib-type">Verified business</div>
+                <div class="ib-desc">{{ verified_info.description }}</div>
+                <div class="v-domain" style="font-size:13px;color:var(--link);margin-top:6px">{{ verified_info.domain }}</div>
+                <div class="v-status" style="font-size:11px;color:#2e7d32;margin-top:4px">arlong Verified &middot; $9/mo</div>
+            </div>
+        {% elif info_box %}
         <aside class="results-sidebar">
             {% if info_box.panel_type == 'weather' %}
             <div class="info-box weather-panel">

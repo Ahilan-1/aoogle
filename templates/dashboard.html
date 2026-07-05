@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard — arlong</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  body{font-family:Arial,sans-serif;background:#fff;color:#222;margin:0;padding:0}
+  .d-wrap{max-width:800px;margin:0 auto;padding:40px 20px}
+  .d-logo{font-size:26px;font-family:'Product Sans',Arial,sans-serif;letter-spacing:-1px;margin-bottom:20px}
+  .d-logo span{display:inline-block;color:#4285f4}
+  .d-nav{display:flex;gap:16px;font-size:14px;margin-bottom:20px}
+  .d-nav a{color:#1a73e8;text-decoration:none}
+  .d-nav a:hover{text-decoration:underline}
+  h1{font-size:22px;margin:0 0 16px}
+  .d-section{background:#f8f9fa;border-radius:12px;padding:24px;border:1px solid #e0e0e0;margin-bottom:20px}
+  .d-section h2{font-size:16px;margin:0 0 12px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;padding:8px 10px;border-bottom:2px solid #e0e0e0;color:#555;font-size:12px;text-transform:uppercase}
+  td{padding:8px 10px;border-bottom:1px solid #eee}
+  .d-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+  .d-badge.active{background:#e8f5e9;color:#2e7d32}
+  .d-badge.pending{background:#fff3e0;color:#e65100}
+  .d-badge.completed{background:#e3f2fd;color:#0d47a1}
+  .d-badge.failed{background:#ffebee;color:#c62828}
+  .d-empty{font-size:13px;color:#888;padding:16px 0}
+  .d-links{margin-top:16px;display:flex;gap:12px}
+  .d-links a{color:#1a73e8;font-size:13px;text-decoration:none}
+  .d-links a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="d-wrap">
+  <div class="d-logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></div>
+  <div class="d-nav">
+    <a href="/">Search</a>
+    <a href="/verified">arlong Verified</a>
+    <a href="/submit">Submit your site</a>
+  </div>
+
+  <h1>Dashboard</h1>
+
+  <div class="d-section">
+    <h2>Verified sites</h2>
+    {% if verified_sites %}
+    <table>
+      <tr><th>Domain</th><th>Name</th><th>Status</th><th>Since</th></tr>
+      {% for s in verified_sites %}
+      <tr>
+        <td>{{ s.domain }}</td>
+        <td>{{ s.name }}</td>
+        <td><span class="d-badge active">{{ s.subscription }}</span></td>
+        <td>{{ s.verified_at[:10] }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <div class="d-empty">No verified sites yet. <a href="/claim">Claim your business</a></div>
+    {% endif %}
+  </div>
+
+  <div class="d-section">
+    <h2>Submitted sites (Kumo Crawler)</h2>
+    {% if submitted_sites %}
+    <table>
+      <tr><th>Domain</th><th>Status</th><th>Pages</th><th>Submitted</th></tr>
+      {% for s in submitted_sites %}
+      <tr>
+        <td>{{ s.domain }}</td>
+        <td><span class="d-badge {{ s.crawl_status }}">{{ s.crawl_status }}</span></td>
+        <td>{{ s.pages_crawled }}</td>
+        <td>{{ s.submitted_at[:10] }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <div class="d-empty">No sites submitted yet. <a href="/submit">Submit your site</a></div>
+    {% endif %}
+  </div>
+
+  <div class="d-links">
+    <a href="/submit">+ Submit a site</a>
+    <a href="/claim">+ Claim verification</a>
+  </div>
+</div>
+</body>
+</html>

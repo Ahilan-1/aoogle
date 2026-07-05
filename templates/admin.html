@@ -89,6 +89,14 @@
                 <div class="num">{{ stats.blacklisted_domains }}</div>
                 <div class="label">Blacklisted Domains</div>
             </div>
+            <div class="stat-card" style="border-left:4px solid #2e7d32">
+                <div class="num" style="color:#2e7d32">{{ stats.verified_sites }}</div>
+                <div class="label">Verified Sites</div>
+            </div>
+            <div class="stat-card" style="border-left:4px solid #1a73e8">
+                <div class="num" style="color:#1a73e8">{{ stats.submitted_sites }}</div>
+                <div class="label">Crawled Sites</div>
+            </div>
             <div class="stat-card">
                 <div class="num">{{ total_searches }}</div>
                 <div class="label">Total Searches</div>
@@ -223,6 +231,72 @@
             {% else %}
             <div class="empty">No blacklisted domains.</div>
             {% endif %}
+        </div>
+
+        <div class="card" style="border-left:4px solid #2e7d32">
+            <div class="card-title">
+                arlong Verified — Manage verified sites
+                <span class="badge" style="background:#2e7d32;color:#fff">{{ verified_sites|length }} sites</span>
+            </div>
+            <div style="padding:16px 20px;border-bottom:1px solid #e8eaed">
+                <form method="POST" action="/admin/verified/add" style="display:flex;gap:8px;flex-wrap:wrap">
+                    <input type="text" name="domain" placeholder="Domain (e.g., example.com)" required style="flex:1;min-width:140px;padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px">
+                    <input type="text" name="name" placeholder="Business name" required style="flex:1;min-width:140px;padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px">
+                    <input type="email" name="email" placeholder="Contact email" style="flex:1;min-width:140px;padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px">
+                    <button type="submit" class="btn btn-approve" style="padding:8px 16px">Add Verified</button>
+                </form>
+            </div>
+            {% if verified_sites %}
+            <table>
+                <tr><th>Domain</th><th>Name</th><th>Description</th><th>Since</th><th>Actions</th></tr>
+                {% for s in verified_sites %}
+                <tr>
+                    <td style="font-weight:600">{{ s.domain }}</td>
+                    <td>{{ s.name }}</td>
+                    <td style="font-size:12px;max-width:200px">{{ s.description[:80] if s.description else '—' }}</td>
+                    <td class="date-cell">{{ s.verified_at[:10] }}</td>
+                    <td>
+                        <form method="POST" action="/admin/verified/remove">
+                            <input type="hidden" name="domain" value="{{ s.domain }}">
+                            <button type="submit" class="btn btn-remove">Remove</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% else %}
+            <div class="empty">No verified sites yet.</div>
+            {% endif %}
+        </div>
+
+        <div class="card" style="border-left:4px solid #1a73e8">
+            <div class="card-title">
+                Kumo Crawler — Submitted sites
+                <span class="badge">{{ submitted_sites|length }} sites</span>
+            </div>
+            {% if submitted_sites %}
+            <table>
+                <tr><th>Domain</th><th>Status</th><th>Pages</th><th>Sitemap</th><th>Actions</th></tr>
+                {% for s in submitted_sites %}
+                <tr>
+                    <td style="font-weight:600">{{ s.domain }}</td>
+                    <td><span class="status-badge status-{{ s.crawl_status }}">{{ s.crawl_status }}</span></td>
+                    <td>{{ s.pages_crawled }}</td>
+                    <td class="url-cell" style="max-width:200px">{{ s.sitemap_url }}</td>
+                    <td>
+                        <form method="POST" action="/admin/crawl/{{ s.domain }}">
+                            <button type="submit" class="btn btn-approve">Re-crawl</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% else %}
+            <div class="empty">No sites submitted to Kumo Crawler.</div>
+            {% endif %}
+            <div style="padding:10px 20px;border-top:1px solid #e8eaed;font-size:12px;color:#5f6368">
+                Submitted sites get crawled via sitemap.xml and indexed in arlong search results.
+            </div>
         </div>
     </div>
     {% endif %}

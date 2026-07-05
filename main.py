@@ -753,7 +753,9 @@ class DataManager:
                 'approved': approved,
                 'denied': denied,
                 'blacklisted_domains': len(self.data['blacklist']),
-                'total_searches': self.data.get('total_searches', 0)
+                'total_searches': self.data.get('total_searches', 0),
+                'verified_sites': len(self.data.get('verified_sites', [])),
+                'submitted_sites': len(self.data.get('submitted_sites', [])),
             }
 
     def get_total_searches(self):
@@ -808,7 +810,206 @@ class DataManager:
                 self.data = loaded
             _save_json(self.data)
 
+    def add_verified_site(self, domain, name, description, email):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('verified_sites', [])
+            for site in self.data['verified_sites']:
+                if site['domain'] == domain:
+                    site['name'] = name
+                    site['description'] = description
+                    site['email'] = email
+                    _save_json(self.data)
+                    return site
+            site = {
+                'domain': domain, 'name': name, 'description': description,
+                'email': email, 'verified_at': datetime.now().isoformat(),
+                'subscription': 'active', 'fee': 9
+            }
+            self.data['verified_sites'].append(site)
+            _save_json(self.data)
+            return site
+
+    def get_verified_sites(self):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            return list(self.data.get('verified_sites', []))
+
+    def is_verified(self, domain):
+        domain = domain.lower().replace('www.', '')
+        sites = self.get_verified_sites()
+        return any(domain in s['domain'] or s['domain'] in domain for s in sites)
+
+    def get_verified_info(self, domain):
+        domain = domain.lower().replace('www.', '')
+        sites = self.get_verified_sites()
+        for s in sites:
+            if domain in s['domain'] or s['domain'] in domain:
+                return s
+        return None
+
+    def remove_verified_site(self, domain):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data['verified_sites'] = [s for s in self.data.get('verified_sites', []) if s['domain'] != domain]
+            _save_json(self.data)
+
+    def add_submitted_site(self, domain, sitemap_url, email):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('submitted_sites', [])
+            for site in self.data['submitted_sites']:
+                if site['domain'] == domain:
+                    site['sitemap_url'] = sitemap_url
+                    site['email'] = email
+                    _save_json(self.data)
+                    return site
+            site = {
+                'domain': domain, 'sitemap_url': sitemap_url, 'email': email,
+                'submitted_at': datetime.now().isoformat(),
+                'crawl_status': 'pending', 'pages_crawled': 0
+            }
+            self.data['submitted_sites'].append(site)
+            _save_json(self.data)
+            return site
+
+    def get_submitted_sites(self):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            return list(self.data.get('submitted_sites', []))
+
+    def update_crawl_status(self, domain, status, pages_crawled=None):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for site in self.data.get('submitted_sites', []):
+                if site['domain'] == domain:
+                    site['crawl_status'] = status
+                    if pages_crawled is not None:
+                        site['pages_crawled'] = pages_crawled
+                    _save_json(self.data)
+                    return True
+            return False
+
+    def get_submitted_site(self, domain):
+        sites = self.get_submitted_sites()
+        for s in sites:
+            if s['domain'] == domain:
+                return s
+        return None
+
 data_manager = DataManager()
+
+
+class KumoCrawler:
+    def __init__(self):
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'KumoCrawler/1.0 (arlong search engine; +https://aoogle.railway.app/)',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        })
+
+    def fetch_sitemap(self, sitemap_url):
+        try:
+            resp = self.session.get(sitemap_url, timeout=10)
+            if resp.status_code != 200:
+                return None, f"HTTP {resp.status_code}"
+            soup = BeautifulSoup(resp.text, 'xml')
+            urls = []
+            for loc in soup.select('urlset url loc'):
+                url = loc.get_text(strip=True)
+                if url:
+                    urls.append(url)
+            if not urls:
+                for loc in soup.select('sitemapindex sitemap loc'):
+                    url = loc.get_text(strip=True)
+                    if url:
+                        sub_urls, _ = self.fetch_sitemap(url)
+                        if sub_urls:
+                            urls.extend(sub_urls)
+            return urls[:200] if urls else None, None
+        except Exception as e:
+            return None, str(e)
+
+    def check_robots_txt(self, domain):
+        try:
+            resp = self.session.get(f'https://{domain}/robots.txt', timeout=5)
+            if resp.status_code == 200:
+                return resp.text, None
+            return None, f"No robots.txt (HTTP {resp.status_code})"
+        except Exception as e:
+            return None, str(e)
+
+    def crawl_page(self, url):
+        try:
+            resp = self.session.get(url, timeout=8)
+            if resp.status_code != 200:
+                return None
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            title = soup.title.get_text(strip=True) if soup.title else ''
+            desc = ''
+            meta = soup.find('meta', attrs={'name': 'description'}) or soup.find('meta', attrs={'property': 'og:description'})
+            if meta:
+                desc = meta.get('content', '')[:300]
+            text = soup.get_text(separator=' ', strip=True)[:5000]
+            return {'title': title, 'description': desc, 'text': text, 'url': url}
+        except Exception:
+            return None
+
+    def crawl_site(self, domain, sitemap_url=None):
+        result = {'domain': domain, 'pages': [], 'sitemap_url': None, 'error': None}
+        if sitemap_url:
+            urls, err = self.fetch_sitemap(sitemap_url)
+            if err:
+                result['error'] = f"Sitemap error: {err}"
+            elif urls:
+                result['sitemap_url'] = sitemap_url
+                for url in urls[:50]:
+                    page = self.crawl_page(url)
+                    if page:
+                        result['pages'].append(page)
+            else:
+                result['error'] = "No URLs found in sitemap"
+        if not result['pages']:
+            homepage = self.crawl_page(f'https://{domain}')
+            if homepage:
+                result['pages'].append(homepage)
+        return result
+
+
+kumo = KumoCrawler()
+
+
+def _search_google(query, max_results=5, region=None):
+    try:
+        from googlesearch import search as google_search
+        from googlesearch import SearchResult
+        results = []
+        kwargs = dict(num_results=max_results, advanced=True, sleep_interval=0.5)
+        if region:
+            kwargs['region'] = region
+        raw = list(google_search(query, **kwargs))
+        for r in raw[:max_results]:
+            parsed = urlparse(r.url)
+            results.append(SearchResult(
+                title=r.title, url=r.url, snippet=r.description[:300],
+                category='general', date=None, domain=parsed.netloc
+            ))
+        return results
+    except Exception as e:
+        app.logger.warning(f"Google search error: {e}")
+        return []
 
 
 class ImprovedSearch:
@@ -825,6 +1026,7 @@ class ImprovedSearch:
             self.search_urls.append("ddgs://text")
         else:
             self.ddgs = DDGS() if ddgs_available else None
+        self.search_urls.append("google://text")
         self.in_memory_cache = {}
         self.cache_lock = threading.Lock()
 
@@ -1551,6 +1753,12 @@ class ImprovedSearch:
                     return results
                 except Exception as e:
                     app.logger.error(f"DDGS search error: {e}")
+                    return []
+            elif search_url == 'google://text':
+                try:
+                    return _search_google(query, max_results=5, region=region)
+                except Exception as e:
+                    app.logger.error(f"Google search error: {e}")
                     return []
             elif 'duckduckgo' in search_url:
                 all_results = []
@@ -3081,6 +3289,27 @@ def search():
         if ml_rank and ml_rank != '0' and results:
             results = search_engine.ml_rerank(query, results, ml_rank)
 
+        verified_info = data_manager.get_verified_info(query.lower().strip())
+        if not verified_info and results:
+            q_parts = query.lower().strip().split()
+            for r in results:
+                domain = (r.get('domain') or '').replace('www.', '')
+                if data_manager.is_verified(domain):
+                    verified_info = data_manager.get_verified_info(domain)
+                    break
+                name_match = any(p in r.get('title', '').lower() for p in q_parts if len(p) > 3)
+                if name_match and data_manager.is_verified(domain):
+                    verified_info = data_manager.get_verified_info(domain)
+                    break
+
+        if results:
+            for r in results:
+                domain = (r.get('domain') or urlparse(r['url']).netloc).lower().replace('www.', '')
+                r['verified'] = data_manager.is_verified(domain)
+            verified_results = [r for r in results if r.get('verified')]
+            other_results = [r for r in results if not r.get('verified')]
+            results = verified_results + other_results
+
         search_stats.record()
         data_manager.increment_total_searches()
 
@@ -3101,6 +3330,7 @@ def search():
             query=query,
             filter=filter_type,
             results=results,
+            verified_info=verified_info,
             safety_info=safety_info,
             news_box=news_box,
             notice=notice,
@@ -3445,11 +3675,6 @@ def privacy():
     return render_template('privacy.html')
 
 
-@app.route('/submit')
-def submit_site():
-    return render_template('submit.html')
-
-
 @app.route('/faq')
 def faq():
     return render_template('faq.html')
@@ -3550,7 +3775,9 @@ def admin_dashboard():
     total_searches = data_manager.get_total_searches()
     celebration = data_manager.get_celebration()
     announcement = data_manager.get_announcement()
-    return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches, celebration=celebration, announcement=announcement)
+    verified_sites = data_manager.get_verified_sites()
+    submitted_sites = data_manager.get_submitted_sites()
+    return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches, celebration=celebration, announcement=announcement, verified_sites=verified_sites, submitted_sites=submitted_sites)
 
 @app.route('/admin/reports/<int:report_id>/approve', methods=['POST'])
 def admin_approve_report(report_id):
@@ -3579,10 +3806,43 @@ def admin_remove_blacklist():
 @app.route('/admin/celebration', methods=['POST'])
 def admin_celebration():
     if not session.get('admin_logged_in'):
-        return jsonify({"error": "Unauthorized"}), 401
+        return redirect(url_for('admin_login'))
     values = request.form.getlist('celebration')
     text = values[-1].strip() if values else ''
     data_manager.set_celebration(text)
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/verified/add', methods=['POST'])
+def admin_add_verified():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    domain = request.form.get('domain', '').strip().lower().replace('www.', '')
+    name = request.form.get('name', '').strip()
+    email = request.form.get('email', '').strip()
+    description = request.form.get('description', '').strip()
+    if domain and name:
+        data_manager.add_verified_site(domain, name, description, email)
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/verified/remove', methods=['POST'])
+def admin_remove_verified():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    domain = request.form.get('domain', '')
+    if domain:
+        data_manager.remove_verified_site(domain)
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/crawl/<domain>', methods=['POST'])
+def admin_crawl_site(domain):
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    site = data_manager.get_submitted_site(domain)
+    if site:
+        data_manager.update_crawl_status(domain, 'crawling')
+        result = kumo.crawl_site(domain, site.get('sitemap_url'))
+        pages = len(result.get('pages', []))
+        data_manager.update_crawl_status(domain, 'completed' if pages > 0 else 'failed', pages)
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/announcement', methods=['POST'])
@@ -3837,6 +4097,47 @@ def benchmark():
             app.logger.error(f"Benchmark error: {e}\n{traceback.format_exc()}")
 
     return render_template('benchmark.html', query=query, results=results_data, metrics=metrics, conclusion=conclusion)
+
+@app.route('/verified')
+def verified_page():
+    return render_template('verified.html',
+        verified_sites=data_manager.get_verified_sites(),
+        submitted_count=len(data_manager.get_submitted_sites()),
+        announcement=data_manager.get_announcement()
+    )
+
+@app.route('/submit', methods=['GET', 'POST'])
+def submit_site():
+    error = None
+    success = None
+    if request.method == 'POST':
+        domain = request.form.get('domain', '').strip().lower()
+        sitemap = request.form.get('sitemap', '').strip()
+        email = request.form.get('email', '').strip()
+        if not domain or not email:
+            error = "Domain and email are required."
+        else:
+            domain = domain.replace('https://', '').replace('http://', '').replace('www.', '').split('/')[0]
+            if not sitemap:
+                sitemap = f'https://{domain}/sitemap.xml'
+            data_manager.add_submitted_site(domain, sitemap, email)
+            result = kumo.crawl_site(domain, sitemap)
+            pages = len(result.get('pages', []))
+            data_manager.update_crawl_status(domain, 'completed' if pages > 0 else 'failed', pages)
+            success = f"Crawled {domain} — found {pages} page(s)."
+    return render_template('submit.html', error=error, success=success, announcement=data_manager.get_announcement())
+
+@app.route('/dashboard')
+def dashboard():
+    return render_template('dashboard.html',
+        verified_sites=data_manager.get_verified_sites(),
+        submitted_sites=data_manager.get_submitted_sites(),
+        announcement=data_manager.get_announcement()
+    )
+
+@app.route('/claim')
+def claim_site():
+    return render_template('claim.html', announcement=data_manager.get_announcement())
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>arlong Verified — Own your presence on the web</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  body{font-family:Arial,sans-serif;background:#fff;color:#222;margin:0;padding:0}
+  .v-wrap{max-width:780px;margin:0 auto;padding:40px 20px}
+  .v-logo{font-size:28px;font-family:'Product Sans',Arial,sans-serif;letter-spacing:-1px;margin-bottom:4px}
+  .v-logo span{display:inline-block;color:#4285f4}
+  .v-badge{display:inline-flex;align-items:center;gap:6px;background:#e8f5e9;color:#2e7d32;padding:4px 14px;border-radius:20px;font-size:13px;font-weight:600;margin:8px 0 16px}
+  .v-badge svg{width:16px;height:16px;fill:#2e7d32}
+  .v-hero{background:linear-gradient(135deg,#e8f0fe,#f3e8ff);border-radius:16px;padding:36px 40px;margin:20px 0 32px}
+  .v-hero h1{margin:0 0 8px;font-size:32px}
+  .v-hero p{margin:0;font-size:16px;color:#444;line-height:1.6}
+  .v-price{display:flex;align-items:baseline;gap:4px;margin:20px 0 0}
+  .v-price .amt{font-size:36px;font-weight:700;color:#1a73e8}
+  .v-price .per{font-size:16px;color:#666}
+  .v-cta{display:inline-block;background:#1a73e8;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;margin:16px 0 0}
+  .v-cta:hover{background:#1557b0}
+  .v-features{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:32px 0}
+  .v-feature{border:1px solid #e0e0e0;border-radius:12px;padding:20px}
+  .v-feature h3{margin:0 0 6px;font-size:16px}
+  .v-feature p{margin:0;font-size:13px;color:#666;line-height:1.5}
+  .v-list{margin:32px 0}
+  .v-list h2{font-size:20px;margin:0 0 12px}
+  .v-site{display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:8px}
+  .v-site .v-check{color:#2e7d32;font-size:18px}
+  .v-site .v-domain{font-weight:600;font-size:14px}
+  .v-site .v-desc{font-size:12px;color:#666;margin-left:auto}
+  .v-nav{display:flex;gap:16px;font-size:14px;margin-bottom:20px}
+  .v-nav a{color:#1a73e8;text-decoration:none}
+  .v-nav a:hover{text-decoration:underline}
+  @media(max-width:640px){.v-features{grid-template-columns:1fr}.v-hero{padding:24px 20px}}
+</style>
+</head>
+<body>
+<div class="v-wrap">
+  <div class="v-logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></div>
+  <div class="v-nav">
+    <a href="/">Search</a>
+    <a href="/submit">Submit your site</a>
+    <a href="/dashboard">Dashboard</a>
+  </div>
+
+  <div class="v-hero">
+    <div class="v-badge">
+      <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+      arlong Verified
+    </div>
+    <h1>Own your presence on the web.</h1>
+    <p>A verified badge tells searchers you're the real thing. Get a blue checkmark, a knowledge panel, and priority placement — all for a flat fee. No auctions, no bidding, no tracking.</p>
+    <div class="v-price">
+      <span class="amt">$9</span>
+      <span class="per">/ month</span>
+    </div>
+    <p style="font-size:14px;margin:20px 0 0"><strong>To apply:</strong> email <a href="mailto:ahilan290@gmail.com" style="color:#1a73e8;font-weight:600">ahilan290@gmail.com</a> with your business name, domain, description, and sitemap URL.</p>
+  </div>
+
+  <div class="v-features">
+    <div class="v-feature">
+      <h3>Blue checkmark</h3>
+      <p>A verified badge appears next to your site in search results. Users instantly know you're authentic.</p>
+    </div>
+    <div class="v-feature">
+      <h3>Knowledge panel</h3>
+      <p>When someone searches your name, a rich info box shows your description, contact, and link — no setup needed.</p>
+    </div>
+    <div class="v-feature">
+      <h3>Priority ranking</h3>
+      <p>Verified sites rank above unverified ones for relevant searches. Your content gets seen first.</p>
+    </div>
+    <div class="v-feature">
+      <h3>Kumo Crawler inclusion</h3>
+      <p>We crawl your site via sitemap and index your pages. No need to wait for Google or DuckDuckGo.</p>
+    </div>
+  </div>
+
+  {% if verified_sites %}
+  <div class="v-list">
+    <h2>Verified sites</h2>
+    {% for s in verified_sites %}
+    <div class="v-site">
+      <span class="v-check">&#10003;</span>
+      <span class="v-domain">{{ s.domain }}</span>
+      <span class="v-name">{{ s.name }}</span>
+      <span class="v-desc">Verified</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <p style="font-size:13px;color:#888;margin-top:40px">{{ submitted_count }} sites submitted via Kumo Crawler</p>
+</div>
+</body>
+</html>
