@@ -2727,6 +2727,63 @@ def detect_news(query):
         return {'topic': q[12:].strip(), 'intent': 'news'}
     return None
 
+def get_shopping_panel(query, results):
+    if not results:
+        return None
+    shopping_kw = ['buy', 'price', 'deal', 'discount', 'cheap', 'shop', 'purchase',
+                   'order', 'cost', 'under', 'sale', 'coupon', 'offer', 'affordable',
+                   'best', 'top', 'review', 'cheap', 'budget']
+    q_lower = query.lower().strip()
+    is_shopping = any(kw in q_lower for kw in shopping_kw)
+    if not is_shopping:
+        shopping_count = sum(1 for r in results if r.get('category') == 'shopping')
+        if shopping_count < 2:
+            return None
+    products = []
+    seen = set()
+    for r in results:
+        if r.get('category') == 'shopping' and r['url'] not in seen:
+            p = _result_to_product(r)
+            if p:
+                products.append(p)
+                seen.add(r['url'])
+    commerce_domains = ['amazon', 'walmart', 'bestbuy', 'ebay', 'target', 'etsy',
+                        'newegg', 'homedepot', 'lowes', 'costco', 'shopify', 'alibaba']
+    if len(products) < 8:
+        for r in results:
+            if r['url'] in seen:
+                continue
+            domain = (r.get('domain') or urlparse(r['url']).netloc).lower()
+            if any(d in domain for d in commerce_domains):
+                p = _result_to_product(r)
+                if p:
+                    products.append(p)
+                    seen.add(r['url'])
+    if not products:
+        return None
+    return {'panel_type': 'shopping', 'products': products[:12]}
+
+def _result_to_product(r):
+    snippet = r.get('snippet', '') or ''
+    title = r.get('title', '') or ''
+    price = _extract_price(snippet) or _extract_price(title)
+    return {
+        'title': title,
+        'url': r['url'],
+        'price': price,
+        'source': r.get('domain') or urlparse(r['url']).netloc,
+        'snippet': snippet[:120] if snippet else ''
+    }
+
+def _extract_price(text):
+    m = re.search(r'\$\s*\d+(?:\.\d{2})?', text)
+    if m:
+        return m.group()
+    m = re.search(r'(?:USD|US\$)\s*\d+(?:\.\d{2})?', text, re.I)
+    if m:
+        return m.group()
+    return None
+
 class RateLimiter:
     def __init__(self, limit=25, window=3600):
         self.limit = limit
@@ -2834,6 +2891,7 @@ def search():
             page=1,
             total_results=len(LIFE_RESOURCES),
             info_box=None,
+            shopping_products=None,
             announcement=announcement
         )
 
@@ -2847,6 +2905,7 @@ def search():
             page=1,
             total_results=0,
             info_box=None,
+            shopping_products=None,
             announcement=announcement
         )
 
@@ -2887,6 +2946,7 @@ def search():
             page=page,
             total_results=total_results,
             info_box=get_info_box(query, results),
+            shopping_products=get_shopping_panel(query, results),
             announcement=announcement
         )
 
@@ -2898,6 +2958,7 @@ def search():
             query=query,
             notice=notice,
             error="An error occurred while processing your search. Please try again.",
+            shopping_products=None,
             announcement=announcement
         )
 

@@ -144,6 +144,23 @@
         .result-score{color:var(--text4);font-size:11px;opacity:.4}
         .reddit-result .result-title{color:#ff4500}
 
+        .shop-panel{border:1px solid var(--border);border-radius:12px;padding:16px 16px 12px;margin-bottom:22px;background:var(--card-bg);overflow:hidden}
+        .shop-panel .sp-header{display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:14px;font-weight:500;color:var(--text)}
+        .shop-panel .sp-header .sp-icon{font-size:18px}
+        .shop-panel .sp-track{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding-bottom:8px;scrollbar-width:thin}
+        .shop-panel .sp-track::-webkit-scrollbar{height:4px}
+        .shop-panel .sp-track::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+        .shop-panel .sp-card{flex:0 0 180px;scroll-snap-align:start;border:1px solid var(--border2);border-radius:10px;padding:12px;background:var(--bg);transition:box-shadow .15s;cursor:pointer}
+        .shop-panel .sp-card:hover{box-shadow:0 2px 8px var(--shadow);border-color:var(--border3)}
+        .shop-panel .sp-card .sp-img{width:100%;height:120px;object-fit:contain;margin-bottom:8px;border-radius:6px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:32px;color:var(--text4);overflow:hidden}
+        .shop-panel .sp-card .sp-img img{width:100%;height:100%;object-fit:contain}
+        .shop-panel .sp-card .sp-title{font-size:13px;font-weight:500;color:var(--text);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:4px}
+        .shop-panel .sp-card .sp-price{font-size:16px;font-weight:600;color:#0288d1;margin-bottom:2px}
+        .shop-panel .sp-card .sp-source{font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .shop-panel .sp-card a{text-decoration:none;color:inherit;display:block}
+        .shop-panel .sp-card a:hover .sp-title{color:var(--link)}
+        @media(max-width:640px){.shop-panel{padding:12px 12px 8px;border-radius:8px}.shop-panel .sp-card{flex:0 0 140px;padding:8px}.shop-panel .sp-card .sp-img{height:90px}.shop-panel .sp-card .sp-title{font-size:12px}.shop-panel .sp-card .sp-price{font-size:14px}}
+
         .pagination{text-align:center;margin:32px 0}
         .pagination a{display:inline-block;padding:8px 14px;color:var(--cm);font-size:13px}
 
@@ -507,6 +524,26 @@
                 <div class="notice-banner {{ notice.type }}">
                     {% if notice.icon %}<span class="notice-icon">{{ notice.icon|safe }}</span>{% endif %}
                     {{ notice.message|safe }}
+                </div>
+            {% endif %}
+
+            {% if shopping_products %}
+                <div class="shop-panel">
+                    <div class="sp-header"><span class="sp-icon">&#x1F6D2;</span> Shop results</div>
+                    <div class="sp-track">
+                        {% for p in shopping_products.products %}
+                        <div class="sp-card">
+                            <a href="{{ p.url }}" target="_blank" rel="noopener">
+                                <div class="sp-img">
+                                    {% if p.price %}&#x1F4B5;{% else %}&#x1F4E6;{% endif %}
+                                </div>
+                                <div class="sp-title">{{ p.title }}</div>
+                                {% if p.price %}<div class="sp-price">{{ p.price }}</div>{% endif %}
+                                <div class="sp-source">{{ p.source }}</div>
+                            </a>
+                        </div>
+                        {% endfor %}
+                    </div>
                 </div>
             {% endif %}
 
