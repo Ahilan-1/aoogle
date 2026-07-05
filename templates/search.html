@@ -155,33 +155,7 @@
         .result-score{color:var(--text4);font-size:11px;opacity:.4}
         .reddit-result .result-title{color:#ff4500}
 
-        .shop-panel{border:1px solid var(--border);border-radius:12px;padding:16px 16px 12px;margin-bottom:22px;background:var(--card-bg);overflow:hidden}
-        .shop-panel .sp-header{display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:14px;font-weight:500;color:var(--text)}
-        .shop-panel .sp-header .sp-icon{font-size:18px}
-        .shop-panel .sp-header .sp-count{font-size:12px;color:var(--text3);font-weight:400;margin-left:auto}
-        .shop-panel .sp-track{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding-bottom:8px;scrollbar-width:thin}
-        .shop-panel .sp-track::-webkit-scrollbar{height:4px}
-        .shop-panel .sp-track::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-        .shop-panel .sp-card{flex:0 0 210px;scroll-snap-align:start;border:1px solid var(--border2);border-radius:10px;padding:10px;background:var(--bg);transition:box-shadow .15s,transform .15s;cursor:pointer;position:relative}
-        .shop-panel .sp-card:hover{box-shadow:0 3px 12px var(--shadow);border-color:var(--border3);transform:translateY(-1px)}
-        .shop-panel .sp-card .sp-badge{position:absolute;top:6px;right:6px;font-size:9px;font-weight:600;text-transform:uppercase;padding:2px 6px;border-radius:4px;letter-spacing:.5px}
-        .shop-panel .sp-card .sp-badge.amazon{background:#febd69;color:#131921}
-        .shop-panel .sp-card .sp-badge.walmart{background:#0071ce;color:#fff}
-        .shop-panel .sp-card .sp-badge.ebay{background:#e53238;color:#fff}
-        .shop-panel .sp-card .sp-badge.bestbuy{background:#0046be;color:#fff}
-        .shop-panel .sp-card .sp-badge.target{background:#cc0000;color:#fff}
-        .shop-panel .sp-card .sp-badge.etsy{background:#f45800;color:#fff}
-        .shop-panel .sp-card .sp-img{width:100%;height:100px;object-fit:contain;margin-bottom:6px;border-radius:6px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--text4);overflow:hidden}
-        .shop-panel .sp-card .sp-img img{width:100%;height:100%;object-fit:contain}
-        .shop-panel .sp-card .sp-title{font-size:13px;font-weight:500;color:var(--text);line-height:1.3;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:3px}
-        .shop-panel .sp-card .sp-price{font-size:17px;font-weight:700;color:#0288d1;margin-bottom:1px}
-        .shop-panel .sp-card .sp-source{font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px}
-        .shop-panel .sp-card .sp-rating{color:#f39c12;font-size:11px;display:inline-flex;align-items:center;gap:2px;margin-right:4px}
-        .shop-panel .sp-card .sp-source img{width:14px;height:14px;border-radius:50%}
-        .shop-panel .sp-card a{text-decoration:none;color:inherit;display:block}
-        .shop-panel .sp-card a:hover .sp-title{color:var(--link)}
-        .dark-mode .shop-panel .sp-card .sp-price{color:#4fc3f7}
-        @media(max-width:640px){.shop-panel{padding:12px 12px 8px;border-radius:8px}.shop-panel .sp-card{flex:0 0 155px;padding:8px}.shop-panel .sp-card .sp-img{height:75px;font-size:22px}.shop-panel .sp-card .sp-title{font-size:12px}.shop-panel .sp-card .sp-price{font-size:14px}}
+        @media(max-width:640px){.ao-warning{font-size:13px;padding:8px 12px}}
 
         .pagination{text-align:center;margin:32px 0}
         .pagination a{display:inline-block;padding:8px 14px;color:var(--cm);font-size:13px}
@@ -579,31 +553,6 @@
                 </div>
             {% endif %}
 
-            {% if shopping_products %}
-                {% set sp = shopping_products.products %}
-                <div class="shop-panel">
-                    <div class="sp-header"><span class="sp-icon">&#x1F6D2;</span> Shop on arlong<span class="sp-count">{{ sp|length }} results</span></div>
-                    <div class="sp-track">
-                        {% for p in sp %}
-                        {% set dn = p.domain|lower %}
-                        <div class="sp-card">
-                            <a href="{{ p.url }}" target="_blank" rel="noopener">
-                                {% if 'amazon' in dn %}<div class="sp-badge amazon">Amazon</div>
-                                {% elif 'walmart' in dn %}<div class="sp-badge walmart">Walmart</div>
-                                {% elif 'ebay' in dn %}<div class="sp-badge ebay">eBay</div>
-                                {% elif 'bestbuy' in dn %}<div class="sp-badge bestbuy">Best Buy</div>
-                                {% elif 'target' in dn %}<div class="sp-badge target">Target</div>
-                                {% elif 'etsy' in dn %}<div class="sp-badge etsy">Etsy</div>{% endif %}
-                                <div class="sp-img">{% if p.image %}<img src="{{ p.image }}" alt="" loading="lazy">{% endif %}</div>
-                                <div class="sp-title">{{ p.title }}</div>
-                                {% if p.price %}<div class="sp-price">{{ p.price }}</div>{% endif %}
-                                <div class="sp-source">{% if p.image %}<span class="sp-rating">{{ p.rating }}&#9733;</span>{% endif %}{{ p.source }}</div>
-                            </a>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endif %}
 
             {% if query == "1776" %}
                 <div class="usa-banner">
