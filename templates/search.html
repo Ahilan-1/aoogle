@@ -403,22 +403,6 @@
                     <input type="search" name="q" class="search-box" id="hp-search" required placeholder="" autocomplete="off" enterkeyhint="search">
                     <div class="suggestions-box" id="hp-suggest"></div>
                 </div>
-                <div class="loc-row">
-                    <select name="region" class="loc-select">
-                        <option value="">All regions</option>
-                        <option value="us-en" {% if region == 'us-en' %}selected{% endif %}>United States</option>
-                        <option value="uk-en" {% if region == 'uk-en' %}selected{% endif %}>United Kingdom</option>
-                        <option value="ca-en" {% if region == 'ca-en' %}selected{% endif %}>Canada</option>
-                        <option value="de-de" {% if region == 'de-de' %}selected{% endif %}>Germany</option>
-                        <option value="fr-fr" {% if region == 'fr-fr' %}selected{% endif %}>France</option>
-                        <option value="jp-jp" {% if region == 'jp-jp' %}selected{% endif %}>Japan</option>
-                        <option value="in-en" {% if region == 'in-en' %}selected{% endif %}>India</option>
-                        <option value="au-en" {% if region == 'au-en' %}selected{% endif %}>Australia</option>
-                        <option value="br-pt" {% if region == 'br-pt' %}selected{% endif %}>Brazil</option>
-                        <option value="es-es" {% if region == 'es-es' %}selected{% endif %}>Spain</option>
-                        <option value="it-it" {% if region == 'it-it' %}selected{% endif %}>Italy</option>
-                    </select>
-                </div>
                 <div class="buttons">
                     <input type="submit" value="Search">
                     <button type="button" id="lucky-btn">I'm Feeling Lucky</button>
@@ -454,20 +438,6 @@
                     <input type="search" name="q" class="rs-input" id="rs-input" value="{{ query }}" autocomplete="off" enterkeyhint="search">
                     <button type="submit" class="rs-submit" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">Search</button>
                     <div class="suggestions-box" id="rs-suggest"></div>
-                    <select name="region" class="loc-select rs-loc">
-                        <option value="">All regions</option>
-                        <option value="us-en" {% if region == 'us-en' %}selected{% endif %}>US</option>
-                        <option value="uk-en" {% if region == 'uk-en' %}selected{% endif %}>UK</option>
-                        <option value="ca-en" {% if region == 'ca-en' %}selected{% endif %}>CA</option>
-                        <option value="de-de" {% if region == 'de-de' %}selected{% endif %}>DE</option>
-                        <option value="fr-fr" {% if region == 'fr-fr' %}selected{% endif %}>FR</option>
-                        <option value="jp-jp" {% if region == 'jp-jp' %}selected{% endif %}>JP</option>
-                        <option value="in-en" {% if region == 'in-en' %}selected{% endif %}>IN</option>
-                        <option value="au-en" {% if region == 'au-en' %}selected{% endif %}>AU</option>
-                        <option value="br-pt" {% if region == 'br-pt' %}selected{% endif %}>BR</option>
-                        <option value="es-es" {% if region == 'es-es' %}selected{% endif %}>ES</option>
-                        <option value="it-it" {% if region == 'it-it' %}selected{% endif %}>IT</option>
-                    </select>
                 </form>
             </div>
         </div>

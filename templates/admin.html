@@ -245,9 +245,23 @@
                     <input type="email" name="email" placeholder="Contact email" style="flex:1;min-width:120px;padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px">
                     <input type="tel" name="phone" placeholder="Phone number" style="flex:1;min-width:120px;padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px">
                     <input type="text" name="description" placeholder="Description" style="flex:2;min-width:200px;padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px">
+                    <select name="scope" style="padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px;background:#fff">
+                        <option value="regional">Regional — $5/mo</option>
+                        <option value="global">Global — $9/mo</option>
+                    </select>
+                    <input type="text" name="regions" placeholder="Regions (comma-sep, e.g. us,in,uk)" style="flex:1;min-width:100px;padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px">
                     <select name="region" style="padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px;background:#fff">
-                        <option value="us">USA / International</option>
+                        <option value="us">Default: USA</option>
                         <option value="in">India</option>
+                        <option value="uk">UK</option>
+                        <option value="ca">Canada</option>
+                        <option value="de">Germany</option>
+                        <option value="fr">France</option>
+                        <option value="jp">Japan</option>
+                        <option value="au">Australia</option>
+                        <option value="br">Brazil</option>
+                        <option value="es">Spain</option>
+                        <option value="it">Italy</option>
                     </select>
                     <select name="plan" style="padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px;background:#fff">
                         <option value="monthly">Monthly</option>
@@ -258,13 +272,14 @@
             </div>
             {% if verified_sites %}
             <table>
-                <tr><th>Domain</th><th>Name</th><th>Phone</th><th>Region</th><th>Plan</th><th>Since</th><th>Actions</th></tr>
+                <tr><th>Domain</th><th>Name</th><th>Phone</th><th>Scope</th><th>Regions</th><th>Plan</th><th>Since</th><th>Actions</th></tr>
                 {% for s in verified_sites %}
                 <tr>
                     <td style="font-weight:600">{{ s.domain }}</td>
                     <td>{{ s.name }}</td>
                     <td style="font-size:12px">{{ s.phone if s.phone else '—' }}</td>
-                    <td><span class="status-badge {% if s.region == 'in' %}status-pending{% else %}status-approved{% endif %}">{{ s.region|upper if s.region else 'US' }}</span></td>
+                    <td><span class="status-badge {% if s.scope == 'global' %}status-approved{% else %}status-pending{% endif %}">{{ s.scope }}</span></td>
+                    <td style="font-size:12px">{{ s.regions|join(', ') if s.regions else s.region|upper }}</td>
                     <td>{{ s.plan if s.plan else 'monthly' }}</td>
                     <td class="date-cell">{{ s.verified_at[:10] }}</td>
                     <td>

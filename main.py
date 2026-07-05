@@ -705,6 +705,29 @@ def detect_notice(query):
             }
     return None
 
+COUNTRY_NAMES = {
+    'us': 'United States', 'uk': 'United Kingdom', 'ca': 'Canada',
+    'de': 'Germany', 'fr': 'France', 'jp': 'Japan', 'in': 'India',
+    'au': 'Australia', 'br': 'Brazil', 'es': 'Spain', 'it': 'Italy',
+}
+
+def detect_user_country():
+    try:
+        r = requests.get('https://ip-api.com/json/?fields=countryCode,country',
+                          headers={'User-Agent': 'arlong-search/1.0'}, timeout=4)
+        if r.status_code == 200:
+            data = r.json()
+            if data.get('status') == 'success':
+                cc = data.get('countryCode', '').lower()
+                country = data.get('country', '')
+                for code, name in COUNTRY_NAMES.items():
+                    if cc == code or country.lower() == name.lower():
+                        return code, cc
+                return None, cc
+    except:
+        pass
+    return None, None
+
 DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data.json')
 
 def _load_json():
@@ -904,7 +927,7 @@ class DataManager:
                 self.data = loaded
             _save_json(self.data)
 
-    def add_verified_site(self, domain, name, description, email, phone='', region='us', plan='monthly'):
+    def add_verified_site(self, domain, name, description, email, phone='', region='us', plan='monthly', scope='regional', regions=None):
         with self._lock:
             loaded = _load_json()
             if loaded:
@@ -913,12 +936,14 @@ class DataManager:
             for site in self.data['verified_sites']:
                 if site['domain'] == domain:
                     site.update(name=name, description=description, email=email,
-                                phone=phone, region=region, plan=plan)
+                                phone=phone, region=region, plan=plan, scope=scope,
+                                regions=regions or [region])
                     _save_json(self.data)
                     return site
             site = {
                 'domain': domain, 'name': name, 'description': description,
                 'email': email, 'phone': phone, 'region': region, 'plan': plan,
+                'scope': scope, 'regions': regions or [region],
                 'verified_at': datetime.now().isoformat(),
                 'subscription': 'active',
             }
@@ -933,17 +958,28 @@ class DataManager:
                 self.data = loaded
             return list(self.data.get('verified_sites', []))
 
-    def is_verified(self, domain):
-        domain = domain.lower().replace('www.', '')
-        sites = self.get_verified_sites()
-        return any(domain in s['domain'] or s['domain'] in domain for s in sites)
-
-    def get_verified_info(self, domain):
+    def is_verified(self, domain, user_country=None):
         domain = domain.lower().replace('www.', '')
         sites = self.get_verified_sites()
         for s in sites:
             if domain in s['domain'] or s['domain'] in domain:
-                return s
+                if s.get('scope') == 'global':
+                    return True
+                regions = s.get('regions') or [s.get('region', 'us')]
+                if user_country and user_country in regions:
+                    return True
+        return False
+
+    def get_verified_info(self, domain, user_country=None):
+        domain = domain.lower().replace('www.', '')
+        sites = self.get_verified_sites()
+        for s in sites:
+            if domain in s['domain'] or s['domain'] in domain:
+                if s.get('scope') == 'global':
+                    return s
+                regions = s.get('regions') or [s.get('region', 'us')]
+                if user_country and user_country in regions:
+                    return s
         return None
 
     def remove_verified_site(self, domain):
@@ -1158,6 +1194,10 @@ def _search_google(query, max_results=5, region=None):
 class ImprovedSearch:
     def __init__(self):
         self.session = requests.Session()
+        # Connection pool with keep-alive for faster repeats
+        adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=20, max_retries=0)
+        self.session.mount('https://', adapter)
+        self.session.mount('http://', adapter)
         try:
             self.user_agent = UserAgent(fallback='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
         except:
@@ -1168,7 +1208,7 @@ class ImprovedSearch:
             self.ddgs = DDGS()
             self.search_urls.append("ddgs://text")
         else:
-            self.ddgs = DDGS() if ddgs_available else None
+            self.ddgs = None
         self.in_memory_cache = {}
         self.cache_lock = threading.Lock()
 
@@ -2065,13 +2105,13 @@ class ImprovedSearch:
     def _search_single_engine(self, search_url, query, page, region=None):
         try:
             if search_url == 'ddgs://text':
-                if not ddgs_available:
+                if not self.ddgs:
                     return []
                 try:
-                    ddgs_kwargs = dict(query=query, max_results=50, backend='auto', safesearch='on')
+                    ddgs_kwargs = dict(query=query, max_results=30, backend='auto', safesearch='on')
                     if region:
                         ddgs_kwargs['region'] = region
-                    raw = DDGS(timeout=5).text(**ddgs_kwargs)
+                    raw = self.ddgs.text(**ddgs_kwargs)
                     results = []
                     for r in raw:
                         title = r.get('title', '')
@@ -2132,12 +2172,12 @@ class ImprovedSearch:
         seen = set()
 
         # 0. DDGS metasearch (fastest, uses multiple engines)
-        if ddgs_available:
+        if self.ddgs:
             try:
-                ddgs_kwargs = dict(query=query, max_results=30, backend='auto', safesearch='on')
+                ddgs_kwargs = dict(query=query, max_results=25, backend='auto', safesearch='on')
                 if region:
                     ddgs_kwargs['region'] = region
-                raw = DDGS(timeout=5).text(**ddgs_kwargs)
+                raw = self.ddgs.text(**ddgs_kwargs)
                 for r in raw:
                     title = r.get('title', '')
                     href = r.get('href', '')
@@ -2159,7 +2199,7 @@ class ImprovedSearch:
             try:
                 r = self.session.get('https://api.duckduckgo.com/', params={
                     'q': query, 'format': 'json', 'no_html': 1, 'skip_disambig': 1
-                }, headers=self._get_headers(), timeout=8)
+                }, headers=self._get_headers(), timeout=5)
                 if r and r.status_code == 200:
                     data = r.json()
                     if data.get('AbstractURL') and data.get('AbstractText'):
@@ -2264,11 +2304,11 @@ class ImprovedSearch:
                 futures.append(future)
 
             try:
-                for future in as_completed(futures, timeout=20):
+                for future in as_completed(futures, timeout=10):
                     try:
                         current_results = future.result()
                         results.extend(current_results)
-                        if len(results) >= 50:
+                        if len(results) >= 30:
                             break
                     except Exception as e:
                         errors.append(str(e))
@@ -3562,7 +3602,10 @@ search_engine = ImprovedSearch()
 def home():
     announcement = data_manager.get_announcement()
     ml_val = request.args.get('ml', '')
-    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, ml_rank=bool(ml_val) and ml_val != '0', blocked_count=BLOCKLIST_COUNT)
+    if 'user_country' not in session:
+        country_code, raw_cc = detect_user_country()
+        session['user_country'] = country_code or ''
+    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, ml_rank=bool(ml_val) and ml_val != '0', blocked_count=BLOCKLIST_COUNT, user_country=session.get('user_country', ''), country_name=COUNTRY_NAMES.get(session.get('user_country', ''), ''))
 
 @app.route('/search')
 def search():
@@ -3574,9 +3617,14 @@ def search():
     ml_rank = request.args.get('ml', '')
     region = request.args.get('region', session.get('region', ''))
 
+    if 'user_country' not in session:
+        country_code, raw_cc = detect_user_country()
+        session['user_country'] = country_code or ''
+    user_country = session.get('user_country', '')
+
     announcement = data_manager.get_announcement()
     if not query:
-        return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT)
+        return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=user_country, country_name=COUNTRY_NAMES.get(user_country, ''))
 
     crisis = detect_crisis(query)
 
@@ -3592,7 +3640,9 @@ def search():
             info_box=None,
             shopping_products=None,
             announcement=announcement,
-            blocked_count=BLOCKLIST_COUNT
+            blocked_count=BLOCKLIST_COUNT,
+            user_country=user_country,
+            country_name=COUNTRY_NAMES.get(user_country, '')
         )
 
     notice = detect_notice(query)
@@ -3607,7 +3657,9 @@ def search():
             info_box=None,
             shopping_products=None,
             announcement=announcement,
-            blocked_count=BLOCKLIST_COUNT
+            blocked_count=BLOCKLIST_COUNT,
+            user_country=user_country,
+            country_name=COUNTRY_NAMES.get(user_country, '')
         )
 
     bang_url = get_bang_redirect(query)
@@ -3622,23 +3674,23 @@ def search():
         if ml_rank and ml_rank != '0' and results:
             results = search_engine.ml_rerank(query, results, ml_rank)
 
-        verified_info = data_manager.get_verified_info(query.lower().strip())
+        verified_info = data_manager.get_verified_info(query.lower().strip(), user_country)
         if not verified_info and results:
             q_parts = query.lower().strip().split()
             for r in results:
                 domain = (r.get('domain') or '').replace('www.', '')
-                if data_manager.is_verified(domain):
-                    verified_info = data_manager.get_verified_info(domain)
+                if data_manager.is_verified(domain, user_country):
+                    verified_info = data_manager.get_verified_info(domain, user_country)
                     break
                 name_match = any(p in r.get('title', '').lower() for p in q_parts if len(p) > 3)
-                if name_match and data_manager.is_verified(domain):
-                    verified_info = data_manager.get_verified_info(domain)
+                if name_match and data_manager.is_verified(domain, user_country):
+                    verified_info = data_manager.get_verified_info(domain, user_country)
                     break
 
         if results:
             for r in results:
                 domain = (r.get('domain') or urlparse(r['url']).netloc).lower().replace('www.', '')
-                r['verified'] = data_manager.is_verified(domain)
+                r['verified'] = data_manager.is_verified(domain, user_country)
             verified_results = [r for r in results if r.get('verified')]
             other_results = [r for r in results if not r.get('verified')]
             results = verified_results + other_results
@@ -3674,7 +3726,9 @@ def search():
             shopping_products=get_shopping_panel(query, results),
             region=region or session.get('region', ''),
             announcement=announcement,
-            blocked_count=BLOCKLIST_COUNT
+            blocked_count=BLOCKLIST_COUNT,
+            user_country=user_country,
+            country_name=COUNTRY_NAMES.get(user_country, '')
         )
 
     except Exception as e:
@@ -3687,7 +3741,9 @@ def search():
             error="An error occurred while processing your search. Please try again.",
             shopping_products=None,
             announcement=announcement,
-            blocked_count=BLOCKLIST_COUNT
+            blocked_count=BLOCKLIST_COUNT,
+            user_country=user_country,
+            country_name=COUNTRY_NAMES.get(user_country, '')
         )
 
 @app.route('/api/search')
@@ -4158,8 +4214,11 @@ def admin_add_verified():
     phone = request.form.get('phone', '').strip()
     region = request.form.get('region', 'us').strip()
     plan = request.form.get('plan', 'monthly').strip()
+    scope = request.form.get('scope', 'regional').strip()
+    regions_raw = request.form.get('regions', '')
+    regions = [r.strip() for r in regions_raw.split(',') if r.strip()] or [region]
     if domain and name:
-        data_manager.add_verified_site(domain, name, description, email, phone, region, plan)
+        data_manager.add_verified_site(domain, name, description, email, phone, region, plan, scope, regions)
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/verified/remove', methods=['POST'])
