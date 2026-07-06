@@ -116,7 +116,9 @@
         .homepage .loc-select:hover{border-color:var(--cm)}.homepage .loc-select:focus{outline:none;border-color:var(--cm)}
         .homepage .buttons{margin-top:24px;display:flex;justify-content:center;flex-wrap:wrap}
         .homepage .buttons input,.homepage .buttons button{background:var(--bg3);border:1px solid var(--bg3);border-radius:4px;color:var(--text);font-size:14px;margin:6px 4px;padding:0 16px;line-height:36px;height:36px;cursor:pointer;min-width:120px;font-family:arial,sans-serif;transition:.1s}
-        .homepage .buttons input:hover,.homepage .buttons button:hover{box-shadow:0 1px 1px rgba(0,0,0,.1);border-color:var(--border)}
+        .homepage .buttons input:hover,.homepage .buttons button:hover,.homepage .buttons .explore-btn:hover{box-shadow:0 1px 1px rgba(0,0,0,.1);border-color:var(--border)}
+        .homepage .buttons .explore-btn{background:var(--bg3);border:1px solid var(--bg3);border-radius:4px;color:var(--text);font-size:14px;margin:6px 4px;padding:0 16px;line-height:36px;height:36px;cursor:pointer;min-width:120px;font-family:arial,sans-serif;transition:.1s;display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
+        .homepage .buttons .explore-btn:hover{background:var(--bg3);text-decoration:none;box-shadow:0 1px 1px rgba(0,0,0,.1);border-color:var(--border)}
         .homepage .about-link{margin-top:30px;font-size:13px;color:var(--text3)}
         .homepage .about-link a{color:var(--link)}
 
@@ -144,7 +146,9 @@
         .results-main{flex:1;min-width:0}
         .results-sidebar{width:300px;flex-shrink:0}
 
-        .result-card{margin-bottom:22px}
+        .result-card{display:flex;gap:8px;margin-bottom:22px}
+        .result-left{display:flex;flex-direction:column;align-items:center;padding-top:2px;width:28px;flex-shrink:0}
+        .result-main{flex:1;min-width:0}
         .result-url{display:flex;align-items:center;font-size:14px;color:#006621;line-height:1.5}
         .dark-mode .result-url{color:#81c995}
         .result-favicon{width:16px;height:16px;margin-right:6px;border-radius:50%;flex-shrink:0}
@@ -358,6 +362,61 @@
         .netflix-intro .ni-hint{display:none;color:rgba(77,166,255,.5);font-size:12px;letter-spacing:3px;margin-top:8px;font-weight:300;animation:ni-hint-pulse 2s ease-in-out infinite}
         @keyframes ni-hint-pulse{0%,100%{opacity:.4}50%{opacity:1}}
         @media(max-width:640px){.netflix-intro .ni-logo span{font-size:56px;letter-spacing:-2px}.netflix-intro .ni-logo{gap:2px}.netflix-intro .ni-subtitle{font-size:11px;letter-spacing:5px}.netflix-intro .ni-waves{height:60px}}
+
+        /* ── Reddit-style community ── */
+        .result-community{display:flex;align-items:center;gap:4px;margin-top:6px;font-size:12px;color:var(--text3)}
+        .reddit-vote{display:flex;flex-direction:column;align-items:center;gap:0}
+        .reddit-vote .arrw{background:none;border:none;cursor:pointer;padding:0;width:15px;height:15px;display:flex;align-items:center;justify-content:center;color:var(--text3);opacity:.5;transition:opacity .15s}
+        .reddit-vote .arrw:hover{opacity:1}
+        .reddit-vote .arrw svg{width:13px;height:13px;fill:currentColor}
+        .reddit-vote .arrw.up.active{color:#ff4500;opacity:1}
+        .reddit-vote .arrw.down.active{color:#7193ff;opacity:1}
+        .reddit-vote .vote-score{font-size:12px;font-weight:600;line-height:1;color:var(--text);min-width:18px;text-align:center;font-family:Verdana,Arial,sans-serif}
+        .com-btn{background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:4px;padding:1px 6px;font-size:12px;color:var(--text3);opacity:.7;transition:opacity .15s;border-radius:3px;line-height:1}
+        .com-btn:hover{opacity:1}
+        .com-btn svg{width:14px;height:14px;fill:currentColor}
+        .pin-btn-sm{background:none;border:none;cursor:pointer;display:flex;align-items:center;padding:1px 4px;font-size:12px;color:var(--text3);opacity:.5;transition:opacity .15s;border-radius:3px;line-height:1}
+        .pin-btn-sm:hover{opacity:1}
+        .pin-btn-sm svg{width:13px;height:13px;fill:currentColor}
+        .rpt-btn{background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:3px;padding:1px 6px;font-size:12px;color:var(--text3);opacity:.5;transition:opacity .15s;border-radius:3px;line-height:1}
+        .rpt-btn:hover{opacity:1}
+        /* Comment section */
+        .comment-section{display:none;margin-top:3px;padding:4px 0 4px 20px;border-left:2px solid var(--border2);font-size:12px}
+        .comment-list{max-height:320px;overflow-y:auto}
+        .rd-comment{padding:4px 0 4px 0;border-bottom:1px solid var(--border2)}
+        .rd-comment:last-child{border-bottom:none}
+        .rd-comment-head{display:flex;align-items:center;gap:6px;margin-bottom:1px}
+        .rd-comment-user{color:var(--link);font-weight:600;font-size:12px}
+        .rd-comment-time{color:var(--text3);font-size:10px}
+        .rd-comment-text{color:var(--text);font-size:12px;line-height:1.4;margin-bottom:2px;word-break:break-word}
+        .rd-comment-actions{display:flex;align-items:center;gap:2px}
+        .rd-comment-actions .arrw{width:12px;height:12px}
+        .rd-comment-actions .arrw svg{width:10px;height:10px}
+        .rd-comment-actions .vote-score{font-size:10px;min-width:14px}
+        .comment-form{margin-top:4px;display:flex;flex-direction:column;gap:4px}
+        .comment-form .captcha-box{display:none;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--text3)}
+        .comment-form .captcha-input{width:50px;padding:3px 5px;border:1px solid var(--border);border-radius:3px;font-size:12px;background:var(--input-bg);color:var(--text);outline:none}
+        .comment-form .captcha-input:focus{border-color:var(--link)}
+        .comment-form textarea{width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:3px;font-size:12px;resize:vertical;background:var(--input-bg);color:var(--text);outline:none}
+        .comment-form textarea:focus{border-color:var(--link)}
+        .comment-form .post-btn{align-self:flex-end;padding:2px 12px;background:var(--link);color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:11px;font-weight:600;opacity:.8;transition:opacity .15s}
+        .comment-form .post-btn:hover{opacity:1}
+        .comment-form .done-btn{padding:2px 10px;background:var(--link);color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:11px}
+        .hp-whatsnew{max-width:680px;margin:24px auto 0;text-align:left;font-size:13px}
+        .hp-whatsnew summary{color:var(--text3);cursor:pointer;font-size:12px;padding:4px 0;user-select:none;list-style:none;display:flex;align-items:center;gap:4px;justify-content:center}
+        .hp-whatsnew summary:hover{color:var(--text)}
+        .hp-whatsnew summary::before{content:'\25B6';font-size:9px;color:var(--text4);transition:transform .2s}
+        .hp-whatsnew[open] summary::before{transform:rotate(90deg)}
+        .hp-whatsnew .wn-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;padding:12px 0;border-top:1px solid var(--border2)}
+        .hp-whatsnew .wn-card{border:1px solid var(--border2);border-radius:4px;padding:10px 12px;background:var(--bg2);transition:border-color .15s}
+        .hp-whatsnew .wn-card:hover{border-color:var(--text4)}
+        .hp-whatsnew .wn-card h4{margin:0 0 2px;font-size:13px;font-weight:600;color:var(--orange)}
+        .hp-whatsnew .wn-card p{margin:0;font-size:11px;color:var(--text3);line-height:1.4}
+        .hp-whatsnew .wn-card .wn-link{font-size:11px;color:var(--link);margin-top:3px;display:inline-block}
+        .hp-whatsnew .wn-card .wn-link:hover{color:var(--orange)}
+        .hp-whatsnew .wn-intro{font-size:11px;color:var(--text4);text-align:center;margin-top:6px}
+        .hp-whatsnew summary::-webkit-details-marker{display:none}
+        @media(max-width:640px){.comment-section{padding-left:12px}.hp-whatsnew .wn-grid{grid-template-columns:1fr}}
     </style>
 </head>
 <body>
@@ -384,6 +443,14 @@
 
     <button class="dm-toggle" id="dm-btn" onclick="toggleDark()" aria-label="Toggle dark mode">&#x263D;</button>
     <button class="flag-toggle" id="flag-btn" title="Toggle flag colors" style="display:none">&#x1F1FA;&#x1F1F8;</button>
+    <div style="position:fixed;top:12px;right:58px;z-index:999;display:flex;align-items:center;gap:8px;font-size:13px">
+        {% if session.user_id %}
+        <span style="color:var(--text3)">{{ session.username }}</span>
+        <a href="/logout" style="color:var(--link);text-decoration:none">Logout</a>
+        {% else %}
+        <a href="/login" style="color:var(--link);text-decoration:none">Sign in</a>
+        {% endif %}
+    </div>
     {% if announcement %}
     <div style="background:#c5221f;color:#fff;text-align:center;padding:10px 20px;font-size:14px;font-weight:500;position:sticky;top:0;z-index:1000;box-shadow:0 2px 8px rgba(197,34,31,.3)">
         &#x26A0; {{ announcement }}
@@ -405,11 +472,13 @@
                 </div>
                 <div class="buttons">
                     <input type="submit" value="Search">
-                    <button type="button" id="lucky-btn">I'm Feeling Lucky</button>
+                    <a href="/feed" class="explore-btn" style="background:var(--bg3);border:1px solid var(--bg3);border-radius:4px;color:var(--text);font-size:14px;margin:6px 4px;padding:0 16px;line-height:36px;height:36px;cursor:pointer;min-width:120px;font-family:arial,sans-serif;transition:.1s;display:inline-flex;align-items:center;justify-content:center;text-decoration:none">Feed</a>
+                    <a href="/explore" class="explore-btn">Explore</a>
                 </div>
             </form>
         </div>
         <div class="bottom-links">
+            <a href="/explore">Explore</a><span class="sep">|</span>
             <a href="/about">How it works</a><span class="sep">|</span>
             <a href="/policy">Policies</a><span class="sep">|</span>
             <a href="/privacy">Privacy</a><span class="sep">|</span>
@@ -424,6 +493,50 @@
         {% if blocked_count %}
         <div class="about-link" style="margin-top:12px;font-size:12px">&#x1F6AB; <strong>{{ "{:,}".format(blocked_count) }}</strong> gambling, ad, crypto, drug &amp; fraud domains delisted</div>
         {% endif %}
+        <details class="hp-whatsnew">
+            <summary>What's new on arlong</summary>
+            <div class="wn-grid">
+                <div class="wn-card">
+                    <h4>Search results voting</h4>
+                    <p>Upvote or downvote any search result. Your votes shape the community feed and help surface quality links.</p>
+                    <a class="wn-link" href="/feed">See the feed &rarr;</a>
+                </div>
+                <div class="wn-card">
+                    <h4>Community comments</h4>
+                    <p>Discuss any search result with threaded, Reddit-style comments. Each comment has its own vote buttons.</p>
+                    <a class="wn-link" href="/#">Try it on any result</a>
+                </div>
+                <div class="wn-card">
+                    <h4>Collections (Pinterest-style)</h4>
+                    <p>Create themed collections and pin your favorite websites. Browse what others have curated in the Explore page.</p>
+                    <a class="wn-link" href="/explore">Browse collections &rarr;</a>
+                </div>
+                <div class="wn-card">
+                    <h4>Activity feed</h4>
+                    <p>See what the community is voting on and discussing in real time. Vote and comment directly from the feed.</p>
+                    <a class="wn-link" href="/feed">Open feed &rarr;</a>
+                </div>
+                <div class="wn-card">
+                    <h4>Verified business listings</h4>
+                    <p>Regional ($5/mo) or global ($9/mo) verification with blue checkmark badge for businesses.</p>
+                    <a class="wn-link" href="/verified">Learn more &rarr;</a>
+                </div>
+                <div class="wn-card">
+                    <h4>1M blocklisted domains</h4>
+                    <p>Over 789K gambling, ad, crypto, drug and fraud domains are automatically filtered from results.</p>
+                    <a class="wn-link" href="/policy">View policy &rarr;</a>
+                </div>
+                <div class="wn-card">
+                    <h4>Academic search ranking</h4>
+                    <p>Automatically detects academic intent and boosts research domains while penalising news/blog spam.</p>
+                </div>
+                <div class="wn-card">
+                    <h4>User profiles</h4>
+                    <p>Every user gets a profile page at /u/username showing their contribution score and activity history.</p>
+                </div>
+            </div>
+            <div class="wn-intro">Sign up with just a username and password &mdash; no email required</div>
+        </details>
     </div>
 
     {% else %}
@@ -550,6 +663,14 @@
                 </div>
                 {% for result in results %}
                     <div class="result-card {{ 'reddit-result' if 'reddit' in result.url else '' }}" data-url="{{ result.url }}" data-title="{{ result.title }}" data-category="{{ result.category or 'general' }}">
+                        <div class="result-left">
+                            <div class="reddit-vote">
+                                <button class="arrw up" onclick="vote(this,1)" title="Upvote"><svg viewBox="0 0 13 13"><path d="M6.5 1L1 8h11z"/></svg></button>
+                                <span class="vote-score">0</span>
+                                <button class="arrw down" onclick="vote(this,-1)" title="Downvote"><svg viewBox="0 0 13 13"><path d="M6.5 12L12 5H1z"/></svg></button>
+                            </div>
+                        </div>
+                        <div class="result-main">
                         <div class="result-url">
                             <img src="{{ result.favicon }}" alt="" class="result-favicon" onerror="this.style.display='none'">
                             {{ result.display_url }}
@@ -557,6 +678,23 @@
                         </div>
                         <a href="{{ result.url }}" class="result-title" target="_blank">{{ result.title }}</a>
                         <div class="result-snippet">{{ result.snippet }}</div>
+                        <div class="result-community" data-url="{{ result.url }}" data-title="{{ result.title }}">
+                            <button class="com-btn" onclick="toggleComments(this)" title="Comments"><svg viewBox="0 0 14 14"><path d="M1 1h12v9H4.5L2 12.5V10H1V1zm1 1v7h1v1.5L4.5 9H12V2H2z"/></svg> <span class="comment-count">0</span></button>
+                            <button class="pin-btn-sm" onclick="pinFromSearch(this)" title="Pin to collection"><svg viewBox="0 0 14 14"><path d="M2 1v12l5-3 5 3V1H2zm1 1h8v9.5l-4-2.5-4 2.5V2z"/></svg></button>
+                            <button class="rpt-btn" onclick="reportDomain(this)" title="Report domain"><svg viewBox="0 0 14 14"><path d="M7 1L1 13h12L7 1zm0 2.5l4.5 8h-9l4.5-8zM7 8.5a.75.75 0 110-1.5.75.75 0 010 1.5zM6.5 5h1v2.5h-1V5z"/></svg></button>
+                        </div>
+                            <div class="comment-section">
+                                <div class="comment-list"></div>
+                                <div class="comment-form">
+                                    <div class="captcha-overlay" style="display:none;position:relative;background:var(--bg3);border:1px solid var(--border);padding:4px 10px;margin-bottom:4px;border-radius:2px;min-height:40px;overflow:hidden"></div>
+                                    <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+                                        <input type="text" class="captcha-input" placeholder="Type word above" style="display:none;width:90px;padding:3px 5px;border:1px solid var(--border);font-size:11px;background:var(--input-bg);color:var(--text);outline:none">
+                                        <button class="done-btn" style="display:none;padding:2px 8px;border:1px solid var(--accent);background:var(--accent);color:#eee;font-size:10px;cursor:pointer" onclick="submitSearchCaptcha(this)">&#x2713;</button>
+                                    </div>
+                                    <textarea class="comment-text" placeholder="What do you think?" rows="2"></textarea>
+                                    <button class="post-btn" onclick="postComment(this)">Comment</button>
+                                </div>
+                            </div>
                         <div class="result-metadata">
                             <span class="result-category">{{ result.category }}</span>
                             {% if result.date %}<span class="result-date">{{ result.date }}</span>{% endif %}
@@ -568,6 +706,7 @@
                                     </div>
                                 </div>
                             </span>
+                        </div>
                         </div>
                     </div>
                 {% endfor %}
@@ -1146,6 +1285,239 @@
             var rs=document.getElementById('rs-ml');if(rs)rs.value=ml_val;
         });
 
+        /* ── Reddit-style community: vote, comments, domain report ── */
+        function loadCommunity(url, container){
+            var card = container.closest('.result-card');
+            fetch('/api/comments/' + encodeURIComponent(url)).then(function(r){return r.json()}).then(function(d){
+                var scoreEl = card.querySelector('.reddit-vote .vote-score');
+                var countEl = container.querySelector('.comment-count');
+                if(scoreEl) scoreEl.textContent = d.score;
+                if(countEl) countEl.textContent = d.comments.length;
+                var up = card.querySelector('.reddit-vote .arrw.up');
+                var down = card.querySelector('.reddit-vote .arrw.down');
+                if(up) up.classList.toggle('active', d.user_vote === 1);
+                if(down) down.classList.toggle('active', d.user_vote === -1);
+            });
+        }
+        document.querySelectorAll('.result-community').forEach(function(el){
+            loadCommunity(el.getAttribute('data-url'), el);
+        });
+        function vote(btn, dir){
+            var userEl = document.querySelector('[href*=\"/login\"]');
+            if(userEl && userEl.textContent === 'Sign in'){ alert('Sign in to vote'); return }
+            var container = btn.closest('.reddit-vote');
+            var card = container.closest('.result-card');
+            var url = card.getAttribute('data-url') || card.querySelector('.result-community').getAttribute('data-url');
+            var title = card.querySelector('.result-title') ? card.querySelector('.result-title').textContent : url;
+            var fd = new FormData(); fd.append('url', url); fd.append('vote', dir); fd.append('title', title);
+            fetch('/api/vote', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
+                if(!d.ok){ alert(d.error); return }
+                container.querySelector('.vote-score').textContent = d.score;
+                container.querySelectorAll('.arrw').forEach(function(b){ b.classList.remove('active') });
+                btn.classList.toggle('active', true);
+            });
+        }
+        function toggleComments(btn){
+            var section = btn.closest('.result-card').querySelector('.comment-section');
+            var visible = section.style.display !== 'none';
+            section.style.display = visible ? 'none' : 'block';
+            if(!visible){
+                var url = btn.closest('.result-community').getAttribute('data-url');
+                var list = section.querySelector('.comment-list');
+                fetch('/api/comments/' + encodeURIComponent(url)).then(function(r){return r.json()}).then(function(d){
+                    list.innerHTML = '';
+                    d.comments.forEach(function(c){
+                        list.appendChild(buildCommentEl(c));
+                    });
+                    btn.querySelector('.comment-count').textContent = d.comments.length;
+                });
+            }
+        }
+        function buildCommentEl(c){
+            var div = document.createElement('div'); div.className = 'rd-comment';
+            var head = document.createElement('div'); head.className = 'rd-comment-head';
+            var user = document.createElement('a'); user.className = 'rd-comment-user'; user.href = '/u/' + c.username; user.textContent = c.username;
+            var time = document.createElement('span'); time.className = 'rd-comment-time'; time.textContent = c.created_at.slice(0,10);
+            head.appendChild(user); head.appendChild(time);
+            var text = document.createElement('div'); text.className = 'rd-comment-text'; text.textContent = c.text;
+            div.appendChild(head); div.appendChild(text);
+            if(c.replies && c.replies.length){
+                var rwrap = document.createElement('div'); rwrap.style.cssText = 'margin-left:16px;border-left:1px solid var(--border2);padding-left:8px';
+                c.replies.forEach(function(rp){ rwrap.appendChild(buildCommentEl(rp)) });
+                div.appendChild(rwrap);
+            }
+            return div;
+        }
+        function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+        /* ── Captcha: scrambled word + countdown ── */
+        function getCaptcha(section, cb){
+            var box = section.querySelector('.captcha-overlay');
+            if(section._capTimer){ clearInterval(section._capTimer); delete section._capTimer }
+            box.style.display = 'block';
+            box.innerHTML = '<span style="color:var(--text4);font-size:11px">Loading captcha...</span>';
+            var inp = section.querySelector('.captcha-input');
+            var doneBtn = section.querySelector('.done-btn');
+            inp.style.display = 'none';
+            doneBtn.style.display = 'none';
+            fetch('/api/captcha').then(function(r){return r.json()}).then(function(d){
+                if(!d.ok) return;
+                box.innerHTML = d.html + '<input type="hidden" class="captcha-token" value="'+d.token+'"><span class="ctimer" style="position:absolute;bottom:1px;right:4px;z-index:3;font-size:9px;color:var(--orange);font-family:monospace"></span>';
+                var timerEl = box.querySelector('.ctimer');
+                var expiresAt = Date.now() + d.expires_in * 1000;
+                function tick(){
+                    var left = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
+                    timerEl.textContent = left + 's';
+                    if(left <= 0){
+                        clearInterval(section._capTimer); delete section._capTimer;
+                        var expired = document.createElement('div'); expired.className = 'expired';
+                        expired.style.cssText = 'position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.7);color:var(--orange);font-size:11px;font-weight:600;cursor:pointer';
+                        expired.textContent = 'Expired - click to refresh';
+                        expired.onclick = function(){ getCaptcha(section, cb); };
+                        box.appendChild(expired);
+                    }
+                }
+                tick();
+                section._capTimer = setInterval(tick, 1000);
+                inp.style.display = 'inline-block'; inp.value = ''; inp.focus();
+                doneBtn.style.display = 'inline-block';
+                var theDoneBtn = doneBtn;
+                inp.onkeydown = function(e){ if(e.key === 'Enter') submitSearchCaptcha(theDoneBtn) };
+                section._captchaCb = cb;
+            });
+        }
+
+        function submitSearchCaptcha(btn){
+            var section = btn.closest('.comment-section');
+            var box = section.querySelector('.captcha-overlay');
+            var inp = section.querySelector('.captcha-input');
+            var token = box.querySelector('.captcha-token').value;
+            var answer = inp.value.trim();
+            if(!answer){ alert('Type the word you see'); return }
+            var cb = section._captchaCb;
+            box.dataset.token = token;
+            box.dataset.answer = answer;
+            box.style.display = 'none';
+            inp.value = '';
+            if(section._capTimer){ clearInterval(section._capTimer); delete section._capTimer }
+            if(cb) cb();
+        }
+
+        function postComment(btn){
+            var section = btn.closest('.comment-section');
+            var textarea = section.querySelector('.comment-text');
+            var text = textarea.value.trim();
+            if(!text){ alert('Write something'); return }
+            window._searchCaptchaCb = function(){
+                var box = section.querySelector('.captcha-overlay');
+                var token = box.dataset.token;
+                var answer = box.dataset.answer;
+                if(!token || !answer){ alert('Complete captcha'); return }
+                var fd = new FormData();
+                var card = section.closest('.result-card');
+                var title = card.querySelector('.result-title') ? card.querySelector('.result-title').textContent : '';
+                fd.append('url', card.getAttribute('data-url'));
+                fd.append('title', title);
+                fd.append('text', text);
+                fd.append('captcha_token', token);
+                fd.append('captcha_answer', answer);
+                fetch('/api/comment', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
+                    if(!d.ok){
+                        if(d.wait){ alert('Please wait '+d.wait+'s'); return }
+                        if(d.error === 'Captcha incorrect'){ alert('Captcha incorrect, try again'); getCaptcha(section, window._searchCaptchaCb); return }
+                        alert(d.error); return
+                    }
+                    textarea.value = '';
+                    box.style.display = 'none';
+                    box.dataset.token = '';
+                    box.dataset.answer = '';
+                    var list = section.querySelector('.comment-list');
+                    var el = buildCommentEl(d.comment);
+                    list.prepend(el);
+                    var count = section.closest('.result-community').querySelector('.comment-count');
+                    if(count) count.textContent = parseInt(count.textContent) + 1;
+                });
+            };
+            getCaptcha(section, window._searchCaptchaCb);
+        }
+        function reportDomain(btn){
+            var userEl = document.querySelector('[href*=\"/login\"]');
+            if(userEl && userEl.textContent === 'Sign in'){ alert('Sign in to report domain'); return }
+            var url = btn.closest('.result-community').getAttribute('data-url');
+            var domain = new URL(url).hostname.replace('www.','');
+            var reason = prompt('Why is this domain low quality?','Low quality or spam');
+            if(!reason) return;
+            var fd = new FormData(); fd.append('domain', domain); fd.append('reason', reason);
+            fetch('/api/report-domain', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
+                if(d.ok) alert('Domain reported. Moderators will review.');
+                else alert(d.error);
+            });
+        }
+        function pinFromSearch(btn){
+            var userEl = document.querySelector('[href*=\"/login\"]');
+            if(userEl && userEl.textContent === 'Sign in'){ alert('Sign in to pin to collection'); return }
+            var container = btn.closest('.result-community');
+            var url = container.getAttribute('data-url');
+            var title = container.getAttribute('data-title') || url;
+            openPinDrawer(url, title);
+        }
+        function openPinDrawer(url, title){
+            var existing = document.getElementById('search-pin-drawer');
+            if(existing) existing.remove();
+            var d = document.createElement('div'); d.id = 'search-pin-drawer';
+            d.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--border);z-index:900;padding:16px 20px;box-shadow:0 -4px 20px var(--shadow2);max-height:50vh;overflow-y:auto';
+            d.innerHTML = '<div style="max-width:600px;margin:0 auto">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+                '<h3 style="margin:0;font-size:14px;font-weight:500">Pin to collection</h3>' +
+                '<button onclick="this.closest(\'#search-pin-drawer\').remove()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">&times;</button></div>' +
+                '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;word-break:break-all">' + url + '</div>' +
+                '<div id="spd-collections" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>' +
+                '<div style="display:flex;gap:6px"><input id="spd-new-name" placeholder="New collection name..." style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--bg);color:var(--text);outline:none">' +
+                '<button onclick="createAndPin()" style="padding:6px 14px;border:none;border-radius:4px;font-size:12px;cursor:pointer;background:var(--link);color:#fff">Create & pin</button></div></div>';
+            document.body.appendChild(d);
+            var hid = document.createElement('input'); hid.type='hidden'; hid.id='spd-url'; hid.value=url;
+            d.appendChild(hid);
+            var hid2 = document.createElement('input'); hid2.type='hidden'; hid2.id='spd-title'; hid2.value=title;
+            d.appendChild(hid2);
+            fetch('/api/collections').then(function(r){return r.json()}).then(function(res){
+                if(!res.ok) return;
+                var list = document.getElementById('spd-collections');
+                if(res.collections && res.collections.length){
+                    res.collections.forEach(function(c){
+                        var item = document.createElement('div');
+                        item.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px';
+                        item.innerHTML = '<span style="font-weight:500">'+c.name+'</span> <span style="color:var(--text3);font-size:11px">'+c.websites.length+' websites</span>';
+                        var btn = document.createElement('button');
+                        btn.textContent = 'Pin'; btn.style.cssText = 'padding:3px 12px;border:none;border-radius:4px;font-size:11px;cursor:pointer;font-weight:500;background:var(--link);color:#fff';
+                        btn.onclick = function(){ doPin(c.id, url, title) };
+                        item.appendChild(btn);
+                        list.appendChild(item);
+                    });
+                } else {
+                    list.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:4px 0">No collections yet. Create one above.</div>';
+                }
+            });
+        }
+        function doPin(cid, url, title){
+            var fd = new FormData(); fd.append('url', url); fd.append('title', title); fd.append('note', '');
+            fetch('/api/collections/'+cid+'/websites', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
+                if(!d.ok){ alert(d.error); return }
+                var drawer = document.getElementById('search-pin-drawer');
+                if(drawer) { drawer.innerHTML = '<div style="max-width:600px;margin:0 auto;text-align:center;padding:16px;color:var(--text2);font-size:14px">Pinned! <a href="/explore/'+cid+'" style="color:var(--link)">View collection</a></div>'; setTimeout(function(){drawer.remove()},2500); }
+            });
+        }
+        function createAndPin(){
+            var name = document.getElementById('spd-new-name').value.trim();
+            if(!name){ alert('Enter a name'); return }
+            var fd = new FormData(); fd.append('name', name); fd.append('description', '');
+            fetch('/api/collections', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
+                if(!d.ok){ alert(d.error); return }
+                var url = document.getElementById('spd-url').value;
+                var title = document.getElementById('spd-title').value;
+                doPin(d.collection.id, url, title);
+            });
+        }
+
         function applyFilter(val){
             var cards = document.querySelectorAll('.result-card');
             var count = 0;
@@ -1169,6 +1541,7 @@
         <a href="/privacy"><span class="m-icon">&#x1F464;</span><span class="m-label">Privacy</span></a>
         <a href="/faq"><span class="m-icon">&#x2753;</span><span class="m-label">FAQ</span></a>
         <a href="/settings"><span class="m-icon">&#x2699;</span><span class="m-label">Settings</span></a>
+        <a href="/explore"><span class="m-icon">&#x1F4DA;</span><span class="m-label">Explore</span></a>
     </div>
 
 </body>

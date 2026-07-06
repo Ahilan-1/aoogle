@@ -22,6 +22,8 @@ except ImportError:
     s3_available = False
 from datetime import datetime, timedelta
 import hashlib
+import secrets
+import uuid
 import re
 import threading
 import os
@@ -1093,6 +1095,561 @@ class DataManager:
                 })
         scored.sort(key=lambda x: x['score'], reverse=True)
         return scored[:5]
+
+    # ── Community system: users, votes, comments, domain reports ──
+
+    def hash_password(self, password):
+        salt = secrets.token_hex(8)
+        h = hashlib.sha256((salt + password).encode()).hexdigest()
+        return f"{salt}:{h}"
+
+    def check_password(self, password, stored):
+        try:
+            salt, h = stored.split(':', 1)
+            return hashlib.sha256((salt + password).encode()).hexdigest() == h
+        except:
+            return False
+
+    def hash_ip(self, ip):
+        return hashlib.sha256(ip.encode()).hexdigest()[:16]
+
+    def create_user(self, username, password, security_question, security_answer, ip):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('users', [])
+            if any(u['username'] == username for u in self.data['users']):
+                return None, 'Username taken'
+            user = {
+                'user_id': str(uuid.uuid4()),
+                'username': username,
+                'password_hash': self.hash_password(password),
+                'security_question': security_question,
+                'security_answer_hash': self.hash_password(security_answer),
+                'ip_hashes': [self.hash_ip(ip)],
+                'created_at': datetime.now().isoformat(),
+                'last_action_at': None,
+            }
+            self.data['users'].append(user)
+            _save_json(self.data)
+            return user, None
+
+    def authenticate_user(self, username, password):
+        users = self.data.get('users', [])
+        for u in users:
+            if u['username'] == username:
+                if self.check_password(password, u['password_hash']):
+                    return u
+        return None
+
+    def get_user_by_id(self, user_id):
+        for u in self.data.get('users', []):
+            if u['user_id'] == user_id:
+                return u
+        return None
+
+    def record_user_action(self, user_id, ip):
+        with self._lock:
+            users = self.data.get('users', [])
+            for u in users:
+                if u['user_id'] == user_id:
+                    u['last_action_at'] = datetime.now().isoformat()
+                    ip_h = self.hash_ip(ip)
+                    if ip_h not in u['ip_hashes']:
+                        u['ip_hashes'].append(ip_h)
+                    _save_json(self.data)
+                    return
+
+    def get_user_cooldown(self, user_id):
+        for u in self.data.get('users', []):
+            if u['user_id'] == user_id:
+                last = u.get('last_action_at')
+                if not last:
+                    return 0, 'ok'
+                elapsed = (datetime.now() - datetime.fromisoformat(last)).total_seconds()
+                if elapsed < 11:
+                    return 11 - elapsed, 'initial wait'
+                if elapsed < 70:
+                    return 70 - elapsed, 'post cooldown'
+                return 0, 'ok'
+        return 0, 'ok'
+
+    def cast_vote(self, user_id, url, vote):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('votes', [])
+            url_hash = hashlib.sha256(url.encode()).hexdigest()
+            for v in self.data['votes']:
+                if v['user_id'] == user_id and v['url_hash'] == url_hash:
+                    if v['vote'] == vote:
+                        return 'same'
+                    v['vote'] = vote
+                    v['updated_at'] = datetime.now().isoformat()
+                    _save_json(self.data)
+                    return 'updated'
+            self.data['votes'].append({
+                'user_id': user_id,
+                'url': url,
+                'url_hash': url_hash,
+                'vote': vote,
+                'created_at': datetime.now().isoformat(),
+            })
+            _save_json(self.data)
+            return 'cast'
+
+    def get_vote_score(self, url):
+        url_hash = hashlib.sha256(url.encode()).hexdigest()
+        up = sum(1 for v in self.data.get('votes', []) if v['url_hash'] == url_hash and v['vote'] == 1)
+        down = sum(1 for v in self.data.get('votes', []) if v['url_hash'] == url_hash and v['vote'] == -1)
+        return up - down, up, down
+
+    def get_user_vote(self, user_id, url):
+        url_hash = hashlib.sha256(url.encode()).hexdigest()
+        for v in self.data.get('votes', []):
+            if v['user_id'] == user_id and v['url_hash'] == url_hash:
+                return v['vote']
+        return 0
+
+    def add_comment(self, user_id, username, url, text, parent_id=None):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('comments', [])
+            c = {
+                'comment_id': str(uuid.uuid4()),
+                'user_id': user_id,
+                'username': username,
+                'url': url,
+                'url_hash': hashlib.sha256(url.encode()).hexdigest(),
+                'text': text[:2000],
+                'parent_id': parent_id,
+                'created_at': datetime.now().isoformat(),
+                'votes': {},
+            }
+            self.data['comments'].append(c)
+            _save_json(self.data)
+            return c
+
+    def get_comments(self, url):
+        url_hash = hashlib.sha256(url.encode()).hexdigest()
+        comments = []
+        for c in self.data.get('comments', []):
+            if c.get('url_hash') == url_hash:
+                c = dict(c)
+                c.setdefault('votes', {})
+                c['score'] = sum(v for v in c['votes'].values())
+                comments.append(c)
+        def build_tree(items, parent=None):
+            tree = []
+            for c in items:
+                if c.get('parent_id') == parent:
+                    c['replies'] = build_tree(items, c.get('comment_id'))
+                    tree.append(c)
+            return tree
+        return sorted(build_tree(comments), key=lambda c: c.get('created_at', ''))
+
+    def report_domain(self, user_id, domain, reason):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('domain_reports', [])
+            for r in self.data['domain_reports']:
+                if r['domain'] == domain:
+                    if user_id in r['reported_by']:
+                        return 'already'
+                    r['reported_by'].append(user_id)
+                    r['downvotes'] += 1
+                    _save_json(self.data)
+                    return 'added'
+            self.data['domain_reports'].append({
+                'domain': domain,
+                'reported_by': [user_id],
+                'downvotes': 1,
+                'status': 'pending',
+                'created_at': datetime.now().isoformat(),
+            })
+            _save_json(self.data)
+            return 'created'
+
+    def get_pending_domain_reports(self):
+        return [r for r in self.data.get('domain_reports', []) if r.get('status') == 'pending']
+
+    def resolve_domain_report(self, domain, action):
+        with self._lock:
+            for r in self.data.get('domain_reports', []):
+                if r['domain'] == domain:
+                    r['status'] = action  # 'approved' or 'dismissed'
+                    if action == 'approved':
+                        self.data.setdefault('blacklist', {})
+                        self.data['blacklist'][domain] = -50
+                    _save_json(self.data)
+                return
+
+    # ── Collections (community curation) ──
+
+    def create_collection(self, user_id, username, name, description):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('collections', [])
+            c = {
+                'id': str(uuid.uuid4()),
+                'name': name[:100],
+                'description': description[:500] if description else '',
+                'creator_id': user_id,
+                'creator_name': username,
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat(),
+                'websites': [],
+            }
+            self.data['collections'].append(c)
+            _save_json(self.data)
+            return c
+
+    def get_collections(self, sort='new', page=1, per_page=20):
+        cols = list(self.data.get('collections', []))
+        if sort == 'new':
+            cols.sort(key=lambda c: c.get('created_at', ''), reverse=True)
+        elif sort == 'popular':
+            cols.sort(key=lambda c: len(c.get('websites', [])), reverse=True)
+        elif sort == 'updated':
+            cols.sort(key=lambda c: c.get('updated_at', ''), reverse=True)
+        total = len(cols)
+        start = (page - 1) * per_page
+        return cols[start:start + per_page], total
+
+    def get_collection(self, collection_id):
+        for c in self.data.get('collections', []):
+            if c['id'] == collection_id:
+                return c
+        return None
+
+    def get_user_collections(self, user_id):
+        return [c for c in self.data.get('collections', []) if c['creator_id'] == user_id]
+
+    def update_collection(self, collection_id, user_id, name, description):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for c in self.data.get('collections', []):
+                if c['id'] == collection_id and c['creator_id'] == user_id:
+                    if name:
+                        c['name'] = name[:100]
+                    if description is not None:
+                        c['description'] = description[:500]
+                    c['updated_at'] = datetime.now().isoformat()
+                    _save_json(self.data)
+                    return c
+            return None
+
+    def delete_collection(self, collection_id, user_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data['collections'] = [c for c in self.data.get('collections', [])
+                                        if not (c['id'] == collection_id and c['creator_id'] == user_id)]
+            _save_json(self.data)
+            return True
+
+    def add_website_to_collection(self, collection_id, user_id, url, title, note):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for c in self.data.get('collections', []):
+                if c['id'] == collection_id:
+                    if any(w['url'] == url for w in c.get('websites', [])):
+                        return None, 'Already in collection'
+                    w = {
+                        'id': str(uuid.uuid4()),
+                        'url': url,
+                        'title': title[:200] if title else url,
+                        'note': note[:300] if note else '',
+                        'added_by': user_id,
+                        'added_at': datetime.now().isoformat(),
+                    }
+                    c.setdefault('websites', []).append(w)
+                    c['updated_at'] = datetime.now().isoformat()
+                    _save_json(self.data)
+                    return w, None
+            return None, 'Collection not found'
+
+    def remove_website_from_collection(self, collection_id, user_id, website_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for c in self.data.get('collections', []):
+                if c['id'] == collection_id:
+                    c['websites'] = [w for w in c.get('websites', [])
+                                     if not (w['id'] == website_id and w['added_by'] == user_id)]
+                    c['updated_at'] = datetime.now().isoformat()
+                    _save_json(self.data)
+                    return True
+            return False
+
+    # ── Collection comments (nested, with votes) ──
+
+    def add_collection_comment(self, user_id, username, collection_id, text, parent_id=None):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('collection_comments', [])
+            c = {
+                'id': str(uuid.uuid4()),
+                'collection_id': collection_id,
+                'parent_id': parent_id,
+                'user_id': user_id,
+                'username': username,
+                'text': text[:2000],
+                'created_at': datetime.now().isoformat(),
+                'votes': {},
+            }
+            self.data['collection_comments'].append(c)
+            _save_json(self.data)
+            return c
+
+    def get_collection_comments(self, collection_id):
+        comments = [c for c in self.data.get('collection_comments', [])
+                    if c['collection_id'] == collection_id]
+        def build_tree(items, parent=None):
+            tree = []
+            for c in items:
+                if c.get('parent_id') == parent:
+                    c['score'] = sum(v for v in c.get('votes', {}).values())
+                    c['replies'] = build_tree(items, c['id'])
+                    tree.append(c)
+            return tree
+        return sorted(build_tree(comments), key=lambda c: c.get('created_at', ''))
+
+    def vote_collection_comment(self, user_id, comment_id, vote):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for c in self.data.get('collection_comments', []):
+                if c['id'] == comment_id:
+                    prev = c['votes'].get(user_id, 0)
+                    if prev == vote:
+                        return c['id'], 'same'
+                    c['votes'][user_id] = vote
+                    _save_json(self.data)
+                    c['score'] = sum(v for v in c['votes'].values())
+                    return c['id'], 'updated'
+            return None, 'Not found'
+
+    # ── Feed (activity stream) ──
+
+    def add_feed_entry(self, entry_type, url, title, user_id, username):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('feed', [])
+            e = {
+                'id': str(uuid.uuid4()),
+                'type': entry_type,
+                'url': url,
+                'title': title[:300],
+                'user_id': user_id,
+                'username': username,
+                'created_at': datetime.now().isoformat(),
+                'votes': {},
+                'score': 0,
+            }
+            self.data['feed'].append(e)
+            _save_json(self.data)
+            return e
+
+    def get_feed(self, page=1, per_page=30, user_id=None):
+        feed = list(self.data.get('feed', []))
+        feed.sort(key=lambda e: e.get('created_at', ''), reverse=True)
+        for e in feed:
+            e['score'] = sum(v for v in e.get('votes', {}).values())
+            e['user_vote'] = e.get('votes', {}).get(user_id, 0) if user_id else 0
+        total = len(feed)
+        start = (page - 1) * per_page
+        return feed[start:start + per_page], total
+
+    def get_feed_entry(self, entry_id, user_id=None):
+        for e in self.data.get('feed', []):
+            if e['id'] == entry_id:
+                e['score'] = sum(v for v in e.get('votes', {}).values())
+                e['user_vote'] = e.get('votes', {}).get(user_id, 0) if user_id else 0
+                return e
+        return None
+
+    def vote_feed_entry(self, user_id, entry_id, vote):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for e in self.data.get('feed', []):
+                if e['id'] == entry_id:
+                    prev = e['votes'].get(user_id, 0)
+                    if prev == vote:
+                        return 'same'
+                    e['votes'][user_id] = vote
+                    _save_json(self.data)
+                    return 'updated'
+            return 'notfound'
+
+    def add_feed_comment(self, user_id, username, entry_id, text, parent_id=None):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            # If feed entry has a url, delegate to url-based comments (shared with search)
+            entry = self._find_feed_entry(entry_id)
+            if entry and entry.get('url'):
+                url = entry['url']
+                self.data.setdefault('comments', [])
+                c = {
+                    'comment_id': str(uuid.uuid4()),
+                    'user_id': user_id,
+                    'username': username,
+                    'url': url,
+                    'url_hash': hashlib.sha256(url.encode()).hexdigest(),
+                    'text': text[:2000],
+                    'parent_id': parent_id,
+                    'created_at': datetime.now().isoformat(),
+                    'votes': {},
+                }
+                self.data['comments'].append(c)
+                _save_json(self.data)
+                return c
+            self.data.setdefault('feed_comments', [])
+            c = {
+                'id': str(uuid.uuid4()),
+                'entry_id': entry_id,
+                'parent_id': parent_id,
+                'user_id': user_id,
+                'username': username,
+                'text': text[:2000],
+                'created_at': datetime.now().isoformat(),
+                'votes': {},
+            }
+            self.data['feed_comments'].append(c)
+            _save_json(self.data)
+            return c
+
+    def _find_feed_entry(self, entry_id):
+        for e in self.data.get('feed', []):
+            if e['id'] == entry_id:
+                return e
+        return None
+
+    def get_feed_comments(self, entry_id):
+        entry = self._find_feed_entry(entry_id)
+        if entry and entry.get('url'):
+            url = entry['url']
+            url_hash = hashlib.sha256(url.encode()).hexdigest()
+            comments = []
+            for c in self.data.get('comments', []):
+                if c.get('url_hash') == url_hash:
+                    c = dict(c)
+                    c['id'] = c.get('comment_id')  # normalize to id for template
+                    c.setdefault('votes', {})
+                    comments.append(c)
+        else:
+            comments = [c for c in self.data.get('feed_comments', [])
+                        if c['entry_id'] == entry_id]
+        def build_tree(items, parent=None):
+            tree = []
+            for c in items:
+                if c.get('parent_id') == parent:
+                    c['score'] = sum(v for v in c.get('votes', {}).values())
+                    c['replies'] = build_tree(items, c.get('comment_id') or c.get('id'))
+                    tree.append(c)
+            return tree
+        return sorted(build_tree(comments), key=lambda c: c.get('created_at', ''))
+
+    def vote_feed_comment(self, user_id, comment_id, vote):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            # Search feed-specific comments (id field)
+            for c in self.data.get('feed_comments', []):
+                if c['id'] == comment_id:
+                    prev = c['votes'].get(user_id, 0)
+                    if prev == vote:
+                        return 'same'
+                    c['votes'][user_id] = vote
+                    _save_json(self.data)
+                    return 'updated'
+            # Search URL-based comments (comment_id field, shared with search)
+            for c in self.data.get('comments', []):
+                if c.get('comment_id') == comment_id:
+                    c.setdefault('votes', {})
+                    prev = c['votes'].get(user_id, 0)
+                    if prev == vote:
+                        return 'same'
+                    c['votes'][user_id] = vote
+                    _save_json(self.data)
+                    return 'updated'
+            return 'notfound'
+
+    # ── User stats / profile ──
+
+    def get_user_profile(self, username):
+        users = self.data.get('users', [])
+        user = None
+        for u in users:
+            if u['username'] == username:
+                user = u
+                break
+        if not user:
+            return None
+
+        user_id = user['user_id']
+
+        # Count contributions
+        collections_count = sum(1 for c in self.data.get('collections', []) if c['creator_id'] == user_id)
+        pins_count = sum(len(c.get('websites', [])) for c in self.data.get('collections', []) if c['creator_id'] == user_id)
+        feed_count = sum(1 for e in self.data.get('feed', []) if e['user_id'] == user_id)
+
+        # Calculate score: comments + upvotes given + pins + collections created
+        comments_count = sum(1 for c in self.data.get('comments', []) if c['user_id'] == user_id)
+        col_comments_count = sum(1 for c in self.data.get('collection_comments', []) if c['user_id'] == user_id)
+        feed_comments_count = sum(1 for c in self.data.get('feed_comments', []) if c['user_id'] == user_id)
+        total_comments = comments_count + col_comments_count + feed_comments_count
+
+        votes_given = sum(1 for v in self.data.get('votes', []) if v['user_id'] == user_id and v['vote'] == 1)
+
+        score = total_comments + votes_given + pins_count + collections_count
+
+        # Recent activity
+        recent = []
+        for e in self.data.get('feed', []):
+            if e['user_id'] == user_id:
+                recent.append({'type': e['type'], 'url': e.get('url', ''), 'title': e.get('title', ''), 'created_at': e.get('created_at', '')})
+        for c in self.data.get('collections', []):
+            if c['creator_id'] == user_id:
+                recent.append({'type': 'collection', 'url': '/explore/' + c['id'], 'title': c['name'], 'created_at': c.get('created_at', '')})
+        recent.sort(key=lambda r: r.get('created_at', ''), reverse=True)
+        recent = recent[:30]
+
+        return {
+            'username': username,
+            'created_at': user.get('created_at', ''),
+            'score': score,
+            'collections_count': collections_count,
+            'pins_count': pins_count,
+            'feed_count': feed_count,
+            'comments_count': total_comments,
+            'votes_given': votes_given,
+            'recent': recent,
+        }
 
 
 data_manager = DataManager()
@@ -4168,7 +4725,8 @@ def admin_dashboard():
     announcement = data_manager.get_announcement()
     verified_sites = data_manager.get_verified_sites()
     submitted_sites = data_manager.get_submitted_sites()
-    return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches, celebration=celebration, announcement=announcement, verified_sites=verified_sites, submitted_sites=submitted_sites)
+    domain_reports = data_manager.get_pending_domain_reports()
+    return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches, celebration=celebration, announcement=announcement, verified_sites=verified_sites, submitted_sites=submitted_sites, domain_reports=domain_reports)
 
 @app.route('/admin/reports/<int:report_id>/approve', methods=['POST'])
 def admin_approve_report(report_id):
@@ -4548,6 +5106,436 @@ def dashboard():
 @app.route('/claim')
 def claim_site():
     return render_template('claim.html', announcement=data_manager.get_announcement())
+
+# ── Community: signup, login, vote, comment, domain reports ──
+
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        sq = request.form.get('security_question', '').strip()
+        sa = request.form.get('security_answer', '').strip()
+        if not username or not password or not sq or not sa:
+            return render_template('signup.html', error='All fields required')
+        if len(username) < 3 or len(username) > 24:
+            return render_template('signup.html', error='Username 3-24 characters')
+        if len(password) < 6:
+            return render_template('signup.html', error='Password at least 6 characters')
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
+        user, err = data_manager.create_user(username, password, sq, sa, ip)
+        if err:
+            return render_template('signup.html', error=err)
+        session['user_id'] = user['user_id']
+        session['username'] = user['username']
+        return redirect(url_for('home'))
+    return render_template('signup.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        user = data_manager.authenticate_user(username, password)
+        if not user:
+            return render_template('signup.html', login_error='Invalid credentials')
+        session['user_id'] = user['user_id']
+        session['username'] = user['username']
+        return redirect(url_for('home'))
+    return render_template('signup.html')
+
+@app.route('/logout')
+def logout():
+    session.pop('user_id', None)
+    session.pop('username', None)
+    return redirect(url_for('home'))
+
+@app.route('/api/captcha')
+def captcha():
+    words = ["apple","beach","cloud","dance","eagle","flame","grape","house","ivory","jewel","knife","lemon","mango","night","ocean","pearl","queen","river","stone","tiger","unity","vivid","water","yacht","zebra","bloom","creek","dwarf","ember","frost","globe","honey","image","jolly","koala","lunar","magic","noble","orbit","piano","quiet","radar","solar","tulip","umbra","vocal","wheat","algae","birch","coral","sunset","midnight","winter","summer","autumn","spring","mountain","forest","desert","garden","silver","golden","crystal","thunder","shadow","spirit"]
+    word = random.choice(words).upper()
+    # Build scrambled visual: intersperse noise chars between real chars
+    noise_pool = '@#&$%+!?~`*|\\/<>{}[]^=;:.,'
+    scrambled_parts = []
+    for i, ch in enumerate(word):
+        rot = random.randint(-15, 15)
+        oy = random.randint(-3, 3)
+        colors = ['#ddd', '#ccc', '#eee', '#ffddaa', '#ddffdd', '#ddaaff']
+        color = random.choice(colors)
+        scrambled_parts.append({'ch': ch, 'rot': rot, 'oy': oy, 'color': color})
+    # Generate HTML for the captcha display
+    chars_html = ''
+    for p in scrambled_parts:
+        chars_html += '<span style="display:inline-block;transform:rotate(%ddeg);margin-top:%dpx;color:%s;font-weight:700">%s</span>' % (p['rot'], p['oy'], p['color'], p['ch'])
+    # Add a few random noise chars as overlay
+    noise_html = ''
+    for _ in range(random.randint(15, 30)):
+        nc = random.choice(noise_pool)
+        left = random.randint(5, 250)
+        top = random.randint(5, 35)
+        noise_html += '<span style="position:absolute;pointer-events:none;z-index:1;color:#666;opacity:.25;font-family:monospace;font-size:%dpx;left:%dpx;top:%dpx">%s</span>' % (random.choice([8,9,10,11]), left, top, nc)
+    # Scratch lines
+    scratch_html = ''
+    for _ in range(random.randint(2, 3)):
+        x = random.randint(10, 240)
+        y = random.randint(10, 30)
+        w = random.randint(30, 80)
+        scratch_html += '<div style="position:absolute;z-index:0;background:#555;opacity:.12;border-radius:2px;left:%dpx;top:%dpx;width:%dpx;height:2px"></div>' % (x, y, w)
+    token = secrets.token_hex(8)
+    session['captcha_token'] = token
+    session['captcha_answer'] = word.lower()
+    session['captcha_expires'] = time.time() + 60
+    return jsonify({
+        'token': token,
+        'word_len': len(word),
+        'html': '<div style="position:relative;display:flex;align-items:center;justify-content:center;min-height:40px;font-family:monospace;font-size:22px;font-weight:700;letter-spacing:2px;z-index:2;padding:4px">' + chars_html + '</div>' + noise_html + scratch_html,
+        'expires_in': 60
+    })
+
+def check_captcha(token, answer):
+    expires = session.get('captcha_expires', 0)
+    if time.time() > expires:
+        return False
+    return (session.get('captcha_token') == token
+            and session.get('captcha_answer') == answer.strip().lower()
+            and token and answer.strip())
+
+def rate_limit_check(user_id):
+    wait, reason = data_manager.get_user_cooldown(user_id)
+    if wait > 0:
+        return False, int(wait) + 1
+    return True, 0
+
+@app.route('/api/vote', methods=['POST'])
+def api_vote():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'Login required'}), 403
+    url = request.form.get('url', '').strip()
+    title = request.form.get('title', url).strip()[:300]
+    vote = int(request.form.get('vote', '0'))
+    if vote not in (-1, 1):
+        return jsonify({'ok': False, 'error': 'Invalid vote'}), 400
+    ok, wait = rate_limit_check(user_id)
+    if not ok:
+        return jsonify({'ok': False, 'error': f'Please wait {wait}s', 'wait': wait}), 429
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
+    data_manager.cast_vote(user_id, url, vote)
+    data_manager.record_user_action(user_id, ip)
+    # Push upvotes to feed
+    if vote == 1:
+        data_manager.add_feed_entry('upvote', url, title, user_id, session.get('username', 'Anonymous'))
+    score, up, down = data_manager.get_vote_score(url)
+    return jsonify({'ok': True, 'score': score, 'up': up, 'down': down})
+
+@app.route('/api/comment', methods=['POST'])
+def api_comment():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'Login required'}), 403
+    url = request.form.get('url', '').strip()
+    title = request.form.get('title', url).strip()[:300]
+    text = request.form.get('text', '').strip()
+    captcha_token = request.form.get('captcha_token', '').strip()
+    captcha_answer = request.form.get('captcha_answer', '').strip()
+    parent_id = request.form.get('parent_id', '').strip() or None
+
+    if not text or len(text) < 2 or len(text) > 2000:
+        return jsonify({'ok': False, 'error': 'Comment 2-2000 characters'}), 400
+    if not check_captcha(captcha_token, captcha_answer):
+        return jsonify({'ok': False, 'error': 'Captcha incorrect'}), 400
+    # Clear used captcha
+    session.pop('captcha_token', None)
+    session.pop('captcha_answer', None)
+    session.pop('captcha_expires', None)
+
+    ok, wait = rate_limit_check(user_id)
+    if not ok:
+        return jsonify({'ok': False, 'error': f'Please wait {wait}s', 'wait': wait}), 429
+
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
+    username = session.get('username', 'Anonymous')
+    c = data_manager.add_comment(user_id, username, url, text, parent_id)
+    data_manager.record_user_action(user_id, ip)
+    data_manager.add_feed_entry('comment', url, title, user_id, username)
+    return jsonify({'ok': True, 'comment': c})
+
+@app.route('/api/comments/<path:url>')
+def api_get_comments(url):
+    comments = data_manager.get_comments(url)
+    score, up, down = data_manager.get_vote_score(url)
+    user_vote = 0
+    if session.get('user_id'):
+        user_vote = data_manager.get_user_vote(session['user_id'], url)
+    return jsonify({'comments': comments, 'score': score, 'up': up, 'down': down, 'user_vote': user_vote})
+
+@app.route('/api/report-domain', methods=['POST'])
+def api_report_domain():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'Login required'}), 403
+    domain = request.form.get('domain', '').strip()
+    reason = request.form.get('reason', 'Low quality').strip()[:200]
+    if not domain:
+        return jsonify({'ok': False, 'error': 'Domain required'}), 400
+    result = data_manager.report_domain(user_id, domain, reason)
+    return jsonify({'ok': True, 'result': result})
+
+@app.route('/admin/reports')
+def admin_reports():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    return render_template('admin.html',
+        pending_reports=data_manager.get_pending_reports(),
+        domain_reports=data_manager.get_pending_domain_reports(),
+        verified_sites=data_manager.get_verified_sites(),
+        submitted_sites=data_manager.get_submitted_sites(),
+        blacklist=data_manager.get_blacklist(),
+        stats=data_manager.get_stats(),
+        announcement=data_manager.get_announcement(),
+    )
+
+@app.route('/admin/report/resolve', methods=['POST'])
+def admin_resolve_report():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    domain = request.form.get('domain', '').strip()
+    action = request.form.get('action', '').strip()
+    if domain and action in ('approved', 'dismissed'):
+        data_manager.resolve_domain_report(domain, action)
+    return redirect(url_for('admin_reports'))
+
+
+@app.template_filter('urlencode')
+def urlencode_filter(s):
+    import urllib.parse
+    return urllib.parse.quote(s or '')
+
+
+# ── Explore / Collections routes ──
+
+@app.route('/explore')
+def explore():
+    sort = request.args.get('sort', 'new')
+    page = int(request.args.get('page', 1))
+    collections, total = data_manager.get_collections(sort=sort, page=page)
+    return render_template('explore.html', collections=collections, sort=sort, page=page, total=total)
+
+
+@app.route('/explore/<collection_id>')
+def explore_collection(collection_id):
+    collection = data_manager.get_collection(collection_id)
+    if not collection:
+        return render_template('explore.html', error='Collection not found'), 404
+    comments = data_manager.get_collection_comments(collection_id)
+    return render_template('collection_detail.html', collection=collection, comments=comments)
+
+
+@app.route('/api/collections', methods=['GET', 'POST'])
+def api_collections():
+    user_id = session.get('user_id')
+    if request.method == 'POST':
+        if not user_id:
+            return jsonify({'ok': False, 'error': 'Login required'}), 403
+        name = request.form.get('name', '').strip()
+        desc = request.form.get('description', '').strip()
+        if not name or len(name) < 2:
+            return jsonify({'ok': False, 'error': 'Name at least 2 characters'}), 400
+        username = session.get('username', 'Anonymous')
+        c = data_manager.create_collection(user_id, username, name, desc)
+        return jsonify({'ok': True, 'collection': c})
+    if user_id:
+        cols = data_manager.get_user_collections(user_id)
+    else:
+        cols, _ = data_manager.get_collections(sort='new', page=1, per_page=50)
+        cols = cols[:50]
+    return jsonify({'ok': True, 'collections': cols})
+
+
+@app.route('/api/collections/<collection_id>', methods=['PUT', 'DELETE'])
+def api_collection(collection_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'Login required'}), 403
+    if request.method == 'PUT':
+        name = request.form.get('name', '').strip()
+        desc = request.form.get('description', '').strip()
+        c = data_manager.update_collection(collection_id, user_id, name, desc)
+        if not c:
+            return jsonify({'ok': False, 'error': 'Not found or not yours'}), 404
+        return jsonify({'ok': True, 'collection': c})
+    if request.method == 'DELETE':
+        data_manager.delete_collection(collection_id, user_id)
+        return jsonify({'ok': True})
+
+
+@app.route('/api/collections/<collection_id>/websites', methods=['POST'])
+def api_collection_add_website(collection_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'Login required'}), 403
+    url = request.form.get('url', '').strip()
+    title = request.form.get('title', '').strip()
+    note = request.form.get('note', '').strip()
+    if not url:
+        return jsonify({'ok': False, 'error': 'URL required'}), 400
+    w, err = data_manager.add_website_to_collection(collection_id, user_id, url, title, note)
+    if err:
+        return jsonify({'ok': False, 'error': err}), 400
+    return jsonify({'ok': True, 'website': w})
+
+
+@app.route('/api/collections/<collection_id>/websites/<website_id>', methods=['DELETE'])
+def api_collection_remove_website(collection_id, website_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'Login required'}), 403
+    ok = data_manager.remove_website_from_collection(collection_id, user_id, website_id)
+    if not ok:
+        return jsonify({'ok': False, 'error': 'Not found'}), 404
+    return jsonify({'ok': True})
+
+
+@app.route('/api/collections/<collection_id>/comments', methods=['GET', 'POST'])
+def api_collection_comments(collection_id):
+    if request.method == 'POST':
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'ok': False, 'error': 'Login required'}), 403
+        text = request.form.get('text', '').strip()
+        parent_id = request.form.get('parent_id') or None
+        captcha_token = request.form.get('captcha_token', '').strip()
+        captcha_answer = request.form.get('captcha_answer', '').strip()
+        if not text or len(text) < 2:
+            return jsonify({'ok': False, 'error': 'Comment too short'}), 400
+        if not check_captcha(captcha_token, captcha_answer):
+            return jsonify({'ok': False, 'error': 'Captcha incorrect'}), 400
+        session.pop('captcha_token', None)
+        session.pop('captcha_answer', None)
+        ok, wait = rate_limit_check(user_id)
+        if not ok:
+            return jsonify({'ok': False, 'error': f'Wait {wait}s', 'wait': wait}), 429
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
+        username = session.get('username', 'Anonymous')
+        c = data_manager.add_collection_comment(user_id, username, collection_id, text, parent_id)
+        data_manager.record_user_action(user_id, ip)
+        return jsonify({'ok': True, 'comment': c})
+    comments = data_manager.get_collection_comments(collection_id)
+    return jsonify({'ok': True, 'comments': comments})
+
+
+@app.route('/api/comments/<comment_id>/vote', methods=['POST'])
+def api_comment_vote(comment_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'Login required'}), 403
+    vote = int(request.form.get('vote', '0'))
+    if vote not in (-1, 1):
+        return jsonify({'ok': False, 'error': 'Invalid vote'}), 400
+    cid, result = data_manager.vote_collection_comment(user_id, comment_id, vote)
+    if result == 'same':
+        return jsonify({'ok': True, 'action': 'same'})
+    return jsonify({'ok': True, 'action': result})
+
+
+@app.route('/collections')
+def user_collections():
+    user_id = session.get('user_id')
+    if not user_id:
+        return redirect(url_for('login'))
+    cols = data_manager.get_user_collections(user_id)
+    return render_template('explore.html', collections=cols, sort='mine', total=len(cols))
+
+
+# ── Feed routes ──
+
+@app.route('/feed')
+def feed():
+    page = int(request.args.get('page', 1))
+    uid = session.get('user_id')
+    entries, total = data_manager.get_feed(page=page, user_id=uid)
+    return render_template('feed.html', entries=entries, page=page, total=total)
+
+
+@app.route('/feed/<entry_id>')
+def feed_entry(entry_id):
+    uid = session.get('user_id')
+    entry = data_manager.get_feed_entry(entry_id, user_id=uid)
+    if not entry:
+        return render_template('feed.html', error='Entry not found'), 404
+    # Attach user_vote to each comment
+    comments = data_manager.get_feed_comments(entry_id)
+    def attach_vote(comments, uid):
+        for c in comments:
+            c['user_vote'] = c.get('votes', {}).get(uid, 0) if uid else 0
+            c['score'] = sum(v for v in c.get('votes', {}).values())
+            if c.get('replies'):
+                attach_vote(c['replies'], uid)
+    attach_vote(comments, uid)
+    return render_template('feed.html', entry=entry, comments=comments, single=True)
+
+
+@app.route('/api/feed/<entry_id>/vote', methods=['POST'])
+def api_feed_vote(entry_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'Login required'}), 403
+    vote = int(request.form.get('vote', '0'))
+    if vote not in (-1, 1):
+        return jsonify({'ok': False, 'error': 'Invalid vote'}), 400
+    result = data_manager.vote_feed_entry(user_id, entry_id, vote)
+    entry = data_manager.get_feed_entry(entry_id)
+    return jsonify({'ok': True, 'action': result, 'score': entry['score'] if entry else 0})
+
+
+@app.route('/api/feed/<entry_id>/comments', methods=['GET', 'POST'])
+def api_feed_comments(entry_id):
+    if request.method == 'POST':
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'ok': False, 'error': 'Login required'}), 403
+        text = request.form.get('text', '').strip()
+        parent_id = request.form.get('parent_id') or None
+        captcha_token = request.form.get('captcha_token', '').strip()
+        captcha_answer = request.form.get('captcha_answer', '').strip()
+        if not text or len(text) < 2:
+            return jsonify({'ok': False, 'error': 'Comment too short'}), 400
+        if not check_captcha(captcha_token, captcha_answer):
+            return jsonify({'ok': False, 'error': 'Captcha incorrect'}), 400
+        session.pop('captcha_token', None)
+        session.pop('captcha_answer', None)
+        ok, wait = rate_limit_check(user_id)
+        if not ok:
+            return jsonify({'ok': False, 'error': f'Wait {wait}s', 'wait': wait}), 429
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
+        username = session.get('username', 'Anonymous')
+        c = data_manager.add_feed_comment(user_id, username, entry_id, text, parent_id)
+        data_manager.record_user_action(user_id, ip)
+        return jsonify({'ok': True, 'comment': c})
+    comments = data_manager.get_feed_comments(entry_id)
+    return jsonify({'ok': True, 'comments': comments})
+
+
+@app.route('/api/feed-comments/<comment_id>/vote', methods=['POST'])
+def api_feed_comment_vote(comment_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'Login required'}), 403
+    vote = int(request.form.get('vote', '0'))
+    if vote not in (-1, 1):
+        return jsonify({'ok': False, 'error': 'Invalid vote'}), 400
+    result = data_manager.vote_feed_comment(user_id, comment_id, vote)
+    return jsonify({'ok': True, 'action': result})
+
+
+# ── User profile ──
+
+@app.route('/u/<username>')
+def user_profile(username):
+    profile = data_manager.get_user_profile(username)
+    if not profile:
+        return render_template('user_profile.html', error='User not found'), 404
+    return render_template('user_profile.html', profile=profile)
 
 
 def weekly_crawl_job():

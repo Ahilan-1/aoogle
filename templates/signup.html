@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>{% if login_error %}Sign in{% else %}Sign up{% endif %} - arlong</title>
+    <style>
+        :root{--bg:#202124;--bg2:#303134;--text:#e8eaed;--text2:#bdc1c6;--text3:#9aa0a6;--link:#8ab4f8;--border:#3c4043;--hover-bg:#3c4043}
+        *,*::before,*::after{box-sizing:border-box}
+        body{margin:0;padding:40px 20px;font-family:arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+        .logo{font-size:36px;font-family:'Product Sans',Arial,sans-serif;letter-spacing:-1px;margin-bottom:4px}
+        .logo span{display:inline-block;animation:none}
+        .sub{color:var(--text3);font-size:14px;margin-bottom:28px}
+        .card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px;width:100%;max-width:380px}
+        .card h2{margin:0 0 6px;font-weight:400;font-size:20px}
+        .card .hint{color:var(--text3);font-size:13px;margin-bottom:20px}
+        label{display:block;font-size:13px;color:var(--text2);margin-bottom:4px;margin-top:14px}
+        label:first-of-type{margin-top:0}
+        input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);outline:none}
+        input:focus{border-color:var(--link)}
+        .btn{width:100%;padding:10px;border:none;border-radius:6px;font-size:14px;cursor:pointer;margin-top:20px;font-weight:500}
+        .btn-primary{background:var(--link);color:#fff}
+        .btn-primary:hover{opacity:.9}
+        .error{background:#3c2020;color:#f28b82;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:16px}
+        .switch{text-align:center;margin-top:16px;font-size:13px;color:var(--text3)}
+        .switch a{color:var(--link);text-decoration:none}
+        .switch a:hover{text-decoration:underline}
+        .info{font-size:12px;color:var(--text3);margin-top:16px;line-height:1.5}
+    </style>
+</head>
+<body>
+    <div class="logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></div>
+    <div class="sub">Community — anonymous and spam-free</div>
+    <div class="card">
+        <h2>{% if login_error %}Sign in{% else %}Create account{% endif %}</h2>
+        <div class="hint">{% if login_error %}Welcome back{% else %}No email needed. Choose a username and password.{% endif %}</div>
+
+        {% if error %}<div class="error">{{ error }}</div>{% endif %}
+        {% if login_error %}<div class="error">{{ login_error }}</div>{% endif %}
+
+        {% if login_error or request.args.get('mode') == 'login' %}
+        <form method="POST" action="/login">
+            <label>Username</label>
+            <input type="text" name="username" required minlength="3" maxlength="24" autocomplete="username">
+            <label>Password</label>
+            <input type="password" name="password" required minlength="6" autocomplete="current-password">
+            <button type="submit" class="btn btn-primary">Sign in</button>
+        </form>
+        <div class="switch">No account? <a href="/signup">Sign up</a></div>
+        {% else %}
+        <form method="POST" action="/signup">
+            <label>Username</label>
+            <input type="text" name="username" required minlength="3" maxlength="24" autocomplete="off">
+            <label>Password</label>
+            <input type="password" name="password" required minlength="6" autocomplete="new-password">
+            <label>Security question</label>
+            <input type="text" name="security_question" placeholder="e.g. What is your pet's name?" required autocomplete="off">
+            <label>Security answer</label>
+            <input type="text" name="security_answer" required autocomplete="off">
+            <button type="submit" class="btn btn-primary">Create account</button>
+        </form>
+        <div class="switch">Have an account? <a href="/login">Sign in</a></div>
+        {% endif %}
+        <div class="info">&#x1F512; Your IP is hashed and stored securely for spam prevention. Your password is salted and hashed. No email required. <a href="/privacy" style="color:var(--link)">Privacy policy</a></div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>{{ profile.username }} - arlong</title>
+    <style>
+        :root{--bg:#202124;--bg2:#2a2a2e;--bg3:#333;--text:#ddd;--text2:#bbb;--text3:#888;--text4:#777;--link:#81a2be;--orange:#d4873c;--border:#444;--border2:#3a3a3e;--accent:#800000}
+        *,*::before,*::after{box-sizing:border-box}
+        body{margin:0;padding:16px 20px;font-family:Verdana,'Bitstream Vera Sans',Arial,sans-serif;color:var(--text);background:var(--bg);font-size:13px;line-height:1.5}
+        a{color:var(--link);text-decoration:none}
+        a:hover{text-decoration:underline;color:var(--orange)}
+        .header{display:flex;align-items:baseline;gap:14px;max-width:700px;margin:0 auto 16px;padding-bottom:10px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+        .header .logo{font-family:'Palatino','Palatino Linotype',Georgia,serif;font-size:20px;color:var(--orange);font-weight:700}
+        .header .logo:hover{color:var(--orange);text-decoration:none}
+        .header nav{display:flex;gap:8px;font-size:12px;margin-left:auto}
+        .header nav a{padding:2px 8px;border:1px solid var(--border);border-radius:2px;color:var(--text3)}
+        .header nav a:hover{color:var(--text);border-color:var(--text3);text-decoration:none}
+        .layout{max-width:700px;margin:0 auto;display:flex;gap:20px;align-items:flex-start}
+        .main{flex:1;min-width:0}
+        .sidebar{width:200px;flex-shrink:0}
+        .profile-card{border:1px solid var(--border);background:var(--bg2);padding:16px;border-radius:2px;margin-bottom:12px}
+        .profile-card h1{margin:0;font-size:18px;font-weight:500;color:var(--orange);font-family:Georgia,serif}
+        .profile-card .joined{font-size:11px;color:var(--text4);margin-top:2px}
+        .profile-card .score{font-size:14px;margin-top:6px;color:var(--text2)}
+        .profile-card .score b{color:var(--orange);font-size:18px}
+        .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+        .stat-grid .stat{padding:6px 8px;border:1px solid var(--border2);border-radius:2px;text-align:center}
+        .stat-grid .stat .n{font-size:16px;font-weight:600;color:var(--orange)}
+        .stat-grid .stat .l{font-size:10px;color:var(--text4);text-transform:uppercase}
+        .activity-list{list-style:none;padding:0;margin:0}
+        .activity-list li{padding:6px 0;border-bottom:1px solid var(--border2);font-size:12px;display:flex;align-items:center;gap:6px}
+        .activity-list li:last-child{border-bottom:none}
+        .activity-list .at{font-size:10px;color:var(--text4);min-width:42px;font-family:monospace}
+        .activity-list .at a{color:var(--text4)}
+        .activity-list .at a:hover{color:var(--text)}
+        .activity-list .aty{font-size:10px;color:var(--text4);text-transform:uppercase;min-width:50px}
+        .activity-list .ati{color:var(--link)}
+        .empty{text-align:center;padding:60px 20px;color:var(--text3)}
+        @media(max-width:600px){.layout{flex-direction:column}.sidebar{width:100%}.stat-grid{grid-template-columns:repeat(4,1fr)}}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <a href="/" class="logo">arlong</a>
+        <h1>/u/{{ profile.username }}</h1>
+        <nav>
+            <a href="/explore">Explore</a>
+            <a href="/feed">Feed</a>
+            <a href="/">Search</a>
+        </nav>
+    </div>
+
+    {% if error %}
+    <div class="empty">{{ error }}</div>
+    {% else %}
+    <div class="layout">
+        <div class="sidebar">
+            <div class="profile-card">
+                <h1>{{ profile.username }}</h1>
+                <div class="joined">Joined {{ profile.created_at[:10] }}</div>
+                <div class="score"><b>{{ profile.score }}</b> contribution score</div>
+                <div class="stat-grid">
+                    <div class="stat"><div class="n">{{ profile.collections_count }}</div><div class="l">collections</div></div>
+                    <div class="stat"><div class="n">{{ profile.pins_count }}</div><div class="l">pins</div></div>
+                    <div class="stat"><div class="n">{{ profile.comments_count }}</div><div class="l">comments</div></div>
+                    <div class="stat"><div class="n">{{ profile.votes_given }}</div><div class="l">upvotes</div></div>
+                </div>
+            </div>
+        </div>
+        <div class="main">
+            <h3 style="margin:0 0 8px;font-size:14px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Recent activity</h3>
+            {% if profile.recent %}
+            <div style="border:1px solid var(--border);background:var(--bg2);padding:4px 12px;border-radius:2px">
+                <ul class="activity-list">
+                    {% for a in profile.recent %}
+                    <li>
+                        <span class="at">{{ a.created_at[:10] }}</span>
+                        <span class="aty">{{ a.type }}</span>
+                        {% if a.type == 'collection' %}
+                        <a href="{{ a.url }}" class="ati">{{ a.title }}</a>
+                        {% else %}
+                        <a href="{{ a.url }}" class="ati" target="_blank">{{ a.title[:60] }}</a>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% else %}
+            <div style="color:var(--text4);font-size:12px">No activity yet.</div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</body>
+</html>

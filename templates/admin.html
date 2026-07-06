@@ -326,6 +326,43 @@
                 Submitted sites get crawled via sitemap.xml and indexed in arlong search results.
             </div>
         </div>
+
+        <div class="card" style="border-left:4px solid #e37400">
+            <div class="card-title">
+                Domain reports — Community downvotes
+                <span class="badge" style="background:#e37400;color:#fff">{{ domain_reports|length }} pending</span>
+            </div>
+            {% if domain_reports %}
+            <table>
+                <tr><th>Domain</th><th>Downvotes</th><th>Reported by</th><th>Date</th><th>Actions</th></tr>
+                {% for r in domain_reports %}
+                <tr>
+                    <td style="font-weight:600">{{ r.domain }}</td>
+                    <td><span style="color:#c5221f;font-weight:600">-{{ r.downvotes }}</span></td>
+                    <td style="font-size:12px">{{ r.reported_by|length }} users</td>
+                    <td class="date-cell">{{ r.created_at[:10] }}</td>
+                    <td>
+                        <form method="POST" action="/admin/report/resolve" style="display:inline">
+                            <input type="hidden" name="domain" value="{{ r.domain }}">
+                            <input type="hidden" name="action" value="approved">
+                            <button type="submit" class="btn btn-approve" style="padding:4px 10px;font-size:12px">Block</button>
+                        </form>
+                        <form method="POST" action="/admin/report/resolve" style="display:inline">
+                            <input type="hidden" name="domain" value="{{ r.domain }}">
+                            <input type="hidden" name="action" value="dismissed">
+                            <button type="submit" class="btn btn-remove" style="padding:4px 10px;font-size:12px">Dismiss</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% else %}
+            <div class="empty">No pending domain reports. Community downvotes will appear here for moderator review.</div>
+            {% endif %}
+            <div style="padding:10px 20px;border-top:1px solid #e8eaed;font-size:12px;color:#5f6368">
+                Users can downvote domains on search results. Domains with enough downvotes appear here. Click Block to add to blacklist, or Dismiss to clear.
+            </div>
+        </div>
     </div>
     {% endif %}
 </body>

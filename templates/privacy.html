@@ -162,7 +162,7 @@
         <p>To be absolutely clear, here is a comprehensive list of data that <strong>never</strong> enters our systems:</p>
         <ul>
             <li>Search queries or search history</li>
-            <li>IP addresses (IPv4 or IPv6)</li>
+            <li>IP addresses (IPv4 or IPv6) — see community section below for the sole exception</li>
             <li>Browser user-agent strings</li>
             <li>Device fingerprints or canvas fingerprints</li>
             <li>Session or persistent cookies (for regular visitors)</li>
@@ -194,7 +194,20 @@
 
         <h2>Changes to this policy</h2>
         <p>If we ever change how data is collected (which is unlikely, given our design principles), we will update this page and note the date of the last change. We will never retroactively change how your data is treated without explicit notice.</p>
-        <p><em>Last updated: July 2025</em></p>
+        <p><em>Last updated: July 2026</em></p>
+
+        <h2>Community system (votes, comments, domain reports)</h2>
+        <p>arlong has an optional community system that lets signed-in users upvote, downvote, and comment on search results, as well as report low-quality domains. Here is exactly what data is involved:</p>
+        <ul>
+            <li><strong>Account creation:</strong> You choose a username and password. No email is required. Your password is salted and hashed — we never store it in plain text. You also provide a security question and answer for account recovery, which is similarly hashed.</li>
+            <li><strong>IP address:</strong> When you perform community actions (vote, comment, report), your IP address is hashed with SHA-256 and stored as a partial hash (first 16 hex characters) to prevent spam and abuse. The full IP is never stored or logged. IP hashes are used only to detect duplicate accounts from the same source.</li>
+            <li><strong>Votes and comments:</strong> Your username, vote (+1/−1), and comment text are stored alongside the URL they apply to. This data is public — anyone viewing a search result can see the vote score and comments. Your user ID is internal and never exposed.</li>
+            <li><strong>Domain reports:</strong> When you report a domain, your user ID is recorded to prevent duplicate reports. Domain reports are reviewed by moderators and may result in the domain being blacklisted.</li>
+            <li><strong>Rate limiting:</strong> To prevent spam, there is an 11-second initial wait and a 70-second gap between community actions. Your last action time is stored to enforce this.</li>
+        </ul>
+        <div class="highlight-box green">
+            <p><strong>Your privacy is still protected.</strong> No email, no real name, no tracking across the web. The only data we keep is what is strictly necessary for the community system to function and prevent abuse. You can vote and comment without revealing anything about who you are.</p>
+        </div>
 
         <h2>Contact</h2>
         <p>If you have questions about this privacy policy, our data practices, or would like to report a privacy concern, please email us at <a href="mailto:ahilan290@gmail.com">ahilan290@gmail.com</a> or reach out on Reddit at <a href="https://www.reddit.com/user/PeaceThrough/" target="_blank">u/PeaceThrough</a>.</p>

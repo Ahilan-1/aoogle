@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>{{ collection.name }} - arlong</title>
+    <style>
+        :root{--bg:#202124;--bg2:#2a2a2e;--bg3:#333;--text:#ddd;--text2:#bbb;--text3:#888;--text4:#777;--link:#81a2be;--link-v:#5f8aad;--orange:#d4873c;--border:#444;--border2:#3a3a3e;--accent:#800000;--input-bg:#2a2a2e;--hover-bg:#333}
+        *,*::before,*::after{box-sizing:border-box}
+        body{margin:0;padding:16px 20px;font-family:Verdana,'Bitstream Vera Sans',Arial,sans-serif;color:var(--text);background:var(--bg);font-size:13px;line-height:1.5}
+        a{color:var(--link);text-decoration:none}
+        a:hover{text-decoration:underline;color:var(--orange)}
+        .nav-bar{display:flex;align-items:baseline;gap:14px;max-width:900px;margin:0 auto 16px;padding-bottom:10px;border-bottom:1px solid var(--border);flex-wrap:wrap;font-size:13px}
+        .nav-bar .logo{font-family:'Palatino','Palatino Linotype',Georgia,serif;font-size:20px;color:var(--orange);font-weight:700;letter-spacing:-.5px}
+        .nav-bar .logo:hover{color:var(--orange);text-decoration:none}
+        .nav-bar a{font-size:12px}
+        .nav-bar .sep{color:var(--text4)}
+        .layout{display:flex;gap:20px;max-width:900px;margin:0 auto;align-items:flex-start}
+        .main-col{flex:1;min-width:0}
+        .side-col{width:280px;flex-shrink:0}
+        .thread{border:1px solid var(--border);background:var(--bg2);padding:16px;margin-bottom:12px;border-radius:2px}
+        .thread h1{margin:0 0 2px;font-size:18px;font-weight:500;font-family:Georgia,serif;color:var(--orange)}
+        .thread .byline{color:var(--text3);font-size:11px;margin-bottom:8px}
+        .thread .desc{color:var(--text2);font-size:13px;line-height:1.5;margin-bottom:10px}
+        .thread .actions{display:flex;gap:6px;flex-wrap:wrap}
+        .thread .actions button,.thread .actions .btn{padding:3px 10px;border:1px solid var(--border);border-radius:2px;font-size:11px;cursor:pointer;font-family:Verdana,Arial,sans-serif;background:var(--bg3);color:var(--text)}
+        .thread .actions button:hover,.thread .actions .btn:hover{background:var(--hover-bg);text-decoration:none;color:var(--text)}
+        .thread .actions .pin-btn{background:var(--accent);color:#eee;border-color:var(--accent)}
+        .thread .actions .pin-btn:hover{opacity:.85}
+        .thread .actions .del-btn{color:#c55}
+        .thread .actions .del-btn:hover{background:#3a2020}
+        .post{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border2)}
+        .post:last-child{border-bottom:none}
+        .post .post-num{color:var(--text4);font-size:11px;min-width:24px;text-align:right;font-family:monospace;padding-top:1px}
+        .post .post-body{flex:1;min-width:0}
+        .post .post-title{font-weight:500;font-size:13px;color:var(--link);display:block;margin-bottom:1px}
+        .post .post-title:hover{color:var(--orange)}
+        .post .post-url{font-size:11px;color:var(--text4);word-break:break-all;margin-bottom:1px;font-family:monospace}
+        .post .post-note{font-size:12px;color:var(--text2);line-height:1.4;margin-top:2px;font-style:italic;border-left:2px solid var(--border);padding-left:8px}
+        .post .post-del{background:none;border:none;cursor:pointer;color:var(--text4);font-size:14px;padding:0 2px;opacity:.4;font-family:monospace}
+        .post .post-del:hover{opacity:1;color:#c55}
+        .empty-posts{padding:20px;text-align:center;color:var(--text3);font-size:13px}
+        .empty-posts .big{font-size:28px;margin-bottom:4px;opacity:.35}
+
+        /* Reddit-style comment thread */
+        .comments{border:1px solid var(--border);background:var(--bg2);padding:12px 16px;border-radius:2px;margin-top:12px}
+        .comments h3{margin:0 0 8px;font-size:13px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+        .rd-comment{padding:3px 0;border-bottom:1px solid var(--border2)}
+        .rd-comment:last-child{border-bottom:none}
+        .rd-comment-head{display:flex;align-items:center;gap:6px;margin-bottom:1px}
+        .rd-comment-user{color:var(--orange);font-weight:600;font-size:12px}
+        .rd-comment-time{color:var(--text4);font-size:10px;font-family:monospace}
+        .rd-comment-text{color:var(--text);font-size:12px;line-height:1.4;margin-bottom:1px;word-break:break-word}
+        .rd-comment-acts{display:flex;align-items:center;gap:2px;font-size:10px;color:var(--text4);margin-top:1px}
+        .rd-comment-acts button{background:none;border:none;cursor:pointer;padding:1px 3px;font-size:10px;color:var(--text4);opacity:.5;font-family:monospace}
+        .rd-comment-acts button:hover{opacity:1;color:var(--text)}
+        .rd-comment-acts .active{color:var(--orange);opacity:1}
+        .rd-comment-acts .cscore{font-weight:600;font-size:10px;min-width:12px;text-align:center;color:var(--text2);font-family:monospace}
+        .replies-wrap{margin-left:14px;border-left:1px solid var(--border2);padding-left:6px;margin-top:1px}
+        .comment-form{margin-top:6px;display:flex;flex-direction:column;gap:4px}
+        .comment-form textarea{width:100%;padding:4px 6px;border:1px solid var(--border);font-size:12px;resize:vertical;background:var(--input-bg);color:var(--text);outline:none;font-family:Verdana,Arial,sans-serif}
+        .comment-form textarea:focus{border-color:var(--orange)}
+        .comment-form .post-btn{align-self:flex-end;padding:2px 10px;border:1px solid var(--border);border-radius:2px;font-size:11px;cursor:pointer;background:var(--accent);color:#eee;font-family:Verdana,Arial,sans-serif;border-color:var(--accent)}
+
+        .side-card{border:1px solid var(--border);background:var(--bg2);padding:12px;border-radius:2px;font-size:12px}
+        .side-card h4{margin:0 0 6px;font-size:12px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+        .side-card .sc-item{padding:3px 0;color:var(--text3);display:flex;align-items:center;gap:4px}
+        .side-card .sc-item b{color:var(--text2)}
+
+        .pin-drawer{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:2px solid var(--orange);z-index:900;padding:16px 20px;max-height:45vh;overflow-y:auto;font-size:13px}
+        .pin-drawer.open{display:block}
+        .pin-drawer .pd-close{float:right;background:none;border:none;color:var(--text3);font-size:16px;cursor:pointer;padding:2px 6px;font-family:monospace}
+        .pin-drawer .pd-close:hover{color:var(--text)}
+        .pin-drawer h3{margin:0 0 6px;font-size:14px;font-weight:400;color:var(--orange);font-family:Georgia,serif}
+
+        @media(max-width:700px){.layout{flex-direction:column-reverse}.side-col{width:100%}}
+    </style>
+</head>
+<body>
+    <div class="nav-bar">
+        <a href="/" class="logo">arlong</a>
+        <span class="sep">/</span>
+        <a href="/explore">explore</a>
+        <span class="sep">/</span>
+        <span style="color:var(--text2);font-size:13px">{{ collection.name }}</span>
+        {% if session.user_id %}
+        <span class="sep">|</span>
+        <a href="/collections">my</a>
+        {% endif %}
+        <div style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:11px">
+            {% if session.user_id %}
+            <span style="color:var(--text3)">{{ session.username }}</span>
+            <a href="/logout" style="color:var(--text4)">Logout</a>
+            {% else %}
+            <a href="/login" style="color:var(--link)">Sign in</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="layout">
+        <div class="main-col">
+            <div class="thread">
+                <h1>{{ collection.name }}</h1>
+                <div class="byline">by <b>{{ collection.creator_name }}</b> &middot; {{ collection.websites|length }} pin{% if collection.websites|length != 1 %}s{% endif %} &middot; {{ collection.created_at[:10] }}</div>
+                {% if collection.description %}<div class="desc">{{ collection.description }}</div>{% endif %}
+                <div class="actions">
+                    {% if session.user_id %}
+                    <button class="pin-btn" onclick="showPinDrawer('{{ collection.id }}', '{{ collection.name|e }}')">+ Pin</button>
+                    {% endif %}
+                    {% if session.user_id and session.user_id == collection.creator_id %}
+                    <button onclick="editCollection()">Edit</button>
+                    <button class="del-btn" onclick="deleteCollection()">Delete</button>
+                    {% endif %}
+                    <a href="/explore" class="btn">Back</a>
+                </div>
+            </div>
+
+            {% if collection.websites %}
+            <div style="border:1px solid var(--border);background:var(--bg2);padding:4px 16px;border-radius:2px">
+                {% for w in collection.websites %}
+                <div class="post">
+                    <span class="post-num">{{ loop.index }}.</span>
+                    <div class="post-body">
+                        <a href="{{ w.url }}" class="post-title" target="_blank">{{ w.title }}</a>
+                        <div class="post-url">{{ w.url }}</div>
+                        {% if w.note %}<div class="post-note">{{ w.note }}</div>{% endif %}
+                    </div>
+                    {% if session.user_id and session.user_id == w.added_by %}
+                    <button class="post-del" onclick="removeWebsite('{{ collection.id }}','{{ w.id }}')" title="Remove">&times;</button>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-posts">
+                <div class="big">+</div>
+                <p>No pins yet.</p>
+                {% if session.user_id %}
+                <button class="pin-btn" style="background:var(--accent);color:#eee;border:1px solid var(--accent);border-radius:2px;padding:3px 10px;font-size:12px;cursor:pointer" onclick="showPinDrawer('{{ collection.id }}', '{{ collection.name|e }}')">Pin the first</button>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <div class="comments">
+                <h3>comments ({{ comments|length }})</h3>
+                {% if session.user_id %}
+                <div class="comment-list" id="comment-list"></div>
+                <div class="comment-form">
+                    <div class="captcha-box" style="display:none;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--text3);margin-bottom:4px">
+                        <span class="captcha-question" style="font-family:monospace"></span>
+                        <input type="text" class="captcha-input" placeholder="Type words" style="width:90px;padding:3px 5px;border:1px solid var(--border);font-size:11px;background:var(--input-bg);color:var(--text);outline:none">
+                        <input type="hidden" class="captcha-token">
+                        <button class="done-btn" onclick="this.closest('.captcha-box').style.display='none'" style="padding:1px 8px;border:1px solid var(--border);font-size:10px;cursor:pointer;background:var(--bg3);color:var(--text)">Done</button>
+                    </div>
+                    <textarea class="comment-text" placeholder="Write a comment..." rows="2"></textarea>
+                    <button class="post-btn" onclick="postCollectionComment('{{ collection.id }}', null)">Post</button>
+                </div>
+                {% else %}
+                <div style="text-align:center;padding:8px;color:var(--text3);font-size:12px">
+                    <a href="/login">Sign in</a> to comment.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="side-col">
+            <div class="side-card">
+                <h4>Info</h4>
+                <div class="sc-item"><b>Created:</b> {{ collection.created_at[:10] }}</div>
+                <div class="sc-item"><b>By:</b> {{ collection.creator_name }}</div>
+                <div class="sc-item"><b>Pins:</b> {{ collection.websites|length }}</div>
+            </div>
+            {% if session.user_id %}
+            <div class="side-card" style="margin-top:8px">
+                <h4>My collections</h4>
+                <div id="my-collections-sidebar">
+                    <span style="color:var(--text4);font-size:11px">Loading...</span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="pin-drawer" id="pin-drawer">
+        <button class="pd-close" onclick="closePinDrawer()">&times;</button>
+        <h3>Pin a website</h3>
+        <div id="pd-url-display" style="font-size:11px;color:var(--text3);margin-bottom:6px;word-break:break-all"></div>
+        <input type="hidden" id="pd-collection-id">
+        <input type="hidden" id="pd-url">
+        <input type="hidden" id="pd-title">
+        <div style="margin-bottom:6px">
+            <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:2px">Note (optional)</label>
+            <input type="text" id="pd-note" placeholder="Why this belongs here" style="width:100%;padding:5px 8px;border:1px solid var(--border);font-size:12px;background:var(--bg);color:var(--text);outline:none">
+        </div>
+        <button onclick="pinToCollection()" style="padding:4px 14px;border:1px solid var(--accent);background:var(--accent);color:#eee;border-radius:2px;font-size:12px;cursor:pointer;font-family:Verdana,Arial,sans-serif">Pin it</button>
+    </div>
+
+    <script>
+    loadComments('{{ collection.id }}');
+    function loadComments(cid){
+        fetch('/api/collections/'+cid+'/comments').then(function(r){return r.json()}).then(function(d){
+            var list=document.getElementById('comment-list');
+            if(!list)return;
+            list.innerHTML='';
+            if(d.comments && d.comments.length){
+                d.comments.forEach(function(c){ list.appendChild(buildCommentEl(c, cid)) });
+            } else {
+                list.innerHTML='<div style="color:var(--text4);font-size:11px;padding:4px 0">No comments yet.</div>';
+            }
+        });
+    }
+    function buildCommentEl(c, cid){
+        var div=document.createElement('div'); div.className='rd-comment';
+        var head=document.createElement('div'); head.className='rd-comment-head';
+        var user=document.createElement('span'); user.className='rd-comment-user'; user.textContent=c.username;
+        var time=document.createElement('span'); time.className='rd-comment-time'; time.textContent=(c.created_at||'').slice(0,16).replace('T',' ');
+        head.appendChild(user); head.appendChild(time);
+        var text=document.createElement('div'); text.className='rd-comment-text'; text.textContent=c.text;
+        var acts=document.createElement('div'); acts.className='rd-comment-acts';
+        var upBtn=document.createElement('button'); upBtn.innerHTML='▲'; upBtn.onclick=function(){voteComment(c.id,1,upBtn,scoreEl,downBtn)};
+        var scoreEl=document.createElement('span'); scoreEl.className='cscore'; scoreEl.textContent=c.score||0;
+        var downBtn=document.createElement('button'); downBtn.innerHTML='▼'; downBtn.onclick=function(){voteComment(c.id,-1,downBtn,scoreEl,upBtn)};
+        acts.appendChild(upBtn); acts.appendChild(scoreEl); acts.appendChild(downBtn);
+        var replyBtn=document.createElement('button'); replyBtn.textContent='Reply'; replyBtn.style.marginLeft='4px';
+        replyBtn.onclick=function(){showReplyForm(c.id, cid)};
+        acts.appendChild(replyBtn);
+        div.appendChild(head); div.appendChild(text); div.appendChild(acts);
+        if(c.replies && c.replies.length){
+            var rwrap=document.createElement('div'); rwrap.className='replies-wrap';
+            c.replies.forEach(function(rp){ rwrap.appendChild(buildCommentEl(rp, cid)) });
+            div.appendChild(rwrap);
+        }
+        return div;
+    }
+    function voteComment(cid, dir, btn, scoreEl, otherBtn){
+        if(!document.querySelector('[href*=\"/login\"]') || document.querySelector('[href*=\"/login\"]').textContent==='Sign in'){alert('Sign in to vote');return}
+        var fd=new FormData(); fd.append('vote', dir);
+        fetch('/api/comments/'+cid+'/vote', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
+            if(!d.ok){alert(d.error);return}
+            if(d.action==='same') return;
+            btn.classList.add('active');
+            otherBtn.classList.remove('active');
+            var cur=parseInt(scoreEl.textContent)||0;
+            scoreEl.textContent = dir===1 ? Math.max(0,cur+1) : Math.max(0,cur-1);
+        });
+    }
+    function showReplyForm(parentId, cid){
+        var ret=document.getElementById('reply-form-'+parentId);
+        if(ret){ret.remove();return}
+        var wrap=document.createElement('div'); wrap.id='reply-form-'+parentId; wrap.style.cssText='margin:4px 0 4px 14px;display:flex;flex-direction:column;gap:4px';
+        var ta=document.createElement('textarea'); ta.placeholder='Reply...'; ta.style.cssText='width:100%;padding:3px 5px;border:1px solid var(--border);font-size:11px;resize:vertical;background:var(--input-bg);color:var(--text);outline:none;font-family:Verdana,Arial,sans-serif';
+        var btn=document.createElement('button'); btn.textContent='Reply'; btn.style.cssText='align-self:flex-end;padding:2px 10px;border:1px solid var(--accent);background:var(--accent);color:#eee;font-size:11px;cursor:pointer;font-family:Verdana,Arial,sans-serif';
+        btn.onclick=function(){
+            var fd=new FormData();
+            fd.append('text', ta.value);
+            fd.append('parent_id', parentId);
+            fetch('/api/collections/'+cid+'/comments', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
+                if(!d.ok){alert(d.error);return}
+                ta.value=''; wrap.remove();
+                loadComments(cid);
+            });
+        };
+        wrap.appendChild(ta); wrap.appendChild(btn);
+        var list=document.getElementById('comment-list');
+        if(list) list.prepend(wrap);
+        ta.focus();
+    }
+    function postCollectionComment(cid, parentId){
+        var section=document.querySelector('.comments');
+        var ta=section.querySelector('.comment-text');
+        var text=ta.value.trim();
+        if(!text){alert('Write something');return}
+        var box=section.querySelector('.captcha-box');
+        getColCaptcha(section, function(){
+            var token=box.querySelector('.captcha-token').value;
+            var answer=box.querySelector('.captcha-input').value;
+            if(!answer.trim()){alert('Type the 3 words');return}
+            var fd=new FormData();
+            fd.append('text', text);
+            fd.append('captcha_token', token);
+            fd.append('captcha_answer', answer);
+            if(parentId) fd.append('parent_id', parentId);
+            fetch('/api/collections/'+cid+'/comments', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
+                if(!d.ok){if(d.wait){alert('Wait '+d.wait+'s');return}if(d.error==='Captcha incorrect'){alert('Incorrect, try again');return}alert(d.error);return}
+                ta.value='';
+                box.style.display='none';
+                box.querySelector('.captcha-token').value='';
+                loadComments(cid);
+            });
+        });
+    }
+    function getColCaptcha(section, cb){
+        var box=section.querySelector('.captcha-box');
+        fetch('/api/captcha').then(function(r){return r.json()}).then(function(d){
+            box.querySelector('.captcha-question').textContent=d.words.join('  ');
+            box.querySelector('.captcha-token').value=d.token;
+            box.querySelector('.captcha-input').value='';
+            box.style.display='flex';
+            box.querySelector('.captcha-input').focus();
+            box.querySelector('.captcha-input').onkeydown=function(e){if(e.key==='Enter'){box.style.display='none';if(cb)cb()}};
+            var doneBtn=box.querySelector('.done-btn');
+            if(doneBtn)doneBtn.onclick=function(){box.style.display='none';if(cb)cb()};
+        });
+    }
+    function showPinDrawer(cid, cname){
+        document.getElementById('pin-drawer').classList.add('open');
+        document.getElementById('pd-collection-id').value=cid;
+    }
+    function closePinDrawer(){document.getElementById('pin-drawer').classList.remove('open')}
+    function pinToCollection(){
+        var cid=document.getElementById('pd-collection-id').value;
+        var url=document.getElementById('pd-url').value;
+        var title=document.getElementById('pd-title').value;
+        var note=document.getElementById('pd-note').value;
+        var fd=new FormData(); fd.append('url', url); fd.append('title', title); fd.append('note', note);
+        fetch('/api/collections/'+cid+'/websites', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
+            if(!d.ok){alert(d.error);return}
+            closePinDrawer();
+            window.location.reload();
+        });
+    }
+    function removeWebsite(cid, wid){
+        if(!confirm('Remove this pin?')) return;
+        fetch('/api/collections/'+cid+'/websites/'+wid, {method:'DELETE'}).then(function(r){return r.json()}).then(function(d){
+            if(!d.ok){alert(d.error);return}
+            window.location.reload();
+        });
+    }
+    function editCollection(){
+        var name=prompt('Name:', '{{ collection.name|e }}');
+        if(!name)return;
+        var desc=prompt('Description:', '{{ collection.description|e }}');
+        var fd=new FormData(); fd.append('name', name); fd.append('description', desc||'');
+        fetch('/api/collections/{{ collection.id }}', {method:'PUT', body:fd}).then(function(r){return r.json()}).then(function(d){
+            if(!d.ok){alert(d.error);return}
+            window.location.reload();
+        });
+    }
+    function deleteCollection(){
+        if(!confirm('Delete this collection permanently?')) return;
+        fetch('/api/collections/{{ collection.id }}', {method:'DELETE'}).then(function(r){return r.json()}).then(function(d){
+            window.location.href='/explore';
+        });
+    }
+
+    fetch('/api/collections').then(function(r){return r.json()}).then(function(d){
+        if(d.ok && d.collections && d.collections.length){
+            var html='';
+            d.collections.forEach(function(c){
+                html+='<div class="sc-item"><b>'+c.name+'</b> <span style="color:var(--text4)">('+c.websites.length+')</span></div>';
+            });
+            var el=document.getElementById('my-collections-sidebar');
+            if(el) el.innerHTML=html;
+        } else {
+            var el=document.getElementById('my-collections-sidebar');
+            if(el) el.innerHTML='<div style="color:var(--text4);font-size:11px"><a href="/explore" style="color:var(--link)">Create one</a></div>';
+        }
+    });
+    </script>
+</body>
+</html>
