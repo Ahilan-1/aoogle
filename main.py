@@ -111,6 +111,20 @@ if redis_available:
         redis_client = None
         app.logger.warning("Redis not available, falling back to in-memory cache")
 
+DISCUSSION_DOMAINS = {
+    'reddit.com', 'redd.it', 'old.reddit.com', 'new.reddit.com',
+    'quora.com', 'stackexchange.com', 'stackoverflow.com',
+    'serverfault.com', 'superuser.com', 'askubuntu.com',
+    'mathoverflow.net', 'forum.xda-developers.com',
+    'discourse.org', 'discourse.', 'forum.', 'forums.',
+    'answers.yahoo.com', 'answers.com', 'ask.com',
+    'hubpages.com', 'medium.com', 'dev.to', 'hashnode.com',
+    'producthunt.com', 'news.ycombinator.com', 'lobste.rs',
+    'twitter.com', 'x.com', 'facebook.com', 'facebook.com/groups',
+    'linkedin.com', 'reddit.com/r/',
+}
+
+
 class SearchResult:
     def __init__(self, title, url, snippet, category='general', date=None, favicon=None, domain=None):
         self.title = title
@@ -2315,6 +2329,16 @@ class ImprovedSearch:
             score += 4
         return min(20, max(-15, score))
 
+    def _is_discussion_site(self, url):
+        domain = urlparse(url).netloc.lower()
+        domain = re.sub(r'^www\.', '', domain)
+        for d in DISCUSSION_DOMAINS:
+            if d.endswith('.') and d[:-1] in domain:
+                return True
+            if domain == d or domain.endswith('.' + d):
+                return True
+        return False
+
     def _rank_results(self, query, results, filter_type='general'):
         intent = SearchIntent(query)
         blacklist = data_manager.get_blacklist()
@@ -2382,6 +2406,33 @@ class ImprovedSearch:
 
             result.score = round(s, 2)
             scored.append(result)
+
+        # Neural network evaluation: score non-discussion sites with ML model
+        try:
+            from ml_ranking import get_ranker
+            ranker = get_ranker()
+            if ranker.available:
+                discussion_results = []
+                neural_results = []
+                for r in scored:
+                    if self._is_discussion_site(r.url):
+                        discussion_results.append(r)
+                    else:
+                        neural_results.append(r)
+
+                if neural_results:
+                    docs = [{'title': r.title or '', 'snippet': r.snippet or '', 'url': r.url or ''} for r in neural_results]
+                    ml_scores = ranker.predict(query, docs)
+                    min_m, max_m = min(ml_scores), max(ml_scores)
+                    m_range = max_m - min_m if max_m > min_m else 1
+                    for i, r in enumerate(neural_results):
+                        ml = ml_scores[i] if i < len(ml_scores) else 0.0
+                        r.score = ((ml - min_m) / m_range) * 100  # Normalize ML score to 0-100
+
+                for r in discussion_results:
+                    r.score = min(r.score, 10)  # Cap discussion/heuristic scores
+        except Exception as e:
+            app.logger.error(f"Neural ranking error: {e}")
 
         scored.sort(key=lambda x: x.score, reverse=True)
 
@@ -4046,9 +4097,6 @@ def search():
         if region:
             session['region'] = region
         results, total_results = search_engine.search(query, page, filter_type, region or None)
-
-        if ml_rank and ml_rank != '0' and results:
-            results = search_engine.ml_rerank(query, results, ml_rank)
 
         verified_info = data_manager.get_verified_info(query.lower().strip(), user_country)
         if not verified_info and results:
