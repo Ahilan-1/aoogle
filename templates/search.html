@@ -103,8 +103,9 @@
             50% { background-position: 0 55%; }
         }
 
-        .dm-toggle{position:fixed;top:12px;right:16px;z-index:999;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:.15s}
-        .dm-toggle:hover{background:var(--hover-bg);color:var(--text)}
+        .acc-btn{position:fixed;top:12px;right:16px;z-index:999;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:.15s;text-decoration:none}
+        .acc-btn:hover{background:var(--hover-bg);color:var(--text)}
+        .acc-btn svg{width:18px;height:18px;fill:currentColor}
 
         .homepage{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 16px}
         .homepage .search-form{margin-top:24px;position:relative;width:100%;max-width:584px}
@@ -296,7 +297,8 @@
             .weather-panel .wp-icon{width:40px;height:40px}
             .weather-panel .wp-icon svg{width:40px;height:40px}
             .weather-panel .wp-main{gap:12px}
-            .dm-toggle{top:8px;right:8px;width:32px;height:32px;font-size:14px}
+            .acc-btn{top:8px;right:8px;width:32px;height:32px}
+            .acc-btn svg{width:16px;height:16px}
         }
         @media(max-width:400px){
             .glogo{font-size:36px}
@@ -316,7 +318,7 @@
         @supports(padding:max(0px)){
             .results-header{padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
             .results-header .top-row{padding-left:0;padding-right:0}
-            .dm-toggle{right:max(16px,env(safe-area-inset-right,16px))}
+            .acc-btn{right:max(16px,env(safe-area-inset-right,16px))}
             .results-layout{padding-left:max(16px,env(safe-area-inset-left,16px));padding-right:max(16px,env(safe-area-inset-right,16px))}
         }
 
@@ -380,28 +382,7 @@
         .pin-btn-sm svg{width:13px;height:13px;fill:currentColor}
         .rpt-btn{background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:3px;padding:1px 6px;font-size:12px;color:var(--text3);opacity:.5;transition:opacity .15s;border-radius:3px;line-height:1}
         .rpt-btn:hover{opacity:1}
-        /* Comment section */
-        .comment-section{display:none;margin-top:3px;padding:4px 0 4px 20px;border-left:2px solid var(--border2);font-size:12px}
-        .comment-list{max-height:320px;overflow-y:auto}
-        .rd-comment{padding:4px 0 4px 0;border-bottom:1px solid var(--border2)}
-        .rd-comment:last-child{border-bottom:none}
-        .rd-comment-head{display:flex;align-items:center;gap:6px;margin-bottom:1px}
-        .rd-comment-user{color:var(--link);font-weight:600;font-size:12px}
-        .rd-comment-time{color:var(--text3);font-size:10px}
-        .rd-comment-text{color:var(--text);font-size:12px;line-height:1.4;margin-bottom:2px;word-break:break-word}
-        .rd-comment-actions{display:flex;align-items:center;gap:2px}
-        .rd-comment-actions .arrw{width:12px;height:12px}
-        .rd-comment-actions .arrw svg{width:10px;height:10px}
-        .rd-comment-actions .vote-score{font-size:10px;min-width:14px}
-        .comment-form{margin-top:4px;display:flex;flex-direction:column;gap:4px}
-        .comment-form .captcha-box{display:none;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--text3)}
-        .comment-form .captcha-input{width:50px;padding:3px 5px;border:1px solid var(--border);border-radius:3px;font-size:12px;background:var(--input-bg);color:var(--text);outline:none}
-        .comment-form .captcha-input:focus{border-color:var(--link)}
-        .comment-form textarea{width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:3px;font-size:12px;resize:vertical;background:var(--input-bg);color:var(--text);outline:none}
-        .comment-form textarea:focus{border-color:var(--link)}
-        .comment-form .post-btn{align-self:flex-end;padding:2px 12px;background:var(--link);color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:11px;font-weight:600;opacity:.8;transition:opacity .15s}
-        .comment-form .post-btn:hover{opacity:1}
-        .comment-form .done-btn{padding:2px 10px;background:var(--link);color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:11px}
+
         .hp-whatsnew{max-width:680px;margin:24px auto 0;text-align:left;font-size:13px}
         .hp-whatsnew summary{color:var(--text3);cursor:pointer;font-size:12px;padding:4px 0;user-select:none;list-style:none;display:flex;align-items:center;gap:4px;justify-content:center}
         .hp-whatsnew summary:hover{color:var(--text)}
@@ -419,7 +400,7 @@
         @media(max-width:640px){.comment-section{padding-left:12px}.hp-whatsnew .wn-grid{grid-template-columns:1fr}}
     </style>
 </head>
-<body>
+<body data-loggedin="{% if session.user_id %}true{% else %}false{% endif %}">
     <canvas id="fireworks-canvas"></canvas>
     <div class="ao-loading" id="ao-loading">
         <div class="al-bar"><div class="bar"></div></div>
@@ -441,16 +422,10 @@
         })();
     </script>
 
-    <button class="dm-toggle" id="dm-btn" onclick="toggleDark()" aria-label="Toggle dark mode">&#x263D;</button>
     <button class="flag-toggle" id="flag-btn" title="Toggle flag colors" style="display:none">&#x1F1FA;&#x1F1F8;</button>
-    <div style="position:fixed;top:12px;right:58px;z-index:999;display:flex;align-items:center;gap:8px;font-size:13px">
-        {% if session.user_id %}
-        <span style="color:var(--text3)">{{ session.username }}</span>
-        <a href="/logout" style="color:var(--link);text-decoration:none">Logout</a>
-        {% else %}
-        <a href="/login" style="color:var(--link);text-decoration:none">Sign in</a>
-        {% endif %}
-    </div>
+    <a class="acc-btn" id="acc-btn" href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" aria-label="Account">
+        <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+    </a>
     {% if announcement %}
     <div style="background:#c5221f;color:#fff;text-align:center;padding:10px 20px;font-size:14px;font-weight:500;position:sticky;top:0;z-index:1000;box-shadow:0 2px 8px rgba(197,34,31,.3)">
         &#x26A0; {{ announcement }}
@@ -472,7 +447,7 @@
                 </div>
                 <div class="buttons">
                     <input type="submit" value="Search">
-                    <a href="/feed" class="explore-btn" style="background:var(--bg3);border:1px solid var(--bg3);border-radius:4px;color:var(--text);font-size:14px;margin:6px 4px;padding:0 16px;line-height:36px;height:36px;cursor:pointer;min-width:120px;font-family:arial,sans-serif;transition:.1s;display:inline-flex;align-items:center;justify-content:center;text-decoration:none">Feed</a>
+                    <a href="/leaderboard" class="explore-btn" style="background:var(--bg3);border:1px solid var(--bg3);border-radius:4px;color:var(--text);font-size:14px;margin:6px 4px;padding:0 16px;line-height:36px;height:36px;cursor:pointer;min-width:120px;font-family:arial,sans-serif;transition:.1s;display:inline-flex;align-items:center;justify-content:center;text-decoration:none">Leaderboard</a>
                     <a href="/explore" class="explore-btn">Explore</a>
                 </div>
             </form>
@@ -497,24 +472,20 @@
             <summary>What's new on arlong</summary>
             <div class="wn-grid">
                 <div class="wn-card">
-                    <h4>Search results voting</h4>
-                    <p>Upvote or downvote any search result. Your votes shape the community feed and help surface quality links.</p>
-                    <a class="wn-link" href="/feed">See the feed &rarr;</a>
+                    <h4>Upvote &amp; downvote</h4>
+                    <p>Vote on search results to help surface quality links. Earn points for contributing and climb the leaderboard.</p>
+                    <a class="wn-link" href="/leaderboard">View leaderboard &rarr;</a>
                 </div>
-                <div class="wn-card">
-                    <h4>Community comments</h4>
-                    <p>Discuss any search result with threaded, Reddit-style comments. Each comment has its own vote buttons.</p>
-                    <a class="wn-link" href="/#">Try it on any result</a>
-                </div>
+
                 <div class="wn-card">
                     <h4>Collections (Pinterest-style)</h4>
                     <p>Create themed collections and pin your favorite websites. Browse what others have curated in the Explore page.</p>
                     <a class="wn-link" href="/explore">Browse collections &rarr;</a>
                 </div>
                 <div class="wn-card">
-                    <h4>Activity feed</h4>
-                    <p>See what the community is voting on and discussing in real time. Vote and comment directly from the feed.</p>
-                    <a class="wn-link" href="/feed">Open feed &rarr;</a>
+                    <h4>Submit your site</h4>
+                    <p>Get your website indexed by Kumo Crawler instantly. Submit your sitemap and robots.txt to appear in results.</p>
+                    <a class="wn-link" href="/submit">Submit now &rarr;</a>
                 </div>
                 <div class="wn-card">
                     <h4>Verified business listings</h4>
@@ -553,6 +524,9 @@
                     <div class="suggestions-box" id="rs-suggest"></div>
                 </form>
             </div>
+            <a href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" style="flex-shrink:0;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);display:flex;align-items:center;justify-content:center;text-decoration:none;transition:.15s" aria-label="Account">
+                <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            </a>
         </div>
         <div class="results-nav">
             <a href="/search?q={{ query }}" class="active">Web</a>
@@ -679,22 +653,9 @@
                         <a href="{{ result.url }}" class="result-title" target="_blank">{{ result.title }}</a>
                         <div class="result-snippet">{{ result.snippet }}</div>
                         <div class="result-community" data-url="{{ result.url }}" data-title="{{ result.title }}">
-                            <button class="com-btn" onclick="toggleComments(this)" title="Comments"><svg viewBox="0 0 14 14"><path d="M1 1h12v9H4.5L2 12.5V10H1V1zm1 1v7h1v1.5L4.5 9H12V2H2z"/></svg> <span class="comment-count">0</span></button>
                             <button class="pin-btn-sm" onclick="pinFromSearch(this)" title="Pin to collection"><svg viewBox="0 0 14 14"><path d="M2 1v12l5-3 5 3V1H2zm1 1h8v9.5l-4-2.5-4 2.5V2z"/></svg></button>
                             <button class="rpt-btn" onclick="reportDomain(this)" title="Report domain"><svg viewBox="0 0 14 14"><path d="M7 1L1 13h12L7 1zm0 2.5l4.5 8h-9l4.5-8zM7 8.5a.75.75 0 110-1.5.75.75 0 010 1.5zM6.5 5h1v2.5h-1V5z"/></svg></button>
                         </div>
-                            <div class="comment-section">
-                                <div class="comment-list"></div>
-                                <div class="comment-form">
-                                    <div class="captcha-overlay" style="display:none;position:relative;background:var(--bg3);border:1px solid var(--border);padding:4px 10px;margin-bottom:4px;border-radius:2px;min-height:40px;overflow:hidden"></div>
-                                    <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
-                                        <input type="text" class="captcha-input" placeholder="Type word above" style="display:none;width:90px;padding:3px 5px;border:1px solid var(--border);font-size:11px;background:var(--input-bg);color:var(--text);outline:none">
-                                        <button class="done-btn" style="display:none;padding:2px 8px;border:1px solid var(--accent);background:var(--accent);color:#eee;font-size:10px;cursor:pointer" onclick="submitSearchCaptcha(this)">&#x2713;</button>
-                                    </div>
-                                    <textarea class="comment-text" placeholder="What do you think?" rows="2"></textarea>
-                                    <button class="post-btn" onclick="postComment(this)">Comment</button>
-                                </div>
-                            </div>
                         <div class="result-metadata">
                             <span class="result-category">{{ result.category }}</span>
                             {% if result.date %}<span class="result-date">{{ result.date }}</span>{% endif %}
@@ -1181,18 +1142,7 @@
             })
         });
 
-        function setDark(v){
-            document.body.classList.toggle('dark-mode',v);
-            var b=document.getElementById('dm-btn');
-            if(b)b.innerHTML=v?'&#x2600;':'&#x263D;';
-            try{localStorage.setItem('arlong-dark',v?'1':'0')}catch(e){}
-        }
-        function toggleDark(){setDark(!document.body.classList.contains('dark-mode'))}
-        (function(){
-            var p=null;try{p=localStorage.getItem('arlong-dark')}catch(e){}
-            if(p==='1')setDark(true);
-            else if(p===null&&window.matchMedia('(prefers-color-scheme:dark)').matches)setDark(true);
-        })();
+        document.body.classList.add('dark-mode');
 
         var BANG_LIST = [];
         function loadBangList(){
@@ -1285,29 +1235,12 @@
             var rs=document.getElementById('rs-ml');if(rs)rs.value=ml_val;
         });
 
-        /* ── Reddit-style community: vote, comments, domain report ── */
-        function loadCommunity(url, container){
-            var card = container.closest('.result-card');
-            fetch('/api/comments/' + encodeURIComponent(url)).then(function(r){return r.json()}).then(function(d){
-                var scoreEl = card.querySelector('.reddit-vote .vote-score');
-                var countEl = container.querySelector('.comment-count');
-                if(scoreEl) scoreEl.textContent = d.score;
-                if(countEl) countEl.textContent = d.comments.length;
-                var up = card.querySelector('.reddit-vote .arrw.up');
-                var down = card.querySelector('.reddit-vote .arrw.down');
-                if(up) up.classList.toggle('active', d.user_vote === 1);
-                if(down) down.classList.toggle('active', d.user_vote === -1);
-            });
-        }
-        document.querySelectorAll('.result-community').forEach(function(el){
-            loadCommunity(el.getAttribute('data-url'), el);
-        });
+        /* ── Voting, domain report, pin-to-collection ── */
         function vote(btn, dir){
-            var userEl = document.querySelector('[href*=\"/login\"]');
-            if(userEl && userEl.textContent === 'Sign in'){ alert('Sign in to vote'); return }
+            if(document.body.getAttribute('data-loggedin') !== 'true'){ alert('Sign in to vote'); return }
             var container = btn.closest('.reddit-vote');
             var card = container.closest('.result-card');
-            var url = card.getAttribute('data-url') || card.querySelector('.result-community').getAttribute('data-url');
+            var url = card.getAttribute('data-url');
             var title = card.querySelector('.result-title') ? card.querySelector('.result-title').textContent : url;
             var fd = new FormData(); fd.append('url', url); fd.append('vote', dir); fd.append('title', title);
             fetch('/api/vote', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
@@ -1317,132 +1250,8 @@
                 btn.classList.toggle('active', true);
             });
         }
-        function toggleComments(btn){
-            var section = btn.closest('.result-card').querySelector('.comment-section');
-            var visible = section.style.display !== 'none';
-            section.style.display = visible ? 'none' : 'block';
-            if(!visible){
-                var url = btn.closest('.result-community').getAttribute('data-url');
-                var list = section.querySelector('.comment-list');
-                fetch('/api/comments/' + encodeURIComponent(url)).then(function(r){return r.json()}).then(function(d){
-                    list.innerHTML = '';
-                    d.comments.forEach(function(c){
-                        list.appendChild(buildCommentEl(c));
-                    });
-                    btn.querySelector('.comment-count').textContent = d.comments.length;
-                });
-            }
-        }
-        function buildCommentEl(c){
-            var div = document.createElement('div'); div.className = 'rd-comment';
-            var head = document.createElement('div'); head.className = 'rd-comment-head';
-            var user = document.createElement('a'); user.className = 'rd-comment-user'; user.href = '/u/' + c.username; user.textContent = c.username;
-            var time = document.createElement('span'); time.className = 'rd-comment-time'; time.textContent = c.created_at.slice(0,10);
-            head.appendChild(user); head.appendChild(time);
-            var text = document.createElement('div'); text.className = 'rd-comment-text'; text.textContent = c.text;
-            div.appendChild(head); div.appendChild(text);
-            if(c.replies && c.replies.length){
-                var rwrap = document.createElement('div'); rwrap.style.cssText = 'margin-left:16px;border-left:1px solid var(--border2);padding-left:8px';
-                c.replies.forEach(function(rp){ rwrap.appendChild(buildCommentEl(rp)) });
-                div.appendChild(rwrap);
-            }
-            return div;
-        }
-        function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
-
-        /* ── Captcha: scrambled word + countdown ── */
-        function getCaptcha(section, cb){
-            var box = section.querySelector('.captcha-overlay');
-            if(section._capTimer){ clearInterval(section._capTimer); delete section._capTimer }
-            box.style.display = 'block';
-            box.innerHTML = '<span style="color:var(--text4);font-size:11px">Loading captcha...</span>';
-            var inp = section.querySelector('.captcha-input');
-            var doneBtn = section.querySelector('.done-btn');
-            inp.style.display = 'none';
-            doneBtn.style.display = 'none';
-            fetch('/api/captcha').then(function(r){return r.json()}).then(function(d){
-                if(!d.ok) return;
-                box.innerHTML = d.html + '<input type="hidden" class="captcha-token" value="'+d.token+'"><span class="ctimer" style="position:absolute;bottom:1px;right:4px;z-index:3;font-size:9px;color:var(--orange);font-family:monospace"></span>';
-                var timerEl = box.querySelector('.ctimer');
-                var expiresAt = Date.now() + d.expires_in * 1000;
-                function tick(){
-                    var left = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
-                    timerEl.textContent = left + 's';
-                    if(left <= 0){
-                        clearInterval(section._capTimer); delete section._capTimer;
-                        var expired = document.createElement('div'); expired.className = 'expired';
-                        expired.style.cssText = 'position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.7);color:var(--orange);font-size:11px;font-weight:600;cursor:pointer';
-                        expired.textContent = 'Expired - click to refresh';
-                        expired.onclick = function(){ getCaptcha(section, cb); };
-                        box.appendChild(expired);
-                    }
-                }
-                tick();
-                section._capTimer = setInterval(tick, 1000);
-                inp.style.display = 'inline-block'; inp.value = ''; inp.focus();
-                doneBtn.style.display = 'inline-block';
-                var theDoneBtn = doneBtn;
-                inp.onkeydown = function(e){ if(e.key === 'Enter') submitSearchCaptcha(theDoneBtn) };
-                section._captchaCb = cb;
-            });
-        }
-
-        function submitSearchCaptcha(btn){
-            var section = btn.closest('.comment-section');
-            var box = section.querySelector('.captcha-overlay');
-            var inp = section.querySelector('.captcha-input');
-            var token = box.querySelector('.captcha-token').value;
-            var answer = inp.value.trim();
-            if(!answer){ alert('Type the word you see'); return }
-            var cb = section._captchaCb;
-            box.dataset.token = token;
-            box.dataset.answer = answer;
-            box.style.display = 'none';
-            inp.value = '';
-            if(section._capTimer){ clearInterval(section._capTimer); delete section._capTimer }
-            if(cb) cb();
-        }
-
-        function postComment(btn){
-            var section = btn.closest('.comment-section');
-            var textarea = section.querySelector('.comment-text');
-            var text = textarea.value.trim();
-            if(!text){ alert('Write something'); return }
-            window._searchCaptchaCb = function(){
-                var box = section.querySelector('.captcha-overlay');
-                var token = box.dataset.token;
-                var answer = box.dataset.answer;
-                if(!token || !answer){ alert('Complete captcha'); return }
-                var fd = new FormData();
-                var card = section.closest('.result-card');
-                var title = card.querySelector('.result-title') ? card.querySelector('.result-title').textContent : '';
-                fd.append('url', card.getAttribute('data-url'));
-                fd.append('title', title);
-                fd.append('text', text);
-                fd.append('captcha_token', token);
-                fd.append('captcha_answer', answer);
-                fetch('/api/comment', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
-                    if(!d.ok){
-                        if(d.wait){ alert('Please wait '+d.wait+'s'); return }
-                        if(d.error === 'Captcha incorrect'){ alert('Captcha incorrect, try again'); getCaptcha(section, window._searchCaptchaCb); return }
-                        alert(d.error); return
-                    }
-                    textarea.value = '';
-                    box.style.display = 'none';
-                    box.dataset.token = '';
-                    box.dataset.answer = '';
-                    var list = section.querySelector('.comment-list');
-                    var el = buildCommentEl(d.comment);
-                    list.prepend(el);
-                    var count = section.closest('.result-community').querySelector('.comment-count');
-                    if(count) count.textContent = parseInt(count.textContent) + 1;
-                });
-            };
-            getCaptcha(section, window._searchCaptchaCb);
-        }
         function reportDomain(btn){
-            var userEl = document.querySelector('[href*=\"/login\"]');
-            if(userEl && userEl.textContent === 'Sign in'){ alert('Sign in to report domain'); return }
+            if(document.body.getAttribute('data-loggedin') !== 'true'){ alert('Sign in to report domain'); return }
             var url = btn.closest('.result-community').getAttribute('data-url');
             var domain = new URL(url).hostname.replace('www.','');
             var reason = prompt('Why is this domain low quality?','Low quality or spam');
@@ -1454,8 +1263,7 @@
             });
         }
         function pinFromSearch(btn){
-            var userEl = document.querySelector('[href*=\"/login\"]');
-            if(userEl && userEl.textContent === 'Sign in'){ alert('Sign in to pin to collection'); return }
+            if(document.body.getAttribute('data-loggedin') !== 'true'){ alert('Sign in to pin to collection'); return }
             var container = btn.closest('.result-community');
             var url = container.getAttribute('data-url');
             var title = container.getAttribute('data-title') || url;

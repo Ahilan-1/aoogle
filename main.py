@@ -993,7 +993,7 @@ class DataManager:
             _save_json(self.data)
 
     def add_submitted_site(self, domain, sitemap_url, robots_txt_url, email,
-                           name='', description='', phone='', category=''):
+                           name='', description='', phone='', category='', submitted_by=None):
         with self._lock:
             loaded = _load_json()
             if loaded:
@@ -1006,7 +1006,7 @@ class DataManager:
                 'domain': domain, 'name': name, 'description': description,
                 'phone': phone, 'category': category,
                 'sitemap_url': sitemap_url, 'robots_txt_url': robots_txt_url,
-                'email': email,
+                'email': email, 'submitted_by': submitted_by,
                 'submitted_at': datetime.now().isoformat(),
                 'crawl_status': 'pending', 'pages_crawled': 0
             }
@@ -1041,6 +1041,18 @@ class DataManager:
             if s['domain'] == domain:
                 return s
         return None
+
+    def approve_submission(self, domain):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for s in self.data.get('submitted_sites', []):
+                if s['domain'] == domain:
+                    s['crawl_status'] = 'approved'
+                    _save_json(self.data)
+                    return True
+            return False
 
     def store_crawled_pages(self, domain, pages):
         with self._lock:
@@ -1096,7 +1108,7 @@ class DataManager:
         scored.sort(key=lambda x: x['score'], reverse=True)
         return scored[:5]
 
-    # ── Community system: users, votes, comments, domain reports ──
+    # ── Community system: users, votes, domain reports ──
 
     def hash_password(self, password):
         salt = secrets.token_hex(8)
@@ -1136,6 +1148,10 @@ class DataManager:
             return user, None
 
     def authenticate_user(self, username, password):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
         users = self.data.get('users', [])
         for u in users:
             if u['username'] == username:
@@ -1213,45 +1229,6 @@ class DataManager:
                 return v['vote']
         return 0
 
-    def add_comment(self, user_id, username, url, text, parent_id=None):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            self.data.setdefault('comments', [])
-            c = {
-                'comment_id': str(uuid.uuid4()),
-                'user_id': user_id,
-                'username': username,
-                'url': url,
-                'url_hash': hashlib.sha256(url.encode()).hexdigest(),
-                'text': text[:2000],
-                'parent_id': parent_id,
-                'created_at': datetime.now().isoformat(),
-                'votes': {},
-            }
-            self.data['comments'].append(c)
-            _save_json(self.data)
-            return c
-
-    def get_comments(self, url):
-        url_hash = hashlib.sha256(url.encode()).hexdigest()
-        comments = []
-        for c in self.data.get('comments', []):
-            if c.get('url_hash') == url_hash:
-                c = dict(c)
-                c.setdefault('votes', {})
-                c['score'] = sum(v for v in c['votes'].values())
-                comments.append(c)
-        def build_tree(items, parent=None):
-            tree = []
-            for c in items:
-                if c.get('parent_id') == parent:
-                    c['replies'] = build_tree(items, c.get('comment_id'))
-                    tree.append(c)
-            return tree
-        return sorted(build_tree(comments), key=lambda c: c.get('created_at', ''))
-
     def report_domain(self, user_id, domain, reason):
         with self._lock:
             loaded = _load_json()
@@ -1281,14 +1258,17 @@ class DataManager:
 
     def resolve_domain_report(self, domain, action):
         with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
             for r in self.data.get('domain_reports', []):
                 if r['domain'] == domain:
-                    r['status'] = action  # 'approved' or 'dismissed'
+                    r['status'] = action
                     if action == 'approved':
                         self.data.setdefault('blacklist', {})
                         self.data['blacklist'][domain] = -50
                     _save_json(self.data)
-                return
+                    return
 
     # ── Collections (community curation) ──
 
@@ -1396,212 +1376,59 @@ class DataManager:
                     return True
             return False
 
-    # ── Collection comments (nested, with votes) ──
-
-    def add_collection_comment(self, user_id, username, collection_id, text, parent_id=None):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            self.data.setdefault('collection_comments', [])
-            c = {
-                'id': str(uuid.uuid4()),
-                'collection_id': collection_id,
-                'parent_id': parent_id,
-                'user_id': user_id,
-                'username': username,
-                'text': text[:2000],
-                'created_at': datetime.now().isoformat(),
-                'votes': {},
-            }
-            self.data['collection_comments'].append(c)
-            _save_json(self.data)
-            return c
-
-    def get_collection_comments(self, collection_id):
-        comments = [c for c in self.data.get('collection_comments', [])
-                    if c['collection_id'] == collection_id]
-        def build_tree(items, parent=None):
-            tree = []
-            for c in items:
-                if c.get('parent_id') == parent:
-                    c['score'] = sum(v for v in c.get('votes', {}).values())
-                    c['replies'] = build_tree(items, c['id'])
-                    tree.append(c)
-            return tree
-        return sorted(build_tree(comments), key=lambda c: c.get('created_at', ''))
-
-    def vote_collection_comment(self, user_id, comment_id, vote):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            for c in self.data.get('collection_comments', []):
-                if c['id'] == comment_id:
-                    prev = c['votes'].get(user_id, 0)
-                    if prev == vote:
-                        return c['id'], 'same'
-                    c['votes'][user_id] = vote
-                    _save_json(self.data)
-                    c['score'] = sum(v for v in c['votes'].values())
-                    return c['id'], 'updated'
-            return None, 'Not found'
-
-    # ── Feed (activity stream) ──
-
-    def add_feed_entry(self, entry_type, url, title, user_id, username):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            self.data.setdefault('feed', [])
-            e = {
-                'id': str(uuid.uuid4()),
-                'type': entry_type,
-                'url': url,
-                'title': title[:300],
-                'user_id': user_id,
-                'username': username,
-                'created_at': datetime.now().isoformat(),
-                'votes': {},
-                'score': 0,
-            }
-            self.data['feed'].append(e)
-            _save_json(self.data)
-            return e
-
-    def get_feed(self, page=1, per_page=30, user_id=None):
-        feed = list(self.data.get('feed', []))
-        feed.sort(key=lambda e: e.get('created_at', ''), reverse=True)
-        for e in feed:
-            e['score'] = sum(v for v in e.get('votes', {}).values())
-            e['user_vote'] = e.get('votes', {}).get(user_id, 0) if user_id else 0
-        total = len(feed)
-        start = (page - 1) * per_page
-        return feed[start:start + per_page], total
-
-    def get_feed_entry(self, entry_id, user_id=None):
-        for e in self.data.get('feed', []):
-            if e['id'] == entry_id:
-                e['score'] = sum(v for v in e.get('votes', {}).values())
-                e['user_vote'] = e.get('votes', {}).get(user_id, 0) if user_id else 0
-                return e
-        return None
-
-    def vote_feed_entry(self, user_id, entry_id, vote):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            for e in self.data.get('feed', []):
-                if e['id'] == entry_id:
-                    prev = e['votes'].get(user_id, 0)
-                    if prev == vote:
-                        return 'same'
-                    e['votes'][user_id] = vote
-                    _save_json(self.data)
-                    return 'updated'
-            return 'notfound'
-
-    def add_feed_comment(self, user_id, username, entry_id, text, parent_id=None):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            # If feed entry has a url, delegate to url-based comments (shared with search)
-            entry = self._find_feed_entry(entry_id)
-            if entry and entry.get('url'):
-                url = entry['url']
-                self.data.setdefault('comments', [])
-                c = {
-                    'comment_id': str(uuid.uuid4()),
-                    'user_id': user_id,
-                    'username': username,
-                    'url': url,
-                    'url_hash': hashlib.sha256(url.encode()).hexdigest(),
-                    'text': text[:2000],
-                    'parent_id': parent_id,
-                    'created_at': datetime.now().isoformat(),
-                    'votes': {},
-                }
-                self.data['comments'].append(c)
-                _save_json(self.data)
-                return c
-            self.data.setdefault('feed_comments', [])
-            c = {
-                'id': str(uuid.uuid4()),
-                'entry_id': entry_id,
-                'parent_id': parent_id,
-                'user_id': user_id,
-                'username': username,
-                'text': text[:2000],
-                'created_at': datetime.now().isoformat(),
-                'votes': {},
-            }
-            self.data['feed_comments'].append(c)
-            _save_json(self.data)
-            return c
-
-    def _find_feed_entry(self, entry_id):
-        for e in self.data.get('feed', []):
-            if e['id'] == entry_id:
-                return e
-        return None
-
-    def get_feed_comments(self, entry_id):
-        entry = self._find_feed_entry(entry_id)
-        if entry and entry.get('url'):
-            url = entry['url']
-            url_hash = hashlib.sha256(url.encode()).hexdigest()
-            comments = []
-            for c in self.data.get('comments', []):
-                if c.get('url_hash') == url_hash:
-                    c = dict(c)
-                    c['id'] = c.get('comment_id')  # normalize to id for template
-                    c.setdefault('votes', {})
-                    comments.append(c)
-        else:
-            comments = [c for c in self.data.get('feed_comments', [])
-                        if c['entry_id'] == entry_id]
-        def build_tree(items, parent=None):
-            tree = []
-            for c in items:
-                if c.get('parent_id') == parent:
-                    c['score'] = sum(v for v in c.get('votes', {}).values())
-                    c['replies'] = build_tree(items, c.get('comment_id') or c.get('id'))
-                    tree.append(c)
-            return tree
-        return sorted(build_tree(comments), key=lambda c: c.get('created_at', ''))
-
-    def vote_feed_comment(self, user_id, comment_id, vote):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            # Search feed-specific comments (id field)
-            for c in self.data.get('feed_comments', []):
-                if c['id'] == comment_id:
-                    prev = c['votes'].get(user_id, 0)
-                    if prev == vote:
-                        return 'same'
-                    c['votes'][user_id] = vote
-                    _save_json(self.data)
-                    return 'updated'
-            # Search URL-based comments (comment_id field, shared with search)
-            for c in self.data.get('comments', []):
-                if c.get('comment_id') == comment_id:
-                    c.setdefault('votes', {})
-                    prev = c['votes'].get(user_id, 0)
-                    if prev == vote:
-                        return 'same'
-                    c['votes'][user_id] = vote
-                    _save_json(self.data)
-                    return 'updated'
-            return 'notfound'
-
     # ── User stats / profile ──
 
+    def get_user_points(self, user_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+        collections = [c for c in self.data.get('collections', []) if c['creator_id'] == user_id]
+        collections_count = len(collections)
+        pins_count = sum(len(c.get('websites', [])) for c in collections)
+        submissions_count = sum(1 for s in self.data.get('submitted_sites', []) if s.get('submitted_by') == user_id and s.get('crawl_status') in ('approved', 'completed'))
+        upvotes_count = sum(1 for v in self.data.get('votes', []) if v['user_id'] == user_id and v['vote'] == 1)
+        return collections_count * 2 + pins_count * 2 + submissions_count * 4 + upvotes_count * 3
+
+    def add_user_points(self, user_id, points, reason=''):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for u in self.data.get('users', []):
+                if u['user_id'] == user_id:
+                    u['points'] = u.get('points', 0) + points
+                    self.data.setdefault('points_log', [])
+                    self.data['points_log'].append({
+                        'user_id': user_id,
+                        'points': points,
+                        'reason': reason,
+                        'created_at': datetime.now().isoformat(),
+                    })
+                    _save_json(self.data)
+                    return u['points']
+            return None
+
+    def get_leaderboard(self, limit=50):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+        users = self.data.get('users', [])
+        scored = []
+        for u in users:
+            uid = u['user_id']
+            pts = self.get_user_points(uid)
+            if pts > 0:
+                scored.append((pts, u['username'], u.get('created_at', '')))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [{'rank': i+1, 'username': s[1], 'score': s[0], 'joined': s[2][:10]} for i, s in enumerate(scored[:limit])]
+
     def get_user_profile(self, username):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
         users = self.data.get('users', [])
         user = None
         for u in users:
@@ -1613,40 +1440,32 @@ class DataManager:
 
         user_id = user['user_id']
 
-        # Count contributions
         collections_count = sum(1 for c in self.data.get('collections', []) if c['creator_id'] == user_id)
         pins_count = sum(len(c.get('websites', [])) for c in self.data.get('collections', []) if c['creator_id'] == user_id)
-        feed_count = sum(1 for e in self.data.get('feed', []) if e['user_id'] == user_id)
-
-        # Calculate score: comments + upvotes given + pins + collections created
-        comments_count = sum(1 for c in self.data.get('comments', []) if c['user_id'] == user_id)
-        col_comments_count = sum(1 for c in self.data.get('collection_comments', []) if c['user_id'] == user_id)
-        feed_comments_count = sum(1 for c in self.data.get('feed_comments', []) if c['user_id'] == user_id)
-        total_comments = comments_count + col_comments_count + feed_comments_count
-
         votes_given = sum(1 for v in self.data.get('votes', []) if v['user_id'] == user_id and v['vote'] == 1)
-
-        score = total_comments + votes_given + pins_count + collections_count
+        submissions_count = sum(1 for s in self.data.get('submitted_sites', []) if s.get('submitted_by') == user_id and s.get('crawl_status') in ('approved', 'completed'))
+        reports_approved = sum(1 for r in self.data.get('domain_reports', []) if user_id in r.get('reported_by', []) and r.get('status') == 'approved')
+        points = collections_count * 2 + pins_count * 2 + submissions_count * 4 + votes_given * 3
 
         # Recent activity
         recent = []
-        for e in self.data.get('feed', []):
-            if e['user_id'] == user_id:
-                recent.append({'type': e['type'], 'url': e.get('url', ''), 'title': e.get('title', ''), 'created_at': e.get('created_at', '')})
         for c in self.data.get('collections', []):
             if c['creator_id'] == user_id:
                 recent.append({'type': 'collection', 'url': '/explore/' + c['id'], 'title': c['name'], 'created_at': c.get('created_at', '')})
+        for s in self.data.get('submitted_sites', []):
+            if s.get('submitted_by') == user_id:
+                recent.append({'type': 'submission', 'url': 'https://' + s['domain'], 'title': s.get('name', s['domain']), 'created_at': s.get('submitted_at', '')})
         recent.sort(key=lambda r: r.get('created_at', ''), reverse=True)
         recent = recent[:30]
 
         return {
             'username': username,
             'created_at': user.get('created_at', ''),
-            'score': score,
+            'points': points,
             'collections_count': collections_count,
             'pins_count': pins_count,
-            'feed_count': feed_count,
-            'comments_count': total_comments,
+            'submissions_count': submissions_count,
+            'reports_approved': reports_approved,
             'votes_given': votes_given,
             'recent': recent,
         }
@@ -5082,7 +4901,8 @@ def submit_site():
             domain = domain.replace('https://', '').replace('http://', '').replace('www.', '').split('/')[0]
             existing = data_manager.add_submitted_site(
                 domain, sitemap_url, robots_txt_url, email,
-                name=name, description=description, phone=phone, category=category
+                name=name, description=description, phone=phone, category=category,
+                submitted_by=session.get('user_id')
             )
             if existing is None:
                 error = f"{domain} has already been submitted."
@@ -5142,7 +4962,7 @@ def login():
         session['user_id'] = user['user_id']
         session['username'] = user['username']
         return redirect(url_for('home'))
-    return render_template('signup.html')
+    return redirect(url_for('signup', mode='login'))
 
 @app.route('/logout')
 def logout():
@@ -5222,52 +5042,10 @@ def api_vote():
     ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
     data_manager.cast_vote(user_id, url, vote)
     data_manager.record_user_action(user_id, ip)
-    # Push upvotes to feed
-    if vote == 1:
-        data_manager.add_feed_entry('upvote', url, title, user_id, session.get('username', 'Anonymous'))
     score, up, down = data_manager.get_vote_score(url)
     return jsonify({'ok': True, 'score': score, 'up': up, 'down': down})
 
-@app.route('/api/comment', methods=['POST'])
-def api_comment():
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'ok': False, 'error': 'Login required'}), 403
-    url = request.form.get('url', '').strip()
-    title = request.form.get('title', url).strip()[:300]
-    text = request.form.get('text', '').strip()
-    captcha_token = request.form.get('captcha_token', '').strip()
-    captcha_answer = request.form.get('captcha_answer', '').strip()
-    parent_id = request.form.get('parent_id', '').strip() or None
 
-    if not text or len(text) < 2 or len(text) > 2000:
-        return jsonify({'ok': False, 'error': 'Comment 2-2000 characters'}), 400
-    if not check_captcha(captcha_token, captcha_answer):
-        return jsonify({'ok': False, 'error': 'Captcha incorrect'}), 400
-    # Clear used captcha
-    session.pop('captcha_token', None)
-    session.pop('captcha_answer', None)
-    session.pop('captcha_expires', None)
-
-    ok, wait = rate_limit_check(user_id)
-    if not ok:
-        return jsonify({'ok': False, 'error': f'Please wait {wait}s', 'wait': wait}), 429
-
-    ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
-    username = session.get('username', 'Anonymous')
-    c = data_manager.add_comment(user_id, username, url, text, parent_id)
-    data_manager.record_user_action(user_id, ip)
-    data_manager.add_feed_entry('comment', url, title, user_id, username)
-    return jsonify({'ok': True, 'comment': c})
-
-@app.route('/api/comments/<path:url>')
-def api_get_comments(url):
-    comments = data_manager.get_comments(url)
-    score, up, down = data_manager.get_vote_score(url)
-    user_vote = 0
-    if session.get('user_id'):
-        user_vote = data_manager.get_user_vote(session['user_id'], url)
-    return jsonify({'comments': comments, 'score': score, 'up': up, 'down': down, 'user_vote': user_vote})
 
 @app.route('/api/report-domain', methods=['POST'])
 def api_report_domain():
@@ -5306,6 +5084,15 @@ def admin_resolve_report():
     return redirect(url_for('admin_reports'))
 
 
+@app.route('/admin/submission/approve', methods=['POST'])
+def admin_approve_submission():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    domain = request.form.get('domain', '').strip()
+    data_manager.approve_submission(domain)
+    return redirect(url_for('admin_reports'))
+
+
 @app.template_filter('urlencode')
 def urlencode_filter(s):
     import urllib.parse
@@ -5327,8 +5114,7 @@ def explore_collection(collection_id):
     collection = data_manager.get_collection(collection_id)
     if not collection:
         return render_template('explore.html', error='Collection not found'), 404
-    comments = data_manager.get_collection_comments(collection_id)
-    return render_template('collection_detail.html', collection=collection, comments=comments)
+    return render_template('collection_detail.html', collection=collection)
 
 
 @app.route('/api/collections', methods=['GET', 'POST'])
@@ -5396,46 +5182,7 @@ def api_collection_remove_website(collection_id, website_id):
     return jsonify({'ok': True})
 
 
-@app.route('/api/collections/<collection_id>/comments', methods=['GET', 'POST'])
-def api_collection_comments(collection_id):
-    if request.method == 'POST':
-        user_id = session.get('user_id')
-        if not user_id:
-            return jsonify({'ok': False, 'error': 'Login required'}), 403
-        text = request.form.get('text', '').strip()
-        parent_id = request.form.get('parent_id') or None
-        captcha_token = request.form.get('captcha_token', '').strip()
-        captcha_answer = request.form.get('captcha_answer', '').strip()
-        if not text or len(text) < 2:
-            return jsonify({'ok': False, 'error': 'Comment too short'}), 400
-        if not check_captcha(captcha_token, captcha_answer):
-            return jsonify({'ok': False, 'error': 'Captcha incorrect'}), 400
-        session.pop('captcha_token', None)
-        session.pop('captcha_answer', None)
-        ok, wait = rate_limit_check(user_id)
-        if not ok:
-            return jsonify({'ok': False, 'error': f'Wait {wait}s', 'wait': wait}), 429
-        ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
-        username = session.get('username', 'Anonymous')
-        c = data_manager.add_collection_comment(user_id, username, collection_id, text, parent_id)
-        data_manager.record_user_action(user_id, ip)
-        return jsonify({'ok': True, 'comment': c})
-    comments = data_manager.get_collection_comments(collection_id)
-    return jsonify({'ok': True, 'comments': comments})
 
-
-@app.route('/api/comments/<comment_id>/vote', methods=['POST'])
-def api_comment_vote(comment_id):
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'ok': False, 'error': 'Login required'}), 403
-    vote = int(request.form.get('vote', '0'))
-    if vote not in (-1, 1):
-        return jsonify({'ok': False, 'error': 'Invalid vote'}), 400
-    cid, result = data_manager.vote_collection_comment(user_id, comment_id, vote)
-    if result == 'same':
-        return jsonify({'ok': True, 'action': 'same'})
-    return jsonify({'ok': True, 'action': result})
 
 
 @app.route('/collections')
@@ -5449,83 +5196,18 @@ def user_collections():
 
 # ── Feed routes ──
 
-@app.route('/feed')
-def feed():
-    page = int(request.args.get('page', 1))
-    uid = session.get('user_id')
-    entries, total = data_manager.get_feed(page=page, user_id=uid)
-    return render_template('feed.html', entries=entries, page=page, total=total)
+# ── Leaderboard ──
+
+@app.route('/leaderboard')
+def leaderboard():
+    lb = data_manager.get_leaderboard()
+    return render_template('leaderboard.html', leaderboard=lb)
 
 
-@app.route('/feed/<entry_id>')
-def feed_entry(entry_id):
-    uid = session.get('user_id')
-    entry = data_manager.get_feed_entry(entry_id, user_id=uid)
-    if not entry:
-        return render_template('feed.html', error='Entry not found'), 404
-    # Attach user_vote to each comment
-    comments = data_manager.get_feed_comments(entry_id)
-    def attach_vote(comments, uid):
-        for c in comments:
-            c['user_vote'] = c.get('votes', {}).get(uid, 0) if uid else 0
-            c['score'] = sum(v for v in c.get('votes', {}).values())
-            if c.get('replies'):
-                attach_vote(c['replies'], uid)
-    attach_vote(comments, uid)
-    return render_template('feed.html', entry=entry, comments=comments, single=True)
-
-
-@app.route('/api/feed/<entry_id>/vote', methods=['POST'])
-def api_feed_vote(entry_id):
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'ok': False, 'error': 'Login required'}), 403
-    vote = int(request.form.get('vote', '0'))
-    if vote not in (-1, 1):
-        return jsonify({'ok': False, 'error': 'Invalid vote'}), 400
-    result = data_manager.vote_feed_entry(user_id, entry_id, vote)
-    entry = data_manager.get_feed_entry(entry_id)
-    return jsonify({'ok': True, 'action': result, 'score': entry['score'] if entry else 0})
-
-
-@app.route('/api/feed/<entry_id>/comments', methods=['GET', 'POST'])
-def api_feed_comments(entry_id):
-    if request.method == 'POST':
-        user_id = session.get('user_id')
-        if not user_id:
-            return jsonify({'ok': False, 'error': 'Login required'}), 403
-        text = request.form.get('text', '').strip()
-        parent_id = request.form.get('parent_id') or None
-        captcha_token = request.form.get('captcha_token', '').strip()
-        captcha_answer = request.form.get('captcha_answer', '').strip()
-        if not text or len(text) < 2:
-            return jsonify({'ok': False, 'error': 'Comment too short'}), 400
-        if not check_captcha(captcha_token, captcha_answer):
-            return jsonify({'ok': False, 'error': 'Captcha incorrect'}), 400
-        session.pop('captcha_token', None)
-        session.pop('captcha_answer', None)
-        ok, wait = rate_limit_check(user_id)
-        if not ok:
-            return jsonify({'ok': False, 'error': f'Wait {wait}s', 'wait': wait}), 429
-        ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
-        username = session.get('username', 'Anonymous')
-        c = data_manager.add_feed_comment(user_id, username, entry_id, text, parent_id)
-        data_manager.record_user_action(user_id, ip)
-        return jsonify({'ok': True, 'comment': c})
-    comments = data_manager.get_feed_comments(entry_id)
-    return jsonify({'ok': True, 'comments': comments})
-
-
-@app.route('/api/feed-comments/<comment_id>/vote', methods=['POST'])
-def api_feed_comment_vote(comment_id):
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'ok': False, 'error': 'Login required'}), 403
-    vote = int(request.form.get('vote', '0'))
-    if vote not in (-1, 1):
-        return jsonify({'ok': False, 'error': 'Invalid vote'}), 400
-    result = data_manager.vote_feed_comment(user_id, comment_id, vote)
-    return jsonify({'ok': True, 'action': result})
+@app.route('/api/leaderboard')
+def api_leaderboard():
+    lb = data_manager.get_leaderboard()
+    return jsonify({'ok': True, 'leaderboard': lb})
 
 
 # ── User profile ──

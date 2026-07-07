@@ -164,14 +164,15 @@
             color: var(--apple-gray);
         }
 
-        .dm-toggle {
+        .acc-btn {
             position: fixed; top: 14px; right: 16px; z-index: 999;
             width: 32px; height: 32px; border-radius: 50%;
             border: 1px solid var(--border); background: var(--bg);
-            color: var(--apple-gray); cursor: pointer; font-size: 14px;
-            display: flex; align-items: center; justify-content: center; transition: .15s;
+            color: var(--apple-gray); font-size: 14px;
+            display: flex; align-items: center; justify-content: center; transition: .15s; text-decoration: none;
         }
-        .dm-toggle:hover { background: var(--hover-bg); }
+        .acc-btn:hover { background: var(--hover-bg); }
+        .acc-btn svg { width: 18px; height: 18px; fill: currentColor; }
         @media(max-width:640px){
             .header{padding:10px 12px}
             .header-inner{gap:8px;flex-wrap:wrap}
@@ -185,7 +186,8 @@
             .image-card .info{padding:6px 8px}
             .image-card .info .title{font-size:11px}
             .image-card .info .source{font-size:10px}
-            .dm-toggle{top:8px;right:8px;width:30px;height:30px;font-size:13px}
+            .acc-btn{top:8px;right:8px;width:30px;height:30px}
+            .acc-btn svg{width:16px;height:16px}
         }
         @media(max-width:400px){
             .images-grid{columns:2;column-gap:6px;padding:0 8px}
@@ -195,13 +197,15 @@
         }
         @supports(padding:max(0px)){
             .header{padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
-            .dm-toggle{right:max(16px,env(safe-area-inset-right,16px))}
+            .acc-btn{right:max(16px,env(safe-area-inset-right,16px))}
             .images-grid{padding-left:max(16px,env(safe-area-inset-left,16px));padding-right:max(16px,env(safe-area-inset-right,16px))}
         }
     </style>
 </head>
 <body>
-    <button class="dm-toggle" id="dm-btn" onclick="toggleDark()" aria-label="Toggle dark mode">&#x263D;</button>
+    <a class="acc-btn" id="acc-btn" href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" aria-label="Account">
+        <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+    </a>
 
     <header class="header">
         <div class="header-inner">
@@ -219,6 +223,9 @@
                 <a href="/images?q={{ query }}" class="tab active">Images</a>
                 <a href="/videos?q={{ query }}" class="tab">Videos</a>
             </div>
+            <a href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" style="width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--bg);color:var(--apple-gray);display:flex;align-items:center;justify-content:center;flex-shrink:0;text-decoration:none;transition:.15s" aria-label="Account">
+                <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            </a>
         </div>
     </header>
 
@@ -248,19 +255,6 @@
         {% endif %}
     </main>
 
-    <script>
-        function setDark(v){
-            document.body.classList.toggle('dark-mode',v);
-            var b=document.getElementById('dm-btn');
-            if(b)b.innerHTML=v?'&#x2600;':'&#x263D;';
-            try{localStorage.setItem('arlong-dark',v?'1':'0')}catch(e){}
-        }
-        function toggleDark(){setDark(!document.body.classList.contains('dark-mode'))}
-        (function(){
-            var p=null;try{p=localStorage.getItem('arlong-dark')}catch(e){}
-            if(p==='1')setDark(true);
-            else if(p===null&&window.matchMedia('(prefers-color-scheme:dark)').matches)setDark(true);
-        })();
-    </script>
+    <script>document.body.classList.add('dark-mode');</script>
 </body>
 </html>

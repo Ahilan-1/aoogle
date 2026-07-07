@@ -303,18 +303,27 @@
             </div>
             {% if submitted_sites %}
             <table>
-                <tr><th>Domain</th><th>Name</th><th>Status</th><th>Pages</th><th>Sitemap</th><th>Actions</th></tr>
+                <tr><th>Domain</th><th>Name</th><th>Submitted By</th><th>Status</th><th>Pages</th><th>Sitemap</th><th>Actions</th></tr>
                 {% for s in submitted_sites %}
                 <tr>
                     <td style="font-weight:600">{{ s.domain }}</td>
                     <td style="font-size:12px">{{ s.name if s.name else '—' }}</td>
+                    <td style="font-size:12px;color:var(--link)">{{ s.submitted_by[:8] if s.submitted_by else '—' }}</td>
                     <td><span class="status-badge status-{{ s.crawl_status }}">{{ s.crawl_status }}</span></td>
                     <td>{{ s.pages_crawled }}</td>
                     <td class="url-cell" style="max-width:160px">{{ s.sitemap_url }}</td>
                     <td>
-                        <form method="POST" action="/admin/crawl/{{ s.domain }}">
-                            <button type="submit" class="btn btn-approve">Re-crawl</button>
-                        </form>
+                        <div class="btn-group">
+                            <form method="POST" action="/admin/crawl/{{ s.domain }}" style="display:inline">
+                                <button type="submit" class="btn btn-approve">Re-crawl</button>
+                            </form>
+                            {% if s.crawl_status == 'completed' or s.crawl_status == 'approved' %}
+                            <form method="POST" action="/admin/submission/approve" style="display:inline">
+                                <input type="hidden" name="domain" value="{{ s.domain }}">
+                                <button type="submit" class="btn btn-approve" style="background:#2e7d32">Approve (+20pts)</button>
+                            </form>
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
