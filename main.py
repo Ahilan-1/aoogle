@@ -1404,25 +1404,6 @@ class DataManager:
         upvotes_count = sum(1 for v in self.data.get('votes', []) if v['user_id'] == user_id and v['vote'] == 1)
         return collections_count * 2 + pins_count * 2 + submissions_count * 4 + upvotes_count * 3
 
-    def add_user_points(self, user_id, points, reason=''):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            for u in self.data.get('users', []):
-                if u['user_id'] == user_id:
-                    u['points'] = u.get('points', 0) + points
-                    self.data.setdefault('points_log', [])
-                    self.data['points_log'].append({
-                        'user_id': user_id,
-                        'points': points,
-                        'reason': reason,
-                        'created_at': datetime.now().isoformat(),
-                    })
-                    _save_json(self.data)
-                    return u['points']
-            return None
-
     def get_leaderboard(self, limit=50):
         with self._lock:
             loaded = _load_json()
