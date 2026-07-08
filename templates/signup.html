@@ -40,6 +40,7 @@
 
         {% if login_error or request.args.get('mode') == 'login' %}
         <form method="POST" action="/login">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
             <label>Username</label>
             <input type="text" name="username" required minlength="3" maxlength="24" autocomplete="username">
             <label>Password</label>
@@ -49,6 +50,7 @@
         <div class="switch">No account? <a href="/signup">Sign up</a></div>
         {% else %}
         <form method="POST" action="/signup">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
             <label>Username</label>
             <input type="text" name="username" required minlength="3" maxlength="24" autocomplete="off">
             <label>Password</label>

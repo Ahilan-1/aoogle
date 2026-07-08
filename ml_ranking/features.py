@@ -124,7 +124,8 @@ def extract_features(query, documents, feature_names=None):
         title = doc.get('title', '')
         snippet = doc.get('snippet', '')
         url = doc.get('url', '')
-        text = f"{title} {snippet}"
+        page_content = doc.get('page_content', '')
+        text = page_content or f"{title} {snippet}"
         doc_tokens = _tokenize(text)
 
         if not doc_tokens:

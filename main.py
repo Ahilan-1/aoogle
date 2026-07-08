@@ -27,6 +27,7 @@ import uuid
 import re
 import threading
 import os
+from werkzeug.security import generate_password_hash, check_password_hash
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
     from apscheduler.triggers.interval import IntervalTrigger
@@ -51,12 +52,45 @@ if os.path.exists(env_path):
                 key, val = line.split('=', 1)
                 os.environ.setdefault(key.strip(), val.strip())
 
-app.secret_key = os.environ.get('SECRET_KEY', 'arlong-secret-key-change-in-prod')
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Admin@123')
+app.secret_key = os.environ.get('SECRET_KEY')
+if not app.secret_key:
+    app.secret_key = secrets.token_hex(32)
+    app.logger.warning("No SECRET_KEY set in environment. Using temporary random key - sessions will be invalidated on restart.")
+
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SECURE=False,  # Set True if using HTTPS
+    PERMANENT_SESSION_LIFETIME=timedelta(days=7),
+)
+
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD')
+if not ADMIN_PASSWORD:
+    ADMIN_PASSWORD = secrets.token_hex(16)
+    app.logger.warning("No ADMIN_PASSWORD set in environment. Generated random password - check logs to retrieve it.")
 AMAZON_ASSOCIATE_TAG = os.environ.get('AMAZON_ASSOCIATE_TAG', '')
 
+# ── CSRF Protection ──
+def generate_csrf_token():
+    if '_csrf_token' not in session:
+        session['_csrf_token'] = secrets.token_hex(32)
+    return session['_csrf_token']
+
+def validate_csrf():
+    token = request.form.get('_csrf_token', '')
+    expected = session.get('_csrf_token', '')
+    if not token or not hmac.compare_digest(expected, token):
+        return False
+    return True
+
+app.jinja_env.globals['csrf_token'] = generate_csrf_token
+
 @app.after_request
-def add_cors_headers(response):
+def add_security_headers(response):
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'interest-cohort=()'
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type, X-Requested-With'
@@ -936,6 +970,91 @@ class DataManager:
             self.data['announcement'] = text
             _save_json(self.data)
 
+    def get_ads(self):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            return self.data.get('ads', [])
+
+    def add_ad(self, image_url, link_url, width, height, alt_text=''):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('ads', [])
+            ad = {
+                'id': str(uuid.uuid4())[:8],
+                'image_url': image_url,
+                'link_url': link_url,
+                'width': width,
+                'height': height,
+                'alt_text': alt_text,
+                'created_at': datetime.now().isoformat(),
+            }
+            self.data['ads'].append(ad)
+            _save_json(self.data)
+            return ad
+
+    def remove_ad(self, ad_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data['ads'] = [a for a in self.data.get('ads', []) if a['id'] != ad_id]
+            _save_json(self.data)
+
+    def add_ad_submission(self, user_id, username, image_url, link_url, alt_text, duration_hours, email, telegram):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('ad_submissions', [])
+            sub = {
+                'id': str(uuid.uuid4())[:8],
+                'user_id': user_id,
+                'username': username,
+                'image_url': image_url,
+                'link_url': link_url,
+                'alt_text': alt_text,
+                'duration_hours': duration_hours,
+                'cost': round(duration_hours * 0.30, 2),
+                'email': email,
+                'telegram': telegram,
+                'status': 'submitted',
+                'admin_note': '',
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat(),
+            }
+            self.data['ad_submissions'].append(sub)
+            _save_json(self.data)
+            return sub
+
+    def get_ad_submissions(self, user_id=None):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            subs = self.data.get('ad_submissions', [])
+            if user_id is not None:
+                subs = [s for s in subs if s.get('user_id') == user_id]
+            return sorted(subs, key=lambda x: x.get('created_at', ''), reverse=True)
+
+    def update_ad_submission_status(self, sub_id, status, note=''):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for s in self.data.get('ad_submissions', []):
+                if s['id'] == sub_id:
+                    s['status'] = status
+                    s['updated_at'] = datetime.now().isoformat()
+                    if note:
+                        s['admin_note'] = note
+                    _save_json(self.data)
+                    return True
+            return False
+
     def flush(self):
         with self._lock:
             loaded = _load_json()
@@ -1125,14 +1244,11 @@ class DataManager:
     # ── Community system: users, votes, domain reports ──
 
     def hash_password(self, password):
-        salt = secrets.token_hex(8)
-        h = hashlib.sha256((salt + password).encode()).hexdigest()
-        return f"{salt}:{h}"
+        return generate_password_hash(password)
 
     def check_password(self, password, stored):
         try:
-            salt, h = stored.split(':', 1)
-            return hashlib.sha256((salt + password).encode()).hexdigest() == h
+            return check_password_hash(stored, password)
         except:
             return False
 
@@ -1204,6 +1320,33 @@ class DataManager:
                     return 70 - elapsed, 'post cooldown'
                 return 0, 'ok'
         return 0, 'ok'
+
+    def record_click(self, user_id, url):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('clicks', [])
+            url_hash = hashlib.sha256(url.encode()).hexdigest()
+            for c in self.data['clicks']:
+                if c['user_id'] == user_id and c['url_hash'] == url_hash:
+                    c['clicked_at'] = datetime.now().isoformat()
+                    _save_json(self.data)
+                    return
+            self.data['clicks'].append({
+                'user_id': user_id,
+                'url': url,
+                'url_hash': url_hash,
+                'clicked_at': datetime.now().isoformat(),
+            })
+            _save_json(self.data)
+
+    def has_clicked(self, user_id, url):
+        url_hash = hashlib.sha256(url.encode()).hexdigest()
+        for c in self.data.get('clicks', []):
+            if c['user_id'] == user_id and c['url_hash'] == url_hash:
+                return True
+        return False
 
     def cast_vote(self, user_id, url, vote):
         with self._lock:
@@ -1560,6 +1703,23 @@ def _detect_domain_entity(domain):
 
 def _search_google(query, max_results=5, region=None):
     return []
+
+
+def _extract_page_text(url, timeout=5):
+    try:
+        ua = UserAgent()
+        headers = {'User-Agent': ua.random}
+        resp = requests.get(url, timeout=timeout, headers=headers, allow_redirects=True)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, 'html.parser')
+        for tag in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'noscript', 'form', 'svg', 'iframe']):
+            tag.decompose()
+        body = soup.find('body') or soup
+        text = body.get_text(separator=' ', strip=True)
+        text = re.sub(r'\s+', ' ', text)
+        return text[:5000]
+    except Exception:
+        return None
 
 
 class ImprovedSearch:
@@ -2402,13 +2562,44 @@ class ImprovedSearch:
                         neural_results.append(r)
 
                 if neural_results:
-                    docs = [{'title': r.title or '', 'snippet': r.snippet or '', 'url': r.url or ''} for r in neural_results]
+                    # Fetch page content concurrently for ML evaluation
+                    fetch_start = time.time()
+                    page_texts = {}
+                    with ThreadPoolExecutor(max_workers=10) as fexec:
+                        fut_map = {fexec.submit(_extract_page_text, r.url): i for i, r in enumerate(neural_results)}
+                        for f in as_completed(fut_map, timeout=30):
+                            idx = fut_map[f]
+                            try:
+                                text = f.result()
+                                if text:
+                                    page_texts[idx] = text
+                            except Exception:
+                                pass
+
+                    docs = []
+                    for i, r in enumerate(neural_results):
+                        docs.append({
+                            'title': r.title or '',
+                            'snippet': r.snippet or '',
+                            'url': r.url or '',
+                            'page_content': page_texts.get(i, ''),
+                        })
+
                     ml_scores = ranker.predict(query, docs)
                     min_m, max_m = min(ml_scores), max(ml_scores)
                     m_range = max_m - min_m if max_m > min_m else 1
+
+                    # Normalize heuristic scores to 0-100 for blending
+                    h_scores = [r.score for r in neural_results]
+                    min_h, max_h = min(h_scores), max(h_scores)
+                    h_range = max_h - min_h if max_h > min_h else 1
+
                     for i, r in enumerate(neural_results):
                         ml = ml_scores[i] if i < len(ml_scores) else 0.0
-                        r.score = ((ml - min_m) / m_range) * 100  # Normalize ML score to 0-100
+                        ml_norm = ((ml - min_m) / m_range) * 100
+                        h_norm = ((r.score - min_h) / h_range) * 100
+                        # Blend: 75% ML (page content), 25% heuristic (freshness, authority, filter boosts)
+                        r.score = round(h_norm * 0.25 + ml_norm * 0.75, 2)
 
                 for r in discussion_results:
                     r.score = min(r.score, 10)  # Cap discussion/heuristic scores
@@ -4013,7 +4204,10 @@ def home():
     if 'user_country' not in session:
         country_code, raw_cc = detect_user_country()
         session['user_country'] = country_code or ''
-    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, ml_rank=bool(ml_val) and ml_val != '0', blocked_count=BLOCKLIST_COUNT, user_country=session.get('user_country', ''), country_name=COUNTRY_NAMES.get(session.get('user_country', ''), ''))
+    user_stats = None
+    if session.get('user_id'):
+        user_stats = data_manager.get_user_profile(session.get('username'))
+    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, ml_rank=bool(ml_val) and ml_val != '0', blocked_count=BLOCKLIST_COUNT, user_country=session.get('user_country', ''), country_name=COUNTRY_NAMES.get(session.get('user_country', '')), user_stat=user_stats)
 
 @app.route('/search')
 def search():
@@ -4032,11 +4226,17 @@ def search():
 
     announcement = data_manager.get_announcement()
     if not query:
-        return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=user_country, country_name=COUNTRY_NAMES.get(user_country, ''))
+        user_stats = None
+        if session.get('user_id'):
+            user_stats = data_manager.get_user_profile(session.get('username'))
+        return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=user_country, country_name=COUNTRY_NAMES.get(user_country), user_stat=user_stats)
 
     crisis = detect_crisis(query)
 
     if crisis and crisis['type'] in ('harmful', 'crisis'):
+        user_stats = None
+        if session.get('user_id'):
+            user_stats = data_manager.get_user_profile(session.get('username'))
         return render_template(
             'search.html',
             query=query,
@@ -4050,11 +4250,15 @@ def search():
             announcement=announcement,
             blocked_count=BLOCKLIST_COUNT,
             user_country=user_country,
-            country_name=COUNTRY_NAMES.get(user_country, '')
+            country_name=COUNTRY_NAMES.get(user_country, ''),
+            user_stat=user_stats
         )
 
     notice = detect_notice(query)
     if notice and notice['type'] == 'redirect':
+        user_stats = None
+        if session.get('user_id'):
+            user_stats = data_manager.get_user_profile(session.get('username'))
         return render_template(
             'search.html',
             query=query,
@@ -4067,7 +4271,8 @@ def search():
             announcement=announcement,
             blocked_count=BLOCKLIST_COUNT,
             user_country=user_country,
-            country_name=COUNTRY_NAMES.get(user_country, '')
+            country_name=COUNTRY_NAMES.get(user_country, ''),
+            user_stat=user_stats
         )
 
     bang_url = get_bang_redirect(query)
@@ -4133,7 +4338,8 @@ def search():
             announcement=announcement,
             blocked_count=BLOCKLIST_COUNT,
             user_country=user_country,
-            country_name=COUNTRY_NAMES.get(user_country, '')
+            country_name=COUNTRY_NAMES.get(user_country, ''),
+            user_stat=None
         )
 
     except Exception as e:
@@ -4148,8 +4354,10 @@ def search():
             announcement=announcement,
             blocked_count=BLOCKLIST_COUNT,
             user_country=user_country,
-            country_name=COUNTRY_NAMES.get(user_country, '')
+            country_name=COUNTRY_NAMES.get(user_country, ''),
+            user_stat=None
         )
+
 
 @app.route('/api/search')
 def api_search():
@@ -4410,6 +4618,64 @@ def about():
     ]
     return render_template('about.html', comparisons=comparisons)
 
+@app.route('/ads')
+def ads_page():
+    return render_template('ads.html')
+
+@app.route('/admaker')
+def admaker():
+    if not session.get('user_id'):
+        return redirect(url_for('login'))
+    submissions = data_manager.get_ad_submissions(session['user_id'])
+    return render_template('admaker.html', submissions=submissions, error='')
+
+@app.route('/api/admaker/submit', methods=['POST'])
+def admaker_submit():
+    if not session.get('user_id'):
+        return jsonify({'ok': False, 'error': 'Login required'}), 403
+    image_url = request.form.get('image_url', '').strip()
+    link_url = request.form.get('link_url', '').strip()
+    alt_text = request.form.get('alt_text', '').strip()
+    duration_hours = request.form.get('duration_hours', '').strip()
+    email = request.form.get('email', '').strip()
+    telegram = request.form.get('telegram', '').strip()
+    if not all([image_url, link_url, duration_hours, email, telegram]):
+        return jsonify({'ok': False, 'error': 'All fields required'}), 400
+    try:
+        dur = int(duration_hours)
+        if dur < 6 or dur > 240:
+            return jsonify({'ok': False, 'error': 'Duration must be 6–240 hours'}), 400
+    except ValueError:
+        return jsonify({'ok': False, 'error': 'Invalid duration'}), 400
+    cost = round(dur * 0.30, 2)
+    sub = data_manager.add_ad_submission(
+        session['user_id'], session.get('username', ''),
+        image_url, link_url, alt_text, dur, email, telegram
+    )
+    return jsonify({'ok': True, 'submission': sub, 'cost': cost})
+
+@app.route('/admin/admaker')
+def admin_admaker():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    submissions = data_manager.get_ad_submissions()
+    revenue = sum(s.get('cost', 0) for s in submissions if s.get('status') in ('active', 'approved_pending_payment'))
+    return render_template('admin_admaker.html', submissions=submissions, total_revenue=revenue)
+
+@app.route('/admin/admaker/update', methods=['POST'])
+def admin_admaker_update():
+    if not session.get('admin_logged_in'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    sub_id = request.form.get('id', '').strip()
+    status = request.form.get('status', '').strip()
+    note = request.form.get('note', '').strip()
+    valid_statuses = ['pending', 'approved_pending_payment', 'active', 'rejected']
+    if status not in valid_statuses:
+        return jsonify({'error': 'Invalid status'}), 400
+    if sub_id:
+        data_manager.update_ad_submission_status(sub_id, status, note)
+    return redirect(url_for('admin_admaker'))
+
 @app.route('/docs')
 def docs():
     return render_template('docs.html')
@@ -4548,17 +4814,21 @@ def admin_login():
         return redirect(url_for('admin_dashboard'))
     error = ''
     if request.method == 'POST':
-        password = request.form.get('password', '')
-        if password == ADMIN_PASSWORD:
-            session['admin_logged_in'] = True
-            return redirect(url_for('admin_dashboard'))
+        if not validate_csrf():
+            error = 'Invalid form submission. Please try again.'
         else:
-            error = 'Incorrect password'
+            password = request.form.get('password', '')
+            if hmac.compare_digest(password, ADMIN_PASSWORD):
+                session.clear()
+                session['admin_logged_in'] = True
+                return redirect(url_for('admin_dashboard'))
+            else:
+                error = 'Incorrect password'
     return render_template('admin.html', login=True, error=error)
 
 @app.route('/admin/logout')
 def admin_logout():
-    session.pop('admin_logged_in', None)
+    session.clear()
     return redirect(url_for('admin_login'))
 
 @app.route('/admin/dashboard')
@@ -4574,7 +4844,9 @@ def admin_dashboard():
     verified_sites = data_manager.get_verified_sites()
     submitted_sites = data_manager.get_submitted_sites()
     domain_reports = data_manager.get_pending_domain_reports()
-    return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches, celebration=celebration, announcement=announcement, verified_sites=verified_sites, submitted_sites=submitted_sites, domain_reports=domain_reports)
+    ads = data_manager.get_ads()
+    ad_submissions = data_manager.get_ad_submissions()
+    return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches, celebration=celebration, announcement=announcement, verified_sites=verified_sites, submitted_sites=submitted_sites, domain_reports=domain_reports, ads=ads, ad_submissions=ad_submissions)
 
 @app.route('/admin/reports/<int:report_id>/approve', methods=['POST'])
 def admin_approve_report(report_id):
@@ -4635,6 +4907,73 @@ def admin_remove_verified():
     if domain:
         data_manager.remove_verified_site(domain)
     return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/ads', methods=['GET', 'POST'])
+def admin_ads():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    if request.method == 'POST':
+        image_url = request.form.get('image_url', '').strip()
+        link_url = request.form.get('link_url', '').strip()
+        width = int(request.form.get('width', 300))
+        height = int(request.form.get('height', 250))
+        alt_text = request.form.get('alt_text', '').strip()
+        if image_url and link_url:
+            data_manager.add_ad(image_url, link_url, width, height, alt_text)
+        return redirect(url_for('admin_ads'))
+    ads = data_manager.get_ads()
+    return render_template('admin_ads.html', ads=ads)
+
+@app.route('/admin/bannerads', methods=['GET', 'POST'])
+def admin_bannerads():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    if request.method == 'POST':
+        image_url = request.form.get('image_url', '').strip()
+        link_url = request.form.get('link_url', '').strip()
+        width = int(request.form.get('width', 560))
+        height = int(request.form.get('height', 110))
+        alt_text = request.form.get('alt_text', '').strip()
+        if image_url and link_url:
+            data_manager.add_ad(image_url, link_url, width, height, alt_text)
+        return redirect(url_for('admin_bannerads'))
+    ads = data_manager.get_ads()
+    return render_template('admin_bannerads.html', ads=ads)
+
+@app.route('/admin/bannerads/remove', methods=['POST'])
+def admin_bannerads_remove():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    ad_id = request.form.get('id', '')
+    if ad_id:
+        data_manager.remove_ad(ad_id)
+    return redirect(url_for('admin_bannerads'))
+
+@app.route('/admin/ads/remove', methods=['POST'])
+def admin_remove_ad():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    ad_id = request.form.get('id', '')
+    if ad_id:
+        data_manager.remove_ad(ad_id)
+    return redirect(url_for('admin_ads'))
+
+@app.route('/api/ads')
+def api_ads():
+    ads = data_manager.get_ads()
+    active_subs = [s for s in data_manager.get_ad_submissions() if s.get('status') == 'active']
+    for s in active_subs:
+        ads.insert(0, {
+            'id': s['id'],
+            'image_url': s['image_url'],
+            'link_url': s['link_url'],
+            'alt_text': s.get('alt_text', ''),
+            'width': 560,
+            'height': 110,
+            'created_at': s.get('created_at', ''),
+            'submission': True,
+        })
+    return jsonify({'ok': True, 'ads': ads})
 
 @app.route('/admin/crawl/<domain>', methods=['POST'])
 def admin_crawl_site(domain):
@@ -4961,6 +5300,8 @@ def claim_site():
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     if request.method == 'POST':
+        if not validate_csrf():
+            return render_template('signup.html', error='Invalid form submission. Please try again.')
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
         sq = request.form.get('security_question', '').strip()
@@ -4969,12 +5310,15 @@ def signup():
             return render_template('signup.html', error='All fields required')
         if len(username) < 3 or len(username) > 24:
             return render_template('signup.html', error='Username 3-24 characters')
-        if len(password) < 6:
-            return render_template('signup.html', error='Password at least 6 characters')
+        if len(password) < 8:
+            return render_template('signup.html', error='Password must be at least 8 characters')
+        if not re.search(r'[A-Za-z]', password) or not re.search(r'[0-9]', password):
+            return render_template('signup.html', error='Password must contain both letters and numbers')
         ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
         user, err = data_manager.create_user(username, password, sq, sa, ip)
         if err:
             return render_template('signup.html', error=err)
+        session.clear()
         session['user_id'] = user['user_id']
         session['username'] = user['username']
         return redirect(url_for('home'))
@@ -4983,11 +5327,14 @@ def signup():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
+        if not validate_csrf():
+            return render_template('signup.html', login_error='Invalid form submission. Please try again.')
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
         user = data_manager.authenticate_user(username, password)
         if not user:
             return render_template('signup.html', login_error='Invalid credentials')
+        session.clear()
         session['user_id'] = user['user_id']
         session['username'] = user['username']
         return redirect(url_for('home'))
@@ -4995,8 +5342,7 @@ def login():
 
 @app.route('/logout')
 def logout():
-    session.pop('user_id', None)
-    session.pop('username', None)
+    session.clear()
     return redirect(url_for('home'))
 
 @app.route('/api/captcha')
@@ -5055,6 +5401,252 @@ def rate_limit_check(user_id):
         return False, int(wait) + 1
     return True, 0
 
+@app.route('/api/click', methods=['POST'])
+def api_click():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'ok': False}), 403
+    url = request.form.get('url', '').strip()
+    if url:
+        data_manager.record_click(user_id, url)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/news')
+def api_news():
+    import feedparser
+    import re
+
+    def _extract_news_image(entry):
+        img = ''
+        if hasattr(entry, 'media_content') and entry.media_content:
+            for mc in entry.media_content:
+                url_val = mc.get('url', '')
+                if url_val:
+                    img = url_val
+                    if any(x in url_val for x in ('static01.nyt.com', 'ichef.bbci', 'timesofindia', 'media.ign', 'espn')):
+                        break
+            if not img and entry.media_content:
+                img = entry.media_content[0].get('url', '')
+        if not img and hasattr(entry, 'media_thumbnail') and entry.media_thumbnail:
+            img = entry.media_thumbnail[0].get('url', '')
+        if not img and hasattr(entry, 'enclosures') and entry.enclosures:
+            for enc in entry.enclosures:
+                if hasattr(enc, 'type') and enc.type and 'image' in enc.type:
+                    img = enc.href
+                    break
+        if not img and hasattr(entry, 'summary'):
+            imgs = re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', entry.summary)
+            if imgs:
+                img = imgs[0]
+        if not img and hasattr(entry, 'links'):
+            for link in entry.links:
+                if hasattr(link, 'type') and link.type and 'image' in link.type:
+                    img = link.href
+                    break
+        return img
+
+    category = request.args.get('category', 'top')
+    sources = {
+        'top': 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml',
+        'world': 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml',
+        'tech': 'https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml',
+        'business': 'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml',
+        'science': 'https://rss.nytimes.com/services/xml/rss/nyt/Science.xml',
+        'health': 'https://rss.nytimes.com/services/xml/rss/nyt/Health.xml',
+        'sports': 'https://www.espn.com/espn/rss/news',
+        'entertainment': 'https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml',
+        'gaming': 'https://www.ign.com/rss/articles/feed',
+        'economy': 'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml',
+    }
+    asian_sources = [
+        'https://timesofindia.indiatimes.com/rssfeedstopstories.cms',
+        'https://www.japantimes.co.jp/feed/',
+        'https://www.scmp.com/rss/4/feed',
+        'https://www.channelnewsasia.com/rssfeeds/topstories',
+    ]
+    try:
+        items = []
+        if category == 'asian':
+            for src_url in asian_sources:
+                try:
+                    feed = feedparser.parse(src_url)
+                    for entry in feed.entries[:8]:
+                        img = _extract_news_image(entry)
+                        items.append({
+                            'title': entry.title,
+                            'link': entry.link,
+                            'published': entry.get('published', ''),
+                            'source': feed.feed.get('title', 'Asian News'),
+                            'image': img,
+                        })
+                except Exception:
+                    pass
+            items.sort(key=lambda x: x['published'], reverse=True)
+            items = items[:20]
+            source_label = 'Asian News'
+        else:
+            url = sources.get(category, sources['top'])
+            feed = feedparser.parse(url)
+            for entry in feed.entries[:20]:
+                img = _extract_news_image(entry)
+                items.append({
+                    'title': entry.title,
+                    'link': entry.link,
+                    'published': entry.get('published', ''),
+                    'source': feed.feed.get('title', source_name(category)),
+                    'image': img,
+                })
+            source_label = feed.feed.get('title', source_name(category))
+        return jsonify({'ok': True, 'items': items, 'source': source_label})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+def source_name(cat):
+    names = {'top': 'Top Stories', 'world': 'World', 'tech': 'Technology', 'business': 'Business',
+             'science': 'Science', 'health': 'Health', 'sports': 'Sports', 'entertainment': 'Entertainment',
+             'gaming': 'Gaming', 'economy': 'Economy', 'asian': 'Asian News'}
+    return names.get(cat, 'News')
+
+
+@app.route('/api/weather')
+def api_weather():
+    city = request.args.get('city', '')
+    if not city:
+        return jsonify({'ok': False, 'error': 'City required'}), 400
+    try:
+        resp = requests.get(f'https://wttr.in/{quote_plus(city)}?format=j1', timeout=5,
+                            headers={'User-Agent': 'curl/7.68.0'})
+        resp.raise_for_status()
+        data = resp.json()
+        current = data.get('current_condition', [{}])[0]
+        area = data.get('nearest_area', [{}])[0]
+        return jsonify({
+            'ok': True,
+            'temp': current.get('temp_C', ''),
+            'feels': current.get('FeelsLikeC', ''),
+            'desc': current.get('weatherDesc', [{}])[0].get('value', ''),
+            'icon': current.get('weatherIconUrl', [{}])[0].get('value', ''),
+            'humidity': current.get('humidity', ''),
+            'wind': current.get('windspeedKmph', ''),
+            'city': area.get('areaName', [{}])[0].get('value', city) if area.get('areaName') else city,
+            'region': area.get('region', [{}])[0].get('value', '') if area.get('region') else '',
+        })
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/stocks')
+def api_stocks():
+    tickers = request.args.get('tickers', '^GSPC,^IXIC,^DJI,AAPL,MSFT,GOOGL,AMZN')
+    try:
+        results = []
+        for t in tickers.split(','):
+            t = t.strip()
+            if not t:
+                continue
+            url = f'https://query1.finance.yahoo.com/v8/finance/chart/{t}?interval=1d&range=1mo'
+            resp = requests.get(url, timeout=5, headers={'User-Agent': 'Mozilla/5.0'})
+            if resp.status_code != 200:
+                continue
+            data = resp.json()
+            meta = data.get('chart', {}).get('result', [{}])[0].get('meta', {})
+            quotes = data.get('chart', {}).get('result', [{}])[0].get('indicators', {}).get('quote', [{}])[0]
+            closes = quotes.get('close', [])
+            prev_close = meta.get('chartPreviousClose', 0)
+            current = closes[-1] if closes else prev_close
+            change = current - prev_close
+            change_pct = (change / prev_close * 100) if prev_close else 0
+            name = {'^GSPC': 'S&P 500', '^IXIC': 'NASDAQ', '^DJI': 'Dow Jones', 'AAPL': 'Apple', 'MSFT': 'Microsoft', 'GOOGL': 'Alphabet', 'AMZN': 'Amazon', 'TSLA': 'Tesla', 'META': 'Meta', 'NVDA': 'NVIDIA'}
+            results.append({
+                'ticker': t,
+                'name': name.get(t, t),
+                'price': round(current, 2),
+                'change': round(change, 2),
+                'change_pct': round(change_pct, 2),
+            })
+        return jsonify({'ok': True, 'items': results})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/scores')
+def api_scores():
+    soccer_leagues = [
+        {'id': '4328', 'name': 'Premier League'},
+        {'id': '4335', 'name': 'La Liga'},
+        {'id': '4332', 'name': 'Bundesliga'},
+        {'id': '4334', 'name': 'Serie A'},
+        {'id': '4331', 'name': 'Ligue 1'},
+        {'id': '4387', 'name': 'UEFA Champions League'},
+    ]
+    TEAM_CODES = {
+        'Manchester United': 'MUN', 'Liverpool': 'LIV', 'Arsenal': 'ARS', 'Chelsea': 'CHE',
+        'Manchester City': 'MCI', 'Tottenham': 'TOT', 'Newcastle United': 'NEW',
+        'Aston Villa': 'AVL', 'West Ham United': 'WHU', 'Brighton': 'BRI',
+        'Wolverhampton': 'WOL', 'Crystal Palace': 'CRY', 'Everton': 'EVE',
+        'Fulham': 'FUL', 'Brentford': 'BRE', 'Nottingham Forest': 'NFO',
+        'Bournemouth': 'BOU', 'Leicester City': 'LEI', 'Southampton': 'SOU',
+        'Ipswich Town': 'IPS', 'Barcelona': 'BAR', 'Real Madrid': 'RMA',
+        'Atletico Madrid': 'ATM', 'Athletic Bilbao': 'ATH', 'Real Sociedad': 'RSO',
+        'Villarreal': 'VIL', 'Real Betis': 'BET', 'Sevilla': 'SEV',
+        'Valencia': 'VAL', 'Celta Vigo': 'CEL', 'Getafe': 'GET',
+        'Rayo Vallecano': 'RAY', 'Osasuna': 'OSA', 'Mallorca': 'MLL',
+        'Bayern Munich': 'BAY', 'Borussia Dortmund': 'BVB', 'RB Leipzig': 'RBL',
+        'Bayer Leverkusen': 'LEV', 'Eintracht Frankfurt': 'FRA',
+        'Inter Milan': 'INT', 'AC Milan': 'ACM', 'Juventus': 'JUV',
+        'Napoli': 'NAP', 'Roma': 'ROM', 'Lazio': 'LAZ', 'Atalanta': 'ATA',
+        'PSG': 'PSG', 'Marseille': 'MAR', 'Lyon': 'LYO', 'Monaco': 'MON',
+    }
+    def short_code(name):
+        return TEAM_CODES.get(name, ''.join(w[0] for w in name.split()[:3]).upper()[:3])
+    live_statuses = ['LIVE', '1st Half', '2nd Half', 'Half Time', 'Extra Time', 'Penalties']
+    try:
+        results = []
+        for league in soccer_leagues:
+            try:
+                url = f'https://www.thesportsdb.com/free/v1/json/3/eventsnextleague.php?id={league["id"]}'
+                resp = requests.get(url, timeout=5, headers={'User-Agent': 'Mozilla/5.0'})
+                if resp.status_code != 200:
+                    continue
+                data = resp.json()
+                events = data.get('events', [])
+                for ev in events[:5]:
+                    home = ev.get('strHomeTeam', '')
+                    away = ev.get('strAwayTeam', '')
+                    home_score = ev.get('intHomeScore', '')
+                    away_score = ev.get('intAwayScore', '')
+                    status = ev.get('strStatus', '')
+                    date = ev.get('dateEvent', '')
+                    time = ev.get('strTime', '')
+                    badge_h = ev.get('strHomeTeamBadge', '')
+                    badge_a = ev.get('strAwayTeamBadge', '')
+                    if home and away:
+                        is_live = status in live_statuses
+                        results.append({
+                            'league': league['name'],
+                            'home': home,
+                            'away': away,
+                            'home_code': short_code(home),
+                            'away_code': short_code(away),
+                            'home_score': home_score,
+                            'away_score': away_score,
+                            'status': status,
+                            'is_live': is_live,
+                            'date': date,
+                            'time': time,
+                            'badge_h': badge_h,
+                            'badge_a': badge_a,
+                            'label': f'{home} vs {away}',
+                        })
+            except Exception:
+                continue
+        results.sort(key=lambda x: (0 if x['is_live'] else 1, x.get('date') or '', x.get('time') or ''))
+        return jsonify({'ok': True, 'items': results[:8]})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 @app.route('/api/vote', methods=['POST'])
 def api_vote():
     user_id = session.get('user_id')
@@ -5065,6 +5657,8 @@ def api_vote():
     vote = int(request.form.get('vote', '0'))
     if vote not in (-1, 1):
         return jsonify({'ok': False, 'error': 'Invalid vote'}), 400
+    if not data_manager.has_clicked(user_id, url):
+        return jsonify({'ok': False, 'error': 'Click the link first to vote'}), 403
     ok, wait = rate_limit_check(user_id)
     if not ok:
         return jsonify({'ok': False, 'error': f'Please wait {wait}s', 'wait': wait}), 429

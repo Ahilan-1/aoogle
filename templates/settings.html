@@ -60,7 +60,7 @@
 
         <h2>Enhancements</h2>
 
-    <div class="setting-group">
+        <div class="setting-group">
             <div class="toggle-row">
                 <div class="toggle-label">
                     <h3>ML-Powered Ranking <span class="new-tag">NEW</span></h3>
@@ -90,6 +90,19 @@
                     <div><strong>Normalized 50/50</strong><br><span style="font-size:12px;color:var(--text3)">Both scores normalized to 0-1, blended equally. Fair mix regardless of scale.</span></div>
                 </label>
             </div>
+        </div>
+
+        <div class="setting-group">
+            <div class="toggle-row">
+                <div class="toggle-label">
+                    <h3>News Portal <span class="new-tag">NEW</span></h3>
+                    <div class="label-desc">News ticker, headlines grid, weather and stock prices on the homepage. Data from BBC RSS, wttr.in and Yahoo Finance (no API key needed).</div>
+                </div>
+                <div class="toggle-wrap">
+                    <span class="toggle" id="portal-toggle"></span>
+                </div>
+            </div>
+            <div id="portal-status" class="status-badge off"><span class="dot"></span> Disabled</div>
         </div>
 
         <div class="note">
@@ -128,6 +141,29 @@
 
         document.addEventListener('DOMContentLoaded',function(){
             setupToggle('ml-toggle','ml-status','arlong-ml','ml-mode-select');
+            setupToggle('portal-toggle','portal-status','arlong-portal',null);
+
+            /* Portal is ON by default, flip the toggle logic */
+            (function(){
+                var t=document.getElementById('portal-toggle'),s=document.getElementById('portal-status');
+                var active=true;
+                try{ active = localStorage.getItem('arlong-portal') !== '0' }catch(e){}
+                if(active){ t.classList.add('on'); s.className='status-badge on'; s.innerHTML='<span class="dot"></span> Enabled' }
+                else{ t.classList.remove('on'); s.className='status-badge off'; s.innerHTML='<span class="dot"></span> Disabled' }
+                /* Override click to store inverse */
+                t.onclick = function(){
+                    var on = true;
+                    try{ on = localStorage.getItem('arlong-portal') !== '0' }catch(e){}
+                    if(on){
+                        try{localStorage.setItem('arlong-portal','0')}catch(e){}
+                        t.classList.remove('on'); s.className='status-badge off'; s.innerHTML='<span class="dot"></span> Disabled';
+                    } else {
+                        try{localStorage.setItem('arlong-portal','1')}catch(e){}
+                        t.classList.add('on'); s.className='status-badge on'; s.innerHTML='<span class="dot"></span> Enabled';
+                    }
+                    showToast('Saved');
+                };
+            })();
 
             var mode=getVal('arlong-ml-mode')||'blend_light';
             var rbs=document.querySelectorAll('input[name="ml-mode"]');

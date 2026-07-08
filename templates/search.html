@@ -398,6 +398,156 @@
         .hp-whatsnew .wn-intro{font-size:11px;color:var(--text4);text-align:center;margin-top:6px}
         .hp-whatsnew summary::-webkit-details-marker{display:none}
         @media(max-width:640px){.comment-section{padding-left:12px}.hp-whatsnew .wn-grid{grid-template-columns:1fr}}
+        /* ── Portal Mode (Naver-inspired) ── */
+        .portal-wrap{display:none}
+        .portal-mode .portal-wrap{display:block}
+        .portal-mode .homepage,.portal-mode .glogo,.portal-mode .slogan,.portal-mode .bottom-links,.portal-mode .hp-whatsnew{display:none}
+        .portal-mode .acc-btn{display:none}
+        .portal-header{display:flex;align-items:flex-start;gap:20px;padding:24px 32px 8px;max-width:1200px;margin:0 auto}
+        .portal-header-left{display:flex;align-items:center;gap:12px;padding-top:6px;position:relative;flex-shrink:0}
+        .portal-hamburger{width:22px;height:22px;display:flex;flex-direction:column;justify-content:space-around;cursor:pointer;color:var(--text3);padding:2px 0}
+        .portal-hamburger span{display:block;height:2px;background:var(--text3);border-radius:2px;transition:.2s}
+        .portal-hamburger:hover span{background:var(--text)}
+        /* Hamburger dropdown */
+        .hm-dropdown{display:none;position:absolute;top:100%;left:0;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:8px 0;min-width:200px;z-index:200;box-shadow:0 4px 16px var(--shadow2);margin-top:6px}
+        .hm-dropdown.show{display:block}
+        .hm-dropdown a{display:block;padding:8px 18px;font-size:13px;color:var(--text2);text-decoration:none}
+        .hm-dropdown a:hover{background:var(--hover-bg);color:var(--text);text-decoration:none}
+        .portal-avatar{width:34px;height:34px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:14px;overflow:hidden;flex-shrink:0;transition:border-color .2s}
+        .portal-avatar:hover{border-color:var(--orange)}
+        .portal-avatar svg{width:18px;height:18px;fill:currentColor}
+        .portal-header-center{flex:1;max-width:760px;margin-left:0;display:flex;align-items:center;gap:16px}
+        .portal-logo{flex-shrink:0}
+        .portal-logo .pl-text{font-size:24px;font-family:'Product Sans',Arial,sans-serif;letter-spacing:-1px;font-weight:700;line-height:1.2}
+        .portal-logo .pl-text span{
+            background:linear-gradient(to top,#0066cc,#3399ff 50%,var(--text) 50%);
+            background-size:100% 200%;-webkit-background-clip:text;background-clip:text;color:transparent;
+            animation:arlong-wave 4s ease-in-out infinite;
+        }
+        .portal-logo .pl-text span:nth-child(1){animation-delay:0s}
+        .portal-logo .pl-text span:nth-child(2){animation-delay:.15s}
+        .portal-logo .pl-text span:nth-child(3){animation-delay:.3s}
+        .portal-logo .pl-text span:nth-child(4){animation-delay:.45s}
+        .portal-logo .pl-text span:nth-child(5){animation-delay:.6s}
+        .portal-logo .pl-text span:nth-child(6){animation-delay:.75s}
+        #portal-form{flex:1;min-width:0}
+        .portal-search-box{width:100%;height:46px;border:2px solid #0077be;border-radius:26px;padding:0 22px;font-size:15px;outline:none;background:var(--input-bg);color:var(--text);transition:box-shadow .2s,border-color .2s;box-sizing:border-box}
+        .portal-search-box:focus{box-shadow:0 2px 14px rgba(0,119,190,.3);border-color:#0099e5}
+        .portal-search-box::placeholder{color:var(--text3)}
+        .portal-header-right{width:0;flex-shrink:0}
+        .portal-auth-card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:22px 24px}
+        .portal-auth-card .auth-title{font-size:13px;color:var(--text3);line-height:1.5;margin-bottom:16px;letter-spacing:.2px}
+        .portal-auth-card .auth-btn{display:block;width:100%;padding:13px 0;border:none;border-radius:10px;background:#0077be;color:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:center;text-decoration:none;transition:background .2s,opacity .15s}
+        .portal-auth-card .auth-btn:hover{background:#0066a0;text-decoration:none}
+        .portal-auth-card .auth-links{display:flex;justify-content:center;gap:0;margin-top:14px;font-size:12px;color:var(--text3)}
+        .portal-auth-card .auth-links a{color:var(--text3);padding:0 10px;transition:color .15s}
+        .portal-auth-card .auth-links a:hover{color:var(--text)}
+        .portal-auth-card .auth-links .sep{color:var(--border3)}
+        /* User stats card */
+        .portal-auth-card .au-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+        .portal-auth-card .au-avatar{width:36px;height:36px;border-radius:50%;background:#0077be;color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0}
+        .portal-auth-card .au-name{font-size:15px;font-weight:600;color:var(--text)}
+        .portal-auth-card .au-stats{display:flex;gap:0;border-top:1px solid var(--border2);padding-top:12px}
+        .portal-auth-card .au-stat{flex:1;text-align:center}
+        .portal-auth-card .au-stat .au-stat-val{display:block;font-size:18px;font-weight:700;color:var(--text)}
+        .portal-auth-card .au-stat .au-stat-lbl{display:block;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-top:2px}
+        /* News grid 2x2 */
+        /* Loading spinner */
+        .news-loading{display:flex;align-items:center;justify-content:center;gap:12px;padding:60px 0;grid-column:1/-1;color:var(--text3);font-size:13px}
+        .news-loading .spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:#0077be;border-radius:50%;animation:spin .7s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .portal-news-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:0}
+        .ng-card{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--card-bg);transition:box-shadow .2s;box-shadow:0 1px 3px var(--shadow2)}
+        .ng-card:hover{box-shadow:0 4px 12px var(--shadow2)}
+        .ng-img{width:100%;aspect-ratio:16/10;object-fit:cover;display:block;background:var(--bg3)}
+        .ng-body{padding:12px 14px}
+        .ng-title{font-size:14px;font-weight:500;color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;margin-bottom:4px}
+        .ng-title a{color:var(--text);text-decoration:none}
+        .ng-title a:hover{color:var(--link)}
+        .ng-source{font-size:11px;color:var(--text3)}
+        .portal-body{display:flex;gap:24px;max-width:1200px;margin:8px auto 0;padding:0 32px 32px}
+        .portal-content{flex:1;min-width:0}
+        .portal-sidebar{width:280px;flex-shrink:0;display:flex;flex-direction:column;gap:14px}
+        /* Banner */
+        .portal-banner{margin-bottom:14px}
+        /* Tabs */
+        .portal-tabs{display:flex;gap:0;margin-bottom:14px;border-bottom:1px solid var(--border);font-size:13px;overflow-x:auto}
+        .portal-tabs a{padding:10px 18px;color:var(--text3);text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;font-weight:500;transition:color .15s}
+        .portal-tabs a:hover{color:var(--text);text-decoration:none}
+        .portal-tabs a.active{color:var(--text);border-bottom-color:#0077be}
+        .portal-tabs .live-badge{display:inline-block;background:#c5221f;color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:4px;vertical-align:middle;letter-spacing:.3px}
+        /* News Container */
+        .portal-news-container{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:14px;background:var(--card-bg);box-shadow:0 1px 4px var(--shadow2)}
+        .portal-news-container .news-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border2);font-size:14px;font-weight:600;color:var(--text)}
+        .portal-news-container .news-head .news-more{font-size:11px;font-weight:400;color:var(--text3);cursor:pointer}
+        .portal-news-container .news-head .news-more:hover{color:var(--text)}
+        .portal-news-container .news-body{position:relative;overflow:hidden;padding:0}
+        .portal-news-container .news-body .breaking-scroll{display:flex;animation:newsScroll 60s linear infinite;white-space:nowrap;width:max-content}
+        .portal-news-container .news-body .breaking-scroll:hover{animation-play-state:paused}
+        .portal-news-container .news-body .breaking-item{display:inline-flex;align-items:center;gap:10px;padding:10px 20px;font-size:13px;color:var(--text2);flex-shrink:0}
+        .portal-news-container .news-body .breaking-item .br-badge{background:#c5221f;color:#fff;font-size:9px;font-weight:700;padding:3px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.4px;flex-shrink:0}
+        .portal-news-container .news-body .breaking-item a{color:var(--text2);white-space:nowrap;transition:color .15s}
+        .portal-news-container .news-body .breaking-item a:hover{color:var(--link)}
+        @keyframes newsScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+        /* Sidebar cards */
+        .sidebar-card{border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--card-bg);box-shadow:0 1px 3px var(--shadow2)}
+        .sidebar-card .sc-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;letter-spacing:.2px}
+        .weather-mini{display:flex;align-items:center;gap:12px}
+        .weather-mini .wm-temp{font-size:30px;font-weight:300;color:var(--text);line-height:1}
+        .weather-mini .wm-desc{font-size:13px;color:var(--text2)}
+        .weather-mini .wm-details{font-size:11px;color:var(--text3);margin-top:3px;line-height:1.4}
+        .stocks-mini{display:flex;flex-direction:column;gap:6px}
+        .stocks-mini .sm-row{display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border2)}
+        .stocks-mini .sm-row:last-child{border-bottom:none}
+        .stocks-mini .sm-row .sm-name{color:var(--text2);font-weight:500}
+        .stocks-mini .sm-row .sm-val{text-align:right}
+        .stocks-mini .sm-row .sm-val .sm-change{font-weight:500;margin-left:6px}
+        .stocks-mini .sm-row .sm-val .sm-change.up{color:#137333}
+        .stocks-mini .sm-row .sm-val .sm-change.down{color:#c5221f}
+        /* Scores */
+        .score-row{display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--border2);font-size:11px}
+        .score-row:last-child{border-bottom:none}
+        .score-row .sr-badge{width:18px;height:18px;border-radius:50%;object-fit:contain;flex-shrink:0}
+        .score-row .sr-code{font-weight:600;color:var(--text2);font-size:10px;text-transform:uppercase}
+        .score-row .sr-score{font-weight:700;color:var(--text);font-size:12px}
+        @media(max-width:900px){
+            .portal-body{flex-direction:column}
+            .portal-sidebar{width:auto;flex-direction:row;flex-wrap:wrap}
+            .portal-sidebar .sidebar-card{flex:1;min-width:200px}
+            .portal-header{flex-wrap:wrap;padding:16px 20px 6px}
+            .portal-mode .portal-header-right{width:auto;padding-top:8px}
+        }
+        @media(max-width:640px){
+            .portal-header{padding:10px 10px 4px;gap:8px;flex-wrap:wrap}
+            .portal-body{padding:0 10px 16px;gap:12px}
+            .portal-header-left{gap:6px;padding-top:3px}
+            .portal-header-center{flex:1 1 100%;flex-wrap:wrap;display:flex;width:100%;gap:6px;max-width:none}
+            .portal-header-center .portal-logo{flex:1 1 auto;text-align:center;min-width:0}
+            .portal-header-center .portal-logo .pl-text{font-size:28px}
+            .portal-header-center #portal-form{order:0;flex:1 1 100%}
+            .portal-header-center > a[href="/ads"]{order:1;flex:1 1 100%;text-align:center;font-size:11px;padding-bottom:4px}
+            .portal-search-box{height:42px;font-size:15px;padding:0 18px;border-radius:24px}
+            .portal-mode .portal-header-right{display:none}
+            .portal-auth-card{padding:14px 16px}
+            .portal-auth-card .auth-btn{font-size:14px;padding:10px 0}
+            .portal-banner{min-height:0;margin-bottom:10px}
+            .portal-banner a{min-height:0}
+            .portal-tabs{overflow-x:auto;white-space:nowrap;padding:0;gap:0;scrollbar-width:none;-ms-overflow-style:none}
+            .portal-tabs::-webkit-scrollbar{display:none}
+            .portal-tabs a{padding:8px 10px;font-size:11px;display:inline-block}
+            .portal-news-grid{grid-template-columns:1fr}
+            .portal-sidebar{flex-direction:column;gap:10px}
+            .portal-sidebar .sidebar-card{min-width:auto}
+            .portal-hamburger{width:20px;height:20px}
+            .portal-avatar{width:30px;height:30px}
+            .portal-avatar svg{width:16px;height:16px}
+            .hm-dropdown{position:fixed;top:50px;left:10px;right:10px;width:auto;min-width:0;max-height:60vh;overflow-y:auto;z-index:300}
+        }
+        @media(max-width:400px){
+            .portal-header{padding:8px 8px 4px;gap:6px}
+            .portal-header-center .portal-logo .pl-text{font-size:24px}
+            .portal-search-box{height:34px;font-size:13px;padding:0 12px}
+        }
     </style>
 </head>
 <body data-loggedin="{% if session.user_id %}true{% else %}false{% endif %}">
@@ -417,8 +567,14 @@
 
     <script>
         (function(){
+            var al=document.getElementById('ao-loading');
             if(window.location.pathname==='/search'&&window.location.search.indexOf('q=')>-1)
-                document.getElementById('ao-loading').classList.add('show');
+                al.classList.add('show');
+            document.addEventListener('submit',function(e){
+                var f=e.target;
+                if(f&&f.method&&f.action&&f.action.indexOf('/search')>-1)
+                    al.classList.add('show');
+            },true);
         })();
     </script>
 
@@ -438,7 +594,7 @@
         <div class="glogo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></div>
         <div class="slogan">{% if celebration %}{{ celebration }}{% else %}Sail the web{% endif %}</div>
         <div class="search-form">
-            <form action="/search" method="GET" autocomplete="off" id="hp-form">
+            <form action="/search" method="GET" autocomplete="off" id="hp-form" onsubmit="document.getElementById('ao-loading').classList.add('show')">
                 <input type="hidden" name="filter" value="{{ filter or 'general' }}">
                 <input type="hidden" name="ml" id="hp-ml" value="">
                 <div class="search-input-wrap">
@@ -461,6 +617,7 @@
             <a href="/benchmark">Benchmark</a><span class="sep">|</span>
             <a href="/submit">Submit your site</a><span class="sep">|</span>
             <a href="/docs">API</a><span class="sep">|</span>
+            <a href="/ads">Ads</a><span class="sep">|</span>
             <a href="/blog">Blog</a><span class="sep">|</span>
             <a href="/changelogs">Changelogs</a><span class="sep">|</span>
             <a href="/settings">Settings</a>
@@ -468,46 +625,121 @@
         {% if blocked_count %}
         <div class="about-link" style="margin-top:12px;font-size:12px">&#x1F6AB; <strong>{{ "{:,}".format(blocked_count) }}</strong> gambling, ad, crypto, drug &amp; fraud domains delisted</div>
         {% endif %}
-        <details class="hp-whatsnew">
-            <summary>What's new on arlong</summary>
-            <div class="wn-grid">
-                <div class="wn-card">
-                    <h4>Upvote &amp; downvote</h4>
-                    <p>Vote on search results to help surface quality links. Earn points for contributing and climb the leaderboard.</p>
-                    <a class="wn-link" href="/leaderboard">View leaderboard &rarr;</a>
-                </div>
+    </div>
 
-                <div class="wn-card">
-                    <h4>Collections (Pinterest-style)</h4>
-                    <p>Create themed collections and pin your favorite websites. Browse what others have curated in the Explore page.</p>
-                    <a class="wn-link" href="/explore">Browse collections &rarr;</a>
+    <!-- ── Portal Layout (Naver-inspired) ── -->
+    <div class="portal-wrap">
+        <div class="portal-header">
+            <div class="portal-header-left">
+                <div class="portal-hamburger" id="hm-btn" onclick="toggleHmMenu()">
+                    <span></span><span></span><span></span>
+                    <div class="hm-dropdown" id="hm-dropdown">
+                        <a href="/explore">Explore</a>
+                        <a href="/about">How it works</a>
+                        <a href="/policy">Policies</a>
+                        <a href="/privacy">Privacy</a>
+                        <a href="/faq">FAQ</a>
+                        <a href="/benchmark">Benchmark</a>
+                        <a href="/submit">Submit your site</a>
+                        <a href="/docs">API</a>
+                        <a href="/blog">Blog</a>
+                        <a href="/changelogs">Changelogs</a>
+                        <a href="/ads">Advertising</a>
+                        <a href="/settings">Settings</a>
+                    </div>
                 </div>
-                <div class="wn-card">
-                    <h4>Submit your site</h4>
-                    <p>Get your website indexed by Kumo Crawler instantly. Submit your sitemap and robots.txt to appear in results.</p>
-                    <a class="wn-link" href="/submit">Submit now &rarr;</a>
-                </div>
-                <div class="wn-card">
-                    <h4>Verified business listings</h4>
-                    <p>Regional ($5/mo) or global ($9/mo) verification with blue checkmark badge for businesses.</p>
-                    <a class="wn-link" href="/verified">Learn more &rarr;</a>
-                </div>
-                <div class="wn-card">
-                    <h4>1M blocklisted domains</h4>
-                    <p>Over 789K gambling, ad, crypto, drug and fraud domains are automatically filtered from results.</p>
-                    <a class="wn-link" href="/policy">View policy &rarr;</a>
-                </div>
-                <div class="wn-card">
-                    <h4>Academic search ranking</h4>
-                    <p>Automatically detects academic intent and boosts research domains while penalising news/blog spam.</p>
-                </div>
-                <div class="wn-card">
-                    <h4>User profiles</h4>
-                    <p>Every user gets a profile page at /u/username showing their contribution score and activity history.</p>
+                <div class="portal-avatar">
+                    <a href="{% if session.user_id %}/u/{{ session.get('username','') }}{% else %}/login{% endif %}" style="color:inherit;text-decoration:none;display:flex;align-items:center;justify-content:center;width:100%;height:100%">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 22c0-4 3.5-7 8-7s8 3 8 7"/></svg>
+                    </a>
                 </div>
             </div>
-            <div class="wn-intro">Sign up with just a username and password &mdash; no email required</div>
-        </details>
+            <div class="portal-header-center">
+                <div class="portal-logo">
+                    <span class="pl-text"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></span>
+                </div>
+                <form action="/search" method="GET" id="portal-form" onsubmit="document.getElementById('ao-loading').classList.add('show')" style="position:relative">
+                    <input type="search" name="q" class="portal-search-box" id="portal-search-box" placeholder="Search the web..." autocomplete="off" enterkeyhint="search">
+                    <div class="suggestions-box" id="portal-suggest"></div>
+                </form>
+                <a href="/ads" style="flex-shrink:0;font-size:11px;color:#c5221f;white-space:nowrap;text-decoration:none;font-weight:500" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">See latest updates</a>
+            </div>
+            <div class="portal-header-right"></div>
+        </div>
+        <div class="portal-body">
+            <div class="portal-content">
+                <div class="portal-banner" id="portal-banner">
+                    <a id="banner-ad-link" href="/admin/bannerads" target="_blank" style="display:flex;align-items:center;justify-content:center;width:100%;text-decoration:none;color:inherit;background:var(--card-bg);border-radius:14px;border:1px solid var(--border);overflow:hidden">
+                        <img id="banner-ad-img" src="" alt="Advertisement" referrerpolicy="no-referrer" crossorigin="anonymous" style="width:100%;height:auto;display:none;border-radius:14px" onerror="this.style.display='none';document.getElementById('banner-placeholder').style.display='flex'">
+                        <div id="banner-placeholder" style="display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px;padding:20px;width:100%">Advertisement</div>
+                    </a>
+                </div>
+                <div class="portal-tabs">
+                    <a href="#" class="active" onclick="return loadNewsTab('top',this)">Newsstand</a>
+                    <a href="#" onclick="return loadNewsTab('entertainment',this)">Enter</a>
+                    <a href="#" onclick="return loadNewsTab('sports',this)">Sport <span class="live-badge">LIVE</span></a>
+                    <a href="#" onclick="return loadNewsTab('gaming',this)">Games</a>
+                    <a href="#" onclick="return loadNewsTab('economy',this)">Economy</a>
+                    <a href="#" onclick="return loadNewsTab('business',this)">Shopping Today</a>
+                    <a href="#" onclick="return loadNewsTab('asian',this)">Asian</a>
+                </div>
+                <div class="portal-news-container">
+                    <div class="news-head">
+                        <span>Breaking News</span>
+                        <span class="news-more">More &rsaquo;</span>
+                    </div>
+                    <div class="news-body" id="news-body">
+                        <div class="breaking-scroll" id="breaking-scroll">
+                            <div class="breaking-item"><span class="br-badge">Breaking</span> <span style="color:var(--text3)">Loading news...</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="portal-news-grid" id="news-grid"></div>
+            </div>
+            <div class="portal-sidebar">
+                <div class="sidebar-card" id="scores-card">
+                    <div class="sc-title">Live Scores</div>
+                    <div id="scores-mini" style="font-size:11px;color:var(--text3)">Loading...</div>
+                </div>
+                {% if session.user_id and user_stat %}
+                <div class="sidebar-card portal-auth-card" id="portal-user-card">
+                    <div class="au-header"><span class="au-avatar">{{ session.username[0]|upper }}</span><span class="au-name">{{ session.username }}</span></div>
+                    <div class="au-stats">
+                        <div class="au-stat"><span class="au-stat-val">{{ user_stat.points }}</span><span class="au-stat-lbl">Points</span></div>
+                        <div class="au-stat"><span class="au-stat-val">{{ user_stat.collections_count or 0 }}</span><span class="au-stat-lbl">Collections</span></div>
+                        <div class="au-stat"><span class="au-stat-val">{{ user_stat.submissions_count or 0 }}</span><span class="au-stat-lbl">Submissions</span></div>
+                    </div>
+                    <a href="/u/{{ session.username }}" class="auth-btn" style="margin-top:12px">See full profile &amp; leaderboard</a>
+                </div>
+                {% else %}
+                <div class="sidebar-card portal-auth-card" id="portal-auth-card">
+                    <div class="auth-title">Make use of arlong more secure and convenient</div>
+                    <a href="/login" class="auth-btn">arlong Log in</a>
+                    <div class="auth-links">
+                        <a href="/search?q=find+id">Find ID</a>
+                        <span class="sep">|</span>
+                        <a href="/faq">Forgot Password</a>
+                        <span class="sep">|</span>
+                        <a href="/signup">Sign up</a>
+                    </div>
+                </div>
+                {% endif %}
+                <div class="sidebar-card" id="weather-card">
+                    <div class="sc-title">Weather</div>
+                    <div class="weather-mini" id="weather-mini">
+                        <span class="wm-temp" id="wm-temp">--</span>
+                        <div>
+                            <div class="wm-desc" id="wm-desc">--</div>
+                            <div class="wm-details" id="wm-details"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="sidebar-card" id="stocks-card">
+                    <div class="sc-title">Markets</div>
+                    <div class="stocks-mini" id="stocks-mini"><span style="font-size:11px;color:var(--text3)">Loading...</span></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     {% else %}
@@ -516,7 +748,7 @@
         <div class="top-row">
             <a href="/" class="mini-logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></a>
             <div class="rs-wrap">
-                <form action="/search" method="GET" id="rs-form">
+                <form action="/search" method="GET" id="rs-form" onsubmit="document.getElementById('ao-loading').classList.add('show')">
                     <input type="hidden" name="filter" value="{{ filter or 'general' }}">
                     <input type="hidden" name="ml" id="rs-ml" value="">
                     <input type="search" name="q" class="rs-input" id="rs-input" value="{{ query }}" autocomplete="off" enterkeyhint="search">
@@ -650,7 +882,7 @@
                             {{ result.display_url }}
                             {% if result.verified %}<span class="v-checkmark" title="Verified business"><svg viewBox="0 0 24 24"><circle class="ck-bg" cx="12" cy="12" r="12"/><polyline class="ck-check" points="7,12.5 10.5,16 17,8.5"/></svg></span>{% endif %}
                         </div>
-                        <a href="{{ result.url }}" class="result-title" target="_blank">{{ result.title }}</a>
+                        <a href="{{ result.url }}" class="result-title" target="_blank" onclick="trackClick(this.href)">{{ result.title }}</a>
                         <div class="result-snippet">{{ result.snippet }}</div>
                         <div class="result-community" data-url="{{ result.url }}" data-title="{{ result.title }}">
                             <button class="pin-btn-sm" onclick="pinFromSearch(this)" title="Pin to collection"><svg viewBox="0 0 14 14"><path d="M2 1v12l5-3 5 3V1H2zm1 1h8v9.5l-4-2.5-4 2.5V2z"/></svg></button>
@@ -1228,14 +1460,19 @@
             document.addEventListener('click',function(e){if(!box.contains(e.target)&&e.target!==input)box.classList.remove('show')})
         }
         document.addEventListener('DOMContentLoaded',function(){
-            setupSuggestions('hp-search','hp-suggest');setupSuggestions('rs-input','rs-suggest');
+            setupSuggestions('hp-search','hp-suggest');setupSuggestions('rs-input','rs-suggest');setupSuggestions('portal-search-box','portal-suggest');
             var ml='',mode='blend_light';try{ml=localStorage.getItem('arlong-ml')||'';mode=localStorage.getItem('arlong-ml-mode')||'blend_light'}catch(e){}
             var ml_val=(ml&&ml!=='0')?mode:'';
             var hp=document.getElementById('hp-ml');if(hp)hp.value=ml_val;
             var rs=document.getElementById('rs-ml');if(rs)rs.value=ml_val;
         });
 
-        /* ── Voting, domain report, pin-to-collection ── */
+        /* ── Click tracking, voting, domain report, pin-to-collection ── */
+        function trackClick(url){
+            if(document.body.getAttribute('data-loggedin') !== 'true') return;
+            var fd = new FormData(); fd.append('url', url);
+            navigator.sendBeacon('/api/click', fd);
+        }
         function vote(btn, dir){
             if(document.body.getAttribute('data-loggedin') !== 'true'){ alert('Sign in to vote'); return }
             var container = btn.closest('.reddit-vote');
@@ -1342,6 +1579,179 @@
             if(el) el.textContent = count + ' results';
         }
         applyFilter('all');
+
+        /* Hamburger toggle */
+        function toggleHmMenu(){
+            var dd = document.getElementById('hm-dropdown');
+            if(dd) dd.classList.toggle('show');
+        }
+        document.addEventListener('click', function(e){
+            var hm = document.getElementById('hm-btn');
+            if(hm && !hm.contains(e.target)){
+                var dd = document.getElementById('hm-dropdown');
+                if(dd) dd.classList.remove('show');
+            }
+        });
+
+        /* ── Portal Mode ── */
+        (function(){
+            var portalOn = true;
+            try{ portalOn = localStorage.getItem('arlong-portal') !== '0' }catch(e){}
+            if(portalOn){
+                document.body.classList.add('portal-mode');
+                loadBreakingNews();
+                loadStocks();
+                loadWeather();
+                loadBannerAd();
+                loadScores();
+                loadNewsTab('top', document.querySelector('.portal-tabs a.active'));
+                /* Refresh news & scores every 2 minutes */
+                setInterval(function(){ loadBreakingNews(); loadScores(); }, 120000);
+            }
+
+            /* Hide the old fixed acc-btn in portal mode */
+            if(portalOn){
+                var oldAcc = document.getElementById('acc-btn');
+                if(oldAcc) oldAcc.style.display = 'none';
+            }
+        })();
+
+        function loadBreakingNews(){
+            fetch('/api/news?category=top').then(function(r){return r.json()}).then(function(d){
+                if(!d.ok || !d.items) return;
+                var items = d.items;
+                var scroll = document.getElementById('breaking-scroll');
+                var html = '';
+                /* Duplicate for seamless loop */
+                for(var dup=0;dup<2;dup++){
+                    for(var i=0;i<items.length;i++){
+                        html += '<div class="breaking-item"><span class="br-badge">Breaking</span> <a href="'+items[i].link+'" target="_blank">'+items[i].title+'</a></div>';
+                    }
+                }
+                scroll.innerHTML = html;
+            });
+        }
+
+        function loadBannerAd(){
+            fetch('/api/ads').then(function(r){return r.json()}).then(function(d){
+                if(!d.ok || !d.ads || !d.ads.length) return;
+                var ad = d.ads[0];
+                var img = document.getElementById('banner-ad-img');
+                var link = document.getElementById('banner-ad-link');
+                var ph = document.getElementById('banner-placeholder');
+                if(!img || !link) return;
+                img.onload = function(){
+                    img.style.display = 'block';
+                    if(ph) ph.style.display = 'none';
+                };
+                img.src = ad.image_url;
+                link.href = ad.link_url || '/admin/bannerads';
+                link.onclick = function(){
+                    var fd = new FormData();
+                    fd.append('url', ad.link_url || ad.image_url);
+                    navigator.sendBeacon('/api/click', fd);
+                };
+            }).catch(function(){});
+        }
+
+        function loadNewsTab(cat, el){
+            var tabs = document.querySelectorAll('.portal-tabs a');
+            tabs.forEach(function(t){t.classList.remove('active')});
+            if(el) el.classList.add('active');
+            var grid = document.getElementById('news-grid');
+            grid.innerHTML = '<div class="news-loading"><div class="spinner"></div><span>Loading news...</span></div>';
+            var scroll = document.getElementById('breaking-scroll');
+            scroll.innerHTML = '<div class="breaking-item"><span class="br-badge">Breaking</span> <span style="color:var(--text3)">Loading...</span></div>';
+            fetch('/api/news?category='+cat).then(function(r){return r.json()}).then(function(d){
+                if(!d.ok || !d.items){ grid.innerHTML = '<div class="news-loading" style="color:var(--text3)">Failed to load news</div>'; return; }
+                var items = d.items;
+                if(!items.length){ grid.innerHTML = '<div class="news-loading" style="color:var(--text3)">No news available</div>'; return; }
+                /* Breaking ticker */
+                var sh = '';
+                for(var dup=0;dup<2;dup++){
+                    for(var i=0;i<items.length;i++){
+                        sh += '<div class="breaking-item"><span class="br-badge">Breaking</span> <a href="'+items[i].link+'" target="_blank">'+items[i].title+'</a></div>';
+                    }
+                }
+                scroll.innerHTML = sh;
+                /* News grid */
+                grid.innerHTML = '';
+                var cards = items.slice(0,8);
+                for(var i=0;i<cards.length;i++){
+                    var it = cards[i];
+                    var img = it.image || '';
+                    var card = document.createElement('div');
+                    card.className = 'ng-card';
+                    card.innerHTML = '<img class="ng-img" src="'+(img||'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22320%22 height=%22200%22/%3E')+'" alt="" onerror="this.src=\'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22320%22 height=%22200%22/%3E\'"><div class="ng-body"><div class="ng-title"><a href="'+it.link+'" target="_blank">'+it.title.substring(0,100)+'</a></div><div class="ng-source">'+it.source+'</div></div>';
+                    grid.appendChild(card);
+                }
+            }).catch(function(){
+                grid.innerHTML = '<div class="news-loading" style="color:var(--text3)">Failed to load news</div>';
+                scroll.innerHTML = '<div class="breaking-item"><span class="br-badge">Breaking</span> <span style="color:var(--text3)">Failed to load</span></div>';
+            });
+            return false;
+        }
+
+        function loadStocks(){
+            fetch('/api/stocks').then(function(r){return r.json()}).then(function(d){
+                if(!d.ok || !d.items) return;
+                var mini = document.getElementById('stocks-mini');
+                mini.innerHTML = '';
+                d.items.forEach(function(s){
+                    var cls = s.change >= 0 ? 'up' : 'down';
+                    var arrow = s.change >= 0 ? '&#9650;' : '&#9660;';
+                    mini.innerHTML += '<div class="sm-row"><span class="sm-name">'+s.name+'</span> <span class="sm-val">$'+s.price+'<span class="sm-change '+cls+'">'+arrow+' '+s.change_pct+'%</span></span></div>';
+                });
+            });
+        }
+
+        function loadScores(){
+            var card = document.getElementById('scores-mini');
+            if(!card) return;
+            fetch('/api/scores').then(function(r){return r.json()}).then(function(d){
+                if(!d.ok || !d.items || !d.items.length){
+                    card.innerHTML = '<div style="color:var(--text3)">No matches</div>';
+                    return;
+                }
+                var html = '';
+                d.items.forEach(function(m){
+                    var hasScore = m.home_score !== '' && m.home_score !== null && m.away_score !== '' && m.away_score !== null;
+                    var scoreDisplay = hasScore ? m.home_score + '-' + m.away_score : (m.time || m.date || '');
+                    var badge_h = m.badge_h || '';
+                    var badge_a = m.badge_a || '';
+                    var code_h = m.home_code || m.home.substring(0,3).toUpperCase();
+                    var code_a = m.away_code || m.away.substring(0,3).toUpperCase();
+                    var liveTag = m.is_live ? '<span style="color:#e53935;font-weight:700;font-size:10px;margin-left:4px">&#9679; LIVE</span>' : '';
+                    html += '<div class="score-row">';
+                    if(badge_h) html += '<img class="sr-badge" src="'+badge_h+'" alt="" onerror="this.style.display=\'none\'">';
+                    html += '<span class="sr-code">'+code_h+'</span>';
+                    html += '<span class="sr-score">'+scoreDisplay+'</span>';
+                    html += '<span class="sr-code">'+code_a+'</span>';
+                    if(badge_a) html += '<img class="sr-badge" src="'+badge_a+'" alt="" onerror="this.style.display=\'none\'">';
+                    html += liveTag;
+                    html += '</div>';
+                });
+                card.innerHTML = html;
+            }).catch(function(){
+                card.innerHTML = '<div style="color:var(--text3)">Scores unavailable</div>';
+            });
+        }
+
+        function loadWeather(){
+            fetch('https://ip-api.com/json/').then(function(r){return r.json()}).then(function(geo){
+                var city = geo.city || 'London';
+                document.getElementById('wm-temp').parentNode.parentNode.querySelector('.sc-title').textContent = 'Weather - '+city+', '+(geo.region||'');
+                return fetch('/api/weather?city='+encodeURIComponent(city));
+            }).then(function(r){return r.json()}).then(function(d){
+                if(!d.ok) return;
+                document.getElementById('wm-temp').textContent = d.temp + '\u00B0';
+                document.getElementById('wm-desc').textContent = d.desc;
+                document.getElementById('wm-details').innerHTML = 'Feels '+d.feels+'\u00B0 &middot; H '+d.humidity+'% &middot; W '+d.wind+'km/h';
+            }).catch(function(){
+                var wc = document.getElementById('weather-card');
+                if(wc) wc.innerHTML = '<div class="sc-title">Weather</div><div style="font-size:12px;color:var(--text3)">Unavailable</div>';
+            });
+        }
     </script>
     <div class="mob-nav">
         <a href="/" class="active"><span class="m-icon">&#x1F50D;</span><span class="m-label">Search</span></a>
