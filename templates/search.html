@@ -669,7 +669,7 @@
         <div class="portal-body">
             <div class="portal-content">
                 <div class="portal-banner" id="portal-banner">
-                    <a id="banner-ad-link" href="/admin/bannerads" target="_blank" style="display:flex;align-items:center;justify-content:center;width:100%;text-decoration:none;color:inherit;background:var(--card-bg);border-radius:14px;border:1px solid var(--border);overflow:hidden">
+                    <a id="banner-ad-link" href="/ads" target="_blank" style="display:flex;align-items:center;justify-content:center;width:100%;text-decoration:none;color:inherit;background:var(--card-bg);border-radius:14px;border:1px solid var(--border);overflow:hidden">
                         <img id="banner-ad-img" src="" alt="Advertisement" referrerpolicy="no-referrer" crossorigin="anonymous" style="width:100%;height:auto;display:none;border-radius:14px" onerror="this.style.display='none';document.getElementById('banner-placeholder').style.display='flex'">
                         <div id="banner-placeholder" style="display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px;padding:20px;width:100%">Advertisement</div>
                     </a>
@@ -1645,7 +1645,7 @@
                     if(ph) ph.style.display = 'none';
                 };
                 img.src = ad.image_url;
-                link.href = ad.link_url || '/admin/bannerads';
+                link.href = ad.link_url || '/ads';
                 link.onclick = function(){
                     var fd = new FormData();
                     fd.append('url', ad.link_url || ad.image_url);

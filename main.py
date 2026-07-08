@@ -79,7 +79,7 @@ def generate_csrf_token():
 def validate_csrf():
     token = request.form.get('_csrf_token', '')
     expected = session.get('_csrf_token', '')
-    if not token or not hmac.compare_digest(expected, token):
+    if not token or not secrets.compare_digest(expected, token):
         return False
     return True
 
@@ -4818,7 +4818,7 @@ def admin_login():
             error = 'Invalid form submission. Please try again.'
         else:
             password = request.form.get('password', '')
-            if hmac.compare_digest(password, ADMIN_PASSWORD):
+            if secrets.compare_digest(password, ADMIN_PASSWORD):
                 session.clear()
                 session['admin_logged_in'] = True
                 return redirect(url_for('admin_dashboard'))
