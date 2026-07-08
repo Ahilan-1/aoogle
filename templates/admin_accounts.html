@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>arlong Admin — Accounts</title>
+    <style>
+        *{box-sizing:border-box}
+        body{margin:0;padding:20px;font-family:arial,sans-serif;background:#f0f2f5;color:#222}
+        a{color:#1a73e8;text-decoration:none}
+        a:hover{text-decoration:underline}
+        .header{display:flex;align-items:center;justify-content:space-between;max-width:1100px;margin:0 auto 20px}
+        .header h1{font-size:20px;margin:0;color:#1a73e8}
+        .header a{font-size:13px;color:#5f6368;padding:6px 12px;border:1px solid #dadce0;border-radius:6px}
+        .header a:hover{background:#f1f3f4;text-decoration:none}
+        .card{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:20px;overflow:hidden}
+        .card-title{padding:14px 20px;font-size:15px;font-weight:600;border-bottom:1px solid #e8eaed;margin:0;display:flex;align-items:center;justify-content:space-between}
+        .card-title .badge{background:#e8f0fe;color:#1a73e8;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:500}
+        table{width:100%;border-collapse:collapse;font-size:13px}
+        th{text-align:left;padding:10px 16px;background:#f8f9fa;color:#5f6368;font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid #e8eaed}
+        td{padding:10px 16px;border-bottom:1px solid #f1f3f4;color:#3c4043;vertical-align:top}
+        tr:last-child td{border-bottom:none}
+        tr:hover td{background:#f8f9fa}
+        .btn{display:inline-block;padding:5px 12px;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-family:arial,sans-serif}
+        .btn-remove{background:#c5221f;color:#fff}
+        .btn-remove:hover{background:#a50e0e}
+        .empty{text-align:center;padding:30px 20px;color:#5f6368;font-size:14px}
+        .num{font-size:11px;color:#5f6368}
+        .warn{color:#c5221f;font-size:11px;margin-left:4px}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>arlong Admin — Account Manager</h1>
+        <a href="/admin/dashboard">&larr; Back to dashboard</a>
+    </div>
+    <div class="card">
+        <div class="card-title">
+            User Accounts
+            <span class="badge">{{ users|length }} users</span>
+        </div>
+        {% if users %}
+        <table>
+            <tr>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Created</th>
+                <th>Last Active</th>
+                <th>Clicks</th>
+                <th>Searches</th>
+                <th>Points</th>
+                <th>Actions</th>
+            </tr>
+            {% for u in users %}
+            <tr>
+                <td style="font-weight:600">{{ u.username }}</td>
+                <td style="font-size:12px;color:#5f6368">{{ u.email or '—' }}</td>
+                <td class="num">{{ u.created_at }}</td>
+                <td class="num">{{ u.last_active }}</td>
+                <td>{{ u.clicks }}</td>
+                <td>{{ u.searches }}</td>
+                <td>{{ u.points }}</td>
+                <td>
+                    <form method="POST" action="/admin/delete-user" onsubmit="return confirm('Delete user {{ u.username }}? This cannot be undone.')">
+                        <input type="hidden" name="user_id" value="{{ u.user_id }}">
+                        <button type="submit" class="btn btn-remove">Wipe</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% else %}
+        <div class="empty">No user accounts found.</div>
+        {% endif %}
+    </div>
+    <div style="max-width:1100px;margin:0 auto;text-align:center;font-size:12px;color:#5f6368">
+        <span class="warn">&#x26A0; Wiping a user permanently deletes their account data and click stats.</span>
+    </div>
+</body>
+</html>

@@ -5,79 +5,110 @@
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>Explore collections - arlong</title>
     <style>
-        :root{--bg:#202124;--bg2:#2a2a2e;--bg3:#333;--text:#ddd;--text2:#bbb;--text3:#888;--link:#81a2be;--link-v:#5f8aad;--orange:#0077be;--border:#444;--accent:#800000}
-        *,*::before,*::after{box-sizing:border-box}
-        body{margin:0;padding:16px 20px;font-family:Verdana,'Bitstream Vera Sans',Arial,sans-serif;color:var(--text);background:var(--bg);font-size:13px;line-height:1.5}
-        a{color:var(--link);text-decoration:none}
-        a:hover{text-decoration:underline;color:var(--orange)}
-        .header{display:flex;align-items:baseline;gap:14px;max-width:900px;margin:0 auto 20px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid var(--border)}
-        .header .logo{font-family:'Palatino','Palatino Linotype',Georgia,serif;font-size:22px;color:var(--orange);font-weight:700;letter-spacing:-.5px}
-        .header .logo:hover{color:var(--orange);text-decoration:none}
-        .header h1{margin:0;font-size:16px;font-weight:400;color:var(--text2)}
-        .header nav{display:flex;gap:10px;font-size:12px;margin-left:auto}
-        .header nav a{padding:2px 8px;border:1px solid var(--border);border-radius:2px;color:var(--text3)}
-        .header nav a:hover{color:var(--text);border-color:var(--text3);text-decoration:none}
-        .sort-tabs{display:flex;gap:4px;margin-bottom:16px;max-width:900px;margin-left:auto;margin-right:auto}
-        .sort-tabs a{padding:2px 10px;font-size:12px;color:var(--text3);border:1px solid var(--border);border-radius:2px;background:var(--bg2)}
-        .sort-tabs a.active{background:var(--accent);color:#eee;border-color:var(--accent)}
-        .sort-tabs a:hover{text-decoration:none;color:var(--text)}
-        .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;max-width:900px;margin:0 auto}
-        .card{border:1px solid var(--border);padding:14px;background:var(--bg2);border-radius:2px;transition:border-color .15s,background .15s}
-        .card:hover{border-color:var(--orange);background:var(--bg3)}
-        .card h3{margin:0 0 3px;font-size:14px;font-weight:500;font-family:Verdana,Arial,sans-serif}
-        .card h3 a{color:var(--text)}
-        .card h3 a:hover{color:var(--orange)}
-        .card .desc{color:var(--text3);font-size:12px;line-height:1.4;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-        .card .meta{font-size:11px;color:var(--text3);display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);padding-top:6px;margin-top:2px}
-        .card .meta span{display:flex;align-items:center;gap:4px}
-        .empty{text-align:center;padding:60px 20px;color:var(--text3);max-width:900px;margin:0 auto}
-        .empty .big{font-size:36px;margin-bottom:6px;opacity:.35}
-        .create-btn{background:var(--accent);color:#eee;border:none;border-radius:2px;padding:4px 12px;font-size:12px;cursor:pointer;font-family:Verdana,Arial,sans-serif;transition:opacity .1s}
-        .create-btn:hover{opacity:.85}
-        .pagination{text-align:center;margin:24px 0;font-size:12px;max-width:900px;margin-left:auto;margin-right:auto}
-        .pagination a{display:inline-block;padding:4px 10px;margin:0 2px;border:1px solid var(--border);border-radius:2px;color:var(--text3);background:var(--bg2);font-size:12px}
-        .pagination a:hover{text-decoration:none;color:var(--text);border-color:var(--text3)}
-        .pagination .cur{display:inline-block;padding:4px 10px;color:var(--orange);font-weight:600;font-size:12px}
-        .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center}
-        .modal{background:var(--bg2);border:2px solid var(--border);padding:20px;width:90%;max-width:400px;border-radius:2px}
-        .modal h2{margin:0 0 12px;font-size:15px;font-weight:400;color:var(--orange);font-family:Georgia,serif}
-        .modal label{display:block;font-size:11px;color:var(--text3);margin-bottom:3px;margin-top:10px;text-transform:uppercase;letter-spacing:.5px}
+        *{box-sizing:border-box}
+        :root {
+            --bg:#202124; --bg2:#303134; --bg3:#3c4043; --text:#e8eaed; --text2:#bdc1c6;
+            --text3:#9aa0a6; --text4:#9aa0a6; --link:#8ab4f8; --link-v:#c58af9;
+            --border:#5f6368; --border2:#3c4043; --border3:#5f6368; --border4:#5f6368;
+            --nav-active:#8ab4f8;
+            --shadow:rgba(0,0,0,.28); --shadow2:rgba(0,0,0,.4);
+            --card-bg:#303134; --hover-bg:#3c4043; --input-bg:#303134;
+        }
+        body{margin:0;padding:0;font-family:arial,sans-serif;color:var(--text);background:var(--bg);min-height:100vh}
+        a{text-decoration:none;color:var(--link)}
+        a:hover{text-decoration:underline}
+        a:visited{color:var(--link-v)}
+        ::selection{background:#1a73e8;color:#fff}
+
+        .header{display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:100}
+        .logo{font-size:22px;font-weight:700;background:linear-gradient(to top,#0066cc,#3399ff 50%,var(--text) 50%);background-size:100% 200%;-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-1px;font-family:'Product Sans',Arial,sans-serif}
+        .header h1{margin:0;font-size:14px;font-weight:400;color:var(--text3)}
+        .header nav{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
+        .header nav a{padding:6px 14px;font-size:13px;color:var(--text2);border:1px solid var(--border);border-radius:4px;background:var(--bg2);transition:all .1s}
+        .header nav a:hover{color:var(--text);background:var(--hover-bg);text-decoration:none}
+        .header nav .create-btn{padding:6px 14px;font-size:13px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text);cursor:pointer;transition:all .1s;font-family:arial,sans-serif}
+        .header nav .create-btn:hover{background:var(--hover-bg)}
+        .acc-btn{width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .1s}
+        .acc-btn:hover{background:var(--hover-bg);color:var(--text);border-color:var(--text3)}
+        .acc-btn svg{width:16px;height:16px;fill:currentColor}
+
+        .sort-tabs{display:flex;gap:6px;padding:10px 24px 0;max-width:960px;margin:0 auto}
+        .sort-tabs a{padding:6px 16px;font-size:13px;color:var(--text3);border:1px solid var(--border);border-radius:4px;background:var(--bg2);transition:all .1s}
+        .sort-tabs a.active{background:var(--bg3);color:var(--text);border-color:var(--text3)}
+        .sort-tabs a:hover{text-decoration:none;color:var(--text);background:var(--hover-bg)}
+
+        .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;max-width:960px;margin:14px auto;padding:0 24px}
+        .card{background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:16px 18px;transition:all .1s;cursor:default}
+        .card:hover{border-color:var(--text3);box-shadow:0 1px 6px var(--shadow2)}
+        .card h3{margin:0 0 2px;font-size:16px;font-weight:400}
+        .card h3 a{color:var(--link)}
+        .card h3 a:visited{color:var(--link-v)}
+        .card .desc{color:var(--text3);font-size:13px;line-height:1.5;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+        .card .meta{font-size:12px;color:var(--text3);display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border2);padding-top:8px;margin-top:4px}
+        .card .meta .pin-count{font-weight:500;color:var(--text2);font-feature-settings:'tnum'}
+        .card .meta .creator{color:var(--text4)}
+        .card .meta .date{color:var(--text4)}
+
+        .empty-state{text-align:center;padding:80px 20px;color:var(--text3);max-width:960px;margin:0 auto}
+        .empty-state .big{font-size:56px;margin-bottom:12px;opacity:.15;font-weight:100;line-height:1}
+        .empty-state p{font-size:14px;line-height:1.6}
+        .empty-state .create-btn{margin-top:10px;padding:10px 24px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:14px;cursor:pointer;transition:all .1s;font-family:arial,sans-serif}
+        .empty-state .create-btn:hover{background:var(--hover-bg)}
+
+        .pagination{text-align:center;margin:16px auto 40px;font-size:13px;max-width:960px;padding:0 24px}
+        .pagination a{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;margin:0 3px;border:1px solid var(--border);border-radius:4px;color:var(--text2);background:var(--bg2);transition:all .1s;font-size:13px}
+        .pagination a:hover{text-decoration:none;color:var(--text);background:var(--hover-bg)}
+        .pagination .cur{display:inline-flex;align-items:center;padding:8px 16px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text);font-weight:500;font-feature-settings:'tnum'}
+
+        .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:1000;align-items:center;justify-content:center}
+        .modal{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;width:90%;max-width:400px;box-shadow:0 16px 48px rgba(0,0,0,.5)}
+        .modal h2{margin:0 0 14px;font-size:16px;font-weight:400;color:var(--text)}
+        .modal label{display:block;font-size:12px;color:var(--text3);margin-bottom:4px;margin-top:12px}
         .modal label:first-of-type{margin-top:0}
-        .modal input,.modal textarea{width:100%;padding:6px 8px;border:1px solid var(--border);font-size:13px;background:var(--bg);color:var(--text);outline:none;font-family:Verdana,Arial,sans-serif}
-        .modal input:focus,.modal textarea:focus{border-color:var(--orange)}
+        .modal input,.modal textarea{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--input-bg);color:var(--text);outline:none;font-family:arial,sans-serif;transition:border-color .1s}
+        .modal input:focus,.modal textarea:focus{border-color:var(--link)}
         .modal textarea{resize:vertical;min-height:50px}
-        .modal .actions{display:flex;gap:6px;justify-content:flex-end;margin-top:12px}
-        .modal .actions button{padding:4px 14px;border:1px solid var(--border);border-radius:2px;font-size:12px;cursor:pointer;font-family:Verdana,Arial,sans-serif}
-        .modal .actions .cancel{background:var(--bg3);color:var(--text)}
-        .modal .actions .submit{background:var(--accent);color:#eee;border-color:var(--accent)}
-        @media(max-width:640px){.grid{grid-template-columns:1fr}.header nav{margin-left:0}}
+        .modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+        .modal .actions button{padding:8px 20px;border:1px solid var(--border);border-radius:4px;font-size:13px;cursor:pointer;font-family:arial,sans-serif;transition:all .1s}
+        .modal .actions .cancel{background:var(--bg2);color:var(--text2)}
+        .modal .actions .cancel:hover{background:var(--hover-bg);color:var(--text)}
+        .modal .actions .submit{background:var(--bg3);color:var(--text);font-weight:500}
+        .modal .actions .submit:hover{background:var(--hover-bg);border-color:var(--link)}
+
+        @media(max-width:720px){
+            .grid{grid-template-columns:1fr;padding:0 16px}
+            .header{padding:10px 16px;flex-wrap:wrap}
+            .header h1{order:10;width:100%;margin-top:4px}
+            .header nav{margin-left:0}
+            .sort-tabs{padding:10px 16px 0}
+        }
     </style>
 </head>
 <body>
     <div class="header">
         <a href="/" class="logo">arlong</a>
-        <h1>&#47;explore</h1>
+        <h1>/explore</h1>
         <nav>
             <a href="/explore">All</a>
             {% if session.user_id %}<a href="/collections">My</a>{% endif %}
             {% if session.user_id %}<button class="create-btn" onclick="showCreate()">+ New</button>{% endif %}
-            <a href="/">Search</a>
+            <a href="/leaderboard">Rankings</a>
         </nav>
-        <a href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" style="width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);display:flex;align-items:center;justify-content:center;flex-shrink:0;text-decoration:none;transition:.15s;margin-left:8px" aria-label="Account">
-            <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+        <a href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" class="acc-btn" aria-label="Account">
+            <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
         </a>
     </div>
 
     {% if sort != 'mine' %}
     <div class="sort-tabs">
         <a href="/explore?sort=new" class="{% if sort=='new' %}active{% endif %}">newest</a>
-        <a href="/explore?sort=popular" class="{% if sort=='popular' %}active{% endif %}">most</a>
+        <a href="/explore?sort=popular" class="{% if sort=='popular' %}active{% endif %}">popular</a>
         <a href="/explore?sort=updated" class="{% if sort=='updated' %}active{% endif %}">updated</a>
     </div>
     {% endif %}
 
     {% if error %}
-    <div class="empty">{{ error }}</div>
+    <div class="empty-state"><div class="big">!</div><p>{{ error }}</p></div>
     {% elif collections %}
     <div class="grid">
         {% for c in collections %}
@@ -85,35 +116,35 @@
             <h3><a href="/explore/{{ c.id }}">{{ c.name }}</a></h3>
             {% if c.description %}<div class="desc">{{ c.description }}</div>{% endif %}
             <div class="meta">
-                <span><b style="color:var(--orange)">{{ c.websites|length }}</b> pins</span>
-                <span>by <b>{{ c.creator_name }}</b></span>
-                <span>{{ c.created_at[:10] }}</span>
+                <span><span class="pin-count">{{ c.websites|length }}</span> pins</span>
+                <span class="creator">by <b>{{ c.creator_name }}</b></span>
+                <span class="date">{{ c.created_at[:10] }}</span>
             </div>
         </div>
         {% endfor %}
     </div>
     {% if sort != 'mine' and total > 20 %}
     <div class="pagination">
-        {% if page > 1 %}<a href="/explore?sort={{ sort }}&page={{ page-1 }}">prev</a>{% endif %}
+        {% if page > 1 %}<a href="/explore?sort={{ sort }}&page={{ page-1 }}">&larr; prev</a>{% endif %}
         <span class="cur">{{ page }}</span>
-        {% if total > page * 20 %}<a href="/explore?sort={{ sort }}&page={{ page+1 }}">next</a>{% endif %}
+        {% if total > page * 20 %}<a href="/explore?sort={{ sort }}&page={{ page+1 }}">next &rarr;</a>{% endif %}
     </div>
     {% endif %}
     {% else %}
-    <div class="empty">
-        <div class="big">+</div>
+    <div class="empty-state">
+        <div class="big">&#x2728;</div>
         <p>No collections yet.</p>
         {% if session.user_id %}
         <button class="create-btn" onclick="showCreate()">Create the first one</button>
         {% else %}
-        <p><a href="/login">Sign in</a> to create one.</p>
+        <p><a href="/login">Sign in</a> to create a collection.</p>
         {% endif %}
     </div>
     {% endif %}
 
     <div class="modal-overlay" id="create-modal">
         <div class="modal">
-            <h2>new collection</h2>
+            <h2>New collection</h2>
             <form id="create-form" onsubmit="return createCollection(event)">
                 <label>Name</label>
                 <input type="text" name="name" required minlength="2" maxlength="100" placeholder="e.g. Best Linux Tools">

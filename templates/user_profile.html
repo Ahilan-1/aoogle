@@ -5,39 +5,81 @@
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>{% if profile %}{{ profile.username }} - {% endif %}arlong</title>
     <style>
-        :root{--bg:#202124;--bg2:#2a2a2e;--bg3:#333;--text:#ddd;--text2:#bbb;--text3:#888;--text4:#777;--link:#81a2be;--orange:#0077be;--border:#444;--border2:#3a3a3e;--accent:#800000}
-        *,*::before,*::after{box-sizing:border-box}
-        body{margin:0;padding:16px 20px;font-family:Verdana,'Bitstream Vera Sans',Arial,sans-serif;color:var(--text);background:var(--bg);font-size:13px;line-height:1.5}
-        a{color:var(--link);text-decoration:none}
-        a:hover{text-decoration:underline;color:var(--orange)}
-        .header{display:flex;align-items:baseline;gap:14px;max-width:700px;margin:0 auto 16px;padding-bottom:10px;border-bottom:1px solid var(--border);flex-wrap:wrap}
-        .header .logo{font-family:'Palatino','Palatino Linotype',Georgia,serif;font-size:20px;color:var(--orange);font-weight:700}
-        .header .logo:hover{color:var(--orange);text-decoration:none}
-        .header nav{display:flex;gap:8px;font-size:12px;margin-left:auto}
-        .header nav a{padding:2px 8px;border:1px solid var(--border);border-radius:2px;color:var(--text3)}
-        .header nav a:hover{color:var(--text);border-color:var(--text3);text-decoration:none}
-        .layout{max-width:700px;margin:0 auto;display:flex;gap:20px;align-items:flex-start}
+        *{box-sizing:border-box}
+        :root {
+            --bg:#202124; --bg2:#303134; --bg3:#3c4043; --text:#e8eaed; --text2:#bdc1c6;
+            --text3:#9aa0a6; --text4:#9aa0a6; --link:#8ab4f8; --link-v:#c58af9;
+            --border:#5f6368; --border2:#3c4043; --border3:#5f6368; --border4:#5f6368;
+            --shadow:rgba(0,0,0,.28); --shadow2:rgba(0,0,0,.4);
+            --card-bg:#303134; --hover-bg:#3c4043;
+            --accent:#8ab4f8;
+        }
+        body{margin:0;padding:0;font-family:arial,sans-serif;color:var(--text);background:var(--bg);min-height:100vh}
+        a{text-decoration:none;color:var(--link)}
+        a:hover{text-decoration:underline}
+        a:visited{color:var(--link-v)}
+        ::selection{background:#1a73e8;color:#fff}
+
+        .header{display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:100}
+        .logo{font-size:22px;font-weight:700;background:linear-gradient(to top,#0066cc,#3399ff 50%,var(--text) 50%);background-size:100% 200%;-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-1px;font-family:'Product Sans',Arial,sans-serif}
+        .header h1{margin:0;font-size:14px;font-weight:400;color:var(--text3)}
+        .header nav{display:flex;gap:6px;margin-left:auto}
+        .header nav a{padding:6px 14px;font-size:13px;color:var(--text2);border:1px solid var(--border);border-radius:4px;background:var(--bg2);transition:all .1s}
+        .header nav a:hover{color:var(--text);background:var(--hover-bg);text-decoration:none}
+        .acc-btn{width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .1s}
+        .acc-btn:hover{background:var(--hover-bg);color:var(--text);border-color:var(--text3)}
+        .acc-btn svg{width:16px;height:16px;fill:currentColor}
+
+        .layout{max-width:900px;margin:20px auto;padding:0 24px;display:flex;gap:24px;align-items:flex-start}
+        .sidebar{width:240px;flex-shrink:0}
         .main{flex:1;min-width:0}
-        .sidebar{width:200px;flex-shrink:0}
-        .profile-card{border:1px solid var(--border);background:var(--bg2);padding:16px;border-radius:2px;margin-bottom:12px}
-        .profile-card h1{margin:0;font-size:18px;font-weight:500;color:var(--orange);font-family:Georgia,serif}
-        .profile-card .joined{font-size:11px;color:var(--text4);margin-top:2px}
-        .profile-card .score{font-size:14px;margin-top:6px;color:var(--text2)}
-        .profile-card .score b{color:var(--orange);font-size:18px}
-        .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
-        .stat-grid .stat{padding:6px 8px;border:1px solid var(--border2);border-radius:2px;text-align:center}
-        .stat-grid .stat .n{font-size:16px;font-weight:600;color:var(--orange)}
-        .stat-grid .stat .l{font-size:10px;color:var(--text4);text-transform:uppercase}
+
+        .profile-card{background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:24px 20px;text-align:center}
+        .avatar{width:72px;height:72px;border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:600;color:#fff;background:var(--bg3)}
+        .profile-card h1{margin:0;font-size:20px;font-weight:400;color:var(--text)}
+        .profile-card .joined{font-size:12px;color:var(--text3);margin-top:2px}
+        .profile-card .score{margin-top:10px}
+        .profile-card .score b{font-size:28px;font-weight:400;color:var(--text);font-feature-settings:'tnum'}
+        .profile-card .score .lbl{display:block;font-size:11px;color:var(--text3);margin-top:-2px}
+
+        .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:14px}
+        .stat-grid .stat{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:10px 6px;text-align:center}
+        .stat-grid .stat .n{font-size:18px;font-weight:500;color:var(--text)}
+        .stat-grid .stat .l{font-size:10px;color:var(--text3);margin-top:1px;text-transform:lowercase}
+
+        .main-card{background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:18px 22px;box-shadow:0 1px 4px var(--shadow2)}
+        .main-card .mc-title{font-size:14px;font-weight:500;color:var(--text2);margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border2)}
+
         .activity-list{list-style:none;padding:0;margin:0}
-        .activity-list li{padding:6px 0;border-bottom:1px solid var(--border2);font-size:12px;display:flex;align-items:center;gap:6px}
+        .activity-list li{padding:10px 0;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:10px;transition:all .1s}
         .activity-list li:last-child{border-bottom:none}
-        .activity-list .at{font-size:10px;color:var(--text4);min-width:42px;font-family:monospace}
-        .activity-list .at a{color:var(--text4)}
-        .activity-list .at a:hover{color:var(--text)}
-        .activity-list .aty{font-size:10px;color:var(--text4);text-transform:uppercase;min-width:50px}
-        .activity-list .ati{color:var(--link)}
-        .empty{text-align:center;padding:60px 20px;color:var(--text3)}
-        @media(max-width:600px){.layout{flex-direction:column}.sidebar{width:100%}.stat-grid{grid-template-columns:repeat(4,1fr)}}
+        .activity-list li:hover{padding-left:6px}
+        .activity-list .aty{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;min-width:60px;padding:2px 8px;border-radius:4px;background:var(--bg2);text-align:center}
+        .activity-list .aty.collection{color:var(--link);background:var(--bg2)}
+        .activity-list .aty.submission{color:#81c995;background:var(--bg2)}
+        .activity-list .ati{flex:1;font-size:13px;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .activity-list .at{font-size:12px;color:var(--text3);min-width:50px;text-align:right;font-feature-settings:'tnum'}
+
+        .empty-state{text-align:center;padding:60px 20px;color:var(--text3);font-size:14px;line-height:1.6}
+        .empty-state .big{font-size:48px;margin-bottom:12px;opacity:.2}
+        .error-page{text-align:center;padding:80px 20px;color:var(--text3)}
+        .error-page .er-code{font-size:72px;font-weight:400;color:var(--text2);line-height:1}
+        .error-page .er-text{font-size:16px;color:var(--text2);margin-top:12px}
+
+        @media(max-width:720px){
+            .layout{flex-direction:column;padding:0 16px;gap:14px}
+            .sidebar{width:100%}
+            .profile-card{padding:20px 16px}
+            .stat-grid{grid-template-columns:repeat(4,1fr)}
+            .header{padding:10px 16px;flex-wrap:wrap}
+            .header h1{order:10;width:100%;margin-top:4px}
+            .header nav{margin-left:0}
+        }
+        @media(max-width:480px){
+            .stat-grid{grid-template-columns:repeat(2,1fr)}
+            .avatar{width:60px;height:60px;font-size:24px}
+            .main-card{padding:14px 16px}
+        }
     </style>
 </head>
 <body>
@@ -46,53 +88,69 @@
         <h1>/u/{% if profile %}{{ profile.username }}{% else %}...{% endif %}</h1>
         <nav>
             <a href="/explore">Explore</a>
-            <a href="/leaderboard">Leaderboard</a>
-            <a href="/">Search</a>
+            <a href="/leaderboard">Rankings</a>
+            <a href="/users">Users</a>
         </nav>
-        <a href="/login" style="width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);display:flex;align-items:center;justify-content:center;flex-shrink:0;text-decoration:none;transition:.15s;margin-left:auto" aria-label="Account">
-            <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+        <a href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" class="acc-btn" aria-label="Account">
+            <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
         </a>
     </div>
 
-    {% if error %}
-    <div class="empty">{{ error }}</div>
-    {% else %}
+    {% if profile %}
+    {% set colors = ['#8ab4f8','#c58af9','#81c995','#fbbc04','#f28b82','#4fc3f7','#aed581','#ffb74d','#f06292','#ba68c8'] %}
+    {% set ci = profile.username|length * 3 % 10 %}
+    {% set avatar_color = colors[ci] %}
     <div class="layout">
         <div class="sidebar">
             <div class="profile-card">
+                <div class="avatar" style="background:{{ avatar_color }}">{{ profile.username[0]|upper }}</div>
                 <h1>{{ profile.username }}</h1>
-                <div class="joined">Joined {{ profile.created_at[:10] }}</div>
-                <div class="score"><b>{{ profile.points }}</b> points</div>
+                <div class="joined">Joined {{ profile.joined_date }}</div>
+                <div class="score"><b>{{ profile.score }}</b><span class="lbl">points</span></div>
                 <div class="stat-grid">
-                    <div class="stat"><div class="n">{{ profile.collections_count }}</div><div class="l">collections</div></div>
-                    <div class="stat"><div class="n">{{ profile.pins_count }}</div><div class="l">pins</div></div>
-                    <div class="stat"><div class="n">{{ profile.submissions_count }}</div><div class="l">submissions</div></div>
-                    <div class="stat"><div class="n">{{ profile.votes_given }}</div><div class="l">upvotes</div></div>
+                    <div class="stat"><div class="n">{{ profile.clicks }}</div><div class="l">clicks</div></div>
+                    <div class="stat"><div class="n">{{ profile.searches }}</div><div class="l">searches</div></div>
+                    {% if session.user_id == profile.username %}
+                    <div class="stat"><div class="n">{{ profile.points_available or 0 }}</div><div class="l">available</div></div>
+                    {% endif %}
                 </div>
             </div>
         </div>
         <div class="main">
-            <h3 style="margin:0 0 8px;font-size:14px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Recent activity</h3>
-            {% if profile.recent %}
-            <div style="border:1px solid var(--border);background:var(--bg2);padding:4px 12px;border-radius:2px">
+            {% if profile.collections %}
+            <div class="main-card">
+                <div class="mc-title">{{ profile.collections|length }} collection{% if profile.collections|length != 1 %}s{% endif %}</div>
                 <ul class="activity-list">
-                    {% for a in profile.recent %}
-                    <li>
-                        <span class="at">{{ a.created_at[:10] }}</span>
-                        <span class="aty">{{ a.type }}</span>
-                        {% if a.type == 'collection' %}
-                        <a href="{{ a.url }}" class="ati">{{ a.title }}</a>
-                        {% else %}
-                        <a href="{{ a.url }}" class="ati" target="_blank">{{ a.title[:60] }}</a>
-                        {% endif %}
-                    </li>
-                    {% endfor %}
+                {% for c in profile.collections %}
+                    <li><span class="aty collection">collection</span><a href="/explore/{{ c.id }}" class="ati">{{ c.name }}</a><span class="at">{{ c.websites|length }} pins</span></li>
+                {% endfor %}
                 </ul>
             </div>
-            {% else %}
-            <div style="color:var(--text4);font-size:12px">No activity yet.</div>
+            {% endif %}
+            {% if profile.submissions %}
+            <div style="margin-top:14px">
+            <div class="main-card">
+                <div class="mc-title">{{ profile.submissions|length }} submission{% if profile.submissions|length != 1 %}s{% endif %}</div>
+                <ul class="activity-list">
+                {% for s in profile.submissions %}
+                    <li><span class="aty submission">site</span><a href="{{ s.url }}" class="ati" rel="nofollow">{{ s.title or s.url }}</a><span class="at">{{ s.created_at[:10] }}</span></li>
+                {% endfor %}
+                </ul>
+            </div>
+            </div>
+            {% endif %}
+            {% if not profile.collections and not profile.submissions %}
+            <div class="main-card">
+                <div class="empty-state"><div class="big">&#x1F4ED;</div><p>No activity yet.</p></div>
+            </div>
             {% endif %}
         </div>
+    </div>
+    {% else %}
+    <div class="error-page">
+        <div class="er-code">404</div>
+        <div class="er-text">User not found</div>
+        <p style="margin-top:20px"><a href="/users">Find users</a></p>
     </div>
     {% endif %}
 </body>

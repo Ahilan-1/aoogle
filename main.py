@@ -13,7 +13,7 @@ try:
     redis_available = True
 except ImportError:
     redis_available = False
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 try:
     import boto3
     from botocore.exceptions import ClientError
@@ -778,7 +778,7 @@ def detect_user_country():
         pass
     return None, None
 
-DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data.json')
+DATA_FILE = os.environ.get('DATA_FILE') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data.json')
 
 def _load_json():
     if S3_ENABLED and s3_client:
@@ -820,6 +820,13 @@ def _save_json(data):
 class DataManager:
     def __init__(self):
         self._lock = threading.Lock()
+        # Auto-migrate from old path when volume is configured
+        if os.environ.get('DATA_FILE'):
+            old_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data.json')
+            if not os.path.exists(DATA_FILE) and os.path.exists(old_path):
+                import shutil
+                shutil.copy2(old_path, DATA_FILE)
+                app.logger.info(f"Migrated data.json from {old_path} to {DATA_FILE}")
         loaded = _load_json()
         if loaded:
             self.data = loaded
@@ -1295,6 +1302,24 @@ class DataManager:
                 return u
         return None
 
+    def get_all_users(self):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+        return self.data.get('users', [])
+
+    def delete_user(self, user_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            users = self.data.get('users', [])
+            self.data['users'] = [u for u in users if u['user_id'] != user_id]
+            self.data.setdefault('click_stats', {})
+            self.data['click_stats'].pop(user_id, None)
+            _save_json(self.data)
+
     def record_user_action(self, user_id, ip):
         with self._lock:
             users = self.data.get('users', [])
@@ -1327,64 +1352,53 @@ class DataManager:
             if loaded:
                 self.data = loaded
             self.data.setdefault('clicks', [])
+            self.data.setdefault('click_stats', {})
             url_hash = hashlib.sha256(url.encode()).hexdigest()
+            now = datetime.now()
             for c in self.data['clicks']:
                 if c['user_id'] == user_id and c['url_hash'] == url_hash:
-                    c['clicked_at'] = datetime.now().isoformat()
-                    _save_json(self.data)
-                    return
-            self.data['clicks'].append({
-                'user_id': user_id,
-                'url': url,
-                'url_hash': url_hash,
-                'clicked_at': datetime.now().isoformat(),
-            })
+                    c['clicked_at'] = now.isoformat()
+                    break
+            else:
+                self.data['clicks'].append({
+                    'user_id': user_id,
+                    'url': url,
+                    'url_hash': url_hash,
+                    'clicked_at': now.isoformat(),
+                })
+
+            stats = self.data['click_stats'].setdefault(user_id, {'clicks': 0, 'points': 0, 'last_click': '', 'streak': 0, 'searches': 0})
+            stats['clicks'] = stats.get('clicks', 0) + 1
+
+            streak = stats.get('streak', 0)
+            last = stats.get('last_click', '')
+            if last:
+                try:
+                    diff = (now - datetime.fromisoformat(last)).total_seconds()
+                    if diff < 60:
+                        streak += 1
+                    else:
+                        streak = 0
+                except:
+                    streak = 0
+            stats['streak'] = streak
+            stats['last_click'] = now.isoformat()
+
+            multiplier = 1 + (streak * 0.2)
+            points_to_add = round(1 * multiplier)
+            stats['points'] = stats.get('points', 0) + points_to_add
             _save_json(self.data)
 
-    def has_clicked(self, user_id, url):
-        url_hash = hashlib.sha256(url.encode()).hexdigest()
-        for c in self.data.get('clicks', []):
-            if c['user_id'] == user_id and c['url_hash'] == url_hash:
-                return True
-        return False
-
-    def cast_vote(self, user_id, url, vote):
+    def track_search(self, user_id):
         with self._lock:
             loaded = _load_json()
             if loaded:
                 self.data = loaded
-            self.data.setdefault('votes', [])
-            url_hash = hashlib.sha256(url.encode()).hexdigest()
-            for v in self.data['votes']:
-                if v['user_id'] == user_id and v['url_hash'] == url_hash:
-                    if v['vote'] == vote:
-                        return 'same'
-                    v['vote'] = vote
-                    v['updated_at'] = datetime.now().isoformat()
-                    _save_json(self.data)
-                    return 'updated'
-            self.data['votes'].append({
-                'user_id': user_id,
-                'url': url,
-                'url_hash': url_hash,
-                'vote': vote,
-                'created_at': datetime.now().isoformat(),
-            })
+            self.data.setdefault('click_stats', {})
+            stats = self.data['click_stats'].setdefault(user_id, {'clicks': 0, 'points': 0, 'last_click': '', 'streak': 0, 'searches': 0})
+            stats['searches'] = stats.get('searches', 0) + 1
+            stats['points'] = stats.get('points', 0) + 2
             _save_json(self.data)
-            return 'cast'
-
-    def get_vote_score(self, url):
-        url_hash = hashlib.sha256(url.encode()).hexdigest()
-        up = sum(1 for v in self.data.get('votes', []) if v['url_hash'] == url_hash and v['vote'] == 1)
-        down = sum(1 for v in self.data.get('votes', []) if v['url_hash'] == url_hash and v['vote'] == -1)
-        return up - down, up, down
-
-    def get_user_vote(self, user_id, url):
-        url_hash = hashlib.sha256(url.encode()).hexdigest()
-        for v in self.data.get('votes', []):
-            if v['user_id'] == user_id and v['url_hash'] == url_hash:
-                return v['vote']
-        return 0
 
     def report_domain(self, user_id, domain, reason):
         with self._lock:
@@ -1544,8 +1558,9 @@ class DataManager:
         collections_count = len(collections)
         pins_count = sum(len(c.get('websites', [])) for c in collections)
         submissions_count = sum(1 for s in self.data.get('submitted_sites', []) if s.get('submitted_by') == user_id and s.get('crawl_status') in ('approved', 'completed'))
-        upvotes_count = sum(1 for v in self.data.get('votes', []) if v['user_id'] == user_id and v['vote'] == 1)
-        return collections_count * 2 + pins_count * 2 + submissions_count * 4 + upvotes_count * 3
+        click_stats = self.data.get('click_stats', {}).get(user_id, {})
+        click_points = click_stats.get('points', 0)
+        return collections_count * 2 + pins_count * 2 + submissions_count * 4 + click_points
 
     def get_leaderboard(self, limit=50):
         with self._lock:
@@ -1580,10 +1595,13 @@ class DataManager:
 
         collections_count = sum(1 for c in self.data.get('collections', []) if c['creator_id'] == user_id)
         pins_count = sum(len(c.get('websites', [])) for c in self.data.get('collections', []) if c['creator_id'] == user_id)
-        votes_given = sum(1 for v in self.data.get('votes', []) if v['user_id'] == user_id and v['vote'] == 1)
         submissions_count = sum(1 for s in self.data.get('submitted_sites', []) if s.get('submitted_by') == user_id and s.get('crawl_status') in ('approved', 'completed'))
         reports_approved = sum(1 for r in self.data.get('domain_reports', []) if user_id in r.get('reported_by', []) and r.get('status') == 'approved')
-        points = collections_count * 2 + pins_count * 2 + submissions_count * 4 + votes_given * 3
+        click_stats = self.data.get('click_stats', {}).get(user_id, {})
+        clicks = click_stats.get('clicks', 0)
+        searches = click_stats.get('searches', 0)
+        click_points = click_stats.get('points', 0)
+        points = collections_count * 2 + pins_count * 2 + submissions_count * 4 + click_points
 
         # Recent activity
         recent = []
@@ -1604,7 +1622,8 @@ class DataManager:
             'pins_count': pins_count,
             'submissions_count': submissions_count,
             'reports_approved': reports_approved,
-            'votes_given': votes_given,
+            'clicks': clicks,
+            'searches': searches,
             'recent': recent,
         }
 
@@ -1734,7 +1753,7 @@ class ImprovedSearch:
         except:
             self.user_agent = type('SimpleUA',(),{'random':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36','__getitem__':lambda s,k:s.random})()
         self.executor = ThreadPoolExecutor(max_workers=5)
-        self.search_urls = []
+        self.search_urls = ["ddg_html://text"]
         if ddgs_available:
             self.ddgs = DDGS()
             self.search_urls.append("ddgs://text")
@@ -1798,16 +1817,11 @@ class ImprovedSearch:
             'Cache-Control': 'max-age=0',
         }
 
-    def _fetch_with_retry(self, url, params, max_retries=2, backoff_factor=0.3):
-        """Enhanced fetch with exponential backoff"""
+    def _fetch_with_retry(self, url, params, max_retries=1, backoff_factor=0):
         last_exception = None
 
         for attempt in range(max_retries):
             try:
-                # Add jitter to avoid detection
-                delay = (backoff_factor * (2 ** attempt)) + random.uniform(0.1, 0.3)
-                time.sleep(delay)
-
                 response = self.session.get(
                     url,
                     params=params,
@@ -1820,7 +1834,6 @@ class ImprovedSearch:
                     return response
                 elif response.status_code in [429, 403]:
                     app.logger.warning(f"Rate limited on attempt {attempt + 1} for {url}")
-                    time.sleep(delay * 2)  # Additional delay for rate limits
                 else:
                     app.logger.error(f"HTTP {response.status_code} on attempt {attempt + 1} for {url}")
 
@@ -2548,64 +2561,6 @@ class ImprovedSearch:
             result.score = round(s, 2)
             scored.append(result)
 
-        # Neural network evaluation: score non-discussion sites with ML model
-        try:
-            from ml_ranking import get_ranker
-            ranker = get_ranker()
-            if ranker.available:
-                discussion_results = []
-                neural_results = []
-                for r in scored:
-                    if self._is_discussion_site(r.url):
-                        discussion_results.append(r)
-                    else:
-                        neural_results.append(r)
-
-                if neural_results:
-                    # Fetch page content concurrently for ML evaluation
-                    fetch_start = time.time()
-                    page_texts = {}
-                    with ThreadPoolExecutor(max_workers=10) as fexec:
-                        fut_map = {fexec.submit(_extract_page_text, r.url): i for i, r in enumerate(neural_results)}
-                        for f in as_completed(fut_map, timeout=30):
-                            idx = fut_map[f]
-                            try:
-                                text = f.result()
-                                if text:
-                                    page_texts[idx] = text
-                            except Exception:
-                                pass
-
-                    docs = []
-                    for i, r in enumerate(neural_results):
-                        docs.append({
-                            'title': r.title or '',
-                            'snippet': r.snippet or '',
-                            'url': r.url or '',
-                            'page_content': page_texts.get(i, ''),
-                        })
-
-                    ml_scores = ranker.predict(query, docs)
-                    min_m, max_m = min(ml_scores), max(ml_scores)
-                    m_range = max_m - min_m if max_m > min_m else 1
-
-                    # Normalize heuristic scores to 0-100 for blending
-                    h_scores = [r.score for r in neural_results]
-                    min_h, max_h = min(h_scores), max(h_scores)
-                    h_range = max_h - min_h if max_h > min_h else 1
-
-                    for i, r in enumerate(neural_results):
-                        ml = ml_scores[i] if i < len(ml_scores) else 0.0
-                        ml_norm = ((ml - min_m) / m_range) * 100
-                        h_norm = ((r.score - min_h) / h_range) * 100
-                        # Blend: 75% ML (page content), 25% heuristic (freshness, authority, filter boosts)
-                        r.score = round(h_norm * 0.25 + ml_norm * 0.75, 2)
-
-                for r in discussion_results:
-                    r.score = min(r.score, 10)  # Cap discussion/heuristic scores
-        except Exception as e:
-            app.logger.error(f"Neural ranking error: {e}")
-
         scored.sort(key=lambda x: x.score, reverse=True)
 
         deduplicated = []
@@ -2701,13 +2656,56 @@ class ImprovedSearch:
             app.logger.error(f"Error parsing DuckDuckGo HTML: {str(e)}")
         return results
 
+    def _search_duckduckgo_html(self, query):
+        try:
+            url = 'https://html.duckduckgo.com/html/'
+            params = {'q': query}
+            headers = self._get_headers()
+            r = self.session.post(url, data=params, headers=headers, timeout=5)
+            if r.status_code != 200:
+                return []
+            soup = BeautifulSoup(r.text, 'html.parser')
+            results = []
+            seen = set()
+            for result in soup.find_all('div', class_='result') or soup.find_all('div', class_='result__body'):
+                try:
+                    a = result.find('a', class_='result__a') or result.find('a', href=True)
+                    if not a or not a.get('href'):
+                        continue
+                    href = a['href']
+                    if not href.startswith('http'):
+                        continue
+                    if href in seen:
+                        continue
+                    seen.add(href)
+                    title = a.get_text(strip=True)
+                    if not title:
+                        continue
+                    snippet_el = result.find('a', class_='result__snippet') or result.find('div', class_='result__snippet')
+                    snippet = snippet_el.get_text(strip=True)[:300] if snippet_el else ''
+                    parsed = urlparse(href)
+                    results.append(SearchResult(
+                        title=title, url=href, snippet=snippet,
+                        category='general', date=None, domain=parsed.netloc
+                    ))
+                except Exception:
+                    continue
+                if len(results) >= 15:
+                    break
+            return results
+        except Exception as e:
+            app.logger.error(f"DDG HTML search error: {e}")
+            return []
+
     def _search_single_engine(self, search_url, query, page, region=None):
         try:
-            if search_url == 'ddgs://text':
+            if search_url == 'ddg_html://text':
+                return self._search_duckduckgo_html(query)
+            elif search_url == 'ddgs://text':
                 if not self.ddgs:
                     return []
                 try:
-                    ddgs_kwargs = dict(query=query, max_results=30, backend='auto', safesearch='on')
+                    ddgs_kwargs = dict(query=query, max_results=5, backend='html', safesearch='off')
                     if region:
                         ddgs_kwargs['region'] = region
                     raw = self.ddgs.text(**ddgs_kwargs)
@@ -2729,7 +2727,7 @@ class ImprovedSearch:
                     return []
             elif 'duckduckgo' in search_url:
                 all_results = []
-                offsets = [0, 30, 60]
+                offsets = [0]
                 for i, offset in enumerate(offsets):
                     try:
                         data = {'q': query}
@@ -2827,60 +2825,6 @@ class ImprovedSearch:
             except Exception as e:
                 app.logger.error(f"Fallback DDG API error: {e}")
 
-        # 2. Wikipedia API (free, no key needed)
-        if len(results) < 10:
-            try:
-                r = self.session.get('https://en.wikipedia.org/w/api.php', params={
-                    'action': 'query', 'list': 'search', 'srsearch': query,
-                    'format': 'json', 'srlimit': 15
-                }, headers=self._get_headers(), timeout=8)
-                if r and r.status_code == 200:
-                    data = r.json()
-                    for item in data.get('query', {}).get('search', []):
-                        title = item.get('title', '')
-                        url = f'https://en.wikipedia.org/wiki/{quote_plus(title.replace(" ", "_"))}'
-                        if url in seen:
-                            continue
-                        seen.add(url)
-                        raw = item.get('snippet', '')
-                        snippet = BeautifulSoup(raw, 'html.parser').get_text(strip=True)[:200]
-                        results.append(SearchResult(
-                            title=title, url=url, snippet=snippet,
-                            category='general', domain='en.wikipedia.org'
-                        ))
-                        if len(results) >= 25:
-                            break
-            except Exception as e:
-                app.logger.error(f"Fallback Wikipedia error: {e}")
-
-        # 3. Wayback Machine as last resort
-        if len(results) < 5:
-            try:
-                r = self.session.get('https://archive.org/advancedsearch.php', params={
-                    'q': query, 'output': 'json', 'rows': 10,
-                    'fl': 'identifier,title,description,url'
-                }, headers=self._get_headers(), timeout=15)
-                if r and r.status_code == 200:
-                    data = r.json()
-                    for item in data.get('response', {}).get('docs', []):
-                        id_ = item.get('identifier', '')
-                        title = item.get('title', '') or id_
-                        if not id_:
-                            continue
-                        url = f'https://archive.org/details/{id_}'
-                        if url in seen:
-                            continue
-                        seen.add(url)
-                        desc_raw = item.get('description', '') or ''
-                        if isinstance(desc_raw, list):
-                            desc_raw = ' '.join(str(s) for s in desc_raw)
-                        results.append(SearchResult(
-                            title=title, url=url, snippet=str(desc_raw)[:200],
-                            category='general', domain='archive.org'
-                        ))
-            except Exception as e:
-                app.logger.error(f"Fallback Wayback error: {e}")
-
         return results
 
     def search(self, query, page=1, filter_type='general', region=None):
@@ -2897,27 +2841,28 @@ class ImprovedSearch:
             results = []
             errors = []
 
-            futures = []
+            futures = {}
             for search_url in self.search_urls:
                 future = self.executor.submit(self._search_single_engine, search_url, query, page, region)
-                futures.append(future)
+                futures[future] = search_url
 
             try:
-                for future in as_completed(futures, timeout=10):
+                done, not_done = wait(list(futures.keys()), timeout=5, return_when=FIRST_COMPLETED)
+                for future in done:
                     try:
                         current_results = future.result()
-                        results.extend(current_results)
-                        if len(results) >= 30:
+                        if current_results:
+                            results = current_results
                             break
                     except Exception as e:
                         errors.append(str(e))
-                        continue
+                for f in not_done:
+                    f.cancel()
             except TimeoutError:
                 app.logger.warning(f"Search timed out for query: {query[:50]}")
 
             if not results:
-                app.logger.warning("Primary search failed, trying fallback sources...")
-                results = self._search_fallback(query, region)
+                app.logger.warning("Primary search returned no results")
 
             if results:
                 ranked_results = self._rank_results(query, results, filter_type)
@@ -4211,6 +4156,7 @@ def home():
 
 @app.route('/search')
 def search():
+    _search_start = time.time()
     query = request.args.get('q', '').strip()
     page = max(1, int(request.args.get('page', 1)))
     filter_type = request.args.get('filter', 'general')
@@ -4284,6 +4230,9 @@ def search():
             session['region'] = region
         results, total_results = search_engine.search(query, page, filter_type, region or None)
 
+        if session.get('user_id'):
+            data_manager.track_search(session['user_id'])
+
         verified_info = data_manager.get_verified_info(query.lower().strip(), user_country)
         if not verified_info and results:
             q_parts = query.lower().strip().split()
@@ -4320,6 +4269,7 @@ def search():
                     'items': news_items
                 }
 
+        search_time = round(time.time() - _search_start, 2)
         return render_template(
             'search.html',
             query=query,
@@ -4339,6 +4289,7 @@ def search():
             blocked_count=BLOCKLIST_COUNT,
             user_country=user_country,
             country_name=COUNTRY_NAMES.get(user_country, ''),
+            search_time=search_time,
             user_stat=None
         )
 
@@ -4355,7 +4306,8 @@ def search():
             blocked_count=BLOCKLIST_COUNT,
             user_country=user_country,
             country_name=COUNTRY_NAMES.get(user_country, ''),
-            user_stat=None
+            user_stat=None,
+            search_time=round(time.time() - _search_start, 2)
         )
 
 
@@ -5335,6 +5287,7 @@ def login():
         if not user:
             return render_template('signup.html', login_error='Invalid credentials')
         session.clear()
+        session.permanent = True
         session['user_id'] = user['user_id']
         session['username'] = user['username']
         return redirect(url_for('home'))
@@ -5647,29 +5600,6 @@ def api_scores():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
-@app.route('/api/vote', methods=['POST'])
-def api_vote():
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'ok': False, 'error': 'Login required'}), 403
-    url = request.form.get('url', '').strip()
-    title = request.form.get('title', url).strip()[:300]
-    vote = int(request.form.get('vote', '0'))
-    if vote not in (-1, 1):
-        return jsonify({'ok': False, 'error': 'Invalid vote'}), 400
-    if not data_manager.has_clicked(user_id, url):
-        return jsonify({'ok': False, 'error': 'Click the link first to vote'}), 403
-    ok, wait = rate_limit_check(user_id)
-    if not ok:
-        return jsonify({'ok': False, 'error': f'Please wait {wait}s', 'wait': wait}), 429
-    ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
-    data_manager.cast_vote(user_id, url, vote)
-    data_manager.record_user_action(user_id, ip)
-    score, up, down = data_manager.get_vote_score(url)
-    return jsonify({'ok': True, 'score': score, 'up': up, 'down': down})
-
-
-
 @app.route('/api/report-domain', methods=['POST'])
 def api_report_domain():
     user_id = session.get('user_id')
@@ -5714,6 +5644,37 @@ def admin_approve_submission():
     domain = request.form.get('domain', '').strip()
     data_manager.approve_submission(domain)
     return redirect(url_for('admin_reports'))
+
+
+@app.route('/admin/accounts')
+def admin_accounts():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    users = data_manager.get_all_users()
+    click_stats = data_manager.data.get('click_stats', {})
+    user_list = []
+    for u in users:
+        stats = click_stats.get(u['user_id'], {})
+        user_list.append({
+            'username': u['username'],
+            'user_id': u['user_id'],
+            'email': u.get('email', ''),
+            'created_at': u.get('created_at', '')[:10],
+            'last_active': u.get('last_active', '')[:10],
+            'clicks': stats.get('clicks', 0),
+            'searches': stats.get('searches', 0),
+            'points': stats.get('points', 0),
+        })
+    return render_template('admin_accounts.html', users=user_list)
+
+@app.route('/admin/delete-user', methods=['POST'])
+def admin_delete_user():
+    if not session.get('admin_logged_in'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    user_id = request.form.get('user_id', '').strip()
+    if user_id:
+        data_manager.delete_user(user_id)
+    return redirect(url_for('admin_accounts'))
 
 
 @app.template_filter('urlencode')
@@ -5818,6 +5779,28 @@ def user_collections():
 
 
 # ── Feed routes ──
+
+# ── Users (Find ID) ──
+
+@app.route('/users')
+def users_list():
+    q = request.args.get('q', '').strip().lower()
+    all_users = data_manager.get_all_users()
+    if q:
+        all_users = [u for u in all_users if q in u['username'].lower() or q in u.get('email', '').lower()]
+    user_list = []
+    for u in all_users:
+        click_stats = data_manager.data.get('click_stats', {}).get(u['user_id'], {})
+        points = data_manager.get_user_points(u['user_id'])
+        user_list.append({
+            'username': u['username'],
+            'created_at': u.get('created_at', '')[:10],
+            'clicks': click_stats.get('clicks', 0),
+            'searches': click_stats.get('searches', 0),
+            'points': points,
+        })
+    return render_template('users.html', users=user_list, q=q, total=len(user_list))
+
 
 # ── Leaderboard ──
 

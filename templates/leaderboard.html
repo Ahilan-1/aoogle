@@ -5,33 +5,62 @@
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>Leaderboard - arlong</title>
     <style>
-        :root{--bg:#202124;--bg2:#2a2a2e;--bg3:#333;--text:#ddd;--text2:#bbb;--text3:#888;--text4:#777;--link:#81a2be;--orange:#0077be;--border:#444;--border2:#3a3a3e;--accent:#800000}
-        *,*::before,*::after{box-sizing:border-box}
-        body{margin:0;padding:16px 20px;font-family:Verdana,'Bitstream Vera Sans',Arial,sans-serif;color:var(--text);background:var(--bg);font-size:13px;line-height:1.5}
-        a{color:var(--link);text-decoration:none}
-        a:hover{text-decoration:underline;color:var(--orange)}
-        .header{display:flex;align-items:baseline;gap:14px;max-width:700px;margin:0 auto 16px;padding-bottom:10px;border-bottom:1px solid var(--border);flex-wrap:wrap}
-        .header .logo{font-family:'Palatino','Palatino Linotype',Georgia,serif;font-size:20px;color:var(--orange);font-weight:700}
-        .header .logo:hover{color:var(--orange);text-decoration:none}
-        .header h1{margin:0;font-size:15px;font-weight:400;color:var(--text2)}
-        .header nav{display:flex;gap:8px;font-size:12px;margin-left:auto}
-        .header nav a{padding:2px 8px;border:1px solid var(--border);border-radius:2px;color:var(--text3)}
-        .header nav a:hover{color:var(--text);border-color:var(--text3);text-decoration:none}
-        .lb-wrap{max-width:700px;margin:0 auto}
-        .lb-card{border:1px solid var(--border);background:var(--bg2);padding:0;border-radius:2px}
-        .lb-row{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border2)}
+        *{box-sizing:border-box}
+        :root {
+            --bg:#202124; --bg2:#303134; --bg3:#3c4043; --text:#e8eaed; --text2:#bdc1c6;
+            --text3:#9aa0a6; --text4:#9aa0a6; --link:#8ab4f8; --link-v:#c58af9;
+            --border:#5f6368; --border2:#3c4043; --border3:#5f6368; --border4:#5f6368;
+            --shadow:rgba(0,0,0,.28); --shadow2:rgba(0,0,0,.4);
+            --card-bg:#303134; --hover-bg:#3c4043;
+            --gold:#fbbc04; --silver:#9aa0a6; --bronze:#cd7f32;
+        }
+        body{margin:0;padding:0;font-family:arial,sans-serif;color:var(--text);background:var(--bg);min-height:100vh}
+        a{text-decoration:none;color:var(--link)}
+        a:hover{text-decoration:underline}
+        a:visited{color:var(--link-v)}
+
+        .header{display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:100}
+        .logo{font-size:22px;font-weight:700;background:linear-gradient(to top,#0066cc,#3399ff 50%,var(--text) 50%);background-size:100% 200%;-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-1px;font-family:'Product Sans',Arial,sans-serif}
+        .header h1{margin:0;font-size:14px;font-weight:400;color:var(--text3)}
+        .header nav{display:flex;gap:6px;margin-left:auto}
+        .header nav a{padding:6px 14px;font-size:13px;color:var(--text2);border:1px solid var(--border);border-radius:4px;background:var(--bg2);transition:all .1s}
+        .header nav a:hover{color:var(--text);background:var(--hover-bg);text-decoration:none}
+        .acc-btn{width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .1s}
+        .acc-btn:hover{background:var(--hover-bg);color:var(--text);border-color:var(--text3)}
+        .acc-btn svg{width:16px;height:16px;fill:currentColor}
+
+        .lb-wrap{max-width:640px;margin:16px auto;padding:0 24px}
+        .lb-card{background:var(--card-bg);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 1px 4px var(--shadow2)}
+        .lb-header{padding:14px 20px;font-size:14px;font-weight:500;color:var(--text);border-bottom:1px solid var(--border2)}
+        .lb-row{display:flex;align-items:center;gap:10px;padding:10px 20px;border-bottom:1px solid var(--border2);transition:all .1s}
         .lb-row:last-child{border-bottom:none}
-        .lb-rank{font-size:14px;font-weight:700;color:var(--text4);min-width:28px;text-align:center;font-family:monospace}
-        .lb-rank.gold{color:#ffd700}
-        .lb-rank.silver{color:#c0c0c0}
-        .lb-rank.bronze{color:#cd7f32}
-        .lb-name{flex:1;font-size:13px;color:var(--link)}
-        .lb-name:hover{color:var(--orange)}
-        .lb-score{font-size:14px;font-weight:600;color:var(--orange);font-family:monospace}
-        .lb-joined{font-size:10px;color:var(--text4);font-family:monospace}
-        .empty{text-align:center;padding:60px 20px;color:var(--text3)}
-        .lb-note{font-size:11px;color:var(--text4);text-align:center;margin-top:12px}
-        @media(max-width:600px){.lb-row{padding:6px 10px}}
+        .lb-row:hover{background:var(--hover-bg)}
+        .lb-rank{font-size:15px;font-weight:500;color:var(--text3);min-width:28px;text-align:center;font-feature-settings:'tnum'}
+        .lb-rank.gold{color:var(--gold);font-size:18px}
+        .lb-rank.silver{color:var(--silver);font-size:16px}
+        .lb-rank.bronze{color:var(--bronze);font-size:16px}
+        .lb-rank .medal{width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center}
+        .lb-avatar{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0;background:var(--bg3)}
+        .lb-name{flex:1;font-size:14px;color:var(--link);min-width:0}
+        .lb-name:hover{text-decoration:underline}
+        .lb-name:visited{color:var(--link-v)}
+        .lb-score{font-size:14px;font-weight:500;color:var(--text);font-feature-settings:'tnum'}
+        .lb-joined{font-size:12px;color:var(--text4);min-width:60px;text-align:right}
+        .lb-empty{text-align:center;padding:60px 20px;color:var(--text3)}
+        .lb-empty .big{font-size:48px;margin-bottom:12px;opacity:.2}
+        .lb-note{font-size:12px;color:var(--text3);text-align:center;margin-top:10px;padding:0 24px;line-height:1.6}
+
+        @media(max-width:640px){
+            .lb-row{padding:8px 14px;gap:8px;flex-wrap:wrap}
+            .lb-rank{min-width:24px;font-size:13px}
+            .lb-avatar{width:22px;height:22px;font-size:10px}
+            .lb-score{font-size:13px}
+            .lb-joined{font-size:11px;min-width:40px}
+            .header{padding:10px 16px;flex-wrap:wrap}
+            .header h1{order:10;width:100%;margin-top:4px}
+            .header nav{margin-left:0}
+            .lb-wrap{padding:0 16px}
+        }
     </style>
 </head>
 <body>
@@ -40,31 +69,36 @@
         <h1>/leaderboard</h1>
         <nav>
             <a href="/explore">Explore</a>
-            <a href="/">Search</a>
+            <a href="/users">Users</a>
         </nav>
-        <a href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" style="width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);display:flex;align-items:center;justify-content:center;flex-shrink:0;text-decoration:none;transition:.15s" aria-label="Account">
-            <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+        <a href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" class="acc-btn" aria-label="Account">
+            <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
         </a>
     </div>
 
     <div class="lb-wrap">
         <div class="lb-card">
+            <div class="lb-header">Top users by points</div>
             {% if leaderboard %}
             {% for entry in leaderboard %}
             <div class="lb-row">
-                <div class="lb-rank{% if entry.rank == 1 %} gold{% elif entry.rank == 2 %} silver{% elif entry.rank == 3 %} bronze{% endif %}">#{{ entry.rank }}</div>
+                <div class="lb-rank{% if entry.rank == 1 %} gold{% elif entry.rank == 2 %} silver{% elif entry.rank == 3 %} bronze{% endif %}">
+                    {% if entry.rank == 1 %}<span class="medal">&#x1F947;</span>{% elif entry.rank == 2 %}<span class="medal">&#x1F948;</span>{% elif entry.rank == 3 %}<span class="medal">&#x1F949;</span>{% else %}#{{ entry.rank }}{% endif %}
+                </div>
+                <div class="lb-avatar">{{ entry.username[0]|upper }}</div>
                 <a href="/u/{{ entry.username }}" class="lb-name">{{ entry.username }}</a>
                 <div class="lb-score">{{ entry.score }}</div>
                 <div class="lb-joined">{{ entry.joined }}</div>
             </div>
             {% endfor %}
             {% else %}
-            <div class="empty">
-                <p>No points earned yet. <a href="/signup">Sign up</a> and contribute!</p>
+            <div class="lb-empty">
+                <div class="big">&#x1F3C6;</div>
+                <p>No points earned yet. <a href="/signup">Sign up</a> and start clicking!</p>
             </div>
             {% endif %}
         </div>
-        <div class="lb-note">Points earned by submitting websites, reporting low-quality domains, creating collections, and upvoting quality results.</div>
+        <div class="lb-note">Points awarded for link clicks (streak bonus), searches, collections, pins, and submissions.</div>
     </div>
 </body>
 </html>

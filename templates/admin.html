@@ -104,15 +104,25 @@
             </div>
         </div>
 
-        <div class="card" style="border-left:4px solid #1a73e8;cursor:pointer" onclick="window.location='/admin/bannerads'">
-            <div class="card-title">
-                Banner Ads
-                <span class="badge">{{ ads|length if ads else 0 }} ads</span>
+            <div class="card" style="border-left:4px solid #c5221f;cursor:pointer" onclick="window.location='/admin/accounts'">
+                <div class="card-title">
+                    Account Manager
+                    <span class="badge" style="background:#c5221f;color:#fff">Manage users</span>
+                </div>
+                <div style="padding:16px 20px;font-size:13px;color:#5f6368">
+                    View all user accounts, see click/search stats, and wipe test accounts &rarr;
+                </div>
             </div>
-            <div style="padding:16px 20px;font-size:13px;color:#5f6368">
-                Manage homepage banner image advertisements &rarr;
+
+            <div class="card" style="border-left:4px solid #1a73e8;cursor:pointer" onclick="window.location='/admin/bannerads'">
+                <div class="card-title">
+                    Banner Ads
+                    <span class="badge">{{ ads|length if ads else 0 }} ads</span>
+                </div>
+                <div style="padding:16px 20px;font-size:13px;color:#5f6368">
+                    Manage homepage banner image advertisements &rarr;
+                </div>
             </div>
-        </div>
 
         <div class="card" style="border-left:4px solid #e37400;cursor:pointer" onclick="window.location='/admin/admaker'">
             <div class="card-title">

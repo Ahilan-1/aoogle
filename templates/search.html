@@ -148,7 +148,7 @@
         .results-sidebar{width:300px;flex-shrink:0}
 
         .result-card{display:flex;gap:8px;margin-bottom:22px}
-        .result-left{display:flex;flex-direction:column;align-items:center;padding-top:2px;width:28px;flex-shrink:0}
+
         .result-main{flex:1;min-width:0}
         .result-url{display:flex;align-items:center;font-size:14px;color:#006621;line-height:1.5}
         .dark-mode .result-url{color:#81c995}
@@ -367,13 +367,7 @@
 
         /* ── Reddit-style community ── */
         .result-community{display:flex;align-items:center;gap:4px;margin-top:6px;font-size:12px;color:var(--text3)}
-        .reddit-vote{display:flex;flex-direction:column;align-items:center;gap:0}
-        .reddit-vote .arrw{background:none;border:none;cursor:pointer;padding:0;width:15px;height:15px;display:flex;align-items:center;justify-content:center;color:var(--text3);opacity:.5;transition:opacity .15s}
-        .reddit-vote .arrw:hover{opacity:1}
-        .reddit-vote .arrw svg{width:13px;height:13px;fill:currentColor}
-        .reddit-vote .arrw.up.active{color:#ff4500;opacity:1}
-        .reddit-vote .arrw.down.active{color:#7193ff;opacity:1}
-        .reddit-vote .vote-score{font-size:12px;font-weight:600;line-height:1;color:var(--text);min-width:18px;text-align:center;font-family:Verdana,Arial,sans-serif}
+
         .com-btn{background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:4px;padding:1px 6px;font-size:12px;color:var(--text3);opacity:.7;transition:opacity .15s;border-radius:3px;line-height:1}
         .com-btn:hover{opacity:1}
         .com-btn svg{width:14px;height:14px;fill:currentColor}
@@ -680,7 +674,6 @@
                     <a href="#" onclick="return loadNewsTab('sports',this)">Sport <span class="live-badge">LIVE</span></a>
                     <a href="#" onclick="return loadNewsTab('gaming',this)">Games</a>
                     <a href="#" onclick="return loadNewsTab('economy',this)">Economy</a>
-                    <a href="#" onclick="return loadNewsTab('business',this)">Shopping Today</a>
                     <a href="#" onclick="return loadNewsTab('asian',this)">Asian</a>
                 </div>
                 <div class="portal-news-container">
@@ -694,7 +687,10 @@
                         </div>
                     </div>
                 </div>
-                <div class="portal-news-grid" id="news-grid"></div>
+                <div class="portal-news-grid-wrap" style="border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:0;background:var(--card-bg);box-shadow:0 1px 4px var(--shadow2);padding:12px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 0 8px;font-size:13px;font-weight:600;color:var(--text)">News <span style="font-size:11px;font-weight:400;color:var(--text3)">Top stories</span></div>
+                    <div class="portal-news-grid" id="news-grid"></div>
+                </div>
             </div>
             <div class="portal-sidebar">
                 <div class="sidebar-card" id="scores-card">
@@ -716,7 +712,7 @@
                     <div class="auth-title">Make use of arlong more secure and convenient</div>
                     <a href="/login" class="auth-btn">arlong Log in</a>
                     <div class="auth-links">
-                        <a href="/search?q=find+id">Find ID</a>
+                        <a href="/users">Find ID</a>
                         <span class="sep">|</span>
                         <a href="/faq">Forgot Password</a>
                         <span class="sep">|</span>
@@ -725,7 +721,7 @@
                 </div>
                 {% endif %}
                 <div class="sidebar-card" id="weather-card">
-                    <div class="sc-title">Weather</div>
+                    <div class="sc-title" style="display:flex;align-items:center;justify-content:space-between">Weather <span id="weather-edit-btn" onclick="changeWeatherCity()" style="font-size:9px;color:var(--text3);cursor:pointer;padding:2px 6px;border-radius:4px;transition:all .15s" onmouseover="this.style.color='var(--text)';this.style.background='var(--hover-bg)'" onmouseout="this.style.color='var(--text3)';this.style.background=''">&#x270E; change</span></div>
                     <div class="weather-mini" id="weather-mini">
                         <span class="wm-temp" id="wm-temp">--</span>
                         <div>
@@ -865,17 +861,10 @@
                 <div style="color:var(--text3);font-size:13px;margin-bottom:14px;">
                     {% if crisis_info %}You are not alone. These resources can help.
                     {% elif notice and notice.type == 'redirect' %}No results found
-                    {% else %}About {{ total_results }} results{% endif %}
+                    {% else %}About {{ total_results }} results{% if search_time is defined %} ({{ search_time }}s){% endif %}{% endif %}
                 </div>
                 {% for result in results %}
                     <div class="result-card {{ 'reddit-result' if 'reddit' in result.url else '' }}" data-url="{{ result.url }}" data-title="{{ result.title }}" data-category="{{ result.category or 'general' }}">
-                        <div class="result-left">
-                            <div class="reddit-vote">
-                                <button class="arrw up" onclick="vote(this,1)" title="Upvote"><svg viewBox="0 0 13 13"><path d="M6.5 1L1 8h11z"/></svg></button>
-                                <span class="vote-score">0</span>
-                                <button class="arrw down" onclick="vote(this,-1)" title="Downvote"><svg viewBox="0 0 13 13"><path d="M6.5 12L12 5H1z"/></svg></button>
-                            </div>
-                        </div>
                         <div class="result-main">
                         <div class="result-url">
                             <img src="{{ result.favicon }}" alt="" class="result-favicon" onerror="this.style.display='none'">
@@ -1473,20 +1462,6 @@
             var fd = new FormData(); fd.append('url', url);
             navigator.sendBeacon('/api/click', fd);
         }
-        function vote(btn, dir){
-            if(document.body.getAttribute('data-loggedin') !== 'true'){ alert('Sign in to vote'); return }
-            var container = btn.closest('.reddit-vote');
-            var card = container.closest('.result-card');
-            var url = card.getAttribute('data-url');
-            var title = card.querySelector('.result-title') ? card.querySelector('.result-title').textContent : url;
-            var fd = new FormData(); fd.append('url', url); fd.append('vote', dir); fd.append('title', title);
-            fetch('/api/vote', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
-                if(!d.ok){ alert(d.error); return }
-                container.querySelector('.vote-score').textContent = d.score;
-                container.querySelectorAll('.arrw').forEach(function(b){ b.classList.remove('active') });
-                btn.classList.toggle('active', true);
-            });
-        }
         function reportDomain(btn){
             if(document.body.getAttribute('data-loggedin') !== 'true'){ alert('Sign in to report domain'); return }
             var url = btn.closest('.result-community').getAttribute('data-url');
@@ -1738,11 +1713,20 @@
         }
 
         function loadWeather(){
+            var pref = localStorage.getItem('arlong_weather_city');
+            if(pref) return loadWeatherForCity(pref);
             fetch('https://ip-api.com/json/').then(function(r){return r.json()}).then(function(geo){
                 var city = geo.city || 'London';
-                document.getElementById('wm-temp').parentNode.parentNode.querySelector('.sc-title').textContent = 'Weather - '+city+', '+(geo.region||'');
-                return fetch('/api/weather?city='+encodeURIComponent(city));
-            }).then(function(r){return r.json()}).then(function(d){
+                localStorage.setItem('arlong_weather_city', city);
+                loadWeatherForCity(city);
+            }).catch(function(){
+                loadWeatherForCity('London');
+            });
+        }
+        function loadWeatherForCity(city){
+            var title = document.getElementById('wm-temp').parentNode.parentNode.querySelector('.sc-title');
+            if(title) title.childNodes[0].textContent = 'Weather - '+city;
+            fetch('/api/weather?city='+encodeURIComponent(city)).then(function(r){return r.json()}).then(function(d){
                 if(!d.ok) return;
                 document.getElementById('wm-temp').textContent = d.temp + '\u00B0';
                 document.getElementById('wm-desc').textContent = d.desc;
@@ -1751,6 +1735,14 @@
                 var wc = document.getElementById('weather-card');
                 if(wc) wc.innerHTML = '<div class="sc-title">Weather</div><div style="font-size:12px;color:var(--text3)">Unavailable</div>';
             });
+        }
+        function changeWeatherCity(){
+            var cur = localStorage.getItem('arlong_weather_city') || '';
+            var city = prompt('Enter city name for weather:', cur);
+            if(city && city.trim()){
+                localStorage.setItem('arlong_weather_city', city.trim());
+                loadWeatherForCity(city.trim());
+            }
         }
     </script>
     <div class="mob-nav">
