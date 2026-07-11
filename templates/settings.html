@@ -63,38 +63,6 @@
         <div class="setting-group">
             <div class="toggle-row">
                 <div class="toggle-label">
-                    <h3>ML-Powered Ranking <span class="new-tag">NEW</span></h3>
-                    <div class="label-desc">Uses an XGBoost LambdaMART model trained on ORCAS (18M real Bing clicks) + MS MARCO to predict query-document relevance.</div>
-                </div>
-                <div class="toggle-wrap">
-                    <span class="toggle" id="ml-toggle"></span>
-                </div>
-            </div>
-            <div id="ml-status" class="status-badge off"><span class="dot"></span> Disabled</div>
-            <div id="ml-mode-select" style="margin-top:14px;display:none;padding-top:14px;border-top:1px solid #eee">
-                <div style="font-size:13px;font-weight:500;margin-bottom:10px;color:var(--text)">Ranking mode</div>
-                <label class="mode-opt" data-mode="blend_light" style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:4px">
-                    <input type="radio" name="ml-mode" value="blend_light" checked style="margin-top:2px">
-                    <div><strong>Blend (subtle)</strong><br><span style="font-size:12px;color:var(--text3)">ML score lightly blended into existing ranking. Small adjustments to positions 3-10.</span></div>
-                </label>
-                <label class="mode-opt" data-mode="blend_strong" style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:4px">
-                    <input type="radio" name="ml-mode" value="blend_strong">
-                    <div><strong>Blend (strong)</strong><br><span style="font-size:12px;color:var(--text3)">ML score weighted equally with heuristic score. Can reorder top results.</span></div>
-                </label>
-                <label class="mode-opt" data-mode="pure_ml" style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:4px">
-                    <input type="radio" name="ml-mode" value="pure_ml">
-                    <div><strong>Pure ML</strong><br><span style="font-size:12px;color:var(--text3)">Replace heuristic ranking entirely with model-predicted relevance. Most aggressive.</span></div>
-                </label>
-                <label class="mode-opt" data-mode="norm_50" style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:4px">
-                    <input type="radio" name="ml-mode" value="norm_50">
-                    <div><strong>Normalized 50/50</strong><br><span style="font-size:12px;color:var(--text3)">Both scores normalized to 0-1, blended equally. Fair mix regardless of scale.</span></div>
-                </label>
-            </div>
-        </div>
-
-        <div class="setting-group">
-            <div class="toggle-row">
-                <div class="toggle-label">
                     <h3>News Portal <span class="new-tag">NEW</span></h3>
                     <div class="label-desc">News ticker, headlines grid, weather and stock prices on the homepage. Data from BBC RSS, wttr.in and Yahoo Finance (no API key needed).</div>
                 </div>
@@ -103,10 +71,6 @@
                 </div>
             </div>
             <div id="portal-status" class="status-badge off"><span class="dot"></span> Disabled</div>
-        </div>
-
-        <div class="note">
-            <strong>How ML Ranking works:</strong> For each result, the model extracts 20 features (term overlap, BM25, TF-IDF, readability, title/URL structure) and predicts a relevance score. The model was trained on <strong>ORCAS</strong> (18.8M real Bing clicks) + MS MARCO document corpus using XGBoost LambdaMART optimized for NDCG. See <a href="/changelogs">changelogs</a> for details.
         </div>
 
         <h2>About</h2>
@@ -135,12 +99,11 @@
                 if(on){setVal(key,'1');t.classList.add('on');s.className='status-badge on';s.innerHTML='<span class="dot"></span> Enabled';if(mc)mc.style.display='block'}
                 else{setVal(key,'0');t.classList.remove('on');s.className='status-badge off';s.innerHTML='<span class="dot"></span> Disabled';if(mc)mc.style.display='none'}
                 active=on?'1':'0';
-                if(mc){var mode=getVal('arlong-ml-mode')||'blend_light';var rb=mc.querySelector('input[value="'+mode+'"]');if(rb)rb.checked=true}
+
             }
         }
 
         document.addEventListener('DOMContentLoaded',function(){
-            setupToggle('ml-toggle','ml-status','arlong-ml','ml-mode-select');
             setupToggle('portal-toggle','portal-status','arlong-portal',null);
 
             /* Portal is ON by default, flip the toggle logic */
@@ -164,20 +127,6 @@
                     showToast('Saved');
                 };
             })();
-
-            var mode=getVal('arlong-ml-mode')||'blend_light';
-            var rbs=document.querySelectorAll('input[name="ml-mode"]');
-            for(var i=0;i<rbs.length;i++){if(rbs[i].value===mode)rbs[i].checked=true}
-            var mc=document.getElementById('ml-mode-select');
-            mc.addEventListener('change',function(e){
-                if(e.target.name==='ml-mode'){
-                    setVal('arlong-ml-mode',e.target.value);
-                    setVal('arlong-ml','1');
-                    document.getElementById('ml-toggle').classList.add('on');
-                    var ms=document.getElementById('ml-status');
-                    ms.className='status-badge on';ms.innerHTML='<span class="dot"></span> Enabled';
-                }
-            });
         });
     </script>
 </body>

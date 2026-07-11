@@ -38,9 +38,6 @@
         .avatar{width:72px;height:72px;border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:600;color:#fff;background:var(--bg3)}
         .profile-card h1{margin:0;font-size:20px;font-weight:400;color:var(--text)}
         .profile-card .joined{font-size:12px;color:var(--text3);margin-top:2px}
-        .profile-card .score{margin-top:10px}
-        .profile-card .score b{font-size:28px;font-weight:400;color:var(--text);font-feature-settings:'tnum'}
-        .profile-card .score .lbl{display:block;font-size:11px;color:var(--text3);margin-top:-2px}
 
         .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:14px}
         .stat-grid .stat{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:10px 6px;text-align:center}
@@ -88,7 +85,6 @@
         <h1>/u/{% if profile %}{{ profile.username }}{% else %}...{% endif %}</h1>
         <nav>
             <a href="/explore">Explore</a>
-            <a href="/leaderboard">Rankings</a>
             <a href="/users">Users</a>
         </nav>
         <a href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" class="acc-btn" aria-label="Account">
@@ -106,13 +102,9 @@
                 <div class="avatar" style="background:{{ avatar_color }}">{{ profile.username[0]|upper }}</div>
                 <h1>{{ profile.username }}</h1>
                 <div class="joined">Joined {{ profile.joined_date }}</div>
-                <div class="score"><b>{{ profile.score }}</b><span class="lbl">points</span></div>
                 <div class="stat-grid">
                     <div class="stat"><div class="n">{{ profile.clicks }}</div><div class="l">clicks</div></div>
                     <div class="stat"><div class="n">{{ profile.searches }}</div><div class="l">searches</div></div>
-                    {% if session.user_id == profile.username %}
-                    <div class="stat"><div class="n">{{ profile.points_available or 0 }}</div><div class="l">available</div></div>
-                    {% endif %}
                 </div>
             </div>
         </div>

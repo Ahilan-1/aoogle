@@ -147,18 +147,8 @@
         .results-main{flex:1;min-width:0}
         .results-sidebar{width:300px;flex-shrink:0}
 
-        .result-card{display:flex;gap:8px;margin-bottom:22px}
-
-        .result-main{flex:1;min-width:0}
-        .result-url{display:flex;align-items:center;font-size:14px;color:#006621;line-height:1.5}
-        .dark-mode .result-url{color:#81c995}
-        .result-favicon{width:16px;height:16px;margin-right:6px;border-radius:50%;flex-shrink:0}
-        .result-title{font-size:18px;line-height:1.4;font-weight:400;display:inline}
-        .result-snippet{color:var(--text2);font-size:14px;line-height:1.58;word-wrap:break-word}
-        .result-metadata{display:flex;align-items:center;gap:8px;margin-top:2px;font-size:13px;color:var(--text4);flex-wrap:wrap}
-        .result-category{background:var(--bg3);padding:2px 8px;border-radius:10px;font-size:11px;color:var(--text)}
-        .result-score{color:var(--text4);font-size:11px;opacity:.4}
-        .reddit-result .result-title{color:#ff4500}
+        .result-card{display:none}
+        .result-main{display:none}
 
         @media(max-width:640px){.ao-warning{font-size:13px;padding:8px 12px}}
 
@@ -263,9 +253,7 @@
             .media-panel .mp-watch{justify-content:center}
         }
 
-        .result-actions{user-select:none}
-        .three-dots:hover{background:var(--hover-bg)!important;color:var(--text)!important}
-        .report-option:hover{background:var(--hover-bg)!important}
+        .result-actions{display:none}
         .report-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#323232;color:#fff;padding:10px 24px;border-radius:24px;font-size:13px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.3);transition:opacity .3s;opacity:0;pointer-events:none}
         .report-toast.show{opacity:1}
         @media(max-width:900px){
@@ -289,8 +277,8 @@
             .filter-select{font-size:12px;padding:4px 22px 4px 8px;max-width:130px}
             .fl-label{display:none}
             .filter-count{font-size:11px}
-            .result-title{font-size:16px}
-            .result-snippet{font-size:13px}
+            .rc-title{font-size:16px}
+            .rc-snip{font-size:13px}
             .results-layout{padding:10px 12px 40px}
             .info-box{padding:16px}
             .weather-panel .wp-temp{font-size:36px}
@@ -304,15 +292,14 @@
             .glogo{font-size:36px}
             .homepage{padding:24px 12px}
             .homepage .search-box{height:44px;font-size:15px}
-            .result-url{font-size:12px}
-            .result-title{font-size:14px}
-            .result-snippet{font-size:12px}
+            .rc-bread{font-size:11px}
+            .rc-title{font-size:14px}
+            .rc-snip{font-size:12px}
             .pagination a{padding:6px 10px;font-size:12px}
         }
         @media(hover:none){
-            .result-card:active{background:var(--hover-bg);margin:0 -8px;padding:0 8px;border-radius:6px}
+            .rc-modern:active{background:var(--hover-bg);margin:0 -8px;padding:0 8px;border-radius:6px}
             .pagination a{display:block;margin:6px 0;padding:14px;border-radius:10px;background:var(--bg2);border:1px solid var(--border);text-align:center;font-size:15px;font-weight:500}
-            .result-actions button{min-width:44px;min-height:44px}
             .suggestions-box .sug-item{padding:14px 16px;font-size:15px}
         }
         @supports(padding:max(0px)){
@@ -373,17 +360,8 @@
         @keyframes ni-hint-pulse{0%,100%{opacity:.4}50%{opacity:1}}
         @media(max-width:640px){.netflix-intro .ni-logo span{font-size:56px;letter-spacing:-2px}.netflix-intro .ni-logo{gap:2px}.netflix-intro .ni-subtitle{font-size:11px;letter-spacing:5px}.netflix-intro .ni-waves{height:60px}}
 
-        /* ── Reddit-style community ── */
-        .result-community{display:flex;align-items:center;gap:4px;margin-top:6px;font-size:12px;color:var(--text3)}
-
-        .com-btn{background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:4px;padding:1px 6px;font-size:12px;color:var(--text3);opacity:.7;transition:opacity .15s;border-radius:3px;line-height:1}
-        .com-btn:hover{opacity:1}
-        .com-btn svg{width:14px;height:14px;fill:currentColor}
-        .pin-btn-sm{background:none;border:none;cursor:pointer;display:flex;align-items:center;padding:1px 4px;font-size:12px;color:var(--text3);opacity:.5;transition:opacity .15s;border-radius:3px;line-height:1}
-        .pin-btn-sm:hover{opacity:1}
-        .pin-btn-sm svg{width:13px;height:13px;fill:currentColor}
-        .rpt-btn{background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:3px;padding:1px 6px;font-size:12px;color:var(--text3);opacity:.5;transition:opacity .15s;border-radius:3px;line-height:1}
-        .rpt-btn:hover{opacity:1}
+        /* ── Reddit-style community (legacy, hidden) ── */
+        .result-community,.com-btn,.pin-btn-sm,.rpt-btn{display:none}
 
         .hp-whatsnew{max-width:680px;margin:24px auto 0;text-align:left;font-size:13px}
         .hp-whatsnew summary{color:var(--text3);cursor:pointer;font-size:12px;padding:4px 0;user-select:none;list-style:none;display:flex;align-items:center;gap:4px;justify-content:center}
@@ -550,19 +528,97 @@
             .portal-header-center .portal-logo .pl-text{font-size:24px}
             .portal-search-box{height:34px;font-size:13px;padding:0 12px}
         }
-        .qa-btn{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;font-size:11px;color:var(--text3);border:1px solid var(--border);border-radius:4px;background:var(--bg2);cursor:pointer;transition:all .1s;font-family:arial,sans-serif;margin-top:2px}
-        .qa-btn:hover{color:var(--link);border-color:var(--link);background:var(--bg2)}
-        .qa-btn.loading{opacity:.6;pointer-events:none}
-        .qa-btn svg{width:12px;height:12px;fill:currentColor}
-        .qa-summary{display:none;margin-top:4px;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;font-size:13px;line-height:1.5;color:var(--text2);position:relative}
-        .qa-summary.show{display:block}
-        .qa-summary .qa-close{position:absolute;top:4px;right:6px;cursor:pointer;color:var(--text3);font-size:14px;line-height:1;padding:2px;background:none;border:none;font-family:arial,sans-serif}
-        .qa-summary .qa-close:hover{color:var(--text)}
-        .qa-summary .qa-error{color:var(--red)}
-        .qa-summary .qa-loading{color:var(--text3)}
-        .qa-global{margin-bottom:16px;padding:12px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;font-size:14px;line-height:1.6;color:var(--text2);display:none}
-        .qa-global.show{display:block}
-        .qa-global .qa-gtitle{font-weight:600;color:var(--text);margin-bottom:4px}
+        .qa-btn,.qa-summary,.qa-global{display:none}
+
+        /* ── Quick Answer (AI Summary) button + box ── */
+        .ais-btn{display:inline-flex;align-items:center;gap:5px;padding:4px 14px;font-size:13px;color:#8ab4f8;border:1px solid #8ab4f8;border-radius:20px;background:transparent;cursor:pointer;font-family:arial,sans-serif;transition:all .15s;margin-left:auto;white-space:nowrap}
+        .ais-btn:hover{background:rgba(138,180,248,.1)}
+        .ais-btn svg{width:14px;height:14px;fill:currentColor}
+        .ais-btn.loading{opacity:.6;pointer-events:none}
+        .ais-box{display:none;margin:0 0 24px;padding:0;font-size:15px;line-height:1.75;color:var(--text)}
+        .ais-box.show{display:block}
+        .ais-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
+        .ais-title{font-size:20px;font-weight:700;color:var(--text);letter-spacing:-.3px}
+        .ais-close{cursor:pointer;color:var(--text4);font-size:22px;background:none;border:none;line-height:1;padding:0 4px;font-family:arial,sans-serif;transition:color .1s}
+        .ais-close:hover{color:var(--text)}
+        .ais-body{}
+        .ais-loading{color:var(--text3);font-size:13px}
+        .ais-error{color:#f28b82;font-size:13px}
+        .ais-intro{font-size:15px;line-height:1.75;color:var(--text);margin-bottom:20px}
+        .ais-intro strong{color:#fff;font-weight:700}
+        .ais-section{margin-bottom:20px}
+        .ais-section:last-child{margin-bottom:0}
+        .ais-sh{font-size:16px;font-weight:700;color:var(--text);margin-bottom:10px;padding-bottom:0;border-bottom:none;letter-spacing:-.2px}
+        .ais-list{margin:8px 0 0;padding:0;list-style:none}
+        .ais-list li{font-size:14px;line-height:1.65;color:var(--text);padding:3px 0 3px 20px;position:relative}
+        .ais-list li::before{content:'\2022';position:absolute;left:4px;color:var(--text3);font-weight:700}
+        .ais-list li .ais-sublist{padding-left:20px;margin-top:2px;list-style:none}
+        .ais-list li .ais-sublist li{font-size:13px;color:var(--text2);padding-left:16px}
+        .ais-list li .ais-sublist li::before{content:'\2013';color:var(--text4)}
+        .ais-list li strong{color:#fff;font-weight:600}
+        .ais-fn{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:rgba(232,234,237,.12);color:var(--text3);font-size:10px;font-weight:700;margin:0 3px;vertical-align:super;line-height:1;flex-shrink:0}
+        .ais-footnotes{margin-top:16px;padding-top:12px;border-top:1px solid var(--border2);font-size:12px;color:var(--text3);line-height:1.6}
+        .ais-footnotes .ais-fnref{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:rgba(232,234,237,.12);color:var(--text3);font-size:9px;font-weight:700;margin-right:5px;vertical-align:middle;flex-shrink:0}
+        .ais-cite{font-size:11px;color:var(--text3);margin-top:16px;padding-top:10px;border-top:none}
+        .ais-box + .rc-modern{margin-top:2px}
+
+        /* ── Search result cards ── */
+        .rc-modern{margin-bottom:26px;padding-bottom:2px}
+        .rc-row{display:flex;align-items:flex-start;gap:8px}
+        .rc-body{flex:1;min-width:0}
+        .rc-title-line{display:flex;align-items:center;gap:8px}
+        .rc-title{font-size:18px;font-weight:600;color:#8ab4f8;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;text-decoration:none}
+        .rc-title:hover{text-decoration:underline}
+        .rc-title:visited{color:#c58af9}
+        .rc-acts{display:flex;align-items:center;gap:2px;flex-shrink:0;margin-top:1px}
+        .rc-save{background:none;border:1px solid var(--border);border-radius:50%;width:28px;height:28px;cursor:pointer;color:var(--text3);display:flex;align-items:center;justify-content:center;font-size:14px;opacity:0;transition:all .12s;flex-shrink:0}
+        .rc-modern:hover .rc-save{opacity:1}
+        .rc-save:hover{border-color:var(--link);color:var(--link);background:rgba(138,180,248,.08)}
+        .rc-dots{background:none;border:none;cursor:pointer;color:var(--text3);font-size:18px;padding:2px 6px;border-radius:50%;line-height:1;transition:all .12s;flex-shrink:0}
+        .rc-dots:hover{background:var(--hover-bg);color:var(--text)}
+        .rc-bread{display:flex;align-items:center;gap:4px;font-size:13px;color:var(--text3);margin-top:1px;line-height:1.4;flex-wrap:wrap}
+        .rc-bread .rc-fav{width:16px;height:16px;border-radius:50%;flex-shrink:0}
+        .rc-bread .rc-dom{font-weight:600;color:var(--text)}
+        .rc-bread .rc-path{color:var(--text3)}
+        .rc-bread .rc-sep{color:var(--text4);margin:0 2px;font-size:11px}
+        .rc-snip{color:var(--text2);font-size:14px;line-height:1.58;margin-top:5px;word-wrap:break-word}
+        .rc-date{display:inline-block;background:var(--bg3);border-radius:12px;padding:1px 8px;font-size:11px;color:var(--text3);margin-right:6px;vertical-align:baseline}
+        .rc-pos{position:relative}
+        .rc-report-menu{display:none;position:absolute;right:0;top:100%;background:var(--bg2);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px var(--shadow2);z-index:300;min-width:180px;padding:4px 0;margin-top:2px}
+        .rc-report-menu.show{display:block}
+        .rc-report-opt{padding:8px 14px;cursor:pointer;font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px}
+        .rc-report-opt:hover{background:var(--hover-bg)}
+
+        .rc-badge{display:inline-block;font-size:10px;font-weight:600;padding:1px 7px;border-radius:8px;margin-right:5px;vertical-align:baseline;letter-spacing:.3px}
+        .rc-badge.vid{background:rgba(255,255,255,.08);color:var(--text2)}
+        .rc-badge.disc{background:rgba(138,180,248,.12);color:#8ab4f8}
+
+        .disc-sec{margin-bottom:28px;padding-bottom:4px}
+        .disc-head{display:flex;align-items:center;gap:8px;margin-bottom:14px;color:var(--text2);font-size:14px;font-weight:600;letter-spacing:.2px}
+        .disc-head svg{width:16px;height:16px;fill:currentColor;opacity:.7}
+        .disc-car{display:flex;gap:14px;overflow-x:auto;padding-bottom:10px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+        .disc-car::-webkit-scrollbar{height:4px}
+        .disc-car::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+        .disc-c{flex:0 0 300px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:7px;min-height:160px;transition:border-color .15s}
+        .disc-c:hover{border-color:var(--text4)}
+        .disc-ch{display:flex;align-items:center;gap:6px;margin-bottom:2px}
+        .disc-ch .disc-fav{width:16px;height:16px;border-radius:50%;flex-shrink:0}
+        .disc-ch .disc-dom{font-size:11px;color:var(--text3);font-weight:500}
+        .disc-ct{font-size:14px;font-weight:600;color:#fff;line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;text-decoration:none}
+        .disc-ct:hover{color:var(--link);text-decoration:underline}
+        .disc-cs{font-size:12px;color:var(--text3);line-height:1.55;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;flex:1;margin-top:1px}
+        .disc-cf{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text3);margin-top:auto;padding-top:7px;border-top:1px solid var(--border2)}
+
+        @media(max-width:640px){
+            .rc-save{opacity:1}
+            .rc-title{font-size:16px}
+            .ais-btn{font-size:11px;padding:3px 10px}
+            .ais-btn svg{width:12px;height:12px}
+            .ais-title{font-size:18px}
+            .ais-sh{font-size:14px}
+            .ais-list li{font-size:13px}
+            .ais-intro{font-size:14px}
+        }
     </style>
 </head>
 <body data-loggedin="{% if session.user_id %}true{% else %}false{% endif %}">
@@ -612,14 +668,13 @@
         <div class="search-form">
             <form action="/search" method="GET" autocomplete="off" id="hp-form" onsubmit="document.getElementById('ao-loading').classList.add('show')">
                 <input type="hidden" name="filter" value="{{ filter or 'general' }}">
-                <input type="hidden" name="ml" id="hp-ml" value="">
+
                 <div class="search-input-wrap">
                     <input type="search" name="q" class="search-box" id="hp-search" required placeholder="" autocomplete="off" enterkeyhint="search">
                     <div class="suggestions-box" id="hp-suggest"></div>
                 </div>
                 <div class="buttons">
                     <input type="submit" value="Search">
-                    <a href="/leaderboard" class="explore-btn" style="background:var(--bg3);border:1px solid var(--bg3);border-radius:4px;color:var(--text);font-size:14px;margin:6px 4px;padding:0 16px;line-height:36px;height:36px;cursor:pointer;min-width:120px;font-family:arial,sans-serif;transition:.1s;display:inline-flex;align-items:center;justify-content:center;text-decoration:none">Leaderboard</a>
                     <a href="/explore" class="explore-btn">Explore</a>
                 </div>
             </form>
@@ -715,11 +770,9 @@
                 <div class="sidebar-card portal-auth-card" id="portal-user-card">
                     <div class="au-header"><span class="au-avatar">{{ session.username[0]|upper }}</span><span class="au-name">{{ session.username }}</span></div>
                     <div class="au-stats">
-                        <div class="au-stat"><span class="au-stat-val">{{ user_stat.points }}</span><span class="au-stat-lbl">Points</span></div>
                         <div class="au-stat"><span class="au-stat-val">{{ user_stat.collections_count or 0 }}</span><span class="au-stat-lbl">Collections</span></div>
                         <div class="au-stat"><span class="au-stat-val">{{ user_stat.submissions_count or 0 }}</span><span class="au-stat-lbl">Submissions</span></div>
                     </div>
-                    <a href="/u/{{ session.username }}" class="auth-btn" style="margin-top:12px">See full profile &amp; leaderboard</a>
                 </div>
                 {% else %}
                 <div class="sidebar-card portal-auth-card" id="portal-auth-card">
@@ -760,7 +813,6 @@
             <div class="rs-wrap">
                 <form action="/search" method="GET" id="rs-form" onsubmit="document.getElementById('ao-loading').classList.add('show')">
                     <input type="hidden" name="filter" value="{{ filter or 'general' }}">
-                    <input type="hidden" name="ml" id="rs-ml" value="">
                     <input type="search" name="q" class="rs-input" id="rs-input" value="{{ query }}" autocomplete="off" enterkeyhint="search">
                     <button type="submit" class="rs-submit" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">Search</button>
                     <div class="suggestions-box" id="rs-suggest"></div>
@@ -788,9 +840,8 @@
                 <option value="news">News</option>
             </select>
             <span class="filter-count" id="filter-count"></span>
-            {% if ml_rank %}
-            <span style="margin-left:auto;font-size:11px;color:#e37400;background:#fef7e0;padding:2px 10px;border-radius:10px;border:1px solid #f9e0a0;font-weight:500">ML ranking active</span>
-            {% endif %}
+            <button class="ais-btn" id="ais-btn" onclick="globalAiSummary()"><svg viewBox="0 0 24 24"><path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.18l7 3.5v7l-7 3.5-7-3.5v-7l7-3.5zM11 9h2v6h-2V9zm0-3h2v2h-2V6z"/></svg> AI Summary</button>
+
         </div>
     </div>
 
@@ -877,40 +928,85 @@
                     {% elif notice and notice.type == 'redirect' %}No results found
                     {% else %}About {{ total_results }} results{% if search_time is defined %} ({{ search_time }}s){% endif %}{% endif %}
                 </div>
-                <div class="qa-global" id="qa-global">
-                    <div class="qa-gtitle">AI Summary</div>
-                    <div id="qa-global-content">Generating answer...</div>
+                <div class="ais-box" id="ais-box">
+                    <div class="ais-head">
+                        <div class="ais-title">Quick Answer</div>
+                        <button class="ais-close" onclick="document.getElementById('ais-box').classList.remove('show')">&times;</button>
+                    </div>
+                    <div class="ais-body" id="ais-content"></div>
                 </div>
+                {% set ns = namespace(disc=[], rcount=0, ddone=false) %}
                 {% for result in results %}
-                    <div class="result-card {{ 'reddit-result' if 'reddit' in result.url else '' }}" data-url="{{ result.url }}" data-title="{{ result.title }}" data-category="{{ result.category or 'general' }}">
-                        <div class="result-main">
-                        <div class="result-url">
-                            <img src="{{ result.favicon }}" alt="" class="result-favicon" onerror="this.style.display='none'">
-                            {{ result.display_url }}
-                            {% if result.verified %}<span class="v-checkmark" title="Verified business"><svg viewBox="0 0 24 24"><circle class="ck-bg" cx="12" cy="12" r="12"/><polyline class="ck-check" points="7,12.5 10.5,16 17,8.5"/></svg></span>{% endif %}
-                        </div>
-                        <a href="{{ result.url }}" class="result-title" target="_blank" onclick="trackClick(this.href)">{{ result.title }}</a>
-                        <div class="result-snippet">{{ result.snippet }}</div>
-                        <div class="result-community" data-url="{{ result.url }}" data-title="{{ result.title }}">
-                            <button class="pin-btn-sm" onclick="pinFromSearch(this)" title="Pin to collection"><svg viewBox="0 0 14 14"><path d="M2 1v12l5-3 5 3V1H2zm1 1h8v9.5l-4-2.5-4 2.5V2z"/></svg></button>
-                            <button class="rpt-btn" onclick="reportDomain(this)" title="Report domain"><svg viewBox="0 0 14 14"><path d="M7 1L1 13h12L7 1zm0 2.5l4.5 8h-9l4.5-8zM7 8.5a.75.75 0 110-1.5.75.75 0 010 1.5zM6.5 5h1v2.5h-1V5z"/></svg></button>
-                            <button class="qa-btn" onclick="quickAnswer(this)" data-url="{{ result.url }}" data-title="{{ result.title }}" data-snippet="{{ result.snippet }}"><svg viewBox="0 0 24 24"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg> Quick Answer</button>
-                        </div>
-                        <div class="result-metadata">
-                            <span class="result-category">{{ result.category }}</span>
-                            {% if result.date %}<span class="result-date">{{ result.date }}</span>{% endif %}
-                            <span class="result-actions" style="position:relative;margin-left:auto">
-                                <button class="three-dots" onclick="toggleReportMenu(this)" title="More" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:2px 6px;border-radius:50%;line-height:1">&#x22EE;</button>
-                                <div class="report-menu" style="display:none;position:absolute;right:0;top:100%;background:var(--bg2);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px var(--shadow2);z-index:300;min-width:180px;padding:4px 0;margin-top:2px">
-                                    <div class="report-option" onclick="reportResult(this)" style="padding:8px 14px;cursor:pointer;font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px" onmouseover="this.style.background='var(--hover-bg)'" onmouseout="this.style.background=''">
-                                        <span style="font-size:14px">&#x26A0;</span> Report low quality
+                    {% set is_disc = result.category == 'discussions' or result.category == 'discussion' or 'reddit' in result.url or 'forum' in result.url or 'stackexchange' in result.url %}
+                    {% if is_disc %}
+                        {% set ns.disc = ns.disc + [result] %}
+                    {% endif %}
+                {% endfor %}
+                {% for result in results %}
+                    {% set is_video = result.category == 'videos' or result.category == 'video' %}
+                    {% set is_disc = result.category == 'discussions' or result.category == 'discussion' or 'reddit' in result.url or 'forum' in result.url or 'stackexchange' in result.url %}
+                    {% if not is_disc %}
+                    <div class="rc-modern" data-url="{{ result.url }}" data-title="{{ result.title }}" data-category="{{ result.category or 'general' }}">
+                        <div class="rc-row">
+                            <div class="rc-body">
+                                <div class="rc-title-line">
+                                    <a href="{{ result.url }}" class="rc-title" target="_blank">{{ result.title }}</a>
+                                    <div class="rc-acts">
+                                         <button class="rc-save" onclick="pinFromSearch(this)" title="Save"><svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z"/></svg></button>
+                                        <div class="rc-pos">
+                                            <button class="rc-dots" onclick="toggleRcMenu(this)" title="More">&#x22EE;</button>
+                                            <div class="rc-report-menu">
+                                                <div class="rc-report-opt" onclick="reportResult(this)"><span>&#x26A0;</span> Report low quality</div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                            </span>
-                        </div>
+                                <div class="rc-bread">
+                                    <img src="{{ result.favicon }}" alt="" class="rc-fav" onerror="this.style.display='none'">
+                                    {% set du = result.get('display_url', '') %}
+                                    <span class="rc-dom">{{ result.domain or (du.split('/')[2] if '/' in du else du) }}</span>
+                                    {% set path_parts = du.split('/', 1) %}
+                                    {% if path_parts|length > 1 and path_parts[1] %}
+                                    <span class="rc-sep">&#x203A;</span>
+                                    <span class="rc-path">{{ path_parts[1][:40] }}{% if path_parts[1]|length > 40 %}...{% endif %}</span>
+                                    {% endif %}
+                                    {% if is_video %}<span class="rc-badge vid">Video</span>{% endif %}
+                                    {% if result.date %}<span class="rc-date">{{ result.date }}</span>{% endif %}
+                                </div>
+                                <div class="rc-snip">{{ result.snippet }}</div>
+                            </div>
                         </div>
                     </div>
-                    <div class="qa-summary" id="qa-{{ loop.index }}"></div>
+                    {% set ns.rcount = ns.rcount + 1 %}
+                    {% if ns.rcount >= 2 and ns.disc and not ns.ddone %}
+                    <div class="disc-sec" data-category="discussion">
+                        <div class="disc-head"><svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg> Discussions</div>
+                        <div class="disc-car">
+                        {% for r2 in ns.disc %}
+                            <div class="disc-c" data-url="{{ r2.url }}" data-title="{{ r2.title }}" data-category="discussion">
+                                <div class="disc-ch">
+                                    <img src="{{ r2.favicon }}" alt="" class="disc-fav" onerror="this.style.display='none'">
+                                    {% set du2 = r2.get('display_url', '') %}
+                                    <span class="disc-dom">{{ r2.domain or (du2.split('/')[2] if '/' in du2 else du2) }}</span>
+                                </div>
+                                <a href="{{ r2.url }}" class="disc-ct" target="_blank">{{ r2.title }}</a>
+                                <div class="disc-cs">{{ r2.snippet }}</div>
+                                <div class="disc-cf">
+                                    {% if r2.date %}<span class="disc-date">{{ r2.date }}</span>{% endif %}
+                                    <span style="display:flex;align-items:center;gap:2px;margin-left:auto">
+                                        <button class="rc-dots" onclick="toggleRcMenu(this)" title="More">&#x22EE;</button>
+                                        <div class="rc-report-menu">
+                                            <div class="rc-report-opt" onclick="reportResult(this)"><span>&#x26A0;</span> Report low quality</div>
+                                        </div>
+                                    </span>
+                                </div>
+                            </div>
+                        {% endfor %}
+                        </div>
+                    </div>
+                    {% set ns.ddone = true %}
+                    {% endif %}
+                    {% endif %}
                 {% endfor %}
 
                 <div class="pagination">
@@ -1140,24 +1236,26 @@
     <div class="report-toast" id="report-toast"></div>
 
     <script>
-        function toggleReportMenu(btn){
+        function toggleRcMenu(btn){
             var menu=btn.nextElementSibling;
-            var isOpen=menu.style.display==='block';
-            document.querySelectorAll('.report-menu').forEach(function(m){m.style.display='none'});
-            if(!isOpen) menu.style.display='block';
+            if(!menu||!menu.classList.contains('rc-report-menu'))return;
+            var isOpen=menu.classList.contains('show');
+            document.querySelectorAll('.rc-report-menu').forEach(function(m){m.classList.remove('show')});
+            if(!isOpen) menu.classList.add('show');
         }
         document.addEventListener('click',function(e){
-            if(!e.target.classList.contains('three-dots')){
-                document.querySelectorAll('.report-menu').forEach(function(m){m.style.display='none'});
+            if(!e.target.classList.contains('rc-dots')){
+                document.querySelectorAll('.rc-report-menu').forEach(function(m){m.classList.remove('show')});
             }
         });
         function reportResult(el){
-            var card=el.closest('.result-card');
+            var card=el.closest('[data-url]');
+            if(!card)return;
             var url=card.getAttribute('data-url');
             var title=card.getAttribute('data-title');
             var q=document.getElementById('rs-input')?document.getElementById('rs-input').value:'';
-            var menu=el.closest('.report-menu');
-            menu.style.display='none';
+            var menu=el.closest('.rc-report-menu');
+            if(menu)menu.classList.remove('show');
             showToast('Reporting...');
             fetch('/api/report',{
                 method:'POST',
@@ -1245,64 +1343,15 @@
                 }catch(e){}
             }
 
-            // Dynamic AJAX search with loading overlay
+            // Loading overlay hide after page load (600ms)
             var aol=document.getElementById('ao-loading');
-            if(aol){
-                var alBar=aol.querySelector('.bar');
-                var alText=aol.querySelector('.al-text');
-                var alStatus=document.getElementById('al-status');
-                var alDots=aol.querySelector('.al-dots');
-                function showOverlay(msg,status){
-                    aol.classList.add('show');
-                    if(alBar){
-                        alBar.style.animation='none';
-                        alBar.offsetHeight;
-                        alBar.style.animation='';
-                    }
-                    if(msg)alText.textContent=msg;
-                    if(status)alStatus.textContent=status;
-                    var c=0;
-                    clearInterval(alDots._ti);
-                    alDots._ti=setInterval(function(){c=(c+1)%4;alDots.textContent='.'.repeat(c)},400);
-                }
-                function hideOverlay(){aol.classList.remove('show');clearInterval(alDots._ti)}
-                function doSearch(form){
-                    var q=form.querySelector('input[name="q"]');
-                    if(!q||!q.value.trim())return;
-                    var url=form.action+'?'+new URLSearchParams(new FormData(form)).toString();
-                    showOverlay('Searching the web','Connecting...');
-                    setTimeout(function(){alStatus.textContent='Fetching results'},1500);
-                    setTimeout(function(){alText.textContent='Still searching';alStatus.textContent='Ranking sources'},3000);
-                    fetch(url).then(function(r){return r.text()}).then(function(html){
-                        hideOverlay();
-                        playSound('/static/searchsound.mp3');
-                        document.open();
-                        document.write(html);
-                        document.close();
-                    }).catch(function(){
-                        alStatus.textContent='Taking longer than usual...';
-                        setTimeout(function(){window.location=url},1000);
-                    });
-                }
-                // If overlay was shown by sync script (results page load), hide after 600ms
-                if(aol.classList.contains('show')){
-                    setTimeout(function(){
-                        hideOverlay();
-                        playSound('/static/searchsound.mp3');
-                    },600);
-                }
-                function hookForm(form){
-                    if(!form)return;
-                    var orig=form.submit.bind(form);
-                    form.addEventListener('submit',function(e){e.preventDefault();doSearch(form)});
-                    form.submit=function(){
-                        var inp=form.querySelector('input[name="q"]');
-                        if(inp&&inp.value.trim()){doSearch(form);return}
-                        orig()
-                    };
-                }
-                hookForm(document.getElementById('hp-form'));
-                hookForm(document.getElementById('rs-form'));
+            if(aol&&aol.classList.contains('show')){
+                setTimeout(function(){
+                    aol.classList.remove('show');
+                    var dots=aol.querySelector('.al-dots');
+                    if(dots)clearInterval(dots._ti);
+                    playSound('/static/searchsound.mp3');
+                },600);
             }
         });
 
@@ -1447,7 +1496,7 @@
                         if(!currentData.length){box.classList.remove('show');return}
                         currentData.forEach(function(s,i){
                             var d=document.createElement('div');d.className='sug-item';d.textContent=s;
-                            d.addEventListener('click',function(){input.value=s;box.classList.remove('show');input.form.submit()});
+                            d.addEventListener('click',function(){input.value=s;box.classList.remove('show');var ol=document.getElementById('ao-loading');if(ol)ol.classList.add('show');input.form.submit()});
                             d.addEventListener('mouseenter',function(){activeIndex=i;box.querySelectorAll('.sug-item').forEach(function(el,j){el.style.background=j===activeIndex?'var(--hover-bg)':''})});
                             box.appendChild(d)
                         });
@@ -1458,6 +1507,7 @@
             input.addEventListener('keydown',function(e){
                 if(e.key==='Enter'){
                     box.classList.remove('show');
+                    var ol=document.getElementById('ao-loading');if(ol)ol.classList.add('show');
                     input.form.submit();
                     return;
                 }
@@ -1470,21 +1520,15 @@
         }
         document.addEventListener('DOMContentLoaded',function(){
             setupSuggestions('hp-search','hp-suggest');setupSuggestions('rs-input','rs-suggest');setupSuggestions('portal-search-box','portal-suggest');
-            var ml='',mode='blend_light';try{ml=localStorage.getItem('arlong-ml')||'';mode=localStorage.getItem('arlong-ml-mode')||'blend_light'}catch(e){}
-            var ml_val=(ml&&ml!=='0')?mode:'';
-            var hp=document.getElementById('hp-ml');if(hp)hp.value=ml_val;
-            var rs=document.getElementById('rs-ml');if(rs)rs.value=ml_val;
+
         });
 
         /* ── Click tracking, voting, domain report, pin-to-collection ── */
-        function trackClick(url){
-            if(document.body.getAttribute('data-loggedin') !== 'true') return;
-            var fd = new FormData(); fd.append('url', url);
-            navigator.sendBeacon('/api/click', fd);
-        }
         function reportDomain(btn){
             if(document.body.getAttribute('data-loggedin') !== 'true'){ alert('Sign in to report domain'); return }
-            var url = btn.closest('.result-community').getAttribute('data-url');
+            var card = btn.closest('[data-url]');
+            if(!card)return;
+            var url = card.getAttribute('data-url');
             var domain = new URL(url).hostname.replace('www.','');
             var reason = prompt('Why is this domain low quality?','Low quality or spam');
             if(!reason) return;
@@ -1496,7 +1540,7 @@
         }
         function pinFromSearch(btn){
             if(document.body.getAttribute('data-loggedin') !== 'true'){ alert('Sign in to pin to collection'); return }
-            var container = btn.closest('.result-community');
+            var container = btn.closest('[data-url]');
             var url = container.getAttribute('data-url');
             var title = container.getAttribute('data-title') || url;
             openPinDrawer(url, title);
@@ -1559,7 +1603,7 @@
         }
 
         function applyFilter(val){
-            var cards = document.querySelectorAll('.result-card');
+            var cards = document.querySelectorAll('.rc-modern');
             var count = 0;
             cards.forEach(function(c){
                 var cat = c.getAttribute('data-category') || 'general';
@@ -1785,59 +1829,125 @@
                 loadWeatherForCity(city.trim());
             }
         }
-        function quickAnswer(btn){
-            var container = btn.closest('.result-card') || btn.parentElement;
-            if(!container) return;
-            var url = container.getAttribute('data-url') || btn.getAttribute('data-url');
-            var title = container.getAttribute('data-title') || btn.getAttribute('data-title');
-            var snippet = btn.getAttribute('data-snippet') || '';
-            var q = document.getElementById('hp-search') ? document.getElementById('hp-search').value : '';
-            if(!q) q = document.getElementById('portal-search-box') ? document.getElementById('portal-search-box').value : '';
-            if(!q) q = new URLSearchParams(window.location.search).get('q') || '';
-            var summaryEl = container.nextElementSibling;
-            while(summaryEl && !summaryEl.classList.contains('qa-summary')) summaryEl = summaryEl.nextElementSibling;
-            if(!summaryEl) return;
-            if(summaryEl.classList.contains('show')){
-                summaryEl.classList.remove('show');
-                btn.classList.remove('loading');
+        function formatSummary(text){
+            if(!text)return '<span class="ais-loading">No content available</span>';
+            var lines = text.split('\n').filter(function(l){return l.trim()});
+            if(lines.length <= 1){
+                return '<div class="ais-intro">'+escHtml(text.trim())+'</div>';
+            }
+            var html = '';
+            var inList = false, inSubList = false, fnIdx = 0;
+            var firstBlock = true;
+            for(var i=0;i<lines.length;i++){
+                var raw = lines[i];
+                var line = raw.trim();
+                if(!line){ firstBlock = false; continue }
+                var isSub = raw.match(/^ {2,}[-*•]/);
+                var isBullet = line.match(/^[-*•]\s/);
+                var isHeading = line.match(/^[A-Z][A-Za-z\s]+:$/) || line.match(/^\*\*.+\*\*:$/) || (line.match(/^[A-Z][A-Za-z\s()]+:/) && line.length < 60 && !line.match(/^https?:/));
+                if(isHeading && !isBullet){
+                    if(inList){ html += '</ul>'; inList=false; inSubList=false }
+                    firstBlock = false;
+                    var htext = line.replace(/\*+/g,'').replace(/:$/,'');
+                    html += '<div class="ais-sh">'+escHtml(htext)+'</div>';
+                    continue;
+                }
+                if(isBullet){
+                    var content = line.replace(/^[-*•]\s*/,'');
+                    var depth = raw.match(/^ */)[0].length;
+                    if(depth >= 4 && inList){
+                        if(!inSubList){ html += '<ul class="ais-sublist">'; inSubList=true }
+                        content = '<li>'+formatInline(content,fnIdx)+'</li>';
+                        html += content;
+                        continue;
+                    } else {
+                        if(inSubList){ html += '</ul></li>'; inSubList=false }
+                        if(!inList){ html += '<ul class="ais-list">'; inList=true }
+                        firstBlock = false;
+                        html += '<li>'+formatInline(content,fnIdx)+'</li>';
+                        continue;
+                    }
+                }
+                if(inSubList){ html += '</ul></li>'; inSubList=false }
+                if(inList){ html += '</ul>'; inList=false }
+                if(firstBlock){
+                    html += '<div class="ais-intro">'+formatInline(line,fnIdx)+'</div>';
+                    firstBlock = false;
+                } else {
+                    html += '<div class="ais-intro" style="margin-top:8px">'+formatInline(line,fnIdx)+'</div>';
+                }
+            }
+            if(inSubList){ html += '</ul></li>' }
+            if(inList){ html += '</ul>' }
+            return html;
+            function formatInline(t,idxRef){
+                t = escHtml(t);
+                t = t.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+                t = t.replace(/(\d+\.?\d*%?)\s*\[(\d+)\]/g,function(m,n,num){
+                    return '<strong>'+n+'</strong> <span class="ais-fn">'+num+'</span>';
+                });
+                t = t.replace(/(\$\d+\.?\d*[BMK]?)/g,'<strong>$1</strong>');
+                t = t.replace(/(\d+\.?\d*%)(?:\s|$)/g,function(m){return '<strong>'+m.trim()+'</strong> '});
+                return t;
+            }
+        }
+        function escHtml(s){
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+        function globalAiSummary(){
+            var btn = document.getElementById('ais-btn');
+            var box = document.getElementById('ais-box');
+            var content = document.getElementById('ais-content');
+            if(!box || !content) return;
+            if(box.classList.contains('show')){
+                box.classList.remove('show');
                 return;
             }
-            btn.classList.add('loading');
-            summaryEl.innerHTML = '<div class="qa-loading">Generating summary...</div>';
-            summaryEl.classList.add('show');
+            var q = (document.getElementById('rs-input') || {}).value || '';
+            if(!q) q = (document.getElementById('hp-search') || {}).value || '';
+            if(!q) q = (document.getElementById('portal-search-box') || {}).value || '';
+            if(!q) q = new URLSearchParams(window.location.search).get('q') || '';
+            q = q.trim();
+            if(!q){ content.innerHTML = '<span class="ais-error">No query to summarize</span>'; box.classList.add('show'); return; }
+            if(btn) btn.classList.add('loading');
+            content.innerHTML = '<span class="ais-loading">Generating answer...</span>';
+            box.classList.add('show');
             var fd = new FormData();
             fd.append('q', q);
-            fd.append('url', url);
-            fd.append('title', title);
-            fd.append('snippet', snippet);
             fetch('/api/ai-summary', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
-                btn.classList.remove('loading');
-                if(!d.ok){ summaryEl.innerHTML = '<div class="qa-error">'+ (d.error||'Failed') +'</div> <button class="qa-close" onclick="this.parentElement.classList.remove(\'show\')">&times;</button>'; return; }
-                summaryEl.innerHTML = d.summary + ' <button class="qa-close" onclick="this.parentElement.classList.remove(\'show\')">&times;</button>';
+                if(btn) btn.classList.remove('loading');
+                if(!d.ok){ content.innerHTML = '<span class="ais-error">'+ (d.error||'Failed') +'</span>'; return; }
+                content.innerHTML = formatSummary(d.summary);
             }).catch(function(){
-                btn.classList.remove('loading');
-                summaryEl.innerHTML = '<div class="qa-error">Network error</div> <button class="qa-close" onclick="this.parentElement.classList.remove(\'show\')">&times;</button>';
+                if(btn) btn.classList.remove('loading');
+                content.innerHTML = '<span class="ais-error">Network error</span>';
             });
         }
         document.addEventListener('DOMContentLoaded', function(){
-            var q = new URLSearchParams(window.location.search).get('q') || '';
+            var q = (document.getElementById('rs-input') || {}).value || '';
+            if(!q) q = new URLSearchParams(window.location.search).get('q') || '';
+            q = q.trim();
             if(q.indexOf('?') > -1){
-                var el = document.getElementById('qa-global');
-                if(el){
-                    el.classList.add('show');
-                    var content = document.getElementById('qa-global-content');
-                    if(content){
-                        content.textContent = 'Generating answer...';
+                setTimeout(function(){
+                    var box = document.getElementById('ais-box');
+                    var content = document.getElementById('ais-content');
+                    var btn = document.getElementById('ais-btn');
+                    if(box && content){
+                        if(btn) btn.classList.add('loading');
+                        content.innerHTML = '<span class="ais-loading">Generating answer...</span>';
+                        box.classList.add('show');
                         var fd = new FormData();
                         fd.append('q', q);
                         fetch('/api/ai-summary', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
-                            if(!d.ok){ content.innerHTML = '<span class="qa-error">'+ (d.error||'Failed') +'</span>'; return; }
-                            content.textContent = d.summary;
+                            if(btn) btn.classList.remove('loading');
+                            if(!d.ok){ content.innerHTML = '<span class="ais-error">'+ (d.error||'Failed') +'</span>'; return; }
+                            content.innerHTML = formatSummary(d.summary);
                         }).catch(function(){
-                            content.innerHTML = '<span class="qa-error">Network error</span>';
+                            if(btn) btn.classList.remove('loading');
+                            content.innerHTML = '<span class="ais-error">Network error</span>';
                         });
                     }
-                }
+                }, 100);
             }
         });
     </script>

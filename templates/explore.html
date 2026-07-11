@@ -92,7 +92,6 @@
             <a href="/explore">All</a>
             {% if session.user_id %}<a href="/collections">My</a>{% endif %}
             {% if session.user_id %}<button class="create-btn" onclick="showCreate()">+ New</button>{% endif %}
-            <a href="/leaderboard">Rankings</a>
         </nav>
         <a href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" class="acc-btn" aria-label="Account">
             <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>

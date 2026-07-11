@@ -46,9 +46,6 @@
                 <th>Email</th>
                 <th>Created</th>
                 <th>Last Active</th>
-                <th>Clicks</th>
-                <th>Searches</th>
-                <th>Points</th>
                 <th>Actions</th>
             </tr>
             {% for u in users %}
@@ -57,9 +54,6 @@
                 <td style="font-size:12px;color:#5f6368">{{ u.email or '—' }}</td>
                 <td class="num">{{ u.created_at }}</td>
                 <td class="num">{{ u.last_active }}</td>
-                <td>{{ u.clicks }}</td>
-                <td>{{ u.searches }}</td>
-                <td>{{ u.points }}</td>
                 <td>
                     <form method="POST" action="/admin/delete-user" onsubmit="return confirm('Delete user {{ u.username }}? This cannot be undone.')">
                         <input type="hidden" name="user_id" value="{{ u.user_id }}">

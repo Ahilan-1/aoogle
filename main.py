@@ -13,7 +13,7 @@ try:
     redis_available = True
 except ImportError:
     redis_available = False
-from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED, ALL_COMPLETED
 try:
     import boto3
     from botocore.exceptions import ClientError
@@ -1150,7 +1150,7 @@ class DataManager:
         for p in pages:
             text = (p.get('title', '') + ' ' + p.get('description', '') + ' ' + p.get('text', '')).lower()
             matches = sum(1 for t in query_terms if t in text)
-            if matches:
+            if matches / len(query_terms) > 0.5:
                 title = p.get('title', '')
                 snippet = p.get('description', '')[:200]
                 if not snippet:
@@ -1237,125 +1237,6 @@ class DataManager:
                 self.data = loaded
             users = self.data.get('users', [])
             self.data['users'] = [u for u in users if u['user_id'] != user_id]
-            self.data.setdefault('click_stats', {})
-            self.data['click_stats'].pop(user_id, None)
-            _save_json(self.data)
-
-    def record_user_action(self, user_id, ip):
-        with self._lock:
-            users = self.data.get('users', [])
-            for u in users:
-                if u['user_id'] == user_id:
-                    u['last_action_at'] = datetime.now().isoformat()
-                    ip_h = self.hash_ip(ip)
-                    if ip_h not in u['ip_hashes']:
-                        u['ip_hashes'].append(ip_h)
-                    _save_json(self.data)
-                    return
-
-    def get_user_cooldown(self, user_id):
-        for u in self.data.get('users', []):
-            if u['user_id'] == user_id:
-                last = u.get('last_action_at')
-                if not last:
-                    return 0, 'ok'
-                elapsed = (datetime.now() - datetime.fromisoformat(last)).total_seconds()
-                if elapsed < 11:
-                    return 11 - elapsed, 'initial wait'
-                if elapsed < 70:
-                    return 70 - elapsed, 'post cooldown'
-                return 0, 'ok'
-        return 0, 'ok'
-
-    def record_click(self, user_id, url):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            self.data.setdefault('clicks', [])
-            self.data.setdefault('click_stats', {})
-            url_hash = hashlib.sha256(url.encode()).hexdigest()
-            now = datetime.now()
-            for c in self.data['clicks']:
-                if c['user_id'] == user_id and c['url_hash'] == url_hash:
-                    c['clicked_at'] = now.isoformat()
-                    break
-            else:
-                self.data['clicks'].append({
-                    'user_id': user_id,
-                    'url': url,
-                    'url_hash': url_hash,
-                    'clicked_at': now.isoformat(),
-                })
-
-            stats = self.data['click_stats'].setdefault(user_id, {'clicks': 0, 'points': 0, 'last_click': '', 'streak': 0, 'searches': 0})
-            stats['clicks'] = stats.get('clicks', 0) + 1
-
-            streak = stats.get('streak', 0)
-            last = stats.get('last_click', '')
-            if last:
-                try:
-                    diff = (now - datetime.fromisoformat(last)).total_seconds()
-                    if diff < 60:
-                        streak += 1
-                    else:
-                        streak = 0
-                except:
-                    streak = 0
-            stats['streak'] = streak
-            stats['last_click'] = now.isoformat()
-
-            multiplier = 1 + (streak * 0.2)
-            points_to_add = round(1 * multiplier)
-            stats['points'] = stats.get('points', 0) + points_to_add
-            _save_json(self.data)
-
-    def record_feed_interest(self, username, category, delta):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            for u in self.data.get('users', []):
-                if u['username'] == username:
-                    u.setdefault('feed_interests', {})
-                    u['feed_interests'][category] = u['feed_interests'].get(category, 0) + delta
-                    _save_json(self.data)
-                    return True
-            return False
-
-    def get_user_feed_interests(self, username):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-        for u in self.data.get('users', []):
-            if u['username'] == username:
-                return u.get('feed_interests', {})
-        return {}
-
-    def get_feed_interests(self, user_id):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            return self.data.get('feed_interests', {}).get(user_id, {})
-
-    def get_anon_feed_interests(self, anon_id):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            return self.data.get('anon_feed_interests', {}).get(anon_id, {})
-
-    def track_search(self, user_id):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            self.data.setdefault('click_stats', {})
-            stats = self.data['click_stats'].setdefault(user_id, {'clicks': 0, 'points': 0, 'last_click': '', 'streak': 0, 'searches': 0})
-            stats['searches'] = stats.get('searches', 0) + 1
-            stats['points'] = stats.get('points', 0) + 2
             _save_json(self.data)
 
     def report_domain(self, user_id, domain, reason):
@@ -1507,34 +1388,6 @@ class DataManager:
 
     # ── User stats / profile ──
 
-    def get_user_points(self, user_id):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-        collections = [c for c in self.data.get('collections', []) if c['creator_id'] == user_id]
-        collections_count = len(collections)
-        pins_count = sum(len(c.get('websites', [])) for c in collections)
-        submissions_count = sum(1 for s in self.data.get('submitted_sites', []) if s.get('submitted_by') == user_id and s.get('crawl_status') in ('approved', 'completed'))
-        click_stats = self.data.get('click_stats', {}).get(user_id, {})
-        click_points = click_stats.get('points', 0)
-        return collections_count * 2 + pins_count * 2 + submissions_count * 4 + click_points
-
-    def get_leaderboard(self, limit=50):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-        users = self.data.get('users', [])
-        scored = []
-        for u in users:
-            uid = u['user_id']
-            pts = self.get_user_points(uid)
-            if pts > 0:
-                scored.append((pts, u['username'], u.get('created_at', '')))
-        scored.sort(key=lambda x: x[0], reverse=True)
-        return [{'rank': i+1, 'username': s[1], 'score': s[0], 'joined': s[2][:10]} for i, s in enumerate(scored[:limit])]
-
     def get_user_profile(self, username):
         with self._lock:
             loaded = _load_json()
@@ -1555,11 +1408,6 @@ class DataManager:
         pins_count = sum(len(c.get('websites', [])) for c in self.data.get('collections', []) if c['creator_id'] == user_id)
         submissions_count = sum(1 for s in self.data.get('submitted_sites', []) if s.get('submitted_by') == user_id and s.get('crawl_status') in ('approved', 'completed'))
         reports_approved = sum(1 for r in self.data.get('domain_reports', []) if user_id in r.get('reported_by', []) and r.get('status') == 'approved')
-        click_stats = self.data.get('click_stats', {}).get(user_id, {})
-        clicks = click_stats.get('clicks', 0)
-        searches = click_stats.get('searches', 0)
-        click_points = click_stats.get('points', 0)
-        points = collections_count * 2 + pins_count * 2 + submissions_count * 4 + click_points
 
         # Recent activity
         recent = []
@@ -1575,13 +1423,10 @@ class DataManager:
         return {
             'username': username,
             'created_at': user.get('created_at', ''),
-            'points': points,
             'collections_count': collections_count,
             'pins_count': pins_count,
             'submissions_count': submissions_count,
             'reports_approved': reports_approved,
-            'clicks': clicks,
-            'searches': searches,
             'recent': recent,
         }
 
@@ -1710,8 +1555,8 @@ class ImprovedSearch:
             self.user_agent = UserAgent(fallback='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
         except:
             self.user_agent = type('SimpleUA',(),{'random':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36','__getitem__':lambda s,k:s.random})()
-        self.executor = ThreadPoolExecutor(max_workers=5)
-        self.search_urls = ["ddg_html://text"]
+        self.executor = ThreadPoolExecutor(max_workers=8)
+        self.search_urls = ["ddg_html://text", "ddg_reddit://text", "ddg_video://text"]
         if ddgs_available:
             self.ddgs = DDGS()
             self.search_urls.append("ddgs://text")
@@ -2586,7 +2431,7 @@ class ImprovedSearch:
                     title_elem = div.select_one('.result__a')
                     if not title_elem:
                         continue
-                    title = title_elem.get_text(strip=True)
+                    title = title_elem.get_text().strip()
 
                     url = title_elem.get('href', '')
                     if not url:
@@ -2596,7 +2441,7 @@ class ImprovedSearch:
                         continue
 
                     snippet_elem = div.select_one('.result__snippet')
-                    snippet = snippet_elem.get_text(strip=True) if snippet_elem else ''
+                    snippet = snippet_elem.get_text().strip() if snippet_elem else ''
 
                     if SearchBlocker.is_ad(url, title, snippet):
                         continue
@@ -2613,6 +2458,44 @@ class ImprovedSearch:
         except Exception as e:
             app.logger.error(f"Error parsing DuckDuckGo HTML: {str(e)}")
         return results
+
+    def _search_ddg_with_site(self, query, site_filter):
+        try:
+            q = query + ' ' + site_filter
+            r = self.session.post('https://html.duckduckgo.com/html/', data={'q': q}, headers=self._get_headers(), timeout=2.5)
+            if r.status_code != 200:
+                return []
+            soup = BeautifulSoup(r.text, 'html.parser')
+            results = []
+            seen = set()
+            for result in soup.find_all('div', class_='result') or soup.find_all('div', class_='result__body'):
+                try:
+                    a = result.find('a', class_='result__a') or result.find('a', href=True)
+                    if not a or not a.get('href'):
+                        continue
+                    href = a['href']
+                    if not href.startswith('http') or href in seen:
+                        continue
+                    seen.add(href)
+                    title = a.get_text().strip()
+                    if not title:
+                        continue
+                    snippet_el = result.find('a', class_='result__snippet') or result.find('div', class_='result__snippet')
+                    snippet = snippet_el.get_text().strip()[:300] if snippet_el else ''
+                    parsed = urlparse(href)
+                    category = 'discussion' if 'site:reddit.com' in site_filter else 'video'
+                    results.append(SearchResult(
+                        title=title, url=href, snippet=snippet,
+                        category=category, date=None, domain=parsed.netloc
+                    ))
+                except Exception:
+                    continue
+                if len(results) >= 5:
+                    break
+            return results
+        except Exception as e:
+            app.logger.error(f"DDG site search ({site_filter[:20]}) error: {e}")
+            return []
 
     def _search_duckduckgo_html(self, query):
         try:
@@ -2636,15 +2519,17 @@ class ImprovedSearch:
                     if href in seen:
                         continue
                     seen.add(href)
-                    title = a.get_text(strip=True)
+                    title = a.get_text().strip()
                     if not title:
                         continue
                     snippet_el = result.find('a', class_='result__snippet') or result.find('div', class_='result__snippet')
-                    snippet = snippet_el.get_text(strip=True)[:300] if snippet_el else ''
+                    snippet = snippet_el.get_text().strip()[:300] if snippet_el else ''
                     parsed = urlparse(href)
+                    date = self._extract_date(snippet)
+                    category = self._categorize_result(href, title, snippet)
                     results.append(SearchResult(
                         title=title, url=href, snippet=snippet,
-                        category='general', date=None, domain=parsed.netloc
+                        category=category, date=date, domain=parsed.netloc
                     ))
                 except Exception:
                     continue
@@ -2683,6 +2568,10 @@ class ImprovedSearch:
                 except Exception as e:
                     app.logger.error(f"DDGS search error: {e}")
                     return []
+            elif search_url == 'ddg_reddit://text':
+                return self._search_ddg_with_site(query, 'site:reddit.com')
+            elif search_url == 'ddg_video://text':
+                return self._search_ddg_with_site(query, 'site:youtube.com OR site:vimeo.com OR site:dailymotion.com')
             elif 'duckduckgo' in search_url:
                 all_results = []
                 offsets = [0]
@@ -2798,6 +2687,7 @@ class ImprovedSearch:
         else:
             results = []
             errors = []
+            all_results = None
 
             futures = {}
             for search_url in self.search_urls:
@@ -2805,13 +2695,16 @@ class ImprovedSearch:
                 futures[future] = search_url
 
             try:
-                done, not_done = wait(list(futures.keys()), timeout=5, return_when=FIRST_COMPLETED)
+                done, not_done = wait(list(futures.keys()), timeout=5, return_when=ALL_COMPLETED)
+                seen_urls = set()
                 for future in done:
                     try:
                         current_results = future.result()
                         if current_results:
-                            results = current_results
-                            break
+                            for r in current_results:
+                                if r.url not in seen_urls:
+                                    seen_urls.add(r.url)
+                                    results.append(r)
                     except Exception as e:
                         errors.append(str(e))
                 for f in not_done:
@@ -2848,52 +2741,6 @@ class ImprovedSearch:
         page_results = all_results[start:end]
 
         return page_results, total
-
-    def ml_rerank(self, query, results, mode='blend_light'):
-        try:
-            from ml_ranking import get_ranker
-            ranker = get_ranker()
-            if not ranker.available:
-                return results
-            top = [r for r in results[:20]]
-            if not top:
-                return results
-            docs = []
-            for r in top:
-                title = r.get('title', '') or ''
-                snippet = r.get('snippet', '') or ''
-                url = r.get('url', '') or ''
-                docs.append({'title': title, 'snippet': snippet, 'url': url})
-            scores = ranker.predict(query, docs)
-
-            heur_scores = [r.get('score', 0) for r in top]
-            min_h, max_h = min(heur_scores), max(heur_scores)
-            min_m, max_m = min(scores), max(scores)
-            h_range = max_h - min_h if max_h > min_h else 1
-            m_range = max_m - min_m if max_m > min_m else 1
-
-            for i, r in enumerate(top):
-                ml_score = scores[i] if i < len(scores) else 0.0
-                old_score = r.get('score', 0)
-
-                if mode == 'blend_strong':
-                    new_score = old_score + ml_score
-                elif mode == 'pure_ml':
-                    ml_norm = (ml_score - min_m) / m_range
-                    new_score = ml_norm * 100
-                elif mode == 'norm_50':
-                    h_norm = (old_score - min_h) / h_range
-                    m_norm = (ml_score - min_m) / m_range
-                    new_score = (h_norm * 50 + m_norm * 50)
-                else:
-                    new_score = old_score + ml_score * 0.15
-
-                r['score'] = round(new_score, 2)
-                r['ml_score'] = round(ml_score, 4)
-            results.sort(key=lambda x: x.get('score', 0), reverse=True)
-        except Exception as e:
-            app.logger.error(f"ML rerank error: {e}")
-        return results
 
     def _extract_ddg_url(self, url):
         if url.startswith('//duckduckgo.com/l/') or 'duckduckgo.com/l/' in url:
@@ -4103,14 +3950,13 @@ search_engine = ImprovedSearch()
 @app.route('/')
 def home():
     announcement = data_manager.get_announcement()
-    ml_val = request.args.get('ml', '')
     if 'user_country' not in session:
         country_code, raw_cc = detect_user_country()
         session['user_country'] = country_code or ''
     user_stats = None
     if session.get('user_id'):
         user_stats = data_manager.get_user_profile(session.get('username'))
-    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, ml_rank=bool(ml_val) and ml_val != '0', blocked_count=BLOCKLIST_COUNT, user_country=session.get('user_country', ''), country_name=COUNTRY_NAMES.get(session.get('user_country', '')), user_stat=user_stats)
+    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=session.get('user_country', ''), country_name=COUNTRY_NAMES.get(session.get('user_country', '')), user_stat=user_stats)
 
 @app.route('/search')
 def search():
@@ -4120,7 +3966,6 @@ def search():
     filter_type = request.args.get('filter', 'general')
     if filter_type not in ('general', 'shopping', 'official', 'tutorials', 'discussions', 'academic'):
         filter_type = 'general'
-    ml_rank = request.args.get('ml', '')
     region = request.args.get('region', session.get('region', ''))
 
     if 'user_country' not in session:
@@ -4188,9 +4033,6 @@ def search():
             session['region'] = region
         results, total_results = search_engine.search(query, page, filter_type, region or None)
 
-        if session.get('user_id'):
-            data_manager.track_search(session['user_id'])
-
         verified_info = data_manager.get_verified_info(query.lower().strip(), user_country)
         if not verified_info and results:
             q_parts = query.lower().strip().split()
@@ -4237,7 +4079,6 @@ def search():
             safety_info=safety_info,
             news_box=news_box,
             notice=notice,
-            ml_rank=ml_rank,
             page=page,
             total_results=total_results,
             info_box=get_info_box(query, results),
@@ -4273,9 +4114,11 @@ def search():
 def api_ai_summary():
     try:
         if request.method == 'GET':
-            q = request.args.get('q', '').strip()
+            q = (request.args.get('q') or '').strip()
+        elif request.is_json:
+            q = (request.json.get('q') or '').strip()
         else:
-            q = request.form.get('q', '').strip() or request.json.get('q', '') if request.is_json else ''
+            q = (request.form.get('q') or '').strip()
         url = request.form.get('url', '') or request.args.get('url', '') or ''
         title = request.form.get('title', '') or request.args.get('title', '') or ''
         snippet = request.form.get('snippet', '') or request.args.get('snippet', '') or ''
@@ -4643,22 +4486,6 @@ def changelogs():
     return render_template('changelogs.html')
 
 
-@app.route('/feed')
-def feed_page():
-    announcement = data_manager.get_announcement()
-    user_stat = None
-    user_interests = {}
-    username = session.get('username', '')
-    if session.get('user_id'):
-        user_stat = data_manager.get_user_profile(username)
-        user_interests = data_manager.get_user_feed_interests(username)
-    return render_template('feed.html',
-        celebration=data_manager.get_celebration(),
-        announcement=announcement,
-        username=username,
-        user_stat=user_stat,
-        user_interests=user_interests)
-
 @app.route('/settings')
 def settings():
     return render_template('settings.html')
@@ -4997,23 +4824,6 @@ def check_captcha(token, answer):
             and session.get('captcha_answer') == answer.strip().lower()
             and token and answer.strip())
 
-def rate_limit_check(user_id):
-    wait, reason = data_manager.get_user_cooldown(user_id)
-    if wait > 0:
-        return False, int(wait) + 1
-    return True, 0
-
-@app.route('/api/click', methods=['POST'])
-def api_click():
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'ok': False}), 403
-    url = request.form.get('url', '').strip()
-    if url:
-        data_manager.record_click(user_id, url)
-    return jsonify({'ok': True})
-
-
 @app.route('/api/news')
 def api_news():
     import feedparser
@@ -5104,6 +4914,7 @@ def api_news():
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
 
+
 def source_name(cat):
     names = {'top': 'Top Stories', 'world': 'World', 'tech': 'Technology', 'business': 'Business',
              'science': 'Science', 'health': 'Health', 'sports': 'Sports', 'entertainment': 'Entertainment',
@@ -5111,496 +4922,6 @@ def source_name(cat):
     return names.get(cat, 'News')
 
 
-FEED_VIDEO_SOURCES = {
-    'news': [
-        'https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA',
-        'https://www.youtube.com/feeds/videos.xml?channel_id=UC8p1vwvWtl6T73JiExfWs1g',
-        'https://www.youtube.com/feeds/videos.xml?channel_id=UCCQ3HnP3kfVh0E1NwsbCJKA',
-    ],
-    'sports': [
-        'https://www.youtube.com/feeds/videos.xml?channel_id=UCgyQk4H6Hw09O-YdGQYDyfA',
-    ],
-    'business': [
-        'https://www.youtube.com/feeds/videos.xml?channel_id=UCUMZLSgZ7L4TYM3k4G7EiLA',
-    ],
-    'entertainment': [
-        'https://www.youtube.com/feeds/videos.xml?channel_id=UCY6MbP4GjDPMfCCRhFLGQjg',
-    ],
-}
-
-FEED_SOURCES = {
-    'news': [
-        'http://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml',
-        'http://feeds.nbcnews.com/feeds/topstories',
-        'http://www.theguardian.com/world/usa/rss',
-        'http://feeds.abcnews.com/abcnews/usheadlines',
-        'http://feeds.foxnews.com/foxnews/latest?format=xml',
-        'http://www.newyorker.com/feed/news',
-        'http://www.newsweek.com/rss',
-        'http://www.usnews.com/rss/news',
-        'http://www.npr.org/rss/rss.php?id=1004',
-        'http://time.com/newsfeed/feed/',
-    ],
-    'sports': [
-        'http://sports.espn.go.com/espn/rss/news',
-        'http://feeds.foxnews.com/foxnews/sports',
-        'http://rss.nytimes.com/services/xml/rss/nyt/Sports.xml',
-        'http://www.latimes.com/sports/rss2.0.xml',
-        'http://www.theguardian.com/sport/us-sport/rss',
-    ],
-    'business': [
-        'http://rss.cnn.com/rss/edition_business.rss',
-        'http://rss.nytimes.com/services/xml/rss/nyt/Business.xml',
-        'http://www.economist.com/feeds/print-sections/77/business.xml',
-        'https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml',
-    ],
-    'health': [
-        'http://feeds.bbci.co.uk/news/health/rss.xml?edition=us',
-        'http://www.npr.org/rss/rss.php?id=1128',
-        'http://rss.cnn.com/rss/cnn_health.rss',
-        'http://www.theguardian.com/lifeandstyle/health-and-wellbeing/rss',
-        'http://www.usnews.com/rss/health?int=a7fe09',
-        'http://feeds.nbcnews.com/feeds/health',
-        'http://time.com/health/feed/',
-    ],
-    'entertainment': [
-        'http://rss.cnn.com/rss/cnn_showbiz.rss',
-        'http://www.newyorker.com/feed/culture',
-        'http://feeds.abcnews.com/abcnews/entertainmentheadlines',
-        'http://www.latimes.com/entertainment/rss2.0.xml',
-        'http://www.cbsnews.com/latest/rss/entertainment',
-        'http://www.tmz.com/rss.xml',
-        'http://variety.com/feed/',
-    ],
-}
-
-FEED_CACHE = {}
-FEED_CACHE_TIME = {}
-FEED_CACHE_TTL = 120
-
-import concurrent.futures as cf
-
-def _extract_feed_image(entry):
-    img = ''
-    import re
-    # Try to extract YouTube video ID first (most reliable thumbnail source)
-    yt_id = None
-    if hasattr(entry, 'yt_videoid'):
-        yt_id = entry.yt_videoid
-    elif hasattr(entry, 'yt_videoId'):
-        yt_id = entry.yt_videoId
-    if not yt_id:
-        link = entry.get('link', '') or ''
-        m = re.search(r'(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]{11})', link)
-        if m:
-            yt_id = m.group(1)
-    if not yt_id:
-        eid = entry.get('id', '') or ''
-        m = re.match(r'yt:video:([a-zA-Z0-9_-]{11})', eid)
-        if m:
-            yt_id = m.group(1)
-    if yt_id:
-        img = f'https://img.youtube.com/vi/{yt_id}/maxresdefault.jpg'
-
-    if not img and hasattr(entry, 'media_content') and entry.media_content:
-        for mc in entry.media_content:
-            url_val = mc.get('url', '')
-            if url_val:
-                img = url_val
-                break
-        if not img and entry.media_content:
-            img = entry.media_content[0].get('url', '')
-    if not img and hasattr(entry, 'media_thumbnail') and entry.media_thumbnail:
-        url = entry.media_thumbnail[0].get('url', '')
-        if url:
-            img = url
-            # Upgrade YouTube thumbnail to max quality
-            yt_up = re.search(r'(i\.ytimg\.com|img\.youtube\.com)/vi/([a-zA-Z0-9_-]+)/', url)
-            if yt_up:
-                img = f'https://img.youtube.com/vi/{yt_up.group(2)}/maxresdefault.jpg'
-    if not img and hasattr(entry, 'enclosures') and entry.enclosures:
-        for enc in entry.enclosures:
-            if hasattr(enc, 'type') and enc.type and 'image' in enc.type:
-                img = enc.href
-                break
-    if not img and hasattr(entry, 'summary'):
-        imgs = re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', entry.summary)
-        if imgs:
-            img = imgs[0]
-    if not img and hasattr(entry, 'links'):
-        for link in entry.links:
-            if hasattr(link, 'type') and link.type and 'image' in link.type:
-                img = link.href
-                break
-    # Last resort: try YouTube from link
-    if not img and yt_id:
-        img = f'https://img.youtube.com/vi/{yt_id}/hqdefault.jpg'
-    return img
-
-def _detect_content_type(entry):
-    if hasattr(entry, 'media_content') and entry.media_content:
-        for mc in entry.media_content:
-            if mc.get('type', '').startswith('video'):
-                return 'video'
-    link = entry.get('link', '')
-    if link and any(d in link for d in ('youtube.com/watch', 'youtu.be/', 'vimeo.com/', 'dailymotion.com/')):
-        return 'video'
-    if hasattr(entry, 'tags'):
-        for t in entry.tags:
-            if hasattr(t, 'term') and t.term and 'video' in t.term.lower():
-                return 'video'
-    if hasattr(entry, 'summary'):
-        if re.search(r'<video|<iframe[^>]*youtube|src=["\']https://www\.youtube', entry.summary or ''):
-            return 'video'
-    return 'article'
-
-feed_tracker_salt = os.environ.get('FEED_TRACKER_SALT', 'arlong-feed-salt-v1')
-
-def get_anon_id():
-    ip = request.remote_addr or '0.0.0.0'
-    ua = request.headers.get('User-Agent', '')
-    raw = ip + ua + feed_tracker_salt
-    return hashlib.sha256(raw.encode()).hexdigest()[:16]
-
-def _fetch_feed_source(src_url, category, limit=5):
-    import feedparser
-    items = []
-    try:
-        resp = requests.get(src_url, timeout=10, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
-        if resp.status_code != 200:
-            return items
-        feed = feedparser.parse(resp.text)
-        source_title = feed.feed.get('title', category.title())
-        for entry in feed.entries[:limit]:
-            img = _extract_feed_image(entry)
-            if not img:
-                continue
-            content_type = _detect_content_type(entry)
-            items.append({
-                'title': entry.get('title', 'Untitled'),
-                'link': entry.get('link', ''),
-                'published': entry.get('published', ''),
-                'source': source_title,
-                'image': img,
-                'category': category,
-                'content_type': content_type,
-            })
-    except Exception:
-        pass
-    return items
-
-
-@app.route('/api/feed')
-def api_feed():
-    category = request.args.get('category', 'all')
-    page = max(0, int(request.args.get('page', 0)))
-    per_page = min(15, max(1, int(request.args.get('per_page', 15))))
-    feed_type = request.args.get('type', 'mixed')
-    user_id = session.get('user_id')
-    username = session.get('username')
-    anon_id = get_anon_id() if not user_id else None
-
-    cache_key = (category, page, per_page, feed_type)
-    cached = FEED_CACHE.get(cache_key)
-    cache_ts = FEED_CACHE_TIME.get(cache_key, 0)
-    if cached and time.time() - cache_ts < FEED_CACHE_TTL:
-        return jsonify({'ok': True, 'items': cached})
-
-    try:
-        items = []
-        if category == 'all' or category == '':
-            cats = ['news', 'sports', 'business', 'health', 'entertainment']
-        elif category in FEED_SOURCES:
-            cats = [category]
-        else:
-            return jsonify({'ok': False, 'error': 'Invalid category'}), 400
-
-        all_srcs = []
-        for c in cats:
-            for src in FEED_SOURCES.get(c, []):
-                all_srcs.append((src, c, False))
-            if feed_type in ('mixed', 'video') and c in FEED_VIDEO_SOURCES:
-                for src in FEED_VIDEO_SOURCES[c]:
-                    all_srcs.append((src, c, True))
-
-        per_source = max(2, per_page // max(len(all_srcs), 1)) if all_srcs else 3
-
-        def _fetch_wrapper(src, cat, is_video):
-            items = _fetch_feed_source(src, cat, per_source)
-            if is_video:
-                for i in items:
-                    i['content_type'] = 'video'
-            return items
-
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            fut_to_cat = {executor.submit(_fetch_wrapper, src, c, v): c for src, c, v in all_srcs}
-            for fut in cf.as_completed(fut_to_cat, timeout=20):
-                try:
-                    items.extend(fut.result())
-                except Exception:
-                    pass
-
-        # Filter by feed type
-        if feed_type == 'video':
-            items = [i for i in items if i.get('content_type') == 'video']
-
-        import email.utils as eut
-        def _parse_date(pub):
-            if not pub:
-                return ''
-            try:
-                parsed = eut.parsedate(pub)
-                if parsed:
-                    return str(parsed)
-            except Exception:
-                pass
-            try:
-                from datetime import datetime as dtdt
-                dt = dtdt.fromisoformat(pub.replace('Z', '+00:00'))
-                return dt.isoformat()
-            except Exception:
-                pass
-            return pub
-        # Personalization - get interests from user profile
-        if username:
-            interests = data_manager.get_user_feed_interests(username)
-        elif anon_id:
-            interests = data_manager.get_anon_feed_interests(anon_id)
-        else:
-            interests = {}
-
-        # Scoring algorithm: interest * 2 + recency + diversity - penalty
-        import random
-
-        def _recency_score(pub):
-            if not pub:
-                return 0.5
-            try:
-                d = datetime.fromisoformat(pub.replace('Z', '+00:00')) if 'T' in pub else datetime.now()
-                if 'T' not in pub:
-                    parsed = eut.parsedate(pub)
-                    if parsed:
-                        d = datetime(*parsed[:6])
-                    else:
-                        return 0.5
-                hours_ago = (datetime.now() - d).total_seconds() / 3600
-                if hours_ago < 1:
-                    return 1.0
-                if hours_ago < 6:
-                    return 0.9
-                if hours_ago < 24:
-                    return 0.7
-                if hours_ago < 72:
-                    return 0.5
-                if hours_ago < 168:
-                    return 0.3
-                return 0.1
-            except Exception:
-                return 0.5
-
-        # Track recently seen categories for diversity
-        recent_cats = []
-        scored = []
-        interest_cats = sorted(interests.keys(), key=lambda c: interests[c], reverse=True) if interests else []
-        top_interest_cats = interest_cats[:2] if interest_cats else []
-
-        for item in items:
-            cat = item.get('category', 'news')
-            interest = interests.get(cat, 0)
-
-            # Interest score: -1 to +2
-            if interest > 5:
-                interest_score = 2.0
-            elif interest > 2:
-                interest_score = 1.5
-            elif interest > 0:
-                interest_score = 1.0
-            elif interest == 0:
-                interest_score = 0.0
-            else:
-                interest_score = -1.0
-
-            # Recency: 0-1
-            recency = _recency_score(item.get('published', ''))
-
-            # Explore bonus: if user has interests, boost items from non-top categories slightly
-            explore_bonus = 0.0
-            if top_interest_cats and cat not in top_interest_cats:
-                explore_bonus = 0.3
-
-            # Total score
-            score = interest_score * 2.0 + recency * 1.5 + explore_bonus
-            scored.append((score, item))
-
-        # Sort by score descending, then random shuffle for same-score items
-        rng = random.Random(int(time.time() / 1800) + page)
-        scored.sort(key=lambda x: (-x[0], rng.random()))
-
-        # Interleave categories for diversity (take top scored items but vary categories)
-        final = []
-        cat_queue = {}
-        for s, item in scored:
-            cat = item.get('category', 'news')
-            cat_queue.setdefault(cat, []).append(item)
-
-        # Round-robin through categories with positive interest first
-        cat_order = sorted(cat_queue.keys(), key=lambda c: (
-            0 if interests.get(c, 0) > 0 else 1 if interests.get(c, 0) == 0 else 2,
-            -interests.get(c, 0)
-        )) if interests else list(cat_queue.keys())
-        # Add remaining unseen categories at the end
-        for c in cat_queue:
-            if c not in cat_order:
-                cat_order.append(c)
-
-        while any(cat_queue.values()):
-            for c in cat_order:
-                if cat_queue.get(c):
-                    final.append(cat_queue[c].pop(0))
-                    if len(final) >= 60:
-                        break
-            if len(final) >= 60:
-                break
-
-        if not final:
-            final = [item for _, item in scored[:60]]
-
-        # Session dedup: filter out items already shown this session
-        seen = session.get('feed_seen', set())
-        if isinstance(seen, list):
-            seen = set(seen)
-        deduped = []
-        for item in final:
-            key = item.get('link', '')
-            if key not in seen:
-                seen.add(key)
-                deduped.append(item)
-        session['feed_seen'] = list(seen)
-        # Keep last 500 seen links to avoid unbounded growth
-        if len(seen) > 500:
-            session['feed_seen'] = list(seen)[-500:]
-
-        items = deduped[:60]
-
-        FEED_CACHE[cache_key] = items
-        FEED_CACHE_TIME[cache_key] = time.time()
-
-        return jsonify({'ok': True, 'items': items})
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
-
-
-@app.route('/api/feed/vote', methods=['POST'])
-def api_feed_vote():
-    username = session.get('username')
-    category = request.form.get('category', '')
-    vote = request.form.get('vote', '')
-    value = request.form.get('value', '0')
-    if username and category and vote:
-        try:
-            if vote == 'up':
-                data_manager.record_feed_interest(username, category, 1)
-            elif vote == 'down':
-                data_manager.record_feed_interest(username, category, -1)
-            elif vote == 'dwell':
-                dwell_val = min(float(value), 30000) / 1000 * 0.5
-                data_manager.record_feed_interest(username, category, round(dwell_val, 1))
-        except Exception:
-            pass
-    return jsonify({'ok': True})
-
-
-@app.route('/api/feed/interact', methods=['POST'])
-def api_feed_interact():
-    username = session.get('username')
-    category = request.form.get('category', '')
-    title = request.form.get('title', '')
-    url = request.form.get('url', '')
-    anon_id = get_anon_id() if not username else None
-    if category and url:
-        if username:
-            data_manager.record_feed_interest(username, category, 1)
-        elif anon_id:
-            with data_manager._lock:
-                loaded = _load_json()
-                if loaded:
-                    data_manager.data = loaded
-                data_manager.data.setdefault('anon_feed_interests', {})
-                interests = data_manager.data['anon_feed_interests'].setdefault(anon_id, {})
-                interests[category] = interests.get(category, 0) + 1
-                data_manager.data.setdefault('anon_feed_log', [])
-                data_manager.data['anon_feed_log'].append({
-                    'anon_id': anon_id,
-                    'category': category,
-                    'title': title,
-                    'url': url,
-                    't': datetime.now().isoformat(),
-                })
-                _save_json(data_manager.data)
-    return jsonify({'ok': True})
-
-
-@app.route('/api/feed/track', methods=['POST'])
-def api_feed_track():
-    username = session.get('username')
-    user_id = session.get('user_id')
-    anon_id = get_anon_id() if not user_id else None
-    try:
-        data = request.get_json(force=True)
-        if not isinstance(data, list):
-            data = [data]
-        tracker_id = user_id or anon_id
-        if tracker_id:
-            with data_manager._lock:
-                loaded = _load_json()
-                if loaded:
-                    data_manager.data = loaded
-                data_manager.data.setdefault('feed_tracking', [])
-                for event in data:
-                    row = {
-                        'tracker_id': tracker_id,
-                        'is_anon': not user_id,
-                        'event': event.get('event'),
-                        'url': event.get('url'),
-                        'category': event.get('category'),
-                        'content_type': event.get('content_type'),
-                        'dwell_ms': event.get('dwell_ms'),
-                        'velocity': event.get('velocity'),
-                        'ts': datetime.now().isoformat(),
-                        'hour': datetime.now().hour,
-                    }
-                    data_manager.data['feed_tracking'].append(row)
-                    cat = event.get('category')
-                    if cat and username:
-                        # Record interest in user profile
-                        evt = event.get('event')
-                        if evt == 'dwell':
-                            dwell = event.get('dwell_ms', 0) or 0
-                            if dwell > 2000:
-                                dwell_val = min(dwell, 30000) / 1000 * 0.5
-                                for u in data_manager.data.get('users', []):
-                                    if u['username'] == username:
-                                        u.setdefault('feed_interests', {})
-                                        u['feed_interests'][cat] = u['feed_interests'].get(cat, 0) + round(dwell_val, 1)
-                                        break
-                        elif evt == 'scroll':
-                            vel = event.get('velocity', 0) or 0
-                            if 0 < vel < 500:
-                                for u in data_manager.data.get('users', []):
-                                    if u['username'] == username:
-                                        u.setdefault('feed_interests', {})
-                                        u['feed_interests'][cat] = u['feed_interests'].get(cat, 0) + 0.3
-                                        break
-                    elif cat and not username:
-                        data_manager.data.setdefault('feed_interests', {}).setdefault(tracker_id, {})
-                        data_manager.data['feed_interests'][tracker_id][cat] = data_manager.data['feed_interests'][tracker_id].get(cat, 0) + 1
-                # Keep only last 10000 events
-                if len(data_manager.data['feed_tracking']) > 10000:
-                    data_manager.data['feed_tracking'] = data_manager.data['feed_tracking'][-10000:]
-                _save_json(data_manager.data)
-    except Exception:
-        pass
-    return jsonify({'ok': True})
 
 
 @app.route('/api/weather')
@@ -5792,19 +5113,14 @@ def admin_accounts():
     if not session.get('admin_logged_in'):
         return redirect(url_for('admin_login'))
     users = data_manager.get_all_users()
-    click_stats = data_manager.data.get('click_stats', {})
     user_list = []
     for u in users:
-        stats = click_stats.get(u['user_id'], {})
         user_list.append({
             'username': u['username'],
             'user_id': u['user_id'],
             'email': u.get('email', ''),
             'created_at': u.get('created_at', '')[:10],
             'last_active': u.get('last_active', '')[:10],
-            'clicks': stats.get('clicks', 0),
-            'searches': stats.get('searches', 0),
-            'points': stats.get('points', 0),
         })
     return render_template('admin_accounts.html', users=user_list)
 
@@ -5918,9 +5234,6 @@ def user_collections():
     cols = data_manager.get_user_collections(user_id)
     return render_template('explore.html', collections=cols, sort='mine', total=len(cols))
 
-
-# ── Feed routes ──
-
 # ── Users (Find ID) ──
 
 @app.route('/users')
@@ -5931,30 +5244,11 @@ def users_list():
         all_users = [u for u in all_users if q in u['username'].lower() or q in u.get('email', '').lower()]
     user_list = []
     for u in all_users:
-        click_stats = data_manager.data.get('click_stats', {}).get(u['user_id'], {})
-        points = data_manager.get_user_points(u['user_id'])
         user_list.append({
             'username': u['username'],
             'created_at': u.get('created_at', '')[:10],
-            'clicks': click_stats.get('clicks', 0),
-            'searches': click_stats.get('searches', 0),
-            'points': points,
         })
     return render_template('users.html', users=user_list, q=q, total=len(user_list))
-
-
-# ── Leaderboard ──
-
-@app.route('/leaderboard')
-def leaderboard():
-    lb = data_manager.get_leaderboard()
-    return render_template('leaderboard.html', leaderboard=lb)
-
-
-@app.route('/api/leaderboard')
-def api_leaderboard():
-    lb = data_manager.get_leaderboard()
-    return jsonify({'ok': True, 'leaderboard': lb})
 
 
 # ── User profile ──
