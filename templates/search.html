@@ -323,7 +323,15 @@
         }
 
         #fireworks-canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
-        .homepage{position:relative;z-index:1}
+        .homepage{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;transition:all .4s ease}
+        .homepage.scrolled{min-height:auto;padding:40px 20px 10px}
+        .homepage .hp-inner{text-align:center;transition:transform .4s ease,opacity .4s ease}
+        .homepage.scrolled .hp-inner{transform:scale(.85);opacity:.85}
+        .scroll-hint{text-align:center;font-size:11px;color:var(--text4);margin-top:20px;cursor:pointer;transition:opacity .4s;position:absolute;bottom:20px;left:50%;transform:translateX(-50%)}
+        .scroll-hint:hover{color:var(--text3)}
+        .scroll-hint .sh-arrow{display:block;font-size:18px;margin-top:2px;animation:sh-bounce 1.5s ease-in-out infinite}
+        @keyframes sh-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(6px)}}
+        .portal-wrap{transition:opacity .5s ease,transform .5s ease;opacity:1;transform:translateY(0)}
 
         .homepage.flag-mode .glogo{background:linear-gradient(90deg,#b22234 0%,#fff 40%,#3c3b6e 100%);-webkit-background-clip:text;background-clip:text;color:transparent;animation:none}
         .homepage.flag-mode .glogo span{background:none!important;-webkit-background-clip:unset!important;background-clip:unset!important;color:inherit!important;animation:none!important;text-shadow:none!important}
@@ -542,6 +550,19 @@
             .portal-header-center .portal-logo .pl-text{font-size:24px}
             .portal-search-box{height:34px;font-size:13px;padding:0 12px}
         }
+        .qa-btn{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;font-size:11px;color:var(--text3);border:1px solid var(--border);border-radius:4px;background:var(--bg2);cursor:pointer;transition:all .1s;font-family:arial,sans-serif;margin-top:2px}
+        .qa-btn:hover{color:var(--link);border-color:var(--link);background:var(--bg2)}
+        .qa-btn.loading{opacity:.6;pointer-events:none}
+        .qa-btn svg{width:12px;height:12px;fill:currentColor}
+        .qa-summary{display:none;margin-top:4px;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;font-size:13px;line-height:1.5;color:var(--text2);position:relative}
+        .qa-summary.show{display:block}
+        .qa-summary .qa-close{position:absolute;top:4px;right:6px;cursor:pointer;color:var(--text3);font-size:14px;line-height:1;padding:2px;background:none;border:none;font-family:arial,sans-serif}
+        .qa-summary .qa-close:hover{color:var(--text)}
+        .qa-summary .qa-error{color:var(--red)}
+        .qa-summary .qa-loading{color:var(--text3)}
+        .qa-global{margin-bottom:16px;padding:12px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;font-size:14px;line-height:1.6;color:var(--text2);display:none}
+        .qa-global.show{display:block}
+        .qa-global .qa-gtitle{font-weight:600;color:var(--text);margin-bottom:4px}
     </style>
 </head>
 <body data-loggedin="{% if session.user_id %}true{% else %}false{% endif %}">
@@ -584,7 +605,8 @@
 
     {% set is_home = not query and not error and not pg_loading %}
     {% if is_home %}
-    <div class="homepage">
+    <div class="homepage" id="homepage">
+        <div class="hp-inner">
         <div class="glogo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></div>
         <div class="slogan">{% if celebration %}{{ celebration }}{% else %}Sail the web{% endif %}</div>
         <div class="search-form">
@@ -608,10 +630,8 @@
             <a href="/policy">Policies</a><span class="sep">|</span>
             <a href="/privacy">Privacy</a><span class="sep">|</span>
             <a href="/faq">FAQ</a><span class="sep">|</span>
-            <a href="/benchmark">Benchmark</a><span class="sep">|</span>
             <a href="/submit">Submit your site</a><span class="sep">|</span>
             <a href="/docs">API</a><span class="sep">|</span>
-            <a href="/ads">Ads</a><span class="sep">|</span>
             <a href="/blog">Blog</a><span class="sep">|</span>
             <a href="/changelogs">Changelogs</a><span class="sep">|</span>
             <a href="/settings">Settings</a>
@@ -619,10 +639,12 @@
         {% if blocked_count %}
         <div class="about-link" style="margin-top:12px;font-size:12px">&#x1F6AB; <strong>{{ "{:,}".format(blocked_count) }}</strong> gambling, ad, crypto, drug &amp; fraud domains delisted</div>
         {% endif %}
+        </div>
+        <div class="scroll-hint" id="scroll-hint" onclick="document.getElementById('portal-wrap').scrollIntoView({behavior:'smooth'})">Scroll for news <span class="sh-arrow">&#x2193;</span></div>
     </div>
 
     <!-- ── Portal Layout (Naver-inspired) ── -->
-    <div class="portal-wrap">
+    <div class="portal-wrap" id="portal-wrap">
         <div class="portal-header">
             <div class="portal-header-left">
                 <div class="portal-hamburger" id="hm-btn" onclick="toggleHmMenu()">
@@ -638,7 +660,6 @@
                         <a href="/docs">API</a>
                         <a href="/blog">Blog</a>
                         <a href="/changelogs">Changelogs</a>
-                        <a href="/ads">Advertising</a>
                         <a href="/settings">Settings</a>
                     </div>
                 </div>
@@ -656,18 +677,11 @@
                     <input type="search" name="q" class="portal-search-box" id="portal-search-box" placeholder="Search the web..." autocomplete="off" enterkeyhint="search">
                     <div class="suggestions-box" id="portal-suggest"></div>
                 </form>
-                <a href="/ads" style="flex-shrink:0;font-size:11px;color:#c5221f;white-space:nowrap;text-decoration:none;font-weight:500" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">See latest updates</a>
             </div>
             <div class="portal-header-right"></div>
         </div>
         <div class="portal-body">
             <div class="portal-content">
-                <div class="portal-banner" id="portal-banner">
-                    <a id="banner-ad-link" href="/ads" target="_blank" style="display:flex;align-items:center;justify-content:center;width:100%;text-decoration:none;color:inherit;background:var(--card-bg);border-radius:14px;border:1px solid var(--border);overflow:hidden">
-                        <img id="banner-ad-img" src="" alt="Advertisement" referrerpolicy="no-referrer" crossorigin="anonymous" style="width:100%;height:auto;display:none;border-radius:14px" onerror="this.style.display='none';document.getElementById('banner-placeholder').style.display='flex'">
-                        <div id="banner-placeholder" style="display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px;padding:20px;width:100%">Advertisement</div>
-                    </a>
-                </div>
                 <div class="portal-tabs">
                     <a href="#" class="active" onclick="return loadNewsTab('top',this)">Newsstand</a>
                     <a href="#" onclick="return loadNewsTab('entertainment',this)">Enter</a>
@@ -863,6 +877,10 @@
                     {% elif notice and notice.type == 'redirect' %}No results found
                     {% else %}About {{ total_results }} results{% if search_time is defined %} ({{ search_time }}s){% endif %}{% endif %}
                 </div>
+                <div class="qa-global" id="qa-global">
+                    <div class="qa-gtitle">AI Summary</div>
+                    <div id="qa-global-content">Generating answer...</div>
+                </div>
                 {% for result in results %}
                     <div class="result-card {{ 'reddit-result' if 'reddit' in result.url else '' }}" data-url="{{ result.url }}" data-title="{{ result.title }}" data-category="{{ result.category or 'general' }}">
                         <div class="result-main">
@@ -876,6 +894,7 @@
                         <div class="result-community" data-url="{{ result.url }}" data-title="{{ result.title }}">
                             <button class="pin-btn-sm" onclick="pinFromSearch(this)" title="Pin to collection"><svg viewBox="0 0 14 14"><path d="M2 1v12l5-3 5 3V1H2zm1 1h8v9.5l-4-2.5-4 2.5V2z"/></svg></button>
                             <button class="rpt-btn" onclick="reportDomain(this)" title="Report domain"><svg viewBox="0 0 14 14"><path d="M7 1L1 13h12L7 1zm0 2.5l4.5 8h-9l4.5-8zM7 8.5a.75.75 0 110-1.5.75.75 0 010 1.5zM6.5 5h1v2.5h-1V5z"/></svg></button>
+                            <button class="qa-btn" onclick="quickAnswer(this)" data-url="{{ result.url }}" data-title="{{ result.title }}" data-snippet="{{ result.snippet }}"><svg viewBox="0 0 24 24"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg> Quick Answer</button>
                         </div>
                         <div class="result-metadata">
                             <span class="result-category">{{ result.category }}</span>
@@ -891,6 +910,7 @@
                         </div>
                         </div>
                     </div>
+                    <div class="qa-summary" id="qa-{{ loop.index }}"></div>
                 {% endfor %}
 
                 <div class="pagination">
@@ -1577,7 +1597,6 @@
                 loadBreakingNews();
                 loadStocks();
                 loadWeather();
-                loadBannerAd();
                 loadScores();
                 loadNewsTab('top', document.querySelector('.portal-tabs a.active'));
                 /* Refresh news & scores every 2 minutes */
@@ -1589,6 +1608,50 @@
                 var oldAcc = document.getElementById('acc-btn');
                 if(oldAcc) oldAcc.style.display = 'none';
             }
+        })();
+
+        /* ── Homepage scroll animation ── */
+        (function(){
+            var hp = document.getElementById('homepage');
+            var pw = document.getElementById('portal-wrap');
+            if(!hp || !pw) return;
+            var ticking = false;
+            function onScroll(){
+                if(!ticking){
+                    window.requestAnimationFrame(function(){
+                        var scrollY = window.pageYOffset || document.documentElement.scrollTop;
+                        if(scrollY > 60) hp.classList.add('scrolled');
+                        else hp.classList.remove('scrolled');
+                        ticking = false;
+                    });
+                    ticking = true;
+                }
+            }
+            window.addEventListener('scroll', onScroll, {passive:true});
+        })();
+
+        /* ── Move scores above news on mobile when matches are live ── */
+        (function(){
+            var mql = window.matchMedia('(max-width:640px)');
+            function checkScores(){
+                if(!mql.matches) return;
+                var body = document.querySelector('.portal-body');
+                var content = document.querySelector('.portal-content');
+                var sidebar = document.querySelector('.portal-sidebar');
+                var scores = document.getElementById('scores-card');
+                if(body && scores && content && sidebar && scores.querySelector('.sm-row')){
+                    body.insertBefore(scores, content);
+                }
+            }
+            var orig = window.loadScores;
+            if(orig){
+                window.loadScores = function(){
+                    orig.apply(this, arguments);
+                    setTimeout(checkScores, 500);
+                };
+            }
+            checkScores();
+            mql.addListener(checkScores);
         })();
 
         function loadBreakingNews(){
@@ -1605,28 +1668,6 @@
                 }
                 scroll.innerHTML = html;
             });
-        }
-
-        function loadBannerAd(){
-            fetch('/api/ads').then(function(r){return r.json()}).then(function(d){
-                if(!d.ok || !d.ads || !d.ads.length) return;
-                var ad = d.ads[0];
-                var img = document.getElementById('banner-ad-img');
-                var link = document.getElementById('banner-ad-link');
-                var ph = document.getElementById('banner-placeholder');
-                if(!img || !link) return;
-                img.onload = function(){
-                    img.style.display = 'block';
-                    if(ph) ph.style.display = 'none';
-                };
-                img.src = ad.image_url;
-                link.href = ad.link_url || '/ads';
-                link.onclick = function(){
-                    var fd = new FormData();
-                    fd.append('url', ad.link_url || ad.image_url);
-                    navigator.sendBeacon('/api/click', fd);
-                };
-            }).catch(function(){});
         }
 
         function loadNewsTab(cat, el){
@@ -1744,6 +1785,61 @@
                 loadWeatherForCity(city.trim());
             }
         }
+        function quickAnswer(btn){
+            var container = btn.closest('.result-card') || btn.parentElement;
+            if(!container) return;
+            var url = container.getAttribute('data-url') || btn.getAttribute('data-url');
+            var title = container.getAttribute('data-title') || btn.getAttribute('data-title');
+            var snippet = btn.getAttribute('data-snippet') || '';
+            var q = document.getElementById('hp-search') ? document.getElementById('hp-search').value : '';
+            if(!q) q = document.getElementById('portal-search-box') ? document.getElementById('portal-search-box').value : '';
+            if(!q) q = new URLSearchParams(window.location.search).get('q') || '';
+            var summaryEl = container.nextElementSibling;
+            while(summaryEl && !summaryEl.classList.contains('qa-summary')) summaryEl = summaryEl.nextElementSibling;
+            if(!summaryEl) return;
+            if(summaryEl.classList.contains('show')){
+                summaryEl.classList.remove('show');
+                btn.classList.remove('loading');
+                return;
+            }
+            btn.classList.add('loading');
+            summaryEl.innerHTML = '<div class="qa-loading">Generating summary...</div>';
+            summaryEl.classList.add('show');
+            var fd = new FormData();
+            fd.append('q', q);
+            fd.append('url', url);
+            fd.append('title', title);
+            fd.append('snippet', snippet);
+            fetch('/api/ai-summary', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
+                btn.classList.remove('loading');
+                if(!d.ok){ summaryEl.innerHTML = '<div class="qa-error">'+ (d.error||'Failed') +'</div> <button class="qa-close" onclick="this.parentElement.classList.remove(\'show\')">&times;</button>'; return; }
+                summaryEl.innerHTML = d.summary + ' <button class="qa-close" onclick="this.parentElement.classList.remove(\'show\')">&times;</button>';
+            }).catch(function(){
+                btn.classList.remove('loading');
+                summaryEl.innerHTML = '<div class="qa-error">Network error</div> <button class="qa-close" onclick="this.parentElement.classList.remove(\'show\')">&times;</button>';
+            });
+        }
+        document.addEventListener('DOMContentLoaded', function(){
+            var q = new URLSearchParams(window.location.search).get('q') || '';
+            if(q.indexOf('?') > -1){
+                var el = document.getElementById('qa-global');
+                if(el){
+                    el.classList.add('show');
+                    var content = document.getElementById('qa-global-content');
+                    if(content){
+                        content.textContent = 'Generating answer...';
+                        var fd = new FormData();
+                        fd.append('q', q);
+                        fetch('/api/ai-summary', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
+                            if(!d.ok){ content.innerHTML = '<span class="qa-error">'+ (d.error||'Failed') +'</span>'; return; }
+                            content.textContent = d.summary;
+                        }).catch(function(){
+                            content.innerHTML = '<span class="qa-error">Network error</span>';
+                        });
+                    }
+                }
+            }
+        });
     </script>
     <div class="mob-nav">
         <a href="/" class="active"><span class="m-icon">&#x1F50D;</span><span class="m-label">Search</span></a>

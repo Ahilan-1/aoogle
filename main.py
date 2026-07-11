@@ -27,7 +27,10 @@ import uuid
 import re
 import threading
 import os
+from groq import Groq
 from werkzeug.security import generate_password_hash, check_password_hash
+from dotenv import load_dotenv
+load_dotenv()
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
     from apscheduler.triggers.interval import IntervalTrigger
@@ -134,6 +137,9 @@ handler.setFormatter(logging.Formatter(
 ))
 app.logger.addHandler(handler)
 app.logger.setLevel(logging.INFO)
+
+# Groq AI client
+groq_client = Groq(api_key=os.environ.get('GROQ_API_KEY'))
 
 # Initialize Redis for caching
 redis_client = None
@@ -977,91 +983,6 @@ class DataManager:
             self.data['announcement'] = text
             _save_json(self.data)
 
-    def get_ads(self):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            return self.data.get('ads', [])
-
-    def add_ad(self, image_url, link_url, width, height, alt_text=''):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            self.data.setdefault('ads', [])
-            ad = {
-                'id': str(uuid.uuid4())[:8],
-                'image_url': image_url,
-                'link_url': link_url,
-                'width': width,
-                'height': height,
-                'alt_text': alt_text,
-                'created_at': datetime.now().isoformat(),
-            }
-            self.data['ads'].append(ad)
-            _save_json(self.data)
-            return ad
-
-    def remove_ad(self, ad_id):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            self.data['ads'] = [a for a in self.data.get('ads', []) if a['id'] != ad_id]
-            _save_json(self.data)
-
-    def add_ad_submission(self, user_id, username, image_url, link_url, alt_text, duration_hours, email, telegram):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            self.data.setdefault('ad_submissions', [])
-            sub = {
-                'id': str(uuid.uuid4())[:8],
-                'user_id': user_id,
-                'username': username,
-                'image_url': image_url,
-                'link_url': link_url,
-                'alt_text': alt_text,
-                'duration_hours': duration_hours,
-                'cost': round(duration_hours * 0.30, 2),
-                'email': email,
-                'telegram': telegram,
-                'status': 'submitted',
-                'admin_note': '',
-                'created_at': datetime.now().isoformat(),
-                'updated_at': datetime.now().isoformat(),
-            }
-            self.data['ad_submissions'].append(sub)
-            _save_json(self.data)
-            return sub
-
-    def get_ad_submissions(self, user_id=None):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            subs = self.data.get('ad_submissions', [])
-            if user_id is not None:
-                subs = [s for s in subs if s.get('user_id') == user_id]
-            return sorted(subs, key=lambda x: x.get('created_at', ''), reverse=True)
-
-    def update_ad_submission_status(self, sub_id, status, note=''):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            for s in self.data.get('ad_submissions', []):
-                if s['id'] == sub_id:
-                    s['status'] = status
-                    s['updated_at'] = datetime.now().isoformat()
-                    if note:
-                        s['admin_note'] = note
-                    _save_json(self.data)
-                    return True
-            return False
-
     def flush(self):
         with self._lock:
             loaded = _load_json()
@@ -1388,6 +1309,43 @@ class DataManager:
             points_to_add = round(1 * multiplier)
             stats['points'] = stats.get('points', 0) + points_to_add
             _save_json(self.data)
+
+    def record_feed_interest(self, username, category, delta):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for u in self.data.get('users', []):
+                if u['username'] == username:
+                    u.setdefault('feed_interests', {})
+                    u['feed_interests'][category] = u['feed_interests'].get(category, 0) + delta
+                    _save_json(self.data)
+                    return True
+            return False
+
+    def get_user_feed_interests(self, username):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+        for u in self.data.get('users', []):
+            if u['username'] == username:
+                return u.get('feed_interests', {})
+        return {}
+
+    def get_feed_interests(self, user_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            return self.data.get('feed_interests', {}).get(user_id, {})
+
+    def get_anon_feed_interests(self, anon_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            return self.data.get('anon_feed_interests', {}).get(anon_id, {})
 
     def track_search(self, user_id):
         with self._lock:
@@ -4311,6 +4269,50 @@ def search():
         )
 
 
+@app.route('/api/ai-summary', methods=['GET', 'POST'])
+def api_ai_summary():
+    try:
+        if request.method == 'GET':
+            q = request.args.get('q', '').strip()
+        else:
+            q = request.form.get('q', '').strip() or request.json.get('q', '') if request.is_json else ''
+        url = request.form.get('url', '') or request.args.get('url', '') or ''
+        title = request.form.get('title', '') or request.args.get('title', '') or ''
+        snippet = request.form.get('snippet', '') or request.args.get('snippet', '') or ''
+
+        if not q and not snippet:
+            return jsonify({'ok': False, 'error': 'Query required'}), 400
+
+        if url and snippet:
+            prompt = f"""You are a helpful search assistant. Summarize the following web page result concisely.
+
+Title: {title}
+URL: {url}
+Snippet: {snippet}
+
+Question from user: {q}
+
+Provide a clear, useful summary (2-4 sentences) that answers the user's question based on this result. Be factual and direct."""
+        else:
+            prompt = f"""You are a helpful search assistant. Provide a concise, useful answer to the user's question based on search results.
+
+Question: {q}
+
+Provide a clear answer (2-4 sentences) with key facts. Be direct and helpful. If the question is about a definition or fact, give the answer straight away."""
+
+        completion = groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=300,
+            temperature=0.3,
+        )
+        answer = completion.choices[0].message.content.strip()
+        return jsonify({'ok': True, 'summary': answer})
+    except Exception as e:
+        app.logger.error(f"AI summary error: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 @app.route('/api/search')
 def api_search():
     query = request.args.get('q', '').strip()
@@ -4570,64 +4572,6 @@ def about():
     ]
     return render_template('about.html', comparisons=comparisons)
 
-@app.route('/ads')
-def ads_page():
-    return render_template('ads.html')
-
-@app.route('/admaker')
-def admaker():
-    if not session.get('user_id'):
-        return redirect(url_for('login'))
-    submissions = data_manager.get_ad_submissions(session['user_id'])
-    return render_template('admaker.html', submissions=submissions, error='')
-
-@app.route('/api/admaker/submit', methods=['POST'])
-def admaker_submit():
-    if not session.get('user_id'):
-        return jsonify({'ok': False, 'error': 'Login required'}), 403
-    image_url = request.form.get('image_url', '').strip()
-    link_url = request.form.get('link_url', '').strip()
-    alt_text = request.form.get('alt_text', '').strip()
-    duration_hours = request.form.get('duration_hours', '').strip()
-    email = request.form.get('email', '').strip()
-    telegram = request.form.get('telegram', '').strip()
-    if not all([image_url, link_url, duration_hours, email, telegram]):
-        return jsonify({'ok': False, 'error': 'All fields required'}), 400
-    try:
-        dur = int(duration_hours)
-        if dur < 6 or dur > 240:
-            return jsonify({'ok': False, 'error': 'Duration must be 6–240 hours'}), 400
-    except ValueError:
-        return jsonify({'ok': False, 'error': 'Invalid duration'}), 400
-    cost = round(dur * 0.30, 2)
-    sub = data_manager.add_ad_submission(
-        session['user_id'], session.get('username', ''),
-        image_url, link_url, alt_text, dur, email, telegram
-    )
-    return jsonify({'ok': True, 'submission': sub, 'cost': cost})
-
-@app.route('/admin/admaker')
-def admin_admaker():
-    if not session.get('admin_logged_in'):
-        return redirect(url_for('admin_login'))
-    submissions = data_manager.get_ad_submissions()
-    revenue = sum(s.get('cost', 0) for s in submissions if s.get('status') in ('active', 'approved_pending_payment'))
-    return render_template('admin_admaker.html', submissions=submissions, total_revenue=revenue)
-
-@app.route('/admin/admaker/update', methods=['POST'])
-def admin_admaker_update():
-    if not session.get('admin_logged_in'):
-        return jsonify({'error': 'Unauthorized'}), 401
-    sub_id = request.form.get('id', '').strip()
-    status = request.form.get('status', '').strip()
-    note = request.form.get('note', '').strip()
-    valid_statuses = ['pending', 'approved_pending_payment', 'active', 'rejected']
-    if status not in valid_statuses:
-        return jsonify({'error': 'Invalid status'}), 400
-    if sub_id:
-        data_manager.update_ad_submission_status(sub_id, status, note)
-    return redirect(url_for('admin_admaker'))
-
 @app.route('/docs')
 def docs():
     return render_template('docs.html')
@@ -4698,6 +4642,22 @@ def faq():
 def changelogs():
     return render_template('changelogs.html')
 
+
+@app.route('/feed')
+def feed_page():
+    announcement = data_manager.get_announcement()
+    user_stat = None
+    user_interests = {}
+    username = session.get('username', '')
+    if session.get('user_id'):
+        user_stat = data_manager.get_user_profile(username)
+        user_interests = data_manager.get_user_feed_interests(username)
+    return render_template('feed.html',
+        celebration=data_manager.get_celebration(),
+        announcement=announcement,
+        username=username,
+        user_stat=user_stat,
+        user_interests=user_interests)
 
 @app.route('/settings')
 def settings():
@@ -4860,73 +4820,6 @@ def admin_remove_verified():
         data_manager.remove_verified_site(domain)
     return redirect(url_for('admin_dashboard'))
 
-@app.route('/admin/ads', methods=['GET', 'POST'])
-def admin_ads():
-    if not session.get('admin_logged_in'):
-        return redirect(url_for('admin_login'))
-    if request.method == 'POST':
-        image_url = request.form.get('image_url', '').strip()
-        link_url = request.form.get('link_url', '').strip()
-        width = int(request.form.get('width', 300))
-        height = int(request.form.get('height', 250))
-        alt_text = request.form.get('alt_text', '').strip()
-        if image_url and link_url:
-            data_manager.add_ad(image_url, link_url, width, height, alt_text)
-        return redirect(url_for('admin_ads'))
-    ads = data_manager.get_ads()
-    return render_template('admin_ads.html', ads=ads)
-
-@app.route('/admin/bannerads', methods=['GET', 'POST'])
-def admin_bannerads():
-    if not session.get('admin_logged_in'):
-        return redirect(url_for('admin_login'))
-    if request.method == 'POST':
-        image_url = request.form.get('image_url', '').strip()
-        link_url = request.form.get('link_url', '').strip()
-        width = int(request.form.get('width', 560))
-        height = int(request.form.get('height', 110))
-        alt_text = request.form.get('alt_text', '').strip()
-        if image_url and link_url:
-            data_manager.add_ad(image_url, link_url, width, height, alt_text)
-        return redirect(url_for('admin_bannerads'))
-    ads = data_manager.get_ads()
-    return render_template('admin_bannerads.html', ads=ads)
-
-@app.route('/admin/bannerads/remove', methods=['POST'])
-def admin_bannerads_remove():
-    if not session.get('admin_logged_in'):
-        return redirect(url_for('admin_login'))
-    ad_id = request.form.get('id', '')
-    if ad_id:
-        data_manager.remove_ad(ad_id)
-    return redirect(url_for('admin_bannerads'))
-
-@app.route('/admin/ads/remove', methods=['POST'])
-def admin_remove_ad():
-    if not session.get('admin_logged_in'):
-        return redirect(url_for('admin_login'))
-    ad_id = request.form.get('id', '')
-    if ad_id:
-        data_manager.remove_ad(ad_id)
-    return redirect(url_for('admin_ads'))
-
-@app.route('/api/ads')
-def api_ads():
-    ads = data_manager.get_ads()
-    active_subs = [s for s in data_manager.get_ad_submissions() if s.get('status') == 'active']
-    for s in active_subs:
-        ads.insert(0, {
-            'id': s['id'],
-            'image_url': s['image_url'],
-            'link_url': s['link_url'],
-            'alt_text': s.get('alt_text', ''),
-            'width': 560,
-            'height': 110,
-            'created_at': s.get('created_at', ''),
-            'submission': True,
-        })
-    return jsonify({'ok': True, 'ads': ads})
-
 @app.route('/admin/crawl/<domain>', methods=['POST'])
 def admin_crawl_site(domain):
     if not session.get('admin_logged_in'):
@@ -4949,250 +4842,6 @@ def admin_announcement():
     text = values[-1].strip() if values else ''
     data_manager.set_announcement(text)
     return redirect(url_for('admin_dashboard'))
-
-@app.route('/benchmark')
-def benchmark():
-    query = request.args.get('q', '').strip()
-    results_data = None
-    metrics = None
-    conclusion = None
-
-    if query:
-        try:
-            search_engine = ImprovedSearch()
-            modes = ['none', 'blend_light', 'blend_strong', 'pure_ml', 'norm_50']
-            mode_labels = {
-                'none': 'arlong (no ML)',
-                'blend_light': 'Blend (subtle)',
-                'blend_strong': 'Blend (strong)',
-                'pure_ml': 'Pure ML',
-                'norm_50': 'Normalized 50/50',
-            }
-
-            raw_results, _ = search_engine.search(query, page=1)
-            if not raw_results:
-                raw_results = []
-
-            mode_results = {}
-            timings = {}
-            for mode in modes:
-                t0 = time.time()
-                if mode == 'none':
-                    mode_results['none'] = [dict(r) for r in raw_results[:10]]
-                else:
-                    ranked = search_engine.ml_rerank(query, [dict(r) for r in raw_results], mode)
-                    mode_results[mode] = ranked[:10]
-                timings[mode] = round(time.time() - t0, 3)
-
-            ddg_results = []
-            ddg_time = 0
-            if ddgs_available:
-                try:
-                    t0 = time.time()
-                    raw_ddg = DDGS(timeout=8).text(query, max_results=10, backend='auto', safesearch='on')
-                    ddg_time = round(time.time() - t0, 3)
-                    for i, r in enumerate(raw_ddg):
-                        href = r.get('href', '') or ''
-                        if not href or href.startswith('//') or not href.startswith('http'):
-                            continue
-                        parsed = urlparse(href)
-                        if not parsed.netloc:
-                            continue
-                        ddg_results.append({
-                            'title': r.get('title', ''),
-                            'url': href,
-                            'display_url': href[:60] + ('...' if len(href) > 60 else ''),
-                            'snippet': r.get('body', ''),
-                            'domain': parsed.netloc,
-                            'score': round(100.0 - len(ddg_results) * 8, 2),
-                        })
-                        if len(ddg_results) >= 10:
-                            break
-                except Exception as e:
-                    app.logger.error(f"Benchmark DDG error: {e}")
-
-            baseline_pos = {r['url']: i for i, r in enumerate(mode_results['none'])}
-
-            def with_rank_info(results, baseline_pos_map):
-                enriched = []
-                for i, r in enumerate(results):
-                    url = r['url']
-                    if url in baseline_pos_map:
-                        r['pos_change'] = baseline_pos_map[url] - i
-                    else:
-                        r['pos_change'] = None
-                    if not r.get('domain'):
-                        r['domain'] = urlparse(url).netloc
-                    enriched.append(r)
-                return enriched
-
-            def rbo_score(a, b, p=0.9):
-                urls_a = [r['url'] for r in a]
-                urls_b = [r['url'] for r in b]
-                if not urls_a or not urls_b:
-                    return 0
-                sa, sb = set(), set()
-                overlap = 0
-                weighted = 0
-                min_len = min(len(urls_a), len(urls_b))
-                for k in range(min_len):
-                    sa.add(urls_a[k])
-                    sb.add(urls_b[k])
-                    overlap = len(sa & sb)
-                    weighted += overlap * (p ** (k + 1))
-                return round((1 - p) / p * weighted, 3)
-
-            def jaccard(a, b):
-                urls_a = {r['url'] for r in a}
-                urls_b = {r['url'] for r in b}
-                if not urls_a or not urls_b:
-                    return 0
-                return round(len(urls_a & urls_b) / len(urls_a | urls_b), 3)
-
-            def avg_pos_shift(a, b):
-                pos_a = {r['url']: i for i, r in enumerate(a)}
-                pos_b = {r['url']: i for i, r in enumerate(b)}
-                shifts = [abs(pos_a[u] - pos_b[u]) for u in pos_a if u in pos_b]
-                return round(sum(shifts) / max(len(shifts), 1), 2)
-
-            def avg_score_diff(a, b):
-                scores_a = {r['url']: r.get('score', 0) for r in a}
-                scores_b = {r['url']: r.get('score', 0) for r in b}
-                common = set(scores_a.keys()) & set(scores_b.keys())
-                if not common:
-                    return 0
-                diffs = [scores_b[u] - scores_a[u] for u in common]
-                return round(sum(diffs) / len(diffs), 2)
-
-            def pos_changes(results, baseline_pos_map):
-                changes = []
-                for i, r in enumerate(results):
-                    url = r['url']
-                    if url in baseline_pos_map:
-                        changes.append(baseline_pos_map[url] - i)
-                return changes
-
-            def _score_stats(results):
-                scores = [r.get('score', 0) for r in results if r.get('score') is not None]
-                if not scores:
-                    return {'min': 0, 'max': 0, 'mean': 0, 'std': 0}
-                n = len(scores)
-                mean_s = sum(scores) / n
-                std_s = (sum((s - mean_s) ** 2 for s in scores) / n) ** 0.5
-                return {'min': round(min(scores), 2), 'max': round(max(scores), 2), 'mean': round(mean_s, 2), 'std': round(std_s, 2)}
-
-            def _build_entry(key, label, results_list, timing):
-                r = results_list
-                changes = pos_changes(r, baseline_pos)
-                n_up = sum(1 for c in changes if c and c > 0)
-                n_down = sum(1 for c in changes if c and c < 0)
-                n_new = sum(1 for i, rr in enumerate(r) if rr['url'] not in baseline_pos)
-                return {
-                    'label': label,
-                    'key': key,
-                    'results': with_rank_info(r, baseline_pos),
-                    'timing': timing,
-                    'jaccard_vs_none': jaccard(r, mode_results['none']),
-                    'rbo_vs_none': rbo_score(r, mode_results['none']),
-                    'avg_pos_shift_vs_none': avg_pos_shift(r, mode_results['none']),
-                    'avg_score_diff_vs_none': avg_score_diff(mode_results['none'], r) if r else None,
-                    'changed_positions': len(changes),
-                    'moved_up': n_up,
-                    'moved_down': n_down,
-                    'new_results': n_new,
-                    'score_stats': _score_stats(r),
-                    'scores': [r2.get('score', 0) for r2 in r],
-                }
-
-            comparison = []
-            for mode in modes:
-                comparison.append(_build_entry(mode, mode_labels[mode], mode_results[mode], timings[mode]))
-            comparison.append(_build_entry('ddg', 'DuckDuckGo', ddg_results, ddg_time))
-
-            results_data = comparison
-
-            all_results_map = {}
-            for mode in modes:
-                all_results_map[mode] = mode_results[mode]
-            all_results_map['ddg'] = ddg_results
-
-            all_labels = [m['label'] for m in comparison]
-            all_keys = [m['key'] for m in comparison]
-            pairwise = []
-            pairwise_rbo = []
-            for i, k1 in enumerate(all_keys):
-                r1 = all_results_map.get(k1, [])
-                jrow = []
-                rborow = []
-                for j, k2 in enumerate(all_keys):
-                    r2 = all_results_map.get(k2, [])
-                    jrow.append(jaccard(r1, r2))
-                    rborow.append(rbo_score(r1, r2))
-                pairwise.append({'label': all_labels[i], 'row': jrow})
-                pairwise_rbo.append({'label': all_labels[i], 'row': rborow})
-
-            def _find_best_mode(metric_key, higher=True):
-                valid = [(m, m.get(metric_key, 0)) for m in comparison if m.get(metric_key) is not None]
-                if not valid:
-                    return None, 0
-                sorted_m = sorted(valid, key=lambda x: x[1], reverse=higher)
-                return sorted_m[0]
-
-            best_jaccard_mode, best_jaccard = _find_best_mode('jaccard_vs_none', higher=True)
-            best_rbo_mode, best_rbo = _find_best_mode('rbo_vs_none', higher=True)
-            most_aggressive, most_changes = _find_best_mode('changed_positions', higher=True)
-            fastest_ml = min([m for m in comparison if m['key'] not in ('none', 'ddg')], key=lambda m: m['timing'])
-
-            conclusion_parts = []
-            if best_rbo_mode and best_rbo_mode['key'] not in ('none',):
-                conclusion_parts.append(
-                    f"{best_rbo_mode['label']} preserves ranking closest to the baseline (RBO={best_rbo_mode['rbo_vs_none']}), "
-                    f"meaning it makes the most conservative changes to the original order."
-                )
-            if most_aggressive and most_aggressive['key'] not in ('none',):
-                conclusion_parts.append(
-                    f"{most_aggressive['label']} is the most aggressive — it changes the most positions "
-                    f"({most_aggressive['changed_positions']} of 10) vs baseline."
-                )
-            fastest_ml_label = fastest_ml['label'] if fastest_ml else 'blend modes'
-            conclusion_parts.append(
-                f"{fastest_ml_label} is the fastest ML mode at {fastest_ml['timing']}s."
-            )
-
-            for m in comparison:
-                if m['key'] == 'ddg':
-                    j = m['jaccard_vs_none']
-                    rbo = m['rbo_vs_none']
-                    if j is not None and rbo is not None:
-                        conclusion_parts.append(
-                            f"DuckDuckGo shares only {int(j*100)}% URL overlap (RBO={rbo}) with arlong's baseline, "
-                            f"confirming that different engines return fundamentally different sets of results."
-                        )
-
-            conclusion = ' '.join(conclusion_parts)
-
-            metrics = {
-                'total_raw': len(raw_results),
-                'modes_tested': len(comparison),
-                'has_ddg': len(ddg_results) > 0,
-                'pairwise_jaccard': pairwise,
-                'pairwise_rbo': pairwise_rbo,
-                'scores_chart': {
-                    'labels': [m['label'] for m in comparison],
-                    'means': [m['score_stats']['mean'] for m in comparison],
-                    'maxs': [m['score_stats']['max'] for m in comparison],
-                    'mins': [m['score_stats']['min'] for m in comparison],
-                },
-            }
-
-            for m in comparison:
-                m['results'] = m['results'][:10]
-
-        except Exception as e:
-            import traceback
-            app.logger.error(f"Benchmark error: {e}\n{traceback.format_exc()}")
-
-    return render_template('benchmark.html', query=query, results=results_data, metrics=metrics, conclusion=conclusion)
 
 @app.route('/verified')
 def verified_page():
@@ -5460,6 +5109,498 @@ def source_name(cat):
              'science': 'Science', 'health': 'Health', 'sports': 'Sports', 'entertainment': 'Entertainment',
              'gaming': 'Gaming', 'economy': 'Economy', 'asian': 'Asian News'}
     return names.get(cat, 'News')
+
+
+FEED_VIDEO_SOURCES = {
+    'news': [
+        'https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA',
+        'https://www.youtube.com/feeds/videos.xml?channel_id=UC8p1vwvWtl6T73JiExfWs1g',
+        'https://www.youtube.com/feeds/videos.xml?channel_id=UCCQ3HnP3kfVh0E1NwsbCJKA',
+    ],
+    'sports': [
+        'https://www.youtube.com/feeds/videos.xml?channel_id=UCgyQk4H6Hw09O-YdGQYDyfA',
+    ],
+    'business': [
+        'https://www.youtube.com/feeds/videos.xml?channel_id=UCUMZLSgZ7L4TYM3k4G7EiLA',
+    ],
+    'entertainment': [
+        'https://www.youtube.com/feeds/videos.xml?channel_id=UCY6MbP4GjDPMfCCRhFLGQjg',
+    ],
+}
+
+FEED_SOURCES = {
+    'news': [
+        'http://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml',
+        'http://feeds.nbcnews.com/feeds/topstories',
+        'http://www.theguardian.com/world/usa/rss',
+        'http://feeds.abcnews.com/abcnews/usheadlines',
+        'http://feeds.foxnews.com/foxnews/latest?format=xml',
+        'http://www.newyorker.com/feed/news',
+        'http://www.newsweek.com/rss',
+        'http://www.usnews.com/rss/news',
+        'http://www.npr.org/rss/rss.php?id=1004',
+        'http://time.com/newsfeed/feed/',
+    ],
+    'sports': [
+        'http://sports.espn.go.com/espn/rss/news',
+        'http://feeds.foxnews.com/foxnews/sports',
+        'http://rss.nytimes.com/services/xml/rss/nyt/Sports.xml',
+        'http://www.latimes.com/sports/rss2.0.xml',
+        'http://www.theguardian.com/sport/us-sport/rss',
+    ],
+    'business': [
+        'http://rss.cnn.com/rss/edition_business.rss',
+        'http://rss.nytimes.com/services/xml/rss/nyt/Business.xml',
+        'http://www.economist.com/feeds/print-sections/77/business.xml',
+        'https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml',
+    ],
+    'health': [
+        'http://feeds.bbci.co.uk/news/health/rss.xml?edition=us',
+        'http://www.npr.org/rss/rss.php?id=1128',
+        'http://rss.cnn.com/rss/cnn_health.rss',
+        'http://www.theguardian.com/lifeandstyle/health-and-wellbeing/rss',
+        'http://www.usnews.com/rss/health?int=a7fe09',
+        'http://feeds.nbcnews.com/feeds/health',
+        'http://time.com/health/feed/',
+    ],
+    'entertainment': [
+        'http://rss.cnn.com/rss/cnn_showbiz.rss',
+        'http://www.newyorker.com/feed/culture',
+        'http://feeds.abcnews.com/abcnews/entertainmentheadlines',
+        'http://www.latimes.com/entertainment/rss2.0.xml',
+        'http://www.cbsnews.com/latest/rss/entertainment',
+        'http://www.tmz.com/rss.xml',
+        'http://variety.com/feed/',
+    ],
+}
+
+FEED_CACHE = {}
+FEED_CACHE_TIME = {}
+FEED_CACHE_TTL = 120
+
+import concurrent.futures as cf
+
+def _extract_feed_image(entry):
+    img = ''
+    import re
+    # Try to extract YouTube video ID first (most reliable thumbnail source)
+    yt_id = None
+    if hasattr(entry, 'yt_videoid'):
+        yt_id = entry.yt_videoid
+    elif hasattr(entry, 'yt_videoId'):
+        yt_id = entry.yt_videoId
+    if not yt_id:
+        link = entry.get('link', '') or ''
+        m = re.search(r'(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]{11})', link)
+        if m:
+            yt_id = m.group(1)
+    if not yt_id:
+        eid = entry.get('id', '') or ''
+        m = re.match(r'yt:video:([a-zA-Z0-9_-]{11})', eid)
+        if m:
+            yt_id = m.group(1)
+    if yt_id:
+        img = f'https://img.youtube.com/vi/{yt_id}/maxresdefault.jpg'
+
+    if not img and hasattr(entry, 'media_content') and entry.media_content:
+        for mc in entry.media_content:
+            url_val = mc.get('url', '')
+            if url_val:
+                img = url_val
+                break
+        if not img and entry.media_content:
+            img = entry.media_content[0].get('url', '')
+    if not img and hasattr(entry, 'media_thumbnail') and entry.media_thumbnail:
+        url = entry.media_thumbnail[0].get('url', '')
+        if url:
+            img = url
+            # Upgrade YouTube thumbnail to max quality
+            yt_up = re.search(r'(i\.ytimg\.com|img\.youtube\.com)/vi/([a-zA-Z0-9_-]+)/', url)
+            if yt_up:
+                img = f'https://img.youtube.com/vi/{yt_up.group(2)}/maxresdefault.jpg'
+    if not img and hasattr(entry, 'enclosures') and entry.enclosures:
+        for enc in entry.enclosures:
+            if hasattr(enc, 'type') and enc.type and 'image' in enc.type:
+                img = enc.href
+                break
+    if not img and hasattr(entry, 'summary'):
+        imgs = re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', entry.summary)
+        if imgs:
+            img = imgs[0]
+    if not img and hasattr(entry, 'links'):
+        for link in entry.links:
+            if hasattr(link, 'type') and link.type and 'image' in link.type:
+                img = link.href
+                break
+    # Last resort: try YouTube from link
+    if not img and yt_id:
+        img = f'https://img.youtube.com/vi/{yt_id}/hqdefault.jpg'
+    return img
+
+def _detect_content_type(entry):
+    if hasattr(entry, 'media_content') and entry.media_content:
+        for mc in entry.media_content:
+            if mc.get('type', '').startswith('video'):
+                return 'video'
+    link = entry.get('link', '')
+    if link and any(d in link for d in ('youtube.com/watch', 'youtu.be/', 'vimeo.com/', 'dailymotion.com/')):
+        return 'video'
+    if hasattr(entry, 'tags'):
+        for t in entry.tags:
+            if hasattr(t, 'term') and t.term and 'video' in t.term.lower():
+                return 'video'
+    if hasattr(entry, 'summary'):
+        if re.search(r'<video|<iframe[^>]*youtube|src=["\']https://www\.youtube', entry.summary or ''):
+            return 'video'
+    return 'article'
+
+feed_tracker_salt = os.environ.get('FEED_TRACKER_SALT', 'arlong-feed-salt-v1')
+
+def get_anon_id():
+    ip = request.remote_addr or '0.0.0.0'
+    ua = request.headers.get('User-Agent', '')
+    raw = ip + ua + feed_tracker_salt
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+def _fetch_feed_source(src_url, category, limit=5):
+    import feedparser
+    items = []
+    try:
+        resp = requests.get(src_url, timeout=10, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
+        if resp.status_code != 200:
+            return items
+        feed = feedparser.parse(resp.text)
+        source_title = feed.feed.get('title', category.title())
+        for entry in feed.entries[:limit]:
+            img = _extract_feed_image(entry)
+            if not img:
+                continue
+            content_type = _detect_content_type(entry)
+            items.append({
+                'title': entry.get('title', 'Untitled'),
+                'link': entry.get('link', ''),
+                'published': entry.get('published', ''),
+                'source': source_title,
+                'image': img,
+                'category': category,
+                'content_type': content_type,
+            })
+    except Exception:
+        pass
+    return items
+
+
+@app.route('/api/feed')
+def api_feed():
+    category = request.args.get('category', 'all')
+    page = max(0, int(request.args.get('page', 0)))
+    per_page = min(15, max(1, int(request.args.get('per_page', 15))))
+    feed_type = request.args.get('type', 'mixed')
+    user_id = session.get('user_id')
+    username = session.get('username')
+    anon_id = get_anon_id() if not user_id else None
+
+    cache_key = (category, page, per_page, feed_type)
+    cached = FEED_CACHE.get(cache_key)
+    cache_ts = FEED_CACHE_TIME.get(cache_key, 0)
+    if cached and time.time() - cache_ts < FEED_CACHE_TTL:
+        return jsonify({'ok': True, 'items': cached})
+
+    try:
+        items = []
+        if category == 'all' or category == '':
+            cats = ['news', 'sports', 'business', 'health', 'entertainment']
+        elif category in FEED_SOURCES:
+            cats = [category]
+        else:
+            return jsonify({'ok': False, 'error': 'Invalid category'}), 400
+
+        all_srcs = []
+        for c in cats:
+            for src in FEED_SOURCES.get(c, []):
+                all_srcs.append((src, c, False))
+            if feed_type in ('mixed', 'video') and c in FEED_VIDEO_SOURCES:
+                for src in FEED_VIDEO_SOURCES[c]:
+                    all_srcs.append((src, c, True))
+
+        per_source = max(2, per_page // max(len(all_srcs), 1)) if all_srcs else 3
+
+        def _fetch_wrapper(src, cat, is_video):
+            items = _fetch_feed_source(src, cat, per_source)
+            if is_video:
+                for i in items:
+                    i['content_type'] = 'video'
+            return items
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            fut_to_cat = {executor.submit(_fetch_wrapper, src, c, v): c for src, c, v in all_srcs}
+            for fut in cf.as_completed(fut_to_cat, timeout=20):
+                try:
+                    items.extend(fut.result())
+                except Exception:
+                    pass
+
+        # Filter by feed type
+        if feed_type == 'video':
+            items = [i for i in items if i.get('content_type') == 'video']
+
+        import email.utils as eut
+        def _parse_date(pub):
+            if not pub:
+                return ''
+            try:
+                parsed = eut.parsedate(pub)
+                if parsed:
+                    return str(parsed)
+            except Exception:
+                pass
+            try:
+                from datetime import datetime as dtdt
+                dt = dtdt.fromisoformat(pub.replace('Z', '+00:00'))
+                return dt.isoformat()
+            except Exception:
+                pass
+            return pub
+        # Personalization - get interests from user profile
+        if username:
+            interests = data_manager.get_user_feed_interests(username)
+        elif anon_id:
+            interests = data_manager.get_anon_feed_interests(anon_id)
+        else:
+            interests = {}
+
+        # Scoring algorithm: interest * 2 + recency + diversity - penalty
+        import random
+
+        def _recency_score(pub):
+            if not pub:
+                return 0.5
+            try:
+                d = datetime.fromisoformat(pub.replace('Z', '+00:00')) if 'T' in pub else datetime.now()
+                if 'T' not in pub:
+                    parsed = eut.parsedate(pub)
+                    if parsed:
+                        d = datetime(*parsed[:6])
+                    else:
+                        return 0.5
+                hours_ago = (datetime.now() - d).total_seconds() / 3600
+                if hours_ago < 1:
+                    return 1.0
+                if hours_ago < 6:
+                    return 0.9
+                if hours_ago < 24:
+                    return 0.7
+                if hours_ago < 72:
+                    return 0.5
+                if hours_ago < 168:
+                    return 0.3
+                return 0.1
+            except Exception:
+                return 0.5
+
+        # Track recently seen categories for diversity
+        recent_cats = []
+        scored = []
+        interest_cats = sorted(interests.keys(), key=lambda c: interests[c], reverse=True) if interests else []
+        top_interest_cats = interest_cats[:2] if interest_cats else []
+
+        for item in items:
+            cat = item.get('category', 'news')
+            interest = interests.get(cat, 0)
+
+            # Interest score: -1 to +2
+            if interest > 5:
+                interest_score = 2.0
+            elif interest > 2:
+                interest_score = 1.5
+            elif interest > 0:
+                interest_score = 1.0
+            elif interest == 0:
+                interest_score = 0.0
+            else:
+                interest_score = -1.0
+
+            # Recency: 0-1
+            recency = _recency_score(item.get('published', ''))
+
+            # Explore bonus: if user has interests, boost items from non-top categories slightly
+            explore_bonus = 0.0
+            if top_interest_cats and cat not in top_interest_cats:
+                explore_bonus = 0.3
+
+            # Total score
+            score = interest_score * 2.0 + recency * 1.5 + explore_bonus
+            scored.append((score, item))
+
+        # Sort by score descending, then random shuffle for same-score items
+        rng = random.Random(int(time.time() / 1800) + page)
+        scored.sort(key=lambda x: (-x[0], rng.random()))
+
+        # Interleave categories for diversity (take top scored items but vary categories)
+        final = []
+        cat_queue = {}
+        for s, item in scored:
+            cat = item.get('category', 'news')
+            cat_queue.setdefault(cat, []).append(item)
+
+        # Round-robin through categories with positive interest first
+        cat_order = sorted(cat_queue.keys(), key=lambda c: (
+            0 if interests.get(c, 0) > 0 else 1 if interests.get(c, 0) == 0 else 2,
+            -interests.get(c, 0)
+        )) if interests else list(cat_queue.keys())
+        # Add remaining unseen categories at the end
+        for c in cat_queue:
+            if c not in cat_order:
+                cat_order.append(c)
+
+        while any(cat_queue.values()):
+            for c in cat_order:
+                if cat_queue.get(c):
+                    final.append(cat_queue[c].pop(0))
+                    if len(final) >= 60:
+                        break
+            if len(final) >= 60:
+                break
+
+        if not final:
+            final = [item for _, item in scored[:60]]
+
+        # Session dedup: filter out items already shown this session
+        seen = session.get('feed_seen', set())
+        if isinstance(seen, list):
+            seen = set(seen)
+        deduped = []
+        for item in final:
+            key = item.get('link', '')
+            if key not in seen:
+                seen.add(key)
+                deduped.append(item)
+        session['feed_seen'] = list(seen)
+        # Keep last 500 seen links to avoid unbounded growth
+        if len(seen) > 500:
+            session['feed_seen'] = list(seen)[-500:]
+
+        items = deduped[:60]
+
+        FEED_CACHE[cache_key] = items
+        FEED_CACHE_TIME[cache_key] = time.time()
+
+        return jsonify({'ok': True, 'items': items})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/feed/vote', methods=['POST'])
+def api_feed_vote():
+    username = session.get('username')
+    category = request.form.get('category', '')
+    vote = request.form.get('vote', '')
+    value = request.form.get('value', '0')
+    if username and category and vote:
+        try:
+            if vote == 'up':
+                data_manager.record_feed_interest(username, category, 1)
+            elif vote == 'down':
+                data_manager.record_feed_interest(username, category, -1)
+            elif vote == 'dwell':
+                dwell_val = min(float(value), 30000) / 1000 * 0.5
+                data_manager.record_feed_interest(username, category, round(dwell_val, 1))
+        except Exception:
+            pass
+    return jsonify({'ok': True})
+
+
+@app.route('/api/feed/interact', methods=['POST'])
+def api_feed_interact():
+    username = session.get('username')
+    category = request.form.get('category', '')
+    title = request.form.get('title', '')
+    url = request.form.get('url', '')
+    anon_id = get_anon_id() if not username else None
+    if category and url:
+        if username:
+            data_manager.record_feed_interest(username, category, 1)
+        elif anon_id:
+            with data_manager._lock:
+                loaded = _load_json()
+                if loaded:
+                    data_manager.data = loaded
+                data_manager.data.setdefault('anon_feed_interests', {})
+                interests = data_manager.data['anon_feed_interests'].setdefault(anon_id, {})
+                interests[category] = interests.get(category, 0) + 1
+                data_manager.data.setdefault('anon_feed_log', [])
+                data_manager.data['anon_feed_log'].append({
+                    'anon_id': anon_id,
+                    'category': category,
+                    'title': title,
+                    'url': url,
+                    't': datetime.now().isoformat(),
+                })
+                _save_json(data_manager.data)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/feed/track', methods=['POST'])
+def api_feed_track():
+    username = session.get('username')
+    user_id = session.get('user_id')
+    anon_id = get_anon_id() if not user_id else None
+    try:
+        data = request.get_json(force=True)
+        if not isinstance(data, list):
+            data = [data]
+        tracker_id = user_id or anon_id
+        if tracker_id:
+            with data_manager._lock:
+                loaded = _load_json()
+                if loaded:
+                    data_manager.data = loaded
+                data_manager.data.setdefault('feed_tracking', [])
+                for event in data:
+                    row = {
+                        'tracker_id': tracker_id,
+                        'is_anon': not user_id,
+                        'event': event.get('event'),
+                        'url': event.get('url'),
+                        'category': event.get('category'),
+                        'content_type': event.get('content_type'),
+                        'dwell_ms': event.get('dwell_ms'),
+                        'velocity': event.get('velocity'),
+                        'ts': datetime.now().isoformat(),
+                        'hour': datetime.now().hour,
+                    }
+                    data_manager.data['feed_tracking'].append(row)
+                    cat = event.get('category')
+                    if cat and username:
+                        # Record interest in user profile
+                        evt = event.get('event')
+                        if evt == 'dwell':
+                            dwell = event.get('dwell_ms', 0) or 0
+                            if dwell > 2000:
+                                dwell_val = min(dwell, 30000) / 1000 * 0.5
+                                for u in data_manager.data.get('users', []):
+                                    if u['username'] == username:
+                                        u.setdefault('feed_interests', {})
+                                        u['feed_interests'][cat] = u['feed_interests'].get(cat, 0) + round(dwell_val, 1)
+                                        break
+                        elif evt == 'scroll':
+                            vel = event.get('velocity', 0) or 0
+                            if 0 < vel < 500:
+                                for u in data_manager.data.get('users', []):
+                                    if u['username'] == username:
+                                        u.setdefault('feed_interests', {})
+                                        u['feed_interests'][cat] = u['feed_interests'].get(cat, 0) + 0.3
+                                        break
+                    elif cat and not username:
+                        data_manager.data.setdefault('feed_interests', {}).setdefault(tracker_id, {})
+                        data_manager.data['feed_interests'][tracker_id][cat] = data_manager.data['feed_interests'][tracker_id].get(cat, 0) + 1
+                # Keep only last 10000 events
+                if len(data_manager.data['feed_tracking']) > 10000:
+                    data_manager.data['feed_tracking'] = data_manager.data['feed_tracking'][-10000:]
+                _save_json(data_manager.data)
+    except Exception:
+        pass
+    return jsonify({'ok': True})
 
 
 @app.route('/api/weather')
