@@ -4583,9 +4583,7 @@ def admin_dashboard():
     verified_sites = data_manager.get_verified_sites()
     submitted_sites = data_manager.get_submitted_sites()
     domain_reports = data_manager.get_pending_domain_reports()
-    ads = data_manager.get_ads()
-    ad_submissions = data_manager.get_ad_submissions()
-    return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches, celebration=celebration, announcement=announcement, verified_sites=verified_sites, submitted_sites=submitted_sites, domain_reports=domain_reports, ads=ads, ad_submissions=ad_submissions)
+    return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches, celebration=celebration, announcement=announcement, verified_sites=verified_sites, submitted_sites=submitted_sites, domain_reports=domain_reports)
 
 @app.route('/admin/reports/<int:report_id>/approve', methods=['POST'])
 def admin_approve_report(report_id):
