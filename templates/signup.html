@@ -5,40 +5,61 @@
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>{% if login_error %}Sign in{% else %}Sign up{% endif %} - arlong</title>
     <style>
-        :root{--bg:#202124;--bg2:#303134;--text:#e8eaed;--text2:#bdc1c6;--text3:#9aa0a6;--link:#8ab4f8;--border:#3c4043;--hover-bg:#3c4043}
+        :root{--bg:#202124;--bg2:#303134;--text:#e8eaed;--text2:#bdc1c6;--text3:#9aa0a6;--link:#8ab4f8;--border:#3c4043;--hover-bg:#3c4043;--green:#81c995}
         *,*::before,*::after{box-sizing:border-box}
         body{margin:0;padding:40px 20px;font-family:arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;display:flex;flex-direction:column;align-items:center;min-height:100vh}
-        .logo{font-size:36px;font-family:'Product Sans',Arial,sans-serif;letter-spacing:-1px;margin-bottom:4px}
-        .logo span{display:inline-block;animation:none}
-        .sub{color:var(--text3);font-size:14px;margin-bottom:28px}
-        .card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px;width:100%;max-width:380px}
+        .logo{font-size:36px;font-family:'Product Sans',Arial,sans-serif;letter-spacing:-1px;margin-bottom:4px;display:flex;align-items:center;gap:2px}
+        .sub{color:var(--text3);font-size:14px;margin-bottom:28px;text-align:center}
+        .card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px;width:100%;max-width:400px}
         .card h2{margin:0 0 6px;font-weight:400;font-size:20px}
         .card .hint{color:var(--text3);font-size:13px;margin-bottom:20px}
+        .steps{display:flex;gap:6px;margin-bottom:24px;justify-content:center}
+        .step{width:32px;height:4px;border-radius:2px;background:var(--border);transition:.3s}
+        .step.active{background:var(--link)}
+        .step.done{background:var(--green)}
+        .step-form{display:none}
+        .step-form.active{display:block}
         label{display:block;font-size:13px;color:var(--text2);margin-bottom:4px;margin-top:14px}
         label:first-of-type{margin-top:0}
         input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);outline:none}
         input:focus{border-color:var(--link)}
-        .btn{width:100%;padding:10px;border:none;border-radius:6px;font-size:14px;cursor:pointer;margin-top:20px;font-weight:500}
+        .btn{width:100%;padding:10px;border:none;border-radius:6px;font-size:14px;cursor:pointer;margin-top:16px;font-weight:500}
         .btn-primary{background:var(--link);color:#fff}
         .btn-primary:hover{opacity:.9}
+        .btn-secondary{background:var(--bg);color:var(--text);border:1px solid var(--border)}
+        .btn-secondary:hover{background:var(--hover-bg)}
+        .btn-row{display:flex;gap:8px;margin-top:16px}
+        .btn-row .btn{margin-top:0}
+        .btn-row .btn:first-child{flex:0 0 auto}
+        .btn-row .btn:last-child{flex:1}
         .error{background:#3c2020;color:#f28b82;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:16px}
         .switch{text-align:center;margin-top:16px;font-size:13px;color:var(--text3)}
         .switch a{color:var(--link);text-decoration:none}
         .switch a:hover{text-decoration:underline}
         .info{font-size:12px;color:var(--text3);margin-top:16px;line-height:1.5}
+        .opt{font-size:11px;color:var(--text3);margin-top:2px}
+        .pw-hint{font-size:11px;color:var(--text3);margin-top:4px}
+        .pw-hint.valid{color:var(--green)}
+        .pw-hint.invalid{color:#f28b82}
+        .loading-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(32,33,36,.85);z-index:9999;flex-direction:column;align-items:center;justify-content:center}
+        .loading-overlay.show{display:flex}
+        .lo-spinner{width:36px;height:36px;border:3px solid var(--border);border-top:3px solid var(--link);border-radius:50%;animation:lo-spin .8s linear infinite}
+        @keyframes lo-spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+        .lo-text{color:var(--text2);font-size:14px;margin-top:12px}
     </style>
 </head>
 <body>
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="lo-spinner"></div>
+        <div class="lo-text">Creating your account<span class="lo-dots">...</span></div>
+    </div>
     <div class="logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></div>
     <div class="sub">Community — anonymous and spam-free</div>
     <div class="card">
-        <h2>{% if login_error %}Sign in{% else %}Create account{% endif %}</h2>
-        <div class="hint">{% if login_error %}Welcome back{% else %}No email needed. Choose a username and password.{% endif %}</div>
-
-        {% if error %}<div class="error">{{ error }}</div>{% endif %}
-        {% if login_error %}<div class="error">{{ login_error }}</div>{% endif %}
-
         {% if login_error or request.args.get('mode') == 'login' %}
+        <h2>Sign in</h2>
+        <div class="hint">Welcome back</div>
+        {% if login_error %}<div class="error">{{ login_error }}</div>{% endif %}
         <form method="POST" action="/login">
             <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
             <label>Username</label>
@@ -49,21 +70,152 @@
         </form>
         <div class="switch">No account? <a href="/signup">Sign up</a></div>
         {% else %}
-        <form method="POST" action="/signup">
+        <h2>Create account</h2>
+        <div class="hint">Join the community in a few steps</div>
+        {% if error %}<div class="error">{{ error }}</div>{% endif %}
+        <form method="POST" action="/signup" id="signup-form">
             <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-            <label>Username</label>
-            <input type="text" name="username" required minlength="3" maxlength="24" autocomplete="off">
-            <label>Password</label>
-            <input type="password" name="password" required minlength="6" autocomplete="new-password">
-            <label>Security question</label>
-            <input type="text" name="security_question" placeholder="e.g. What is your pet's name?" required autocomplete="off">
-            <label>Security answer</label>
-            <input type="text" name="security_answer" required autocomplete="off">
-            <button type="submit" class="btn btn-primary">Create account</button>
+
+            <div class="steps" id="step-indicator">
+                <div class="step active" data-step="1"></div>
+                <div class="step" data-step="2"></div>
+                <div class="step" data-step="3"></div>
+                <div class="step" data-step="4"></div>
+            </div>
+
+            <div class="step-form active" data-step="1">
+                <label>Choose a username</label>
+                <input type="text" name="username" id="f-username" required minlength="3" maxlength="24" autocomplete="off" placeholder="e.g. explorer99" value="{{ request.form.get('username', '') }}">
+                <div class="pw-hint" id="username-hint">3-24 characters, letters and numbers</div>
+                <label>Create a password</label>
+                <input type="password" name="password" id="f-password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters">
+                <div class="pw-hint invalid" id="pw-hint">Must contain letters and numbers</div>
+                <button type="button" class="btn btn-primary" onclick="nextStep(2)">Continue</button>
+            </div>
+
+            <div class="step-form" data-step="2">
+                <label>Email address <span style="color:var(--text3)">(optional)</span></label>
+                <input type="email" name="email" id="f-email" autocomplete="email" placeholder="you@example.com" value="{{ email or '' }}">
+                <div class="opt">Used for account recovery and payment receipts</div>
+                <label>Security question</label>
+                <input type="text" name="security_question" id="f-sq" required autocomplete="off" placeholder="e.g. What is your pet's name?" value="{{ request.form.get('security_question', '') }}">
+                <label>Security answer</label>
+                <input type="text" name="security_answer" id="f-sa" required autocomplete="off" placeholder="Your answer">
+                <div class="btn-row">
+                    <button type="button" class="btn btn-secondary" onclick="prevStep(1)">Back</button>
+                    <button type="button" class="btn btn-primary" onclick="nextStep(3)">Continue</button>
+                </div>
+            </div>
+
+            <div class="step-form" data-step="3">
+                <label>Your location <span style="color:var(--text3)">(for weather)</span></label>
+                <input type="text" name="weather_location" id="f-wloc" autocomplete="off" placeholder="e.g. New York, NY" value="{{ request.form.get('weather_location', '') }}">
+                <div class="opt">Used to show local weather on your homepage</div>
+                <div class="btn-row">
+                    <button type="button" class="btn btn-secondary" onclick="prevStep(2)">Back</button>
+                    <button type="button" class="btn btn-primary" onclick="nextStep(4)">Continue</button>
+                </div>
+            </div>
+
+            <div class="step-form" data-step="4">
+                <div style="text-align:center;padding:10px 0">
+                    <div style="font-size:48px;margin-bottom:8px;opacity:.8">
+                        <svg viewBox="0 0 24 24" style="width:48px;height:48px;fill:var(--link)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                    </div>
+                    <div style="font-size:16px;font-weight:500;color:var(--text);margin-bottom:4px">Almost done!</div>
+                    <div style="font-size:13px;color:var(--text3);margin-bottom:16px">Review and create your account</div>
+                </div>
+                <div style="background:var(--bg);border-radius:6px;padding:12px 16px;font-size:13px;line-height:1.8">
+                    <div><strong style="color:var(--text2)">Username:</strong> <span id="review-user" style="color:var(--text)"></span></div>
+                    <div><strong style="color:var(--text2)">Email:</strong> <span id="review-email" style="color:var(--text3)">not provided</span></div>
+                    <div><strong style="color:var(--text2)">Location:</strong> <span id="review-wloc" style="color:var(--text3)">not set</span></div>
+                    <div><strong style="color:var(--text2)">Security question:</strong> <span id="review-sq" style="color:var(--text)"></span></div>
+                </div>
+                <div class="btn-row">
+                    <button type="button" class="btn btn-secondary" onclick="prevStep(3)">Back</button>
+                    <button type="submit" class="btn btn-primary">Create account</button>
+                </div>
+            </div>
         </form>
         <div class="switch">Have an account? <a href="/login">Sign in</a></div>
+        <div class="info">Your IP is hashed and stored securely for spam prevention. Password is salted and hashed. <a href="/privacy" style="color:var(--link)">Privacy policy</a></div>
         {% endif %}
-        <div class="info">&#x1F512; Your IP is hashed and stored securely for spam prevention. Your password is salted and hashed. No email required. <a href="/privacy" style="color:var(--link)">Privacy policy</a></div>
     </div>
+
+    <script>
+        var currentStep = 1;
+        function updateStep(step){
+            document.querySelectorAll('.step-form').forEach(function(el){ el.classList.remove('active') });
+            document.querySelector('.step-form[data-step="'+step+'"]').classList.add('active');
+            document.querySelectorAll('.step').forEach(function(el){
+                var s = parseInt(el.getAttribute('data-step'));
+                el.classList.remove('active','done');
+                if(s === step) el.classList.add('active');
+                else if(s < step) el.classList.add('done');
+            });
+            if(step === 4){
+                var u = document.getElementById('f-username').value;
+                var e = document.getElementById('f-email').value;
+                var sq = document.getElementById('f-sq').value;
+                var wl = document.getElementById('f-wloc').value;
+                document.getElementById('review-user').textContent = u;
+                document.getElementById('review-email').textContent = e || 'not provided';
+                document.getElementById('review-wloc').textContent = wl || 'not set';
+                document.getElementById('review-sq').textContent = sq;
+            }
+        }
+        function nextStep(s){
+            if(s === 2){
+                var u = document.getElementById('f-username').value.trim();
+                var p = document.getElementById('f-password').value;
+                if(u.length < 3 || u.length > 24){ alert('Username must be 3-24 characters'); return; }
+                if(p.length < 8){ alert('Password must be at least 8 characters'); return; }
+                if(!/[A-Za-z]/.test(p) || !/[0-9]/.test(p)){ alert('Password must contain both letters and numbers'); return; }
+            }
+            if(s === 3){
+                var sq = document.getElementById('f-sq').value.trim();
+                var sa = document.getElementById('f-sa').value.trim();
+                if(!sq || !sa){ alert('Security question and answer are required'); return; }
+            }
+            if(s === 4){ /* weather location is optional, no validation needed */ }
+            currentStep = s;
+            updateStep(s);
+        }
+        function prevStep(s){
+            currentStep = s;
+            updateStep(s);
+        }
+        document.addEventListener('DOMContentLoaded', function(){
+            var pw = document.getElementById('f-password');
+            if(pw){
+                pw.addEventListener('input', function(){
+                    var h = document.getElementById('pw-hint');
+                    var v = pw.value;
+                    if(v.length >= 8 && /[A-Za-z]/.test(v) && /[0-9]/.test(v)){
+                        h.textContent = 'Strong password';
+                        h.className = 'pw-hint valid';
+                    } else {
+                        h.textContent = 'Must be 8+ characters with letters and numbers';
+                        h.className = 'pw-hint invalid';
+                    }
+                });
+            }
+            var uf = document.getElementById('f-username');
+            if(uf){
+                uf.addEventListener('input', function(){
+                    var h = document.getElementById('username-hint');
+                    var v = uf.value.trim();
+                    if(v.length >= 3 && v.length <= 24){
+                        h.className = 'pw-hint valid';
+                    } else {
+                        h.className = 'pw-hint invalid';
+                    }
+                });
+            }
+        });
+        document.getElementById('signup-form').addEventListener('submit', function(){
+            document.getElementById('loading-overlay').classList.add('show');
+        });
+    </script>
 </body>
 </html>

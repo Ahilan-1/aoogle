@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Premium - arlong</title>
+    <style>
+        :root{--bg:#202124;--bg2:#303134;--text:#e8eaed;--text2:#bdc1c6;--text3:#9aa0a6;--link:#8ab4f8;--border:#3c4043;--hover-bg:#3c4043;--green-bg:#1e3527;--green-border:#2d4a36;--gold:#fbbc04;--gold-bg:#332e1a;--red:#f28b82}
+        *,*::before,*::after{box-sizing:border-box}
+        body{margin:0;padding:40px 20px;font-family:arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+        .logo{font-size:36px;font-family:'Product Sans',Arial,sans-serif;letter-spacing:-1px;margin-bottom:2px}
+        .sub{color:var(--text3);font-size:14px;margin-bottom:24px;text-align:center}
+        .success{background:var(--green-bg);border:1px solid var(--green-border);border-radius:8px;padding:16px 20px;margin-bottom:24px;max-width:540px;text-align:center}
+        .success strong{color:#81c995}
+        .billing-toggle{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:28px;font-size:13px;color:var(--text3)}
+        .billing-toggle .toggle-track{position:relative;width:44px;height:24px;background:var(--border);border-radius:12px;cursor:pointer;transition:.3s}
+        .billing-toggle .toggle-track.active{background:var(--link)}
+        .billing-toggle .toggle-track::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;background:var(--bg);border-radius:50%;transition:.3s}
+        .billing-toggle .toggle-track.active::after{transform:translateX(20px)}
+        .billing-toggle .save-badge{background:var(--gold-bg);color:var(--gold);font-size:10px;padding:2px 8px;border-radius:8px;font-weight:600;margin-left:4px;display:none}
+        .billing-toggle .save-badge.show{display:inline}
+        .tiers{display:flex;gap:20px;flex-wrap:wrap;justify-content:center;max-width:700px}
+        .tier{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px;width:300px;text-align:center;display:flex;flex-direction:column;position:relative}
+        .tier.featured{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
+        .tier-badge{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:10px;font-weight:700;padding:3px 12px;border-radius:8px;text-transform:uppercase;letter-spacing:.5px}
+        .tier-name{font-size:18px;font-weight:600;margin-bottom:2px}
+        .tier-price{font-size:32px;font-weight:300;margin:4px 0}
+        .tier-price .period{font-size:13px;color:var(--text3);font-weight:400}
+        .tier-price .price-yearly{display:none;font-size:32px;font-weight:300}
+        .tier-price .price-monthly{display:inline}
+        .tier.yearly .price-yearly{display:inline}
+        .tier.yearly .price-monthly{display:none}
+        .tier-desc{color:var(--text3);font-size:12px;margin-bottom:4px;line-height:1.4}
+        .tier-trial{color:var(--gold);font-size:12px;font-weight:500;margin-bottom:12px}
+        .tier-features{list-style:none;padding:0;margin:8px 0 16px;text-align:left;font-size:13px}
+        .tier-features li{padding:5px 0;color:var(--text2);display:flex;align-items:center;gap:8px}
+        .tier-features li::before{content:'\2713';width:18px;height:18px;border-radius:50%;background:var(--green-bg);border:1px solid var(--green-border);display:flex;align-items:center;justify-content:center;font-size:10px;color:#81c995;flex-shrink:0}
+        .tier-features li.no{color:var(--text3)}
+        .tier-features li.no::before{content:'\2717';background:#3c2023;border-color:#5f2c30;color:var(--red)}
+        .btn{display:inline-block;padding:10px 24px;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-weight:500;text-decoration:none;margin-top:auto}
+        .btn-primary{background:var(--link);color:#fff}
+        .btn-primary:hover{opacity:.9;text-decoration:none}
+        .btn-gold{background:var(--gold);color:#000}
+        .btn-gold:hover{opacity:.9;text-decoration:none}
+        .btn-disabled{background:var(--border);color:var(--text3);cursor:default}
+        .hint{color:var(--text3);font-size:12px;margin-top:20px;max-width:500px;text-align:center;line-height:1.5}
+        .back{margin-top:24px;font-size:13px}
+        .back a{color:var(--link);text-decoration:none}
+        .back a:hover{text-decoration:underline}
+        .compare{margin-top:24px;font-size:12px;color:var(--text3);text-align:center;max-width:600px;line-height:1.6}
+        .compare a{color:var(--link)}
+    </style>
+</head>
+<body>
+    <div class="logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></div>
+    <div class="sub">Choose the plan that fits your search needs</div>
+
+    {% if success %}
+    <div class="success"><strong>Payment successful!</strong> Your premium plan is now active. <a href="/" style="color:var(--link)">Start searching</a></div>
+    {% endif %}
+
+    {% if not session.get('user_id') %}
+    <div class="success" style="border-color:var(--border)">Please <a href="/login" style="color:var(--link)">sign in</a> to purchase Premium.</div>
+    {% endif %}
+
+    <div class="billing-toggle">
+        <span id="billing-monthly-label">Monthly</span>
+        <div class="toggle-track" id="billing-toggle" onclick="toggleBilling()"></div>
+        <span id="billing-yearly-label">Yearly <span class="save-badge" id="save-badge">Save up to 25%</span></span>
+    </div>
+
+    <div class="tiers">
+        {% for key, tier in premium_tiers.items() %}
+        <div class="tier{% if key == 'golden' %} featured{% endif %}" id="tier-{{ key }}">
+            {% if key == 'golden' %}<div class="tier-badge">Popular</div>{% endif %}
+            <div class="tier-name">{{ tier.name }}</div>
+            <div class="tier-desc">
+                {% if tier.daily_limit %}
+                {{ tier.daily_limit }} searches per day
+                {% else %}
+                Unlimited searches per day
+                {% endif %}
+            </div>
+            <div class="tier-price">
+                <span class="price-monthly">${{ tier.price }}<span class="period">/month</span></span>
+                <span class="price-yearly">${{ tier.price_yearly }}<span class="period">/year</span></span>
+            </div>
+            {% if key == 'golden' %}
+            <div class="tier-trial">&#9733; 3-day free trial &mdash; cancel anytime</div>
+            {% endif %}
+            <ul class="tier-features">
+                {% if tier.daily_limit %}
+                <li>{{ tier.daily_limit }} searches per day</li>
+                {% else %}
+                <li>Unlimited searches per day</li>
+                {% endif %}
+                <li>AI-powered summaries</li>
+                {% if key == 'golden' %}
+                <li>No daily limit</li>
+                <li>Priority support</li>
+                <li>Earliest access to new features</li>
+                {% else %}
+                <li>Priority support</li>
+                <li class="no">Unlimited searches</li>
+                {% endif %}
+            </ul>
+            {% if session.get('user_id') %}
+            <form method="POST" action="/api/create-checkout-session">
+                <input type="hidden" name="tier" value="{{ key }}">
+                <input type="hidden" name="billing" value="monthly" class="billing-input">
+                <button type="submit" class="btn {% if key == 'golden' %}btn-gold{% else %}btn-primary{% endif %}">
+                    {% if key == 'golden' %}Start 3-day free trial{% else %}Subscribe - ${{ tier.price }}/mo{% endif %}
+                </button>
+            </form>
+            {% else %}
+            <span class="btn btn-disabled">Sign in to subscribe</span>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="hint">All plans are ad-free and privacy-focused. Cancel anytime. Payments via Stripe.</div>
+
+    <div class="compare"><a href="/faq">Compare plans</a> &middot; <a href="/privacy">Privacy policy</a></div>
+
+    <div class="back"><a href="/">Back to search</a></div>
+
+    <script>
+        var isYearly = false;
+        function toggleBilling(){
+            isYearly = !isYearly;
+            document.getElementById('billing-toggle').classList.toggle('active', isYearly);
+            document.getElementById('save-badge').classList.toggle('show', isYearly);
+            document.querySelectorAll('.tier').forEach(function(t){ t.classList.toggle('yearly', isYearly); });
+            document.querySelectorAll('.billing-input').forEach(function(i){ i.value = isYearly ? 'yearly' : 'monthly'; });
+            document.querySelectorAll('.tier form .btn').forEach(function(b, idx){
+                var tierKey = idx === 0 ? 'pass' : 'golden';
+                if(isYearly){
+                    var prices = { pass: 40, golden: 90 };
+                    b.textContent = tierKey === 'golden' ? 'Start 3-day free trial' : 'Subscribe - $' + prices[tierKey] + '/yr';
+                } else {
+                    var prices = { pass: 4, golden: 10 };
+                    b.textContent = tierKey === 'golden' ? 'Start 3-day free trial' : 'Subscribe - $' + prices[tierKey] + '/mo';
+                }
+            });
+        }
+    </script>
+</body>
+</html>

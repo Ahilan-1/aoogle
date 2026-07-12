@@ -36,13 +36,7 @@
         .bottom-links a{color:var(--text3);margin:0 8px}
         .bottom-links a:hover{color:var(--text)}
         .bottom-links .sep{color:var(--border3);margin:0 2px}
-        .mob-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--border);z-index:999;padding:6px 0 8px;justify-content:space-around;font-size:11px;box-shadow:0 -2px 8px var(--shadow2)}
-        .mob-nav a{display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--text3);padding:4px 8px;min-width:50px;text-decoration:none}
-        .mob-nav a:hover{color:var(--text);text-decoration:none}
-        .mob-nav a.active{color:var(--nav-active)}
-        .mob-nav .m-icon{font-size:18px;line-height:1}
-        .mob-nav .m-label{font-size:10px}
-        @media(max-width:640px){.mob-nav{display:flex}.bottom-links{margin-bottom:60px}.homepage{padding-bottom:70px}}
+        @media(max-width:640px){.bottom-links{margin-bottom:8px}.homepage{padding-bottom:16px}}
         .bang-suggest .sug-item{display:flex;align-items:center;gap:8px}
         .bang-suggest .sug-item img{width:16px;height:16px;border-radius:50%;flex-shrink:0}
         .bang-suggest .sug-item .bang-key{font-weight:600;color:var(--cm);min-width:28px}
@@ -106,6 +100,10 @@
         .acc-btn{position:fixed;top:12px;right:16px;z-index:999;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:.15s;text-decoration:none}
         .acc-btn:hover{background:var(--hover-bg);color:var(--text)}
         .acc-btn svg{width:18px;height:18px;fill:currentColor}
+        .acc-quota{position:fixed;top:14px;right:60px;z-index:999;display:flex;align-items:center;gap:3px;padding:3px 9px;border-radius:12px;font-size:11px;font-weight:600;background:var(--bg2);border:1px solid var(--border);color:var(--text3);text-decoration:none;cursor:pointer;transition:.15s;line-height:1.3}
+        .acc-quota:hover{background:var(--hover-bg);color:var(--text);border-color:var(--text3);text-decoration:none}
+        .acc-quota .aq-count{color:var(--text);font-weight:700;font-feature-settings:'tnum'}
+        .acc-quota .aq-lbl{font-size:10px;font-weight:400}
 
         .homepage{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 16px}
         .homepage .search-form{margin-top:24px;position:relative;width:100%;max-width:584px}
@@ -287,6 +285,7 @@
             .weather-panel .wp-main{gap:12px}
             .acc-btn{top:8px;right:8px;width:32px;height:32px}
             .acc-btn svg{width:16px;height:16px}
+            .acc-quota{top:10px;right:48px;font-size:10px;padding:2px 7px}
         }
         @media(max-width:400px){
             .glogo{font-size:36px}
@@ -414,7 +413,11 @@
         .portal-search-box{width:100%;height:46px;border:2px solid #0077be;border-radius:26px;padding:0 22px;font-size:15px;outline:none;background:var(--input-bg);color:var(--text);transition:box-shadow .2s,border-color .2s;box-sizing:border-box}
         .portal-search-box:focus{box-shadow:0 2px 14px rgba(0,119,190,.3);border-color:#0099e5}
         .portal-search-box::placeholder{color:var(--text3)}
-        .portal-header-right{width:0;flex-shrink:0}
+        .portal-header-right{width:0;flex-shrink:0;display:flex;align-items:flex-start;justify-content:flex-end;padding-top:4px}
+        .qb-pill{display:inline-flex;align-items:center;gap:3px;padding:4px 12px;border-radius:14px;font-size:12px;font-weight:500;background:var(--bg2);border:1px solid var(--border);color:var(--text3);text-decoration:none;transition:.15s;white-space:nowrap}
+        .qb-pill:hover{background:var(--hover-bg);color:var(--text);border-color:var(--text3);text-decoration:none}
+        .qb-pill .qb-count{color:var(--text);font-weight:700;font-feature-settings:'tnum'}
+        .qb-pill .qb-lbl{font-size:10px;font-weight:400}
         .portal-auth-card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:22px 24px}
         .portal-auth-card .auth-title{font-size:13px;color:var(--text3);line-height:1.5;margin-bottom:16px;letter-spacing:.2px}
         .portal-auth-card .auth-btn{display:block;width:100%;padding:13px 0;border:none;border-radius:10px;background:#0077be;color:#fff;font-size:16px;font-weight:600;cursor:pointer;text-align:center;text-decoration:none;transition:background .2s,opacity .15s}
@@ -431,6 +434,24 @@
         .portal-auth-card .au-stat{flex:1;text-align:center}
         .portal-auth-card .au-stat .au-stat-val{display:block;font-size:18px;font-weight:700;color:var(--text)}
         .portal-auth-card .au-stat .au-stat-lbl{display:block;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.3px;margin-top:2px}
+        /* Quota bar in sidebar */
+        .au-quota{margin-top:12px;padding-top:10px;border-top:1px solid var(--border2)}
+        .auq-row{display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:5px}
+        .auq-row .auq-val{font-weight:600;color:var(--text);font-feature-settings:'tnum'}
+        .auq-bar{background:var(--bg);border-radius:4px;height:5px;overflow:hidden;cursor:help}
+        .auq-bar .auq-fill{height:100%;border-radius:4px;transition:width .3s}
+        .auq-bar .auq-fill.good{background:var(--green,#81c995)}
+        .auq-bar .auq-fill.warn{background:var(--gold,#fbbc04)}
+        .auq-bar .auq-fill.full{background:var(--red,#f28b82)}
+        /* Mobile quota bar */
+        .mobile-quota{display:none;padding:4px 16px 8px;font-size:11px;color:var(--text3)}
+        .mobile-quota .mq-row .mq-val{font-weight:600;color:var(--text);font-feature-settings:'tnum'}
+        .mobile-quota .mq-bar{background:var(--bg2);border-radius:4px;height:4px;overflow:hidden;cursor:help}
+        .mobile-quota .mq-bar .mq-fill{height:100%;border-radius:4px;transition:width .3s}
+        .mobile-quota .mq-bar .mq-fill.good{background:var(--green,#81c995)}
+        .mobile-quota .mq-bar .mq-fill.warn{background:var(--gold,#fbbc04)}
+        .mobile-quota .mq-bar .mq-fill.full{background:var(--red,#f28b82)}
+        @media(max-width:640px){.mobile-quota{display:block}}
         /* News grid 2x2 */
         /* Loading spinner */
         .news-loading{display:flex;align-items:center;justify-content:center;gap:12px;padding:60px 0;grid-column:1/-1;color:var(--text3);font-size:13px}
@@ -439,7 +460,8 @@
         .portal-news-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:0}
         .ng-card{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--card-bg);transition:box-shadow .2s;box-shadow:0 1px 3px var(--shadow2)}
         .ng-card:hover{box-shadow:0 4px 12px var(--shadow2)}
-        .ng-img{width:100%;aspect-ratio:16/10;object-fit:cover;display:block;background:var(--bg3)}
+        .ng-img{width:100%;aspect-ratio:16/10;object-fit:cover;display:block;background:linear-gradient(135deg,var(--bg2),var(--bg3))}
+        .ng-img-wrap{width:100%;aspect-ratio:16/10;overflow:hidden;background:linear-gradient(135deg,var(--bg2),var(--bg3));display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:32px}
         .ng-body{padding:12px 14px}
         .ng-title{font-size:14px;font-weight:500;color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;margin-bottom:4px}
         .ng-title a{color:var(--text);text-decoration:none}
@@ -495,7 +517,8 @@
             .portal-sidebar{width:auto;flex-direction:row;flex-wrap:wrap}
             .portal-sidebar .sidebar-card{flex:1;min-width:200px}
             .portal-header{flex-wrap:wrap;padding:16px 20px 6px}
-            .portal-mode .portal-header-right{width:auto;padding-top:8px}
+            .portal-mode .portal-header-right{width:auto;padding-top:8px;padding-right:4px}
+            .portal-mode .portal-header-right .qb-pill{font-size:11px;padding:3px 10px}
         }
         @media(max-width:640px){
             .portal-header{padding:10px 10px 4px;gap:8px;flex-wrap:wrap}
@@ -529,6 +552,20 @@
             .portal-search-box{height:34px;font-size:13px;padding:0 12px}
         }
         .qa-btn,.qa-summary,.qa-global{display:none}
+
+        /* ── Quota Block ── */
+        .quota-block{text-align:center;padding:60px 20px;max-width:500px;margin:20px auto}
+        .quota-block .qb-icon{margin-bottom:16px}
+        .quota-block .qb-title{font-size:22px;font-weight:400;color:var(--text);margin-bottom:8px}
+        .quota-block .qb-text{font-size:14px;color:var(--text3);line-height:1.6;margin-bottom:20px}
+        .quota-block .qb-text strong{color:var(--text)}
+        .quota-block .qb-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:12px}
+        .quota-block .qb-btn{display:inline-block;padding:10px 22px;border-radius:6px;font-size:14px;font-weight:500;text-decoration:none;transition:opacity .15s}
+        .quota-block .qb-btn:hover{opacity:.9;text-decoration:none}
+        .quota-block .qb-btn-primary{background:var(--link);color:#fff}
+        .quota-block .qb-btn-secondary{background:var(--bg2);color:var(--text);border:1px solid var(--border)}
+        .quota-block .qb-btn-secondary:hover{background:var(--hover-bg)}
+        .quota-block .qb-foot{font-size:12px;color:var(--text4);margin-top:8px}
 
         /* ── Quick Answer (AI Summary) button + box ── */
         .ais-btn{display:inline-flex;align-items:center;gap:5px;padding:4px 14px;font-size:13px;color:#8ab4f8;border:1px solid #8ab4f8;border-radius:20px;background:transparent;cursor:pointer;font-family:arial,sans-serif;transition:all .15s;margin-left:auto;white-space:nowrap}
@@ -650,9 +687,17 @@
     </script>
 
     <button class="flag-toggle" id="flag-btn" title="Toggle flag colors" style="display:none">&#x1F1FA;&#x1F1F8;</button>
-    <a class="acc-btn" id="acc-btn" href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" aria-label="Account">
-        <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-    </a>
+    <div class="acc-group" id="acc-group">
+        <a class="acc-btn" id="acc-btn" href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" aria-label="Account">
+            <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+        </a>
+        {% if session.user_id and daily_remaining is not none %}
+        <a href="/premium" class="acc-quota" id="acc-quota" title="Searches remaining today">
+            <span class="aq-count">{{ daily_remaining }}</span>
+            <span class="aq-lbl">left</span>
+        </a>
+        {% endif %}
+    </div>
     {% if announcement %}
     <div style="background:#c5221f;color:#fff;text-align:center;padding:10px 20px;font-size:14px;font-weight:500;position:sticky;top:0;z-index:1000;box-shadow:0 2px 8px rgba(197,34,31,.3)">
         &#x26A0; {{ announcement }}
@@ -735,6 +780,19 @@
             </div>
             <div class="portal-header-right"></div>
         </div>
+        {% if session.user_id and daily_remaining is not none and quota_limit %}
+        <div class="mobile-quota" title="{{ daily_remaining }} / {{ quota_limit if quota_limit < 999999 else 'Unlimited' }} searches remaining today">
+            <div class="mq-row">
+                <span>{{ daily_remaining }} searches left today</span>
+                <span class="mq-val">{{ daily_remaining }} / {{ quota_limit if quota_limit < 999999 else '&#x221E;' }}</span>
+            </div>
+            <div class="mq-bar">
+                {% set used = quota_limit - daily_remaining if quota_limit < 999999 else 0 %}
+                {% set pct = (used / quota_limit * 100)|round if quota_limit < 999999 else 0 %}
+                <div class="mq-fill {% if pct < 60 %}good{% elif pct < 90 %}warn{% else %}full{% endif %}" style="width:{{ pct }}%"></div>
+            </div>
+        </div>
+        {% endif %}
         <div class="portal-body">
             <div class="portal-content">
                 <div class="portal-tabs">
@@ -773,14 +831,25 @@
                         <div class="au-stat"><span class="au-stat-val">{{ user_stat.collections_count or 0 }}</span><span class="au-stat-lbl">Collections</span></div>
                         <div class="au-stat"><span class="au-stat-val">{{ user_stat.submissions_count or 0 }}</span><span class="au-stat-lbl">Submissions</span></div>
                     </div>
+                    {% if daily_remaining is not none and quota_limit %}
+                    <div class="au-quota" title="{{ daily_remaining }} / {{ quota_limit if quota_limit < 999999 else 'Unlimited' }} searches remaining today">
+                        <div class="auq-row">
+                            <span class="auq-lbl">Searches today</span>
+                            <span class="auq-val">{{ daily_remaining }} / {{ quota_limit if quota_limit < 999999 else '&#x221E;' }}</span>
+                        </div>
+                        <div class="auq-bar" title="">
+                            {% set used = quota_limit - daily_remaining if quota_limit < 999999 else 0 %}
+                            {% set pct = (used / quota_limit * 100)|round if quota_limit < 999999 else 0 %}
+                            <div class="auq-fill {% if pct < 60 %}good{% elif pct < 90 %}warn{% else %}full{% endif %}" style="width:{{ pct }}%"></div>
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
                 {% else %}
                 <div class="sidebar-card portal-auth-card" id="portal-auth-card">
                     <div class="auth-title">Make use of arlong more secure and convenient</div>
                     <a href="/login" class="auth-btn">arlong Log in</a>
                     <div class="auth-links">
-                        <a href="/users">Find ID</a>
-                        <span class="sep">|</span>
                         <a href="/faq">Forgot Password</a>
                         <span class="sep">|</span>
                         <a href="/signup">Sign up</a>
@@ -840,7 +909,11 @@
                 <option value="news">News</option>
             </select>
             <span class="filter-count" id="filter-count"></span>
+            {% if quota_exceeded is defined and quota_exceeded %}
+            <span style="margin-left:auto;font-size:12px;color:var(--text3);padding:4px 12px;border:1px solid var(--border);border-radius:20px">AI Summary unavailable</span>
+            {% else %}
             <button class="ais-btn" id="ais-btn" onclick="globalAiSummary()"><svg viewBox="0 0 24 24"><path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.18l7 3.5v7l-7 3.5-7-3.5v-7l7-3.5zM11 9h2v6h-2V9zm0-3h2v2h-2V6z"/></svg> AI Summary</button>
+            {% endif %}
 
         </div>
     </div>
@@ -907,7 +980,32 @@
             {% endif %}
 
 
-            {% if query == "1776" %}
+            {% if quota_exceeded is defined and quota_exceeded %}
+            <div class="quota-block">
+                <div class="qb-icon">
+                    <svg viewBox="0 0 24 24" style="width:48px;height:48px;fill:var(--red)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                </div>
+                <div class="qb-title">Search limit reached</div>
+                {% if quota_is_anonymous %}
+                <div class="qb-text">You've used your <strong>1 free search</strong> for today. Create a free account to get <strong>24 searches per day</strong> with AI summaries, or upgrade to Premium for even more.</div>
+                <div class="qb-actions">
+                    <a href="/signup" class="qb-btn qb-btn-primary">Create free account</a>
+                    <a href="/premium" class="qb-btn qb-btn-secondary">View Premium</a>
+                </div>
+                {% else %}
+                <div class="qb-text">You've used all <strong>{{ quota_limit }} free searches</strong> today. Upgrade to Premium for more searches, AI summaries, and priority support.</div>
+                <div class="qb-actions">
+                    <a href="/premium" class="qb-btn qb-btn-primary">Upgrade to Premium</a>
+                    <a href="/" class="qb-btn qb-btn-secondary">Back to home</a>
+                </div>
+                {% endif %}
+                <div class="qb-foot">Limit resets at midnight. <a href="/premium" style="color:var(--link)">Premium plans</a> start at $4/month.</div>
+            </div>
+
+            {% if results is not none %}
+            {% endif %}
+
+            {% elif query == "1776" %}
                 <div class="usa-banner">
                     <div class="ub-stars">&#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733;</div>
                     <div class="ub-year">1776</div>
@@ -1632,26 +1730,18 @@
             }
         });
 
-        /* ── Portal Mode ── */
+        /* ── Portal Mode (always on) ── */
         (function(){
-            var portalOn = true;
-            try{ portalOn = localStorage.getItem('arlong-portal') !== '0' }catch(e){}
-            if(portalOn){
-                document.body.classList.add('portal-mode');
-                loadBreakingNews();
-                loadStocks();
-                loadWeather();
-                loadScores();
-                loadNewsTab('top', document.querySelector('.portal-tabs a.active'));
-                /* Refresh news & scores every 2 minutes */
-                setInterval(function(){ loadBreakingNews(); loadScores(); }, 120000);
-            }
-
+            document.body.classList.add('portal-mode');
+            loadBreakingNews();
+            loadStocks();
+            loadWeather();
+            loadScores();
+            loadNewsTab('top', document.querySelector('.portal-tabs a.active'));
+            setInterval(function(){ loadBreakingNews(); loadScores(); }, 3600000);
             /* Hide the old fixed acc-btn in portal mode */
-            if(portalOn){
-                var oldAcc = document.getElementById('acc-btn');
-                if(oldAcc) oldAcc.style.display = 'none';
-            }
+            var oldAcc = document.getElementById('acc-btn');
+            if(oldAcc) oldAcc.style.display = 'none';
         })();
 
         /* ── Homepage scroll animation ── */
@@ -1742,7 +1832,7 @@
                     var img = it.image || '';
                     var card = document.createElement('div');
                     card.className = 'ng-card';
-                    card.innerHTML = '<img class="ng-img" src="'+(img||'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22320%22 height=%22200%22/%3E')+'" alt="" onerror="this.src=\'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22320%22 height=%22200%22/%3E\'"><div class="ng-body"><div class="ng-title"><a href="'+it.link+'" target="_blank">'+it.title.substring(0,100)+'</a></div><div class="ng-source">'+it.source+'</div></div>';
+                    card.innerHTML = '<div class="ng-img-wrap">'+(img ? '<img class="ng-img" src="'+img+'" alt="" loading="lazy" onerror="this.outerHTML=\'<div class=&quot;ng-img&quot; style=&quot;display:flex;align-items:center;justify-content:center;color:var(--text3)&quot;><svg width=&quot;40&quot; height=&quot;40&quot; viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;2&quot;><path d=&quot;M4 19.5A2.5 2.5 0 0 1 6.5 17H20&quot;/><path d=&quot;M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z&quot;/><line x1=&quot;8&quot; y1=&quot;7&quot; x2=&quot;16&quot; y2=&quot;7&quot;/><line x1=&quot;8&quot; y1=&quot;11&quot; x2=&quot;14&quot; y2=&quot;11&quot;/></svg></div>\'">' : '<div class="ng-img" style="display:flex;align-items:center;justify-content:center;color:var(--text3)"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg></div>')+'</div><div class="ng-body"><div class="ng-title"><a href="'+it.link+'" target="_blank">'+it.title.substring(0,100)+'</a></div><div class="ng-source">'+it.source+'</div></div>';
                     grid.appendChild(card);
                 }
             }).catch(function(){
@@ -1797,9 +1887,15 @@
             });
         }
 
+        var userWeatherLocation = '{{ user_weather_location|e }}';
+
         function loadWeather(){
             var pref = localStorage.getItem('arlong_weather_city');
             if(pref) return loadWeatherForCity(pref);
+            if(userWeatherLocation){
+                localStorage.setItem('arlong_weather_city', userWeatherLocation);
+                return loadWeatherForCity(userWeatherLocation);
+            }
             fetch('https://ip-api.com/json/').then(function(r){return r.json()}).then(function(geo){
                 var city = geo.city || 'London';
                 localStorage.setItem('arlong_weather_city', city);
@@ -1951,14 +2047,5 @@
             }
         });
     </script>
-    <div class="mob-nav">
-        <a href="/" class="active"><span class="m-icon">&#x1F50D;</span><span class="m-label">Search</span></a>
-        <a href="/about"><span class="m-icon">&#x1F4CA;</span><span class="m-label">About</span></a>
-        <a href="/privacy"><span class="m-icon">&#x1F464;</span><span class="m-label">Privacy</span></a>
-        <a href="/faq"><span class="m-icon">&#x2753;</span><span class="m-label">FAQ</span></a>
-        <a href="/settings"><span class="m-icon">&#x2699;</span><span class="m-label">Settings</span></a>
-        <a href="/explore"><span class="m-icon">&#x1F4DA;</span><span class="m-label">Explore</span></a>
-    </div>
-
 </body>
 </html>

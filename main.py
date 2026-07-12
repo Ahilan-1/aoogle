@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, abort, session, redirect, url_for
+from flask import Flask, render_template, request, jsonify, abort, session, redirect, url_for, make_response
 import requests
 from bs4 import BeautifulSoup
 from fake_useragent import UserAgent
@@ -27,7 +27,9 @@ import uuid
 import re
 import threading
 import os
-from groq import Groq
+
+import stripe
+import resend
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 load_dotenv()
@@ -72,6 +74,264 @@ if not ADMIN_PASSWORD:
     ADMIN_PASSWORD = secrets.token_hex(16)
     app.logger.warning("No ADMIN_PASSWORD set in environment. Generated random password - check logs to retrieve it.")
 AMAZON_ASSOCIATE_TAG = os.environ.get('AMAZON_ASSOCIATE_TAG', '')
+
+# ── Stripe ──
+STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
+STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
+STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
+if STRIPE_SECRET_KEY:
+    stripe.api_key = STRIPE_SECRET_KEY
+
+# ── Resend (Email) ──
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY', 're_EqrG6tXG_BHUD5LH5ySBRUyNAEVZ1Ucx6')
+RESEND_FROM = os.environ.get('RESEND_FROM', 'onboarding@resend.dev')
+resend.api_key = RESEND_API_KEY
+
+# ── Currents API (News) ──
+CURRENTS_API_KEY = os.environ.get('CURRENTS_API_KEY', '')
+NEWS_CACHE = {}  # populated by background updater every 30 min
+NEWS_CACHE_LOCK = threading.Lock()
+CATEGORY_SOURCE_LABELS = {
+    'top': 'Top Stories', 'world': 'World', 'tech': 'Technology',
+    'business': 'Business', 'science': 'Science', 'health': 'Health',
+    'sports': 'Sports', 'entertainment': 'Entertainment',
+    'gaming': 'Gaming', 'economy': 'Economy', 'asian': 'Asian News',
+}
+
+# ── Background News Updater (Currents API + Premium RSS) ──
+CURRENTS_CATEGORY_ENDPOINTS = {
+    'top': '',
+    'world': 'world',
+    'tech': 'technology',
+    'business': 'business',
+    'science': 'science',
+    'health': 'health',
+    'sports': 'sports',
+    'entertainment': 'entertainment',
+    'gaming': 'game',
+    'economy': 'finance',
+    'asian': '',
+}
+
+PREMIUM_RSS_FEEDS = {
+    'top': [
+        ('NYT', 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml'),
+        ('BBC', 'https://feeds.bbci.co.uk/news/rss.xml'),
+        ('Guardian', 'https://www.theguardian.com/world/rss'),
+    ],
+    'world': [
+        ('NYT', 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml'),
+        ('BBC', 'https://feeds.bbci.co.uk/news/world/rss.xml'),
+    ],
+    'tech': [
+        ('NYT', 'https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml'),
+        ('TechCrunch', 'https://techcrunch.com/feed/'),
+    ],
+    'business': [
+        ('NYT', 'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml'),
+        ('BBC', 'https://feeds.bbci.co.uk/news/business/rss.xml'),
+    ],
+    'science': [
+        ('NYT', 'https://rss.nytimes.com/services/xml/rss/nyt/Science.xml'),
+        ('New Scientist', 'https://www.newscientist.com/feed/home'),
+    ],
+    'health': [
+        ('NYT', 'https://rss.nytimes.com/services/xml/rss/nyt/Health.xml'),
+        ('BBC', 'https://feeds.bbci.co.uk/news/health/rss.xml'),
+    ],
+    'sports': [
+        ('BBC', 'https://feeds.bbci.co.uk/sport/rss.xml'),
+        ('NYT', 'https://rss.nytimes.com/services/xml/rss/nyt/Sports.xml'),
+    ],
+    'entertainment': [
+        ('NYT', 'https://rss.nytimes.com/services/xml/rss/nyt/Arts.xml'),
+        ('Variety', 'https://variety.com/feed/'),
+    ],
+    'gaming': [
+        ('IGN', 'https://feeds.feedburner.com/ign/all'),
+    ],
+    'economy': [
+        ('BBC', 'https://feeds.bbci.co.uk/news/business/rss.xml'),
+    ],
+    'asian': [
+        ('BBC', 'https://feeds.bbci.co.uk/news/world/asia/rss.xml'),
+    ],
+}
+
+def _fetch_currents_news(category_endpoint):
+    """Fetch news for a single Currents API category."""
+    api_key = CURRENTS_API_KEY
+    if not api_key:
+        return []
+    params = {'language': 'en'}
+    if category_endpoint:
+        params['category'] = category_endpoint
+    try:
+        resp = requests.get(
+            'https://api.currentsapi.services/v1/latest-news',
+            params=params,
+            headers={'Authorization': api_key},
+            timeout=12,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get('status') != 'ok':
+            return []
+        return data.get('news', [])
+    except Exception:
+        return []
+
+def _clean_news_img(url):
+    if not url or url == 'None':
+        return ''
+    url = str(url).split('?')[0]
+    if url.startswith('//'):
+        url = 'https:' + url
+    return url if url.startswith('http') else ''
+
+def _extract_rss_image(entry):
+    """Extract best image from an RSS entry."""
+    try:
+        if hasattr(entry, 'media_content') and entry.media_content:
+            for m in entry.media_content:
+                u = m.get('url', '')
+                if u:
+                    return u
+        if hasattr(entry, 'media_thumbnail') and entry.media_thumbnail:
+            for t in entry.media_thumbnail:
+                u = t.get('url', '')
+                if u:
+                    return u
+        if hasattr(entry, 'enclosures') and entry.enclosures:
+            for e in entry.enclosures:
+                u = e.get('url', '')
+                if u:
+                    return u
+    except Exception:
+        pass
+    return ''
+
+def _fetch_rss_items(feeds):
+    """Fetch and parse RSS feeds, return deduped sorted items."""
+    all_items = []
+    seen_links = set()
+    for source_name, url in feeds:
+        try:
+            import feedparser
+            feed = feedparser.parse(url)
+            feed_title = feed.feed.get('title', source_name).strip()
+            for entry in feed.entries:
+                link = entry.get('link', '')
+                if link in seen_links:
+                    continue
+                seen_links.add(link)
+                all_items.append({
+                    'title': entry.get('title', 'Untitled'),
+                    'link': link,
+                    'published': entry.get('published', ''),
+                    'source': feed_title,
+                    'image': _extract_rss_image(entry),
+                })
+        except Exception:
+            pass
+    all_items.sort(key=lambda x: x.get('published', ''), reverse=True)
+    return all_items
+
+def _fetch_and_cache_news():
+    """Fetch news from Currents API + premium RSS feeds per category, store in NEWS_CACHE."""
+    global NEWS_CACHE
+    grouped = {}
+    for ui_cat in CATEGORY_SOURCE_LABELS:
+        try:
+            api_cat = CURRENTS_CATEGORY_ENDPOINTS.get(ui_cat, '')
+            rss_feeds = PREMIUM_RSS_FEEDS.get(ui_cat, [])
+
+            # Fetch both sources in parallel
+            currents_items = []
+            if CURRENTS_API_KEY:
+                articles = _fetch_currents_news(api_cat)
+                for a in articles:
+                    currents_items.append({
+                        'title': a.get('title', 'Untitled'),
+                        'link': a.get('url', ''),
+                        'published': a.get('published', ''),
+                        'source': (a.get('author', '') or 'Currents').strip(),
+                        'image': _clean_news_img(a.get('image', '')),
+                    })
+            currents_items.sort(key=lambda x: x.get('published', ''), reverse=True)
+
+            rss_items = _fetch_rss_items(rss_feeds)
+
+            # Merge: RSS first (premium), then Currents, dedup by link, cap at 20
+            seen = set()
+            merged = []
+            for item in rss_items + currents_items:
+                link = item.get('link', '')
+                if link and link in seen:
+                    continue
+                if link:
+                    seen.add(link)
+                merged.append(item)
+                if len(merged) >= 20:
+                    break
+
+            grouped[ui_cat] = merged
+        except Exception:
+            grouped[ui_cat] = []
+
+    # Fill empty categories with top news
+    top_items = grouped.get('top', [])
+    for cat in grouped:
+        if not grouped[cat] and top_items:
+            grouped[cat] = top_items[:15]
+
+    with NEWS_CACHE_LOCK:
+        NEWS_CACHE = grouped
+
+def start_news_updater(app):
+    """Start background thread to refresh news every 30 minutes."""
+    try:
+        _fetch_and_cache_news()
+    except Exception:
+        pass
+    def _run():
+        while True:
+            time.sleep(1800)
+            try:
+                _fetch_and_cache_news()
+            except Exception:
+                pass
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+
+# Start background news updater immediately
+start_news_updater(app)
+
+PREMIUM_TIERS = {
+    'pass': {
+        'name': 'Pass',
+        'price': 4,
+        'price_yearly': 40,
+        'daily_limit': 500,
+        'stripe_price': 400,
+        'stripe_price_yearly': 4000,
+        'trial_days': 0,
+    },
+    'golden': {
+        'name': 'Golden Pass',
+        'price': 10,
+        'price_yearly': 90,
+        'daily_limit': None,
+        'stripe_price': 1000,
+        'stripe_price_yearly': 9000,
+        'trial_days': 3,
+    },
+}
+
+# ── Search Quota ──
+ANONYMOUS_DAILY_LIMIT = 1
+FREE_DAILY_LIMIT = 24
+PREMIUM_500_DAILY_LIMIT = 500
 
 # ── CSRF Protection ──
 def generate_csrf_token():
@@ -138,8 +398,7 @@ handler.setFormatter(logging.Formatter(
 app.logger.addHandler(handler)
 app.logger.setLevel(logging.INFO)
 
-# Groq AI client
-groq_client = Groq(api_key=os.environ.get('GROQ_API_KEY'))
+
 
 # Initialize Redis for caching
 redis_client = None
@@ -983,6 +1242,87 @@ class DataManager:
             self.data['announcement'] = text
             _save_json(self.data)
 
+    # ── Search Quota ──
+
+    def get_or_create_daily_count(self, user_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('daily_searches', {})
+            uid = str(user_id)
+            user_data = self.data['daily_searches'].get(uid, {})
+            today = datetime.now().strftime('%Y-%m-%d')
+            if user_data.get('date') != today:
+                user_data = {'date': today, 'count': 0}
+                self.data['daily_searches'][uid] = user_data
+                _save_json(self.data)
+            return user_data['date'], user_data['count']
+
+    def increment_daily_count(self, user_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('daily_searches', {})
+            uid = str(user_id)
+            today = datetime.now().strftime('%Y-%m-%d')
+            user_data = self.data['daily_searches'].get(uid, {})
+            if user_data.get('date') != today:
+                user_data = {'date': today, 'count': 0}
+            user_data['count'] = user_data.get('count', 0) + 1
+            self.data['daily_searches'][uid] = user_data
+            _save_json(self.data)
+            return user_data['count']
+
+    def get_daily_remaining(self, user_id):
+        date_str, count = self.get_or_create_daily_count(user_id)
+        premium_info = self.get_premium_info(user_id)
+        if premium_info:
+            limit = premium_info.get('daily_limit', PREMIUM_500_DAILY_LIMIT)
+        else:
+            limit = FREE_DAILY_LIMIT
+        return max(0, limit - count)
+
+    # ── Premium ──
+
+    def get_premium_info(self, user_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('premium', {})
+            info = self.data['premium'].get(str(user_id))
+            if not info:
+                return None
+            expires = info.get('expires_at')
+            if expires:
+                try:
+                    exp_date = datetime.fromisoformat(expires)
+                    if datetime.now() > exp_date:
+                        del self.data['premium'][str(user_id)]
+                        _save_json(self.data)
+                        return None
+                except:
+                    pass
+            return info
+
+    def set_premium(self, user_id, tier, stripe_sub_id, expires_at):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('premium', {})
+            tier_config = PREMIUM_TIERS.get(tier)
+            self.data['premium'][str(user_id)] = {
+                'tier': tier,
+                'daily_limit': tier_config['daily_limit'] if tier_config else PREMIUM_500_DAILY_LIMIT,
+                'stripe_sub_id': stripe_sub_id,
+                'expires_at': expires_at,
+                'activated_at': datetime.now().isoformat()
+            }
+            _save_json(self.data)
+
     def flush(self):
         with self._lock:
             loaded = _load_json()
@@ -1183,7 +1523,7 @@ class DataManager:
     def hash_ip(self, ip):
         return hashlib.sha256(ip.encode()).hexdigest()[:16]
 
-    def create_user(self, username, password, security_question, security_answer, ip):
+    def create_user(self, username, password, security_question, security_answer, ip, email='', weather_location=''):
         with self._lock:
             loaded = _load_json()
             if loaded:
@@ -1191,9 +1531,15 @@ class DataManager:
             self.data.setdefault('users', [])
             if any(u['username'] == username for u in self.data['users']):
                 return None, 'Username taken'
+            if email:
+                email_lower = email.strip().lower()
+                if any(u.get('email', '').lower() == email_lower for u in self.data['users'] if u.get('email')):
+                    return None, 'Email already in use'
             user = {
                 'user_id': str(uuid.uuid4()),
                 'username': username,
+                'email': email.strip().lower() if email else '',
+                'weather_location': weather_location.strip() if weather_location else '',
                 'password_hash': self.hash_password(password),
                 'security_question': security_question,
                 'security_answer_hash': self.hash_password(security_answer),
@@ -1388,6 +1734,51 @@ class DataManager:
 
     # ── User stats / profile ──
 
+    def update_user_email(self, user_id, email):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for u in self.data.get('users', []):
+                if u['user_id'] == user_id:
+                    email_lower = email.strip().lower()
+                    if any(u2.get('email', '').lower() == email_lower for u2 in self.data.get('users', []) if u2.get('email') and u2['user_id'] != user_id):
+                        return False, 'Email already in use'
+                    u['email'] = email_lower
+                    _save_json(self.data)
+                    return True, None
+            return False, 'User not found'
+
+    def update_user_password(self, user_id, current_password, new_password):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for u in self.data.get('users', []):
+                if u['user_id'] == user_id:
+                    if not self.check_password(current_password, u['password_hash']):
+                        return False, 'Current password is incorrect'
+                    if len(new_password) < 8:
+                        return False, 'Password must be at least 8 characters'
+                    if not re.search(r'[A-Za-z]', new_password) or not re.search(r'[0-9]', new_password):
+                        return False, 'Password must contain both letters and numbers'
+                    u['password_hash'] = self.hash_password(new_password)
+                    _save_json(self.data)
+                    return True, None
+            return False, 'User not found'
+
+    def update_user_weather_location(self, user_id, location):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for u in self.data.get('users', []):
+                if u['user_id'] == user_id:
+                    u['weather_location'] = location.strip()[:100] if location else ''
+                    _save_json(self.data)
+                    return True
+            return False
+
     def get_user_profile(self, username):
         with self._lock:
             loaded = _load_json()
@@ -1420,14 +1811,29 @@ class DataManager:
         recent.sort(key=lambda r: r.get('created_at', ''), reverse=True)
         recent = recent[:30]
 
+        joined_date = user.get('created_at', '')[:10] if user.get('created_at') else ''
+        premium_info = self.get_premium_info(user_id)
+        premium_tier = None
+        if premium_info:
+            premium_tier = premium_info.get('tier', 'pass')
+            for k, v in PREMIUM_TIERS.items():
+                if k == premium_tier:
+                    premium_tier = v['name']
+                    break
+
         return {
             'username': username,
+            'email': user.get('email', '') or '',
+            'weather_location': user.get('weather_location', '') or '',
             'created_at': user.get('created_at', ''),
+            'joined_date': joined_date,
+            'premium_tier': premium_tier,
             'collections_count': collections_count,
             'pins_count': pins_count,
             'submissions_count': submissions_count,
             'reports_approved': reports_approved,
             'recent': recent,
+            'is_owner': False,
         }
 
 
@@ -3947,6 +4353,169 @@ search_stats = SearchStats()
 # Initialize search engine
 search_engine = ImprovedSearch()
 
+# ── Anonymous Quota Helper ──
+def check_anonymous_quota():
+    cookie_val = request.cookies.get('aoogle_sq', '')
+    today = datetime.now().strftime('%Y-%m-%d')
+    count = 0
+    reset = False
+    if cookie_val:
+        try:
+            data = json.loads(cookie_val)
+            if data.get('d') == today:
+                count = data.get('c', 0)
+            else:
+                count = 0
+                reset = True
+        except:
+            count = 0
+            reset = True
+    else:
+        reset = True
+    return count, today, reset
+
+def make_anonymous_quota_cookie(count, today):
+    seconds_until_midnight = int((datetime.now().replace(hour=23, minute=59, second=59) - datetime.now()).total_seconds())
+    return json.dumps({'d': today, 'c': count}), seconds_until_midnight
+
+
+# ── Email Helpers ──
+WELCOME_EMAIL_HTML = """<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><style>
+body{font-family:Arial,sans-serif;background:#202124;color:#e8eaed;margin:0;padding:0}
+.container{max-width:560px;margin:0 auto;padding:32px 24px}
+.logo{font-size:28px;font-weight:700;letter-spacing:-1px;text-align:center;margin-bottom:24px;color:#e8eaed}
+.logo span{background:linear-gradient(to top,#0066cc,#3399ff 50%,#e8eaed 50%);background-size:100% 200%;-webkit-background-clip:text;background-clip:text;color:transparent}
+.card{background:#303134;border:1px solid #5f6368;border-radius:12px;padding:28px}
+.card h1{margin:0 0 8px;font-size:20px;font-weight:400}
+.card p{color:#bdc1c6;font-size:14px;line-height:1.6;margin:12px 0}
+.btn{display:inline-block;padding:10px 24px;background:#8ab4f8;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:500;margin:8px 0}
+.btn:hover{opacity:.9}
+.footer{text-align:center;font-size:12px;color:#9aa0a6;margin-top:24px}
+.footer a{color:#8ab4f8;text-decoration:none}
+</style></head>
+<body>
+<div class="container">
+<div class="logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></div>
+<div class="card">
+<h1>Welcome to arlong, {username}!</h1>
+<p>You've joined a privacy-first search community. Here's what you can do:</p>
+<p>&bull; <strong>24 free searches/day</strong> with AI-powered summaries<br>
+&bull; Create and share <strong>collections</strong> of your favorite sites<br>
+&bull; Submit your website for indexing<br>
+&bull; Upgrade to <strong>Premium</strong> for 500+ searches/day</p>
+<p style="text-align:center"><a href="https://aoogle-production.up.railway.app/" class="btn">Start searching</a></p>
+<p style="font-size:12px;color:#9aa0a6">No tracking. No ads. Just search.</p>
+</div>
+<div class="footer">
+<a href="https://aoogle-production.up.railway.app/premium">Premium</a> &middot;
+<a href="https://aoogle-production.up.railway.app/privacy">Privacy</a> &middot;
+<a href="https://aoogle-production.up.railway.app/faq">FAQ</a>
+</div>
+</div>
+</body>
+</html>"""
+
+PREMIUM_EMAIL_HTML = """<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><style>
+body{font-family:Arial,sans-serif;background:#202124;color:#e8eaed;margin:0;padding:0}
+.container{max-width:560px;margin:0 auto;padding:32px 24px}
+.logo{font-size:28px;font-weight:700;letter-spacing:-1px;text-align:center;margin-bottom:24px;color:#e8eaed}
+.logo span{background:linear-gradient(to top,#0066cc,#3399ff 50%,#e8eaed 50%);background-size:100% 200%;-webkit-background-clip:text;background-clip:text;color:transparent}
+.card{background:#303134;border:1px solid #5f6368;border-radius:12px;padding:28px}
+.card h1{margin:0 0 8px;font-size:20px;font-weight:400}
+.card .badge{display:inline-block;padding:4px 12px;border-radius:12px;font-size:11px;font-weight:500;background:#1e3527;color:#81c995;margin:8px 0}
+.card p{color:#bdc1c6;font-size:14px;line-height:1.6;margin:12px 0}
+.btn{display:inline-block;padding:10px 24px;background:#8ab4f8;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:500;margin:8px 0}
+.footer{text-align:center;font-size:12px;color:#9aa0a6;margin-top:24px}
+.footer a{color:#8ab4f8;text-decoration:none}
+</style></head>
+<body>
+<div class="container">
+<div class="logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></div>
+<div class="card">
+<h1>Welcome to Premium, {username}!</h1>
+<div class="badge">&#9733; {tier}</div>
+<p>Your premium plan is now active. Here's what you get:</p>
+<p>&bull; <strong>{daily_limit_text}</strong> searches per day<br>
+&bull; AI-powered summaries on every search<br>
+&bull; Priority support<br>
+&bull; Ad-free experience</p>
+<p style="text-align:center"><a href="https://aoogle-production.up.railway.app/" class="btn">Start searching</a></p>
+<p style="font-size:12px;color:#9aa0a6;margin-top:16px">Need help? Reply to this email or visit our FAQ.</p>
+</div>
+<div class="footer">
+<a href="https://aoogle-production.up.railway.app/premium">Manage subscription</a> &middot;
+<a href="https://aoogle-production.up.railway.app/privacy">Privacy</a>
+</div>
+</div>
+</body>
+</html>"""
+
+LOGIN_EMAIL_HTML = """<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><style>
+body{font-family:Arial,sans-serif;background:#202124;color:#e8eaed;margin:0;padding:0}
+.container{max-width:560px;margin:0 auto;padding:32px 24px}
+.logo{font-size:28px;font-weight:700;letter-spacing:-1px;text-align:center;margin-bottom:24px;color:#e8eaed}
+.logo span{background:linear-gradient(to top,#0066cc,#3399ff 50%,#e8eaed 50%);background-size:100% 200%;-webkit-background-clip:text;background-clip:text;color:transparent}
+.card{background:#303134;border:1px solid #5f6368;border-radius:12px;padding:28px}
+.card h1{margin:0 0 8px;font-size:20px;font-weight:400}
+.card p{color:#bdc1c6;font-size:14px;line-height:1.6;margin:12px 0}
+.card .time{font-size:12px;color:#9aa0a6;margin-top:4px}
+.footer{text-align:center;font-size:12px;color:#9aa0a6;margin-top:24px}
+.footer a{color:#8ab4f8;text-decoration:none}
+</style></head>
+<body>
+<div class="container">
+<div class="logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></div>
+<div class="card">
+<h1>Sign-in notification</h1>
+<p>Hi {username},</p>
+<p>A new sign-in to your arlong account was detected.</p>
+<p>If this was you, no action is needed. If you don't recognize this activity, please change your password immediately.</p>
+<p class="time">Time: {time}<br>IP: {ip}</p>
+<p style="text-align:center;margin-top:16px"><a href="https://aoogle-production.up.railway.app/u/{username}" class="btn" style="display:inline-block;padding:10px 24px;background:#8ab4f8;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:500">Review account</a></p>
+</div>
+<div class="footer">
+<a href="https://aoogle-production.up.railway.app/privacy">Privacy policy</a>
+</div>
+</div>
+</body>
+</html>"""
+
+def send_resend_email(to_email, subject, html_body):
+    if not RESEND_API_KEY or not to_email:
+        return False
+    try:
+        r = resend.Emails.send({
+            "from": RESEND_FROM,
+            "to": to_email,
+            "subject": subject,
+            "html": html_body,
+        })
+        app.logger.info(f"Email sent to {to_email}: {subject}")
+        return True
+    except Exception as e:
+        app.logger.error(f"Failed to send email to {to_email}: {e}")
+        return False
+
+def send_welcome_email(email, username):
+    html = WELCOME_EMAIL_HTML.replace('{username}', username)
+    return send_resend_email(email, 'Welcome to arlong!', html)
+
+def send_premium_email(email, username, tier, daily_limit_text):
+    html = PREMIUM_EMAIL_HTML.replace('{username}', username).replace('{tier}', tier).replace('{daily_limit_text}', daily_limit_text)
+    return send_resend_email(email, f'Welcome to arlong Premium ({tier})!', html)
+
+def send_login_notification(email, username, ip):
+    now_str = datetime.now().strftime('%B %d, %Y at %I:%M %p UTC')
+    html = LOGIN_EMAIL_HTML.replace('{username}', username).replace('{time}', now_str).replace('{ip}', ip or 'Unknown')
+    return send_resend_email(email, 'New sign-in to your arlong account', html)
+
+
 @app.route('/')
 def home():
     announcement = data_manager.get_announcement()
@@ -3954,9 +4523,19 @@ def home():
         country_code, raw_cc = detect_user_country()
         session['user_country'] = country_code or ''
     user_stats = None
+    daily_remaining = None
+    quota_limit = None
+    user_weather_location = ''
     if session.get('user_id'):
-        user_stats = data_manager.get_user_profile(session.get('username'))
-    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=session.get('user_country', ''), country_name=COUNTRY_NAMES.get(session.get('user_country', '')), user_stat=user_stats)
+        profile = data_manager.get_user_profile(session.get('username'))
+        user_stats = profile
+        daily_remaining = data_manager.get_daily_remaining(session['user_id'])
+        if profile:
+            tier_key = profile.get('premium_tier', 'free')
+            tier_info = PREMIUM_TIERS.get(tier_key, {})
+            quota_limit = tier_info.get('daily_limit', 24)
+            user_weather_location = profile.get('weather_location', '') or ''
+    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=session.get('user_country', ''), country_name=COUNTRY_NAMES.get(session.get('user_country', '')), user_stat=user_stats, daily_remaining=daily_remaining, quota_limit=quota_limit, user_weather_location=user_weather_location)
 
 @app.route('/search')
 def search():
@@ -3976,9 +4555,44 @@ def search():
     announcement = data_manager.get_announcement()
     if not query:
         user_stats = None
+        daily_remaining = None
+        quota_limit = None
+        user_weather_location = ''
         if session.get('user_id'):
-            user_stats = data_manager.get_user_profile(session.get('username'))
-        return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=user_country, country_name=COUNTRY_NAMES.get(user_country), user_stat=user_stats)
+            profile = data_manager.get_user_profile(session.get('username'))
+            user_stats = profile
+            daily_remaining = data_manager.get_daily_remaining(session['user_id'])
+            if profile:
+                tier_key = profile.get('premium_tier', 'free')
+                tier_info = PREMIUM_TIERS.get(tier_key, {})
+                quota_limit = tier_info.get('daily_limit', 24)
+                user_weather_location = profile.get('weather_location', '') or ''
+        return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=user_country, country_name=COUNTRY_NAMES.get(user_country), user_stat=user_stats, daily_remaining=daily_remaining, quota_limit=quota_limit, user_weather_location=user_weather_location)
+
+    # ── Search Quota ──
+    user_id = session.get('user_id')
+    quota_exceeded = False
+    quota_remaining = 0
+    quota_limit = 0
+    quota_is_anonymous = False
+    anon_count = 0
+    anon_today = ''
+
+    if user_id:
+        premium_info = data_manager.get_premium_info(user_id)
+        if premium_info:
+            quota_limit = premium_info.get('daily_limit', PREMIUM_500_DAILY_LIMIT)
+        else:
+            quota_limit = FREE_DAILY_LIMIT
+        _, count = data_manager.get_or_create_daily_count(user_id)
+        quota_remaining = max(0, quota_limit - count)
+        quota_exceeded = quota_remaining <= 0
+    else:
+        quota_is_anonymous = True
+        quota_limit = ANONYMOUS_DAILY_LIMIT
+        anon_count, anon_today, _ = check_anonymous_quota()
+        quota_remaining = max(0, quota_limit - anon_count)
+        quota_exceeded = quota_remaining <= 0
 
     crisis = detect_crisis(query)
 
@@ -4028,6 +4642,30 @@ def search():
     if bang_url:
         return redirect(bang_url)
 
+    # ── Quota exceeded: block search entirely ──
+    if quota_exceeded:
+        if not session.get('user_id'):
+            anon_count, anon_today, _ = check_anonymous_quota()
+        return render_template(
+            'search.html',
+            query=query,
+            results=None,
+            quota_exceeded=True,
+            quota_remaining=0,
+            quota_limit=quota_limit,
+            quota_is_anonymous=quota_is_anonymous,
+            page=1,
+            total_results=0,
+            info_box=None,
+            shopping_products=None,
+            announcement=announcement,
+            blocked_count=BLOCKLIST_COUNT,
+            user_country=user_country,
+            country_name=COUNTRY_NAMES.get(user_country, ''),
+            user_stat=None,
+            search_time=0,
+        ), 429
+
     try:
         if region:
             session['region'] = region
@@ -4070,7 +4708,14 @@ def search():
                 }
 
         search_time = round(time.time() - _search_start, 2)
-        return render_template(
+
+        # Increment quota if search succeeded
+        if user_id and not quota_exceeded:
+            data_manager.increment_daily_count(user_id)
+        elif quota_is_anonymous and not quota_exceeded:
+            anon_count += 1
+
+        resp = make_response(render_template(
             'search.html',
             query=query,
             filter=filter_type,
@@ -4089,13 +4734,25 @@ def search():
             user_country=user_country,
             country_name=COUNTRY_NAMES.get(user_country, ''),
             search_time=search_time,
-            user_stat=None
-        )
+            user_stat=None,
+            quota_exceeded=quota_exceeded,
+            quota_remaining=quota_remaining,
+            quota_limit=quota_limit,
+            quota_is_anonymous=quota_is_anonymous,
+        ))
+        if quota_is_anonymous:
+            cookie_val, max_age = make_anonymous_quota_cookie(anon_count, anon_today)
+            resp.set_cookie('aoogle_sq', cookie_val, max_age=max_age, httponly=True, samesite='Lax')
+        return resp
 
     except Exception as e:
         import traceback
         app.logger.error(f"Search route error: {str(e)}\n{traceback.format_exc()}")
-        return render_template(
+        if user_id and not quota_exceeded:
+            data_manager.increment_daily_count(user_id)
+        elif quota_is_anonymous and not quota_exceeded:
+            anon_count += 1
+        resp = make_response(render_template(
             'search.html',
             query=query,
             notice=notice,
@@ -4106,12 +4763,36 @@ def search():
             user_country=user_country,
             country_name=COUNTRY_NAMES.get(user_country, ''),
             user_stat=None,
-            search_time=round(time.time() - _search_start, 2)
-        )
+            search_time=round(time.time() - _search_start, 2),
+            quota_exceeded=quota_exceeded,
+            quota_remaining=quota_remaining,
+            quota_limit=quota_limit,
+            quota_is_anonymous=quota_is_anonymous,
+        ))
+        if quota_is_anonymous:
+            cookie_val, max_age = make_anonymous_quota_cookie(anon_count, anon_today)
+            resp.set_cookie('aoogle_sq', cookie_val, max_age=max_age, httponly=True, samesite='Lax')
+        return resp
 
 
 @app.route('/api/ai-summary', methods=['GET', 'POST'])
 def api_ai_summary():
+    # ── Quota check: block AI if search limit exceeded ──
+    user_id = session.get('user_id')
+    if user_id:
+        premium_info = data_manager.get_premium_info(user_id)
+        if premium_info:
+            ai_limit = premium_info.get('daily_limit', PREMIUM_500_DAILY_LIMIT)
+        else:
+            ai_limit = FREE_DAILY_LIMIT
+        _, count = data_manager.get_or_create_daily_count(user_id)
+        if count >= ai_limit:
+            return jsonify({'ok': False, 'error': 'Daily search limit reached. Upgrade to Premium for more searches.'}), 403
+    else:
+        anon_count, _, _ = check_anonymous_quota()
+        if anon_count >= ANONYMOUS_DAILY_LIMIT:
+            return jsonify({'ok': False, 'error': 'Free search limit reached. Create an account for more searches.'}), 403
+
     try:
         if request.method == 'GET':
             q = (request.args.get('q') or '').strip()
@@ -4143,6 +4824,8 @@ Question: {q}
 
 Provide a clear answer (2-4 sentences) with key facts. Be direct and helpful. If the question is about a definition or fact, give the answer straight away."""
 
+        from groq import Groq
+        groq_client = Groq(api_key=os.environ.get('GROQ_API_KEY'))
         completion = groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
@@ -4730,8 +5413,10 @@ def signup():
             return render_template('signup.html', error='Invalid form submission. Please try again.')
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
+        email = request.form.get('email', '').strip()
         sq = request.form.get('security_question', '').strip()
         sa = request.form.get('security_answer', '').strip()
+        weather_loc = request.form.get('weather_location', '').strip()
         if not username or not password or not sq or not sa:
             return render_template('signup.html', error='All fields required')
         if len(username) < 3 or len(username) > 24:
@@ -4740,14 +5425,19 @@ def signup():
             return render_template('signup.html', error='Password must be at least 8 characters')
         if not re.search(r'[A-Za-z]', password) or not re.search(r'[0-9]', password):
             return render_template('signup.html', error='Password must contain both letters and numbers')
+        if email and '@' not in email:
+            return render_template('signup.html', error='Invalid email address', email=email)
         ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
-        user, err = data_manager.create_user(username, password, sq, sa, ip)
+        user, err = data_manager.create_user(username, password, sq, sa, ip, email, weather_loc)
         if err:
-            return render_template('signup.html', error=err)
+            return render_template('signup.html', error=err, email=email)
         session.clear()
+        session.permanent = True
         session['user_id'] = user['user_id']
         session['username'] = user['username']
-        return redirect(url_for('home'))
+        if email:
+            send_welcome_email(email, username)
+        return redirect(url_for('user_profile', username=username))
     return render_template('signup.html')
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -4764,6 +5454,10 @@ def login():
         session.permanent = True
         session['user_id'] = user['user_id']
         session['username'] = user['username']
+        user_email = user.get('email', '')
+        if user_email:
+            ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
+            send_login_notification(user_email, username, ip)
         return redirect(url_for('home'))
     return redirect(url_for('signup', mode='login'))
 
@@ -4824,100 +5518,14 @@ def check_captcha(token, answer):
 
 @app.route('/api/news')
 def api_news():
-    import feedparser
-    import re
-
-    def _extract_news_image(entry):
-        img = ''
-        if hasattr(entry, 'media_content') and entry.media_content:
-            for mc in entry.media_content:
-                url_val = mc.get('url', '')
-                if url_val:
-                    img = url_val
-                    if any(x in url_val for x in ('static01.nyt.com', 'ichef.bbci', 'timesofindia', 'media.ign', 'espn')):
-                        break
-            if not img and entry.media_content:
-                img = entry.media_content[0].get('url', '')
-        if not img and hasattr(entry, 'media_thumbnail') and entry.media_thumbnail:
-            img = entry.media_thumbnail[0].get('url', '')
-        if not img and hasattr(entry, 'enclosures') and entry.enclosures:
-            for enc in entry.enclosures:
-                if hasattr(enc, 'type') and enc.type and 'image' in enc.type:
-                    img = enc.href
-                    break
-        if not img and hasattr(entry, 'summary'):
-            imgs = re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', entry.summary)
-            if imgs:
-                img = imgs[0]
-        if not img and hasattr(entry, 'links'):
-            for link in entry.links:
-                if hasattr(link, 'type') and link.type and 'image' in link.type:
-                    img = link.href
-                    break
-        return img
-
     category = request.args.get('category', 'top')
-    sources = {
-        'top': 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml',
-        'world': 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml',
-        'tech': 'https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml',
-        'business': 'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml',
-        'science': 'https://rss.nytimes.com/services/xml/rss/nyt/Science.xml',
-        'health': 'https://rss.nytimes.com/services/xml/rss/nyt/Health.xml',
-        'sports': 'https://www.espn.com/espn/rss/news',
-        'entertainment': 'https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml',
-        'gaming': 'https://www.ign.com/rss/articles/feed',
-        'economy': 'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml',
-    }
-    asian_sources = [
-        'https://timesofindia.indiatimes.com/rssfeedstopstories.cms',
-        'https://www.japantimes.co.jp/feed/',
-        'https://www.scmp.com/rss/4/feed',
-        'https://www.channelnewsasia.com/rssfeeds/topstories',
-    ]
-    try:
-        items = []
-        if category == 'asian':
-            for src_url in asian_sources:
-                try:
-                    feed = feedparser.parse(src_url)
-                    for entry in feed.entries[:8]:
-                        img = _extract_news_image(entry)
-                        items.append({
-                            'title': entry.title,
-                            'link': entry.link,
-                            'published': entry.get('published', ''),
-                            'source': feed.feed.get('title', 'Asian News'),
-                            'image': img,
-                        })
-                except Exception:
-                    pass
-            items.sort(key=lambda x: x['published'], reverse=True)
-            items = items[:20]
-            source_label = 'Asian News'
+    with NEWS_CACHE_LOCK:
+        if category in NEWS_CACHE:
+            items = NEWS_CACHE[category]
         else:
-            url = sources.get(category, sources['top'])
-            feed = feedparser.parse(url)
-            for entry in feed.entries[:20]:
-                img = _extract_news_image(entry)
-                items.append({
-                    'title': entry.title,
-                    'link': entry.link,
-                    'published': entry.get('published', ''),
-                    'source': feed.feed.get('title', source_name(category)),
-                    'image': img,
-                })
-            source_label = feed.feed.get('title', source_name(category))
-        return jsonify({'ok': True, 'items': items, 'source': source_label})
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
-
-
-def source_name(cat):
-    names = {'top': 'Top Stories', 'world': 'World', 'tech': 'Technology', 'business': 'Business',
-             'science': 'Science', 'health': 'Health', 'sports': 'Sports', 'entertainment': 'Entertainment',
-             'gaming': 'Gaming', 'economy': 'Economy', 'asian': 'Asian News'}
-    return names.get(cat, 'News')
+            items = []
+    source_label = CATEGORY_SOURCE_LABELS.get(category, 'News')
+    return jsonify({'ok': True, 'items': items, 'source': source_label})
 
 
 
@@ -5232,23 +5840,6 @@ def user_collections():
     cols = data_manager.get_user_collections(user_id)
     return render_template('explore.html', collections=cols, sort='mine', total=len(cols))
 
-# ── Users (Find ID) ──
-
-@app.route('/users')
-def users_list():
-    q = request.args.get('q', '').strip().lower()
-    all_users = data_manager.get_all_users()
-    if q:
-        all_users = [u for u in all_users if q in u['username'].lower() or q in u.get('email', '').lower()]
-    user_list = []
-    for u in all_users:
-        user_list.append({
-            'username': u['username'],
-            'created_at': u.get('created_at', '')[:10],
-        })
-    return render_template('users.html', users=user_list, q=q, total=len(user_list))
-
-
 # ── User profile ──
 
 @app.route('/u/<username>')
@@ -5256,7 +5847,135 @@ def user_profile(username):
     profile = data_manager.get_user_profile(username)
     if not profile:
         return render_template('user_profile.html', error='User not found'), 404
-    return render_template('user_profile.html', profile=profile)
+    profile['is_owner'] = session.get('username') == username
+    if profile['is_owner']:
+        daily_remaining = data_manager.get_daily_remaining(session['user_id'])
+    else:
+        daily_remaining = None
+    premium_tiers_info = PREMIUM_TIERS
+    return render_template('user_profile.html', profile=profile, daily_remaining=daily_remaining, premium_tiers=premium_tiers_info)
+
+
+@app.route('/api/user/update-settings', methods=['POST'])
+def api_user_update_settings():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'Login required'}), 403
+    action = request.form.get('action', '')
+    if action == 'email':
+        email = request.form.get('email', '').strip()
+        current = request.form.get('current_password', '')
+        if not email or '@' not in email:
+            return jsonify({'ok': False, 'error': 'Valid email required'}), 400
+        if not current:
+            return jsonify({'ok': False, 'error': 'Current password required'}), 400
+        user = data_manager.get_user_by_id(user_id)
+        if not user or not data_manager.check_password(current, user['password_hash']):
+            return jsonify({'ok': False, 'error': 'Current password is incorrect'}), 403
+        ok, err = data_manager.update_user_email(user_id, email)
+        return jsonify({'ok': ok, 'error': err})
+    elif action == 'password':
+        current = request.form.get('current_password', '')
+        newpass = request.form.get('new_password', '')
+        if not current or not newpass:
+            return jsonify({'ok': False, 'error': 'Both passwords required'}), 400
+        ok, err = data_manager.update_user_password(user_id, current, newpass)
+        return jsonify({'ok': ok, 'error': err})
+    elif action == 'weather_location':
+        wl = request.form.get('weather_location', '').strip()
+        ok = data_manager.update_user_weather_location(user_id, wl)
+        return jsonify({'ok': ok, 'error': None if ok else 'Failed to update'})
+    return jsonify({'ok': False, 'error': 'Unknown action'}), 400
+
+
+# ── Premium ──
+
+@app.route('/premium')
+def premium_page():
+    return render_template('premium.html', stripe_publishable_key=STRIPE_PUBLISHABLE_KEY, premium_tiers=PREMIUM_TIERS)
+
+
+@app.route('/api/create-checkout-session', methods=['POST'])
+def create_checkout_session():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'Login required'}), 403
+    tier = request.form.get('tier', 'pass')
+    billing = request.form.get('billing', 'monthly')
+    if tier not in PREMIUM_TIERS:
+        return jsonify({'ok': False, 'error': 'Invalid tier'}), 400
+    tier_config = PREMIUM_TIERS[tier]
+    if not STRIPE_SECRET_KEY:
+        return jsonify({'ok': False, 'error': 'Stripe not configured'}), 500
+    price_in_cents = tier_config['stripe_price_yearly'] if billing == 'yearly' else tier_config['stripe_price']
+    interval = 'year' if billing == 'yearly' else 'month'
+    try:
+        session_params = {
+            'payment_method_types': ['card'],
+            'line_items': [{
+                'price_data': {
+                    'currency': 'usd',
+                    'product_data': {'name': f"arlong Premium ({tier_config['name']})"},
+                    'unit_amount': price_in_cents,
+                    'recurring': {'interval': interval},
+                },
+                'quantity': 1,
+            }],
+            'mode': 'subscription',
+            'success_url': url_for('premium_success', _external=True) + '?session_id={CHECKOUT_SESSION_ID}',
+            'cancel_url': url_for('premium_page', _external=True),
+            'client_reference_id': str(user_id),
+            'metadata': {'tier': tier, 'user_id': str(user_id)},
+        }
+        trial_days = tier_config.get('trial_days', 0)
+        if trial_days > 0:
+            session_params['subscription_data'] = {'trial_period_days': trial_days}
+        checkout_session = stripe.checkout.Session.create(**session_params)
+        return jsonify({'ok': True, 'url': checkout_session.url})
+    except Exception as e:
+        app.logger.error(f"Stripe checkout error: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/premium/success')
+def premium_success():
+    session_id = request.args.get('session_id', '')
+    if not session_id:
+        return redirect(url_for('premium_page'))
+    return render_template('premium.html', success=True, stripe_publishable_key=STRIPE_PUBLISHABLE_KEY, premium_tiers=PREMIUM_TIERS)
+
+
+@app.route('/api/stripe-webhook', methods=['POST'])
+def stripe_webhook():
+    payload = request.get_data()
+    sig_header = request.headers.get('Stripe-Signature')
+    if not STRIPE_WEBHOOK_SECRET:
+        app.logger.error("Stripe webhook secret not configured")
+        return jsonify({'ok': False, 'error': 'Not configured'}), 500
+    try:
+        event = stripe.webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+    except ValueError:
+        return jsonify({'ok': False, 'error': 'Invalid payload'}), 400
+    except stripe.error.SignatureVerificationError:
+        return jsonify({'ok': False, 'error': 'Invalid signature'}), 400
+
+    if event['type'] == 'checkout.session.completed':
+        session_obj = event['data']['object']
+        user_id = session_obj.get('metadata', {}).get('user_id')
+        tier = session_obj.get('metadata', {}).get('tier', 'basic')
+        stripe_sub_id = session_obj.get('subscription', '')
+        if user_id:
+            expires_at = (datetime.now() + timedelta(days=30)).isoformat()
+            data_manager.set_premium(user_id, tier, stripe_sub_id, expires_at)
+            app.logger.info(f"Premium activated for user {user_id}, tier={tier}")
+            # Send premium activation email
+            user_obj = data_manager.get_user_by_id(user_id)
+            if user_obj and user_obj.get('email'):
+                tier_name = PREMIUM_TIERS.get(tier, {}).get('name', tier)
+                limit = PREMIUM_TIERS.get(tier, {}).get('daily_limit')
+                limit_text = str(limit) if limit else 'Unlimited'
+                send_premium_email(user_obj['email'], user_obj['username'], tier_name, limit_text)
+    return jsonify({'ok': True})
 
 
 def weekly_crawl_job():

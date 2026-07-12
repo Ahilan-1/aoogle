@@ -58,21 +58,6 @@
         <h1>Settings</h1>
         <div class="sub">Customize your search experience</div>
 
-        <h2>Enhancements</h2>
-
-        <div class="setting-group">
-            <div class="toggle-row">
-                <div class="toggle-label">
-                    <h3>News Portal <span class="new-tag">NEW</span></h3>
-                    <div class="label-desc">News ticker, headlines grid, weather and stock prices on the homepage. Data from BBC RSS, wttr.in and Yahoo Finance (no API key needed).</div>
-                </div>
-                <div class="toggle-wrap">
-                    <span class="toggle" id="portal-toggle"></span>
-                </div>
-            </div>
-            <div id="portal-status" class="status-badge off"><span class="dot"></span> Disabled</div>
-        </div>
-
         <h2>About</h2>
         <p style="font-size:13px;color:var(--text3);line-height:1.6">All settings are stored locally in your browser (localStorage). No data is sent to our servers. Clearing your browser data will reset these preferences.</p>
     </div>
@@ -89,45 +74,7 @@
             var t=document.getElementById('saved-toast');t.textContent=m;t.classList.add('show');
             setTimeout(function(){t.classList.remove('show')},2000)
         }
-
-        function setupToggle(id, statusId, key, modeContainerId){
-            var t=document.getElementById(id),s=document.getElementById(statusId),mc=document.getElementById(modeContainerId);
-            var active=getVal(key);
-            if(active&&active!=='0'){t.classList.add('on');s.className='status-badge on';s.innerHTML='<span class="dot"></span> Enabled';if(mc)mc.style.display='block'}
-            t.onclick=function(){
-                var on=!(active&&active!=='0');
-                if(on){setVal(key,'1');t.classList.add('on');s.className='status-badge on';s.innerHTML='<span class="dot"></span> Enabled';if(mc)mc.style.display='block'}
-                else{setVal(key,'0');t.classList.remove('on');s.className='status-badge off';s.innerHTML='<span class="dot"></span> Disabled';if(mc)mc.style.display='none'}
-                active=on?'1':'0';
-
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded',function(){
-            setupToggle('portal-toggle','portal-status','arlong-portal',null);
-
-            /* Portal is ON by default, flip the toggle logic */
-            (function(){
-                var t=document.getElementById('portal-toggle'),s=document.getElementById('portal-status');
-                var active=true;
-                try{ active = localStorage.getItem('arlong-portal') !== '0' }catch(e){}
-                if(active){ t.classList.add('on'); s.className='status-badge on'; s.innerHTML='<span class="dot"></span> Enabled' }
-                else{ t.classList.remove('on'); s.className='status-badge off'; s.innerHTML='<span class="dot"></span> Disabled' }
-                /* Override click to store inverse */
-                t.onclick = function(){
-                    var on = true;
-                    try{ on = localStorage.getItem('arlong-portal') !== '0' }catch(e){}
-                    if(on){
-                        try{localStorage.setItem('arlong-portal','0')}catch(e){}
-                        t.classList.remove('on'); s.className='status-badge off'; s.innerHTML='<span class="dot"></span> Disabled';
-                    } else {
-                        try{localStorage.setItem('arlong-portal','1')}catch(e){}
-                        t.classList.add('on'); s.className='status-badge on'; s.innerHTML='<span class="dot"></span> Enabled';
-                    }
-                    showToast('Saved');
-                };
-            })();
-        });
+        document.addEventListener('DOMContentLoaded',function(){});
     </script>
 </body>
 </html>

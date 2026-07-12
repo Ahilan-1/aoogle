@@ -12,7 +12,7 @@
             --border:#5f6368; --border2:#3c4043; --border3:#5f6368; --border4:#5f6368;
             --shadow:rgba(0,0,0,.28); --shadow2:rgba(0,0,0,.4);
             --card-bg:#303134; --hover-bg:#3c4043;
-            --accent:#8ab4f8;
+            --accent:#8ab4f8; --green:#81c995; --gold:#fbbc04; --red:#f28b82;
         }
         body{margin:0;padding:0;font-family:arial,sans-serif;color:var(--text);background:var(--bg);min-height:100vh}
         a{text-decoration:none;color:var(--link)}
@@ -30,22 +30,29 @@
         .acc-btn:hover{background:var(--hover-bg);color:var(--text);border-color:var(--text3)}
         .acc-btn svg{width:16px;height:16px;fill:currentColor}
 
-        .layout{max-width:900px;margin:20px auto;padding:0 24px;display:flex;gap:24px;align-items:flex-start}
-        .sidebar{width:240px;flex-shrink:0}
+        .layout{max-width:960px;margin:20px auto;padding:0 24px;display:flex;gap:24px;align-items:flex-start}
+        .sidebar{width:260px;flex-shrink:0}
         .main{flex:1;min-width:0}
 
         .profile-card{background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:24px 20px;text-align:center}
         .avatar{width:72px;height:72px;border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:600;color:#fff;background:var(--bg3)}
-        .profile-card h1{margin:0;font-size:20px;font-weight:400;color:var(--text)}
+        .profile-card h1{margin:0;font-size:20px;font-weight:400;color:var(--text);word-break:break-all}
         .profile-card .joined{font-size:12px;color:var(--text3);margin-top:2px}
+        .profile-card .email{font-size:12px;color:var(--link);margin-top:2px;word-break:break-all}
+
+        .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:500;margin-top:8px}
+        .badge-free{background:var(--bg3);color:var(--text3)}
+        .badge-basic{background:#1e3a5f;color:var(--link)}
+        .badge-unlimited{background:#1e3527;color:var(--green)}
+        .badge svg{width:12px;height:12px;fill:currentColor}
 
         .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:14px}
-        .stat-grid .stat{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:10px 6px;text-align:center}
+        .stat-grid .stat{background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:10px 6px;text-align:center}
         .stat-grid .stat .n{font-size:18px;font-weight:500;color:var(--text)}
         .stat-grid .stat .l{font-size:10px;color:var(--text3);margin-top:1px;text-transform:lowercase}
 
-        .main-card{background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:18px 22px;box-shadow:0 1px 4px var(--shadow2)}
-        .main-card .mc-title{font-size:14px;font-weight:500;color:var(--text2);margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border2)}
+        .main-card{background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:18px 22px;box-shadow:0 1px 4px var(--shadow2);margin-bottom:14px}
+        .main-card .mc-title{font-size:14px;font-weight:500;color:var(--text2);margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:6px}
 
         .activity-list{list-style:none;padding:0;margin:0}
         .activity-list li{padding:10px 0;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:10px;transition:all .1s}
@@ -53,15 +60,37 @@
         .activity-list li:hover{padding-left:6px}
         .activity-list .aty{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;min-width:60px;padding:2px 8px;border-radius:4px;background:var(--bg2);text-align:center}
         .activity-list .aty.collection{color:var(--link);background:var(--bg2)}
-        .activity-list .aty.submission{color:#81c995;background:var(--bg2)}
+        .activity-list .aty.submission{color:var(--green);background:var(--bg2)}
         .activity-list .ati{flex:1;font-size:13px;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
         .activity-list .at{font-size:12px;color:var(--text3);min-width:50px;text-align:right;font-feature-settings:'tnum'}
 
-        .empty-state{text-align:center;padding:60px 20px;color:var(--text3);font-size:14px;line-height:1.6}
-        .empty-state .big{font-size:48px;margin-bottom:12px;opacity:.2}
+        .settings-form{display:none;margin-top:12px}
+        .settings-form.show{display:block}
+        .settings-form label{display:block;font-size:12px;color:var(--text2);margin-bottom:3px;margin-top:10px}
+        .settings-form label:first-of-type{margin-top:0}
+        .settings-form input{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:var(--bg);color:var(--text);outline:none}
+        .settings-form input:focus{border-color:var(--link)}
+        .settings-form .btn{margin-top:10px;padding:7px 16px;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:500}
+        .settings-form .btn-primary{background:var(--link);color:#fff}
+        .settings-form .btn-primary:hover{opacity:.9}
+        .settings-form .s-msg{font-size:11px;margin-top:6px}
+        .settings-form .s-msg.ok{color:var(--green)}
+        .settings-form .s-msg.err{color:var(--red)}
+
+        .toggle-link{font-size:12px;color:var(--link);cursor:pointer;margin-left:auto}
+        .toggle-link:hover{text-decoration:underline}
+
+        .empty-state{text-align:center;padding:40px 20px;color:var(--text3);font-size:14px;line-height:1.6}
+        .empty-state .big{font-size:36px;margin-bottom:8px;opacity:.2}
         .error-page{text-align:center;padding:80px 20px;color:var(--text3)}
         .error-page .er-code{font-size:72px;font-weight:400;color:var(--text2);line-height:1}
         .error-page .er-text{font-size:16px;color:var(--text2);margin-top:12px}
+
+        .quota-bar{background:var(--bg);border-radius:4px;height:6px;overflow:hidden;margin-top:8px}
+        .quota-bar .fill{height:100%;border-radius:4px;transition:width .3s}
+        .quota-bar .fill.good{background:var(--green)}
+        .quota-bar .fill.warn{background:var(--gold)}
+        .quota-bar .fill.full{background:var(--red)}
 
         @media(max-width:720px){
             .layout{flex-direction:column;padding:0 16px;gap:14px}
@@ -85,7 +114,7 @@
         <h1>/u/{% if profile %}{{ profile.username }}{% else %}...{% endif %}</h1>
         <nav>
             <a href="/explore">Explore</a>
-            <a href="/users">Users</a>
+            <a href="/premium">Premium</a>
         </nav>
         <a href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" class="acc-btn" aria-label="Account">
             <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
@@ -102,38 +131,106 @@
                 <div class="avatar" style="background:{{ avatar_color }}">{{ profile.username[0]|upper }}</div>
                 <h1>{{ profile.username }}</h1>
                 <div class="joined">Joined {{ profile.joined_date }}</div>
+                {% if profile.email %}
+                <div class="email">{{ profile.email }}</div>
+                {% endif %}
+                {% if profile.weather_location %}
+                <div style="font-size:12px;color:var(--text3);margin-top:2px">&#x2601; {{ profile.weather_location }}</div>
+                {% endif %}
+                {% if profile.premium_tier %}
+                <div class="badge badge-{{ profile.premium_tier|lower }}">
+                    <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                    {{ profile.premium_tier }}
+                </div>
+                {% else %}
+                <div class="badge badge-free">Free</div>
+                {% endif %}
                 <div class="stat-grid">
-                    <div class="stat"><div class="n">{{ profile.clicks }}</div><div class="l">clicks</div></div>
-                    <div class="stat"><div class="n">{{ profile.searches }}</div><div class="l">searches</div></div>
+                    <div class="stat"><div class="n">{{ profile.collections_count }}</div><div class="l">collections</div></div>
+                    <div class="stat"><div class="n">{{ profile.pins_count }}</div><div class="l">pins</div></div>
                 </div>
             </div>
+
+            {% if profile.is_owner and daily_remaining is not none %}
+            <div class="main-card" style="margin-top:14px">
+                <div class="mc-title">
+                    <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:var(--text3)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                    Daily Searches
+                    <a href="/premium" style="font-size:11px;margin-left:auto;font-weight:400">Upgrade</a>
+                </div>
+                <div style="font-size:22px;font-weight:300;color:var(--text)">{{ daily_remaining }} <span style="font-size:12px;color:var(--text3)">remaining today</span></div>
+                {% if profile.premium_tier %}
+                {% set limit = 500 if 'Basic' in profile.premium_tier else 999999 %}
+                {% else %}
+                {% set limit = 24 %}
+                {% endif %}
+                {% if limit < 999999 %}
+                {% set used = limit - daily_remaining %}
+                {% set pct = (used / limit * 100)|round %}
+                <div class="quota-bar">
+                    <div class="fill {% if pct < 60 %}good{% elif pct < 90 %}warn{% else %}full{% endif %}" style="width:{{ pct }}%"></div>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
         </div>
+
         <div class="main">
-            {% if profile.collections %}
+            {% if profile.is_owner %}
             <div class="main-card">
-                <div class="mc-title">{{ profile.collections|length }} collection{% if profile.collections|length != 1 %}s{% endif %}</div>
+                <div class="mc-title">
+                    <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:var(--text3)"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+                    Account Settings
+                    <span class="toggle-link" onclick="toggleSettings()">Edit</span>
+                </div>
+                <div class="settings-form" id="settings-form">
+                    <label>Email address</label>
+                    <input type="email" id="s-email" placeholder="you@example.com" value="{{ profile.email or '' }}">
+                    <label style="font-size:11px;color:var(--text3);margin-top:0">Current password required</label>
+                    <input type="password" id="s-email-pw" placeholder="Enter password to confirm">
+                    <button class="btn btn-primary" onclick="updateEmail()">Save email</button>
+                    <div class="s-msg" id="s-email-msg"></div>
+
+                    <label style="margin-top:16px">Current password</label>
+                    <input type="password" id="s-cur-pw" placeholder="Current password">
+                    <label>New password</label>
+                    <input type="password" id="s-new-pw" placeholder="New password (8+ chars, letters + numbers)">
+                    <button class="btn btn-primary" onclick="updatePassword()">Change password</button>
+                    <div class="s-msg" id="s-pw-msg"></div>
+
+                    <label style="margin-top:16px">Weather location</label>
+                    <input type="text" id="s-wloc" placeholder="City, State or ZIP code" value="{{ profile.weather_location or '' }}">
+                    <button class="btn btn-primary" onclick="updateWeatherLocation()">Save location</button>
+                    <div class="s-msg" id="s-wloc-msg"></div>
+
+                    {% if not profile.premium_tier %}
+                    <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border2)">
+                        <a href="/premium" style="font-size:13px;color:var(--link)">Upgrade to Premium &rarr;</a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if profile.recent %}
+            <div class="main-card">
+                <div class="mc-title">
+                    <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:var(--text3)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/></svg>
+                    Recent Activity
+                </div>
                 <ul class="activity-list">
-                {% for c in profile.collections %}
-                    <li><span class="aty collection">collection</span><a href="/explore/{{ c.id }}" class="ati">{{ c.name }}</a><span class="at">{{ c.websites|length }} pins</span></li>
+                {% for item in profile.recent %}
+                    <li>
+                        <span class="aty {{ item.type }}">{{ item.type }}</span>
+                        <a href="{{ item.url }}" class="ati">{{ item.title }}</a>
+                        <span class="at">{{ item.created_at[:10] }}</span>
+                    </li>
                 {% endfor %}
                 </ul>
             </div>
-            {% endif %}
-            {% if profile.submissions %}
-            <div style="margin-top:14px">
+            {% else %}
             <div class="main-card">
-                <div class="mc-title">{{ profile.submissions|length }} submission{% if profile.submissions|length != 1 %}s{% endif %}</div>
-                <ul class="activity-list">
-                {% for s in profile.submissions %}
-                    <li><span class="aty submission">site</span><a href="{{ s.url }}" class="ati" rel="nofollow">{{ s.title or s.url }}</a><span class="at">{{ s.created_at[:10] }}</span></li>
-                {% endfor %}
-                </ul>
-            </div>
-            </div>
-            {% endif %}
-            {% if not profile.collections and not profile.submissions %}
-            <div class="main-card">
-                <div class="empty-state"><div class="big">&#x1F4ED;</div><p>No activity yet.</p></div>
+                <div class="empty-state"><div class="big">&#x1F4ED;</div><p>No activity yet. Start searching and creating collections!</p></div>
             </div>
             {% endif %}
         </div>
@@ -142,8 +239,68 @@
     <div class="error-page">
         <div class="er-code">404</div>
         <div class="er-text">User not found</div>
-        <p style="margin-top:20px"><a href="/users">Find users</a></p>
     </div>
     {% endif %}
+
+    <script>
+        function toggleSettings(){
+            var f = document.getElementById('settings-form');
+            if(f) f.classList.toggle('show');
+        }
+        function updateEmail(){
+            var email = document.getElementById('s-email').value.trim();
+            var pw = document.getElementById('s-email-pw').value;
+            var msg = document.getElementById('s-email-msg');
+            if(!email || email.indexOf('@') === -1){ msg.textContent = 'Valid email required'; msg.className = 's-msg err'; return; }
+            if(!pw){ msg.textContent = 'Current password required'; msg.className = 's-msg err'; return; }
+            var fd = new FormData();
+            fd.append('action', 'email');
+            fd.append('email', email);
+            fd.append('current_password', pw);
+            fetch('/api/user/update-settings', {method:'POST', body:fd}).then(function(r){ return r.json() }).then(function(d){
+                msg.textContent = d.ok ? 'Email saved!' : (d.error || 'Failed');
+                msg.className = d.ok ? 's-msg ok' : 's-msg err';
+                if(d.ok){ document.getElementById('s-email-pw').value = ''; }
+            }).catch(function(){
+                msg.textContent = 'Network error';
+                msg.className = 's-msg err';
+            });
+        }
+        function updatePassword(){
+            var cur = document.getElementById('s-cur-pw').value;
+            var npw = document.getElementById('s-new-pw').value;
+            var msg = document.getElementById('s-pw-msg');
+            if(!cur || !npw){ msg.textContent = 'Both fields required'; msg.className = 's-msg err'; return; }
+            var fd = new FormData();
+            fd.append('action', 'password');
+            fd.append('current_password', cur);
+            fd.append('new_password', npw);
+            fetch('/api/user/update-settings', {method:'POST', body:fd}).then(function(r){ return r.json() }).then(function(d){
+                msg.textContent = d.ok ? 'Password changed!' : (d.error || 'Failed');
+                msg.className = d.ok ? 's-msg ok' : 's-msg err';
+                if(d.ok){ document.getElementById('s-cur-pw').value = ''; document.getElementById('s-new-pw').value = ''; }
+            }).catch(function(){
+                msg.textContent = 'Network error';
+                msg.className = 's-msg err';
+            });
+        }
+        function updateWeatherLocation(){
+            var wl = document.getElementById('s-wloc').value.trim();
+            var msg = document.getElementById('s-wloc-msg');
+            var fd = new FormData();
+            fd.append('action', 'weather_location');
+            fd.append('weather_location', wl);
+            fetch('/api/user/update-settings', {method:'POST', body:fd}).then(function(r){ return r.json() }).then(function(d){
+                msg.textContent = d.ok ? 'Location saved!' : (d.error || 'Failed');
+                msg.className = d.ok ? 's-msg ok' : 's-msg err';
+            }).catch(function(){
+                msg.textContent = 'Network error';
+                msg.className = 's-msg err';
+            });
+        }
+        {% if profile.is_owner and profile.recent|length == 0 %}
+        document.addEventListener('DOMContentLoaded', function(){ toggleSettings(); });
+        {% endif %}
+    </script>
 </body>
 </html>
