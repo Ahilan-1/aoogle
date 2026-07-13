@@ -27,6 +27,8 @@ import uuid
 import re
 import threading
 import os
+import ssl
+import httpx
 
 import stripe
 import resend
@@ -44,6 +46,154 @@ try:
     ddgs_available = True
 except ImportError:
     ddgs_available = False
+
+# ── Engine suspension (anti-block) ──
+ENGINE_BAN_TIMES = {}  # engine_name -> timestamp until suspended
+ENGINE_BAN_LOCK = threading.Lock()
+
+def _is_engine_banned(engine):
+    with ENGINE_BAN_LOCK:
+        until = ENGINE_BAN_TIMES.get(engine, 0)
+        if until > time.time():
+            return True
+        return False
+
+def _ban_engine(engine, duration=3600):
+    with ENGINE_BAN_LOCK:
+        ENGINE_BAN_TIMES[engine] = time.time() + duration
+
+def _shuffle_tls_context():
+    """Create SSL context with shuffled ciphers — defeats JA3 fingerprinting (SearXNG technique)."""
+    ctx = httpx.create_ssl_context(verify=True)
+    try:
+        ciphers = ctx.get_ciphers()
+        names = [c['name'] for c in ciphers]
+        fixed, rest = names[:3], names[3:]
+        random.shuffle(rest)
+        ctx.set_ciphers(':'.join(fixed + rest))
+    except Exception:
+        pass
+    return ctx
+
+_FIREFOX_UAS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:152.0) Gecko/20100101 Firefox/152.0',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:151.0) Gecko/20100101 Firefox/151.0',
+    'Mozilla/5.0 (X11; Linux x86_64; rv:152.0) Gecko/20100101 Firefox/152.0',
+]
+
+def _get_browser_headers():
+    """Default headers matching SearXNG's processor output."""
+    return {
+        'Accept-Encoding': 'gzip, deflate',
+        'Cache-Control': 'no-cache',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'User-Agent': random.choice(_FIREFOX_UAS),
+        'Accept-Language': 'en-US,en;q=0.9',
+    }
+
+_GOOGLE_CONSENT_COOKIE = 'CONSENT=YES+'
+
+def _search_google(query, max_results=5):
+    """Scrape Google via HTML — uses SearXNG's TLS shuffling + CONSENT cookie.
+    Note: Google's SERP is now JS-rendered; this is best-effort and often returns nothing."""
+    if _is_engine_banned('google'):
+        return []
+    try:
+        with httpx.Client(verify=_shuffle_tls_context(), http2=True, timeout=3.0, follow_redirects=False) as client:
+            resp = client.get(
+                'https://www.google.com/search',
+                params={'q': query, 'hl': 'en', 'num': str(min(max_results, 10)), 'filter': '0'},
+                headers={**_get_browser_headers(), 'Accept': '*/*'},
+                cookies={'CONSENT': 'YES+'},
+            )
+        text = resp.text
+        if len(text) < 2000 and '/sorry/' in text:
+            _ban_engine('google', 3600)
+            return []
+        if resp.url.host == 'sorry.google.com' or '/sorry/' in resp.url.path:
+            _ban_engine('google', 3600)
+            return []
+        soup = BeautifulSoup(text, 'html.parser')
+        results = []
+        for g in soup.find_all('div', class_='g'):
+            a = g.find('a', href=True)
+            if not a:
+                continue
+            href = a.get('href', '')
+            if href.startswith('/url?q='):
+                href = unquote(href[7:].split('&sa=U')[0])
+            if not href.startswith('http'):
+                continue
+            title = a.get_text(strip=True)
+            if not title:
+                h3 = g.find(['h3', 'h2'])
+                title = h3.get_text(strip=True) if h3 else ''
+            if not title:
+                continue
+            snippet_div = g.find('div', style=lambda s: s and '-webkit-line-clamp' in str(s))
+            snippet = snippet_div.get_text(strip=True)[:300] if snippet_div else ''
+            results.append(SearchResult(
+                title=title, url=href, snippet=snippet, category='general',
+                domain=urlparse(href).netloc
+            ))
+            if len(results) >= max_results:
+                break
+        return results
+    except httpx.TimeoutException:
+        return []
+    except Exception as e:
+        app.logger.error(f"Google search error: {e}")
+        return []
+
+def _search_brave(query, max_results=5):
+    """Scrape Brave Search via HTML — exact SearXNG method (Firefox UA, HTTP/2, TLS shuffling, proper cookies)."""
+    if _is_engine_banned('brave'):
+        return []
+    try:
+        with httpx.Client(verify=_shuffle_tls_context(), http2=True, timeout=5.0, follow_redirects=True) as client:
+            resp = client.get(
+                'https://search.brave.com/search',
+                params={'q': query, 'source': 'web'},
+                headers=_get_browser_headers(),
+                cookies={
+                    'safesearch': 'off',
+                    'useLocation': '0',
+                    'summarizer': '0',
+                    'country': 'us',
+                    'ui_lang': 'en-us',
+                },
+            )
+        if resp.status_code != 200:
+            _ban_engine('brave', 1800)
+            return []
+        soup = BeautifulSoup(resp.text, 'html.parser')
+        results = []
+        for snippet in soup.find_all('div', class_=lambda c: c and 'snippet' in (c.split() if isinstance(c, str) else c)):
+            a = snippet.find('a', href=True)
+            if not a:
+                continue
+            href = a.get('href', '')
+            if not href.startswith('http'):
+                continue
+            title_el = snippet.find(['h2', 'h3', 'div'], class_=lambda c: c and 'title' in str(c).lower().split())
+            title = title_el.get_text(strip=True) if title_el else a.get_text(strip=True)
+            if not title:
+                continue
+            desc_div = snippet.find('div', class_=lambda c: c and 'content' in str(c).lower().split())
+            desc = desc_div.get_text(strip=True)[:300] if desc_div else ''
+            results.append(SearchResult(
+                title=title, url=href, snippet=desc, category='general',
+                domain=urlparse(href).netloc
+            ))
+            if len(results) >= max_results:
+                break
+        return results
+    except httpx.TimeoutException:
+        return []
+    except Exception as e:
+        app.logger.error(f"Brave search error: {e}")
+        return []
 
 app = Flask(__name__)
 
@@ -116,35 +266,26 @@ CURRENTS_CATEGORY_ENDPOINTS = {
 PREMIUM_RSS_FEEDS = {
     'top': [
         ('NYT', 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml'),
-        ('BBC', 'https://feeds.bbci.co.uk/news/rss.xml'),
-        ('Guardian', 'https://www.theguardian.com/world/rss'),
     ],
     'world': [
-        ('NYT', 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml'),
         ('BBC', 'https://feeds.bbci.co.uk/news/world/rss.xml'),
     ],
     'tech': [
-        ('NYT', 'https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml'),
         ('TechCrunch', 'https://techcrunch.com/feed/'),
     ],
     'business': [
-        ('NYT', 'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml'),
         ('BBC', 'https://feeds.bbci.co.uk/news/business/rss.xml'),
     ],
     'science': [
-        ('NYT', 'https://rss.nytimes.com/services/xml/rss/nyt/Science.xml'),
         ('New Scientist', 'https://www.newscientist.com/feed/home'),
     ],
     'health': [
-        ('NYT', 'https://rss.nytimes.com/services/xml/rss/nyt/Health.xml'),
         ('BBC', 'https://feeds.bbci.co.uk/news/health/rss.xml'),
     ],
     'sports': [
         ('BBC', 'https://feeds.bbci.co.uk/sport/rss.xml'),
-        ('NYT', 'https://rss.nytimes.com/services/xml/rss/nyt/Sports.xml'),
     ],
     'entertainment': [
-        ('NYT', 'https://rss.nytimes.com/services/xml/rss/nyt/Arts.xml'),
         ('Variety', 'https://variety.com/feed/'),
     ],
     'gaming': [
@@ -237,6 +378,21 @@ def _fetch_rss_items(feeds):
     all_items.sort(key=lambda x: x.get('published', ''), reverse=True)
     return all_items
 
+def _is_low_quality_news(item):
+    """Filter out junk news items (app download prompts, clickbait with no real content)."""
+    title = (item.get('title') or '').strip().lower()
+    if len(title) < 10:
+        return True
+    junk_patterns = [
+        'download', 'install the app', 'get the app', 'download the app',
+        'bbc news app', 'sign up', 'subscribe to', 'click here',
+        'watch live', 'listen live', 'live stream', 'up next',
+    ]
+    for pat in junk_patterns:
+        if pat in title:
+            return True
+    return False
+
 def _fetch_and_cache_news():
     """Fetch news from Currents API + premium RSS feeds per category, store in NEWS_CACHE."""
     global NEWS_CACHE
@@ -251,13 +407,15 @@ def _fetch_and_cache_news():
             if CURRENTS_API_KEY:
                 articles = _fetch_currents_news(api_cat)
                 for a in articles:
-                    currents_items.append({
+                    item = {
                         'title': a.get('title', 'Untitled'),
                         'link': a.get('url', ''),
                         'published': a.get('published', ''),
                         'source': (a.get('author', '') or 'Currents').strip(),
                         'image': _clean_news_img(a.get('image', '')),
-                    })
+                    }
+                    if not _is_low_quality_news(item):
+                        currents_items.append(item)
             currents_items.sort(key=lambda x: x.get('published', ''), reverse=True)
 
             rss_items = _fetch_rss_items(rss_feeds)
@@ -290,21 +448,23 @@ def _fetch_and_cache_news():
 
 def start_news_updater(app):
     """Start background thread to refresh news every 30 minutes."""
-    try:
-        _fetch_and_cache_news()
-    except Exception:
-        pass
     def _run():
+        # Initial fetch in background (don't block startup)
+        try:
+            _fetch_and_cache_news()
+            app.logger.info("News cache populated on startup")
+        except Exception as e:
+            app.logger.error(f"News cache initial fetch failed: {e}")
         while True:
             time.sleep(1800)
             try:
                 _fetch_and_cache_news()
-            except Exception:
-                pass
+            except Exception as e:
+                app.logger.error(f"News cache refresh failed: {e}")
     t = threading.Thread(target=_run, daemon=True)
     t.start()
 
-# Start background news updater immediately
+# Start background news updater
 start_news_updater(app)
 
 PREMIUM_TIERS = {
@@ -331,6 +491,7 @@ PREMIUM_TIERS = {
 # ── Search Quota ──
 ANONYMOUS_DAILY_LIMIT = 1
 FREE_DAILY_LIMIT = 24
+FREE_BONUS_LIMIT = 25
 PREMIUM_500_DAILY_LIMIT = 500
 
 # ── CSRF Protection ──
@@ -1281,7 +1442,7 @@ class DataManager:
         if premium_info:
             limit = premium_info.get('daily_limit', PREMIUM_500_DAILY_LIMIT)
         else:
-            limit = FREE_DAILY_LIMIT
+            limit = FREE_DAILY_LIMIT + FREE_BONUS_LIMIT
         return max(0, limit - count)
 
     # ── Premium ──
@@ -1529,7 +1690,7 @@ class DataManager:
             if loaded:
                 self.data = loaded
             self.data.setdefault('users', [])
-            if any(u['username'] == username for u in self.data['users']):
+            if any(u['username'].lower() == username.lower() for u in self.data['users']):
                 return None, 'Username taken'
             if email:
                 email_lower = email.strip().lower()
@@ -1558,7 +1719,7 @@ class DataManager:
                 self.data = loaded
         users = self.data.get('users', [])
         for u in users:
-            if u['username'] == username:
+            if u['username'].lower() == username.lower():
                 if self.check_password(password, u['password_hash']):
                     return u
         return None
@@ -1929,10 +2090,6 @@ def _detect_domain_entity(domain):
     return None
 
 
-def _search_google(query, max_results=5, region=None):
-    return []
-
-
 def _extract_page_text(url, timeout=5):
     try:
         ua = UserAgent()
@@ -1962,10 +2119,15 @@ class ImprovedSearch:
         except:
             self.user_agent = type('SimpleUA',(),{'random':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36','__getitem__':lambda s,k:s.random})()
         self.executor = ThreadPoolExecutor(max_workers=8)
-        self.search_urls = ["ddg_html://text", "ddg_reddit://text", "ddg_video://text"]
+        self.search_urls = ["ddg_html://text", "ddg_reddit://text", "ddg_video://text", "google://text", "brave://text"]
         if ddgs_available:
             self.ddgs = DDGS()
             self.search_urls.append("ddgs://text")
+            # Warm up DDGS by making a quick harmless query at startup
+            try:
+                list(self.ddgs.text('warmup', max_results=1, backend='auto', safesearch='on'))
+            except Exception:
+                pass
         else:
             self.ddgs = None
         self.in_memory_cache = {}
@@ -2102,10 +2264,10 @@ class ImprovedSearch:
 
         exact_match_bonus = 0
         if query_lower in title_lower:
-            exact_match_bonus = 40
+            exact_match_bonus = 25
             title_start_ratio = title_lower.find(query_lower) / max(len(title_lower), 1)
             if title_start_ratio < 0.3:
-                exact_match_bonus += 15
+                exact_match_bonus += 10
 
         phrase_in_title = 0
         for i in range(len(query_terms)):
@@ -2118,10 +2280,10 @@ class ImprovedSearch:
         term_ratio = matching_terms / max(len(query_terms), 1)
 
         score = exact_match_bonus
-        score += phrase_in_title * 8
+        score += min(phrase_in_title * 5, 15)
 
         if matching_terms == len(query_terms) and not exact_match_bonus:
-            score += 20
+            score += 12
 
         short_title_penalty = max(0, 8 - len(result.title.split())) * 1.5
         score -= short_title_penalty
@@ -2130,7 +2292,6 @@ class ImprovedSearch:
         if title_is_list:
             score -= 5
 
-        # Age/year number detection — boost when query mentions age and title matches
         age_nums = re.findall(r'\b(\d{1,2})\b', query_lower)
         if age_nums and ('year' in query_lower or 'yr' in query_lower or 'old' in query_lower):
             for num in age_nums:
@@ -2139,7 +2300,7 @@ class ImprovedSearch:
                 if f'{num} year' in title_lower or f'{num} yr' in title_lower:
                     score += 25
 
-        return max(0, score)
+        return max(0, min(score, 50))
 
     def _score_domain_authority(self, url):
         domain = urlparse(url).netloc.lower()
@@ -2702,22 +2863,73 @@ class ImprovedSearch:
                 return True
         return False
 
+    def _classify_query_intent(self, query):
+        q = query.lower().strip()
+        if re.search(r'^how do(?:es)?\s+\S+\s+work', q):
+            return 'explanation'
+        if q.startswith('how do i') or q.startswith('how can i') or q.startswith('how to'):
+            return 'tutorial'
+        if q.startswith('how does') or q.startswith('how do'):
+            return 'tutorial'
+        if q.startswith('what is') or q.startswith('what are') or q.startswith('what does') or q.startswith('define'):
+            return 'definition'
+        if q.startswith('why') or q.startswith('what causes') or q.startswith('what makes'):
+            return 'reason'
+        if q.startswith('where') or q.startswith('who') or q.startswith('when'):
+            return 'fact'
+        if q.startswith('best') or q.startswith('top') or ' vs ' in q or 'versus' in q:
+            return 'comparison'
+        if q.startswith('how much') or q.startswith('how many') or q.startswith('price') or q.startswith('cost'):
+            return 'quantitative'
+        return 'general'
+
+    def _score_intent_match(self, query_intent, title, snippet):
+        tl = (title or '').lower()
+        sl = (snippet or '').lower()
+        combined = tl + ' ' + sl
+        if query_intent == 'explanation':
+            if tl.startswith('how does') or tl.startswith('how do'):
+                return 30
+            if 'how it work' in combined or 'how does it work' in combined or 'explain' in tl:
+                return 30
+            if 'overview' in tl or 'guide' in tl or '的工作原理' in combined:
+                return 20
+            if 'how to' in tl and 'use' in tl:
+                return -15
+            if 'getting started' in tl:
+                return -12
+            return 0
+        if query_intent == 'tutorial':
+            if 'how to' in tl or 'tutorial' in tl or 'guide' in tl or 'step' in tl:
+                return 25
+            if 'getting started' in tl:
+                return 20
+            return 0
+        if query_intent == 'definition':
+            if 'what is' in tl[:30] or 'define' in tl or 'meaning' in tl:
+                return 25
+            if 'what is' in combined[:60]:
+                return 15
+            return 0
+        return 0
+
     def _rank_results(self, query, results, filter_type='general'):
         intent = SearchIntent(query)
+        query_intent_subtype = self._classify_query_intent(query)
         blacklist = data_manager.get_blacklist()
 
         scored = []
         for result in results:
             s = 0
 
-            s += self._score_title_match(query, intent, result) * 0.22
-            s += self._score_snippet_relevance(query, intent, result) * 0.16
-            s += self._score_domain_authority(result.url) * 0.14
+            s += self._score_title_match(query, intent, result) * 0.18
+            s += self._score_snippet_relevance(query, intent, result) * 0.14
+            s += self._score_domain_authority(result.url) * 0.08
             s += self._score_exact_domain_match(query, result) * 0.10
             s += self._score_url_quality(query, result.url) * 0.06
             s += self._score_freshness(result) * 0.08
             s += self._score_category_relevance(query, intent, result) * 0.06
-            s += self._score_content_quality(result) * 0.11
+            s += self._score_content_quality(result) * 0.10
             s += self._score_reddit_boost(query, intent, result) * 0.07
             s += self._score_navigational_domain_boost(query, result)
             s += self._score_answer_quality(query, result.snippet) * 0.08
@@ -2726,6 +2938,7 @@ class ImprovedSearch:
             s += self._score_title_naturalness(result.title)
             s += self._score_url_depth_penalty(result.url)
             s += self._score_academic_boost(query, intent, result)
+            s += self._score_intent_match(query_intent_subtype, result.title, result.snippet) * 0.20
 
             domain = urlparse(result.url).netloc.lower()
             domain = re.sub(r'^www\.', '', domain)
@@ -2735,6 +2948,12 @@ class ImprovedSearch:
 
             s = max(0, s)
 
+            # Penalize off-category results in general search
+            if filter_type == 'general':
+                if result.category == 'video':
+                    s -= 15
+                if result.category == 'discussion':
+                    s -= 5
             if filter_type == 'shopping':
                 if any(d in domain for d in ['amazon.', 'bestbuy.', 'walmart.', 'newegg.', 'target.', 'etsy.', 'ebay.', 'shop.', 'store.', 'costco.']):
                     s += 30
@@ -2954,7 +3173,7 @@ class ImprovedSearch:
                 if not self.ddgs:
                     return []
                 try:
-                    ddgs_kwargs = dict(query=query, max_results=5, backend='html', safesearch='off')
+                    ddgs_kwargs = dict(query=query, max_results=10, backend='html', safesearch='off')
                     if region:
                         ddgs_kwargs['region'] = region
                     raw = self.ddgs.text(**ddgs_kwargs)
@@ -2978,6 +3197,10 @@ class ImprovedSearch:
                 return self._search_ddg_with_site(query, 'site:reddit.com')
             elif search_url == 'ddg_video://text':
                 return self._search_ddg_with_site(query, 'site:youtube.com OR site:vimeo.com OR site:dailymotion.com')
+            elif search_url == 'google://text':
+                return _search_google(query, max_results=5)
+            elif search_url == 'brave://text':
+                return _search_brave(query, max_results=10)
             elif 'duckduckgo' in search_url:
                 all_results = []
                 offsets = [0]
@@ -3083,7 +3306,7 @@ class ImprovedSearch:
     def search(self, query, page=1, filter_type='general', region=None):
         """Main search method with pagination and fallback"""
         self._current_region = region
-        per_page = 10
+        per_page = 20
         cache_key = self._get_cache_key(f"{query}_{filter_type}_{region or 'all'}", 1)
         cached_all = self._get_from_cache(cache_key)
         all_results = None
@@ -3101,7 +3324,8 @@ class ImprovedSearch:
                 futures[future] = search_url
 
             try:
-                done, not_done = wait(list(futures.keys()), timeout=5, return_when=ALL_COMPLETED)
+                # Stage 1: collect fast results (DDG sources typically finish in 1-2s)
+                done, not_done = wait(list(futures.keys()), timeout=3, return_when=FIRST_COMPLETED)
                 seen_urls = set()
                 for future in done:
                     try:
@@ -3113,13 +3337,28 @@ class ImprovedSearch:
                                     results.append(r)
                     except Exception as e:
                         errors.append(str(e))
-                for f in not_done:
-                    f.cancel()
+                # Stage 2: always wait for remaining engines (Brave needs 2-4s)
+                if not_done:
+                    remaining, _ = wait(not_done, timeout=2.5, return_when=ALL_COMPLETED)
+                    for future in remaining:
+                        try:
+                            current_results = future.result()
+                            if current_results:
+                                for r in current_results:
+                                    if r.url not in seen_urls:
+                                        seen_urls.add(r.url)
+                                        results.append(r)
+                        except Exception as e:
+                            errors.append(str(e))
+                for f in futures:
+                    if not f.done():
+                        f.cancel()
             except TimeoutError:
                 app.logger.warning(f"Search timed out for query: {query[:50]}")
 
             if not results:
-                app.logger.warning("Primary search returned no results")
+                app.logger.warning("Primary search returned no results, trying fallback")
+                results = self._search_fallback(query, region)
 
             if results:
                 ranked_results = self._rank_results(query, results, filter_type)
@@ -3413,12 +3652,12 @@ class ImprovedSearch:
         if cached_suggestions:
             return cached_suggestions
 
-        # 1. DuckDuckGo suggest API (may be blocked on some hosts)
+        # 1. DuckDuckGo suggest API (fast, <500ms typical)
         try:
             r = self.session.get(
                 'https://duckduckgo.com/ac/',
                 params={'q': query, 'type': 'list'},
-                timeout=3
+                timeout=1.5
             )
             if r and r.status_code == 200 and r.text.strip():
                 data = r.json()
@@ -3430,12 +3669,12 @@ class ImprovedSearch:
         except Exception as e:
             app.logger.debug(f"DDG suggest failed: {e}")
 
-        # 2. Google suggest API (fallback, works on most hosts)
+        # 2. Google suggest API (fallback)
         try:
             r = self.session.get(
                 'https://suggestqueries.google.com/complete/search',
                 params={'q': query, 'client': 'firefox', 'hl': 'en'},
-                timeout=3
+                timeout=1.5
             )
             if r and r.status_code == 200 and r.text.strip():
                 data = r.json()
@@ -3449,7 +3688,47 @@ class ImprovedSearch:
         except Exception as e:
             app.logger.debug(f"Google suggest failed: {e}")
 
+        # 3. Local fallback — generate basic completions so box never stalls
+        try:
+            local = self._generate_local_suggestions(query)
+            if local:
+                self._save_to_cache(cache_key, local, expire_time=300)
+                return local
+        except Exception:
+            pass
+
         return []
+
+    def _generate_local_suggestions(self, query):
+        """Fast local suggestion generator when APIs are unavailable"""
+        q = query.lower().strip()
+        starters = {
+            'how': ['how to', 'how does', 'how do', 'how can', 'how is'],
+            'what': ['what is', 'what are', 'what does', 'what was', 'what if'],
+            'why': ['why is', 'why does', 'why do', 'why are', 'why was'],
+            'when': ['when is', 'when does', 'when will', 'when did', 'when was'],
+            'where': ['where is', 'where can', 'where does', 'where are', 'where to'],
+            'who': ['who is', 'who are', 'who was', 'who invented', 'who created'],
+            'which': ['which is', 'which are', 'which one', 'which way', 'which side'],
+            'best': ['best', 'best way', 'best place', 'best time', 'best website'],
+            'top': ['top 10', 'top 5', 'top rated', 'top', 'top websites'],
+            'can': ['can you', 'can i', 'can we', 'can someone', 'can python'],
+            'is': ['is there', 'is it', 'is this', 'is that', 'is python'],
+            'does': ['does anyone', 'does python', 'does this', 'does it', 'does windows'],
+        }
+        results = []
+        first_word = q.split()[0] if q.split() else q
+        for starter, completions in starters.items():
+            if first_word.startswith(starter):
+                for c in completions:
+                    if q.startswith(c):
+                        results.append(query)
+                    else:
+                        results.append(c)
+                break
+        if query not in results:
+            results.insert(0, query)
+        return results[:5]
 
 KNOWLEDGE_PANELS = {
     'python': {
@@ -4532,8 +4811,11 @@ def home():
         daily_remaining = data_manager.get_daily_remaining(session['user_id'])
         if profile:
             tier_key = profile.get('premium_tier', 'free')
-            tier_info = PREMIUM_TIERS.get(tier_key, {})
-            quota_limit = tier_info.get('daily_limit', 24)
+            if tier_key in PREMIUM_TIERS:
+                tier_info = PREMIUM_TIERS[tier_key]
+                quota_limit = tier_info.get('daily_limit')
+            else:
+                quota_limit = FREE_DAILY_LIMIT + FREE_BONUS_LIMIT
             user_weather_location = profile.get('weather_location', '') or ''
     return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=session.get('user_country', ''), country_name=COUNTRY_NAMES.get(session.get('user_country', '')), user_stat=user_stats, daily_remaining=daily_remaining, quota_limit=quota_limit, user_weather_location=user_weather_location)
 
@@ -4564,8 +4846,11 @@ def search():
             daily_remaining = data_manager.get_daily_remaining(session['user_id'])
             if profile:
                 tier_key = profile.get('premium_tier', 'free')
-                tier_info = PREMIUM_TIERS.get(tier_key, {})
-                quota_limit = tier_info.get('daily_limit', 24)
+                if tier_key in PREMIUM_TIERS:
+                    tier_info = PREMIUM_TIERS[tier_key]
+                    quota_limit = tier_info.get('daily_limit')
+                else:
+                    quota_limit = FREE_DAILY_LIMIT + FREE_BONUS_LIMIT
                 user_weather_location = profile.get('weather_location', '') or ''
         return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=user_country, country_name=COUNTRY_NAMES.get(user_country), user_stat=user_stats, daily_remaining=daily_remaining, quota_limit=quota_limit, user_weather_location=user_weather_location)
 
@@ -4578,13 +4863,16 @@ def search():
     anon_count = 0
     anon_today = ''
 
+    quota_bonus_active = False
     if user_id:
         premium_info = data_manager.get_premium_info(user_id)
         if premium_info:
             quota_limit = premium_info.get('daily_limit', PREMIUM_500_DAILY_LIMIT)
         else:
-            quota_limit = FREE_DAILY_LIMIT
+            quota_limit = FREE_DAILY_LIMIT + FREE_BONUS_LIMIT
         _, count = data_manager.get_or_create_daily_count(user_id)
+        if not premium_info and count > FREE_DAILY_LIMIT and count < quota_limit:
+            quota_bonus_active = True
         quota_remaining = max(0, quota_limit - count)
         quota_exceeded = quota_remaining <= 0
     else:
@@ -4654,6 +4942,7 @@ def search():
             quota_remaining=0,
             quota_limit=quota_limit,
             quota_is_anonymous=quota_is_anonymous,
+            quota_bonus_active=False,
             page=1,
             total_results=0,
             info_box=None,
@@ -4739,6 +5028,7 @@ def search():
             quota_remaining=quota_remaining,
             quota_limit=quota_limit,
             quota_is_anonymous=quota_is_anonymous,
+            quota_bonus_active=quota_bonus_active,
         ))
         if quota_is_anonymous:
             cookie_val, max_age = make_anonymous_quota_cookie(anon_count, anon_today)
@@ -4768,6 +5058,7 @@ def search():
             quota_remaining=quota_remaining,
             quota_limit=quota_limit,
             quota_is_anonymous=quota_is_anonymous,
+            quota_bonus_active=quota_bonus_active,
         ))
         if quota_is_anonymous:
             cookie_val, max_age = make_anonymous_quota_cookie(anon_count, anon_today)
@@ -4784,7 +5075,7 @@ def api_ai_summary():
         if premium_info:
             ai_limit = premium_info.get('daily_limit', PREMIUM_500_DAILY_LIMIT)
         else:
-            ai_limit = FREE_DAILY_LIMIT
+            ai_limit = FREE_DAILY_LIMIT + FREE_BONUS_LIMIT
         _, count = data_manager.get_or_create_daily_count(user_id)
         if count >= ai_limit:
             return jsonify({'ok': False, 'error': 'Daily search limit reached. Upgrade to Premium for more searches.'}), 403
@@ -4803,9 +5094,79 @@ def api_ai_summary():
         url = request.form.get('url', '') or request.args.get('url', '') or ''
         title = request.form.get('title', '') or request.args.get('title', '') or ''
         snippet = request.form.get('snippet', '') or request.args.get('snippet', '') or ''
+        results_raw = request.form.get('results', '') or request.args.get('results', '') or ''
 
         if not q and not snippet:
             return jsonify({'ok': False, 'error': 'Query required'}), 400
+
+        web_context = ''
+        sources = []
+        import re as _re
+        if not (url and snippet):
+            import httpx as _httpx
+            from urllib.parse import urlparse as _urlparse
+            _skip_domains = ['youtube.com', 'youtu.be', 'vimeo.com', 'instagram.com',
+                             'facebook.com', 'fb.com', 'tiktok.com', 'twitter.com', 'x.com']
+            if results_raw:
+                try:
+                    import json
+                    provided = json.loads(results_raw)
+                    for r in provided[:3]:
+                        r_url = (r.get('url') or '').strip()
+                        r_title = (r.get('title') or '').strip()
+                        if not r_url or not r_url.startswith('http'):
+                            continue
+                        r_domain = _urlparse(r_url).netloc.lower()
+                        r_domain = re.sub(r'^www\.', '', r_domain)
+                        if any(s in r_domain for s in _skip_domains):
+                            continue
+                        try:
+                            resp = _httpx.get(r_url, timeout=8, follow_redirects=True,
+                                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0'})
+                            if resp.status_code == 200:
+                                text = resp.text
+                                text = _re.sub(r'<script[^>]*>.*?</script>', '', text, flags=_re.DOTALL|_re.IGNORECASE)
+                                text = _re.sub(r'<style[^>]*>.*?</style>', '', text, flags=_re.DOTALL|_re.IGNORECASE)
+                                text = _re.sub(r'<[^>]+>', ' ', text)
+                                text = _re.sub(r'\s+', ' ', text).strip()
+                                text = text[:1500]
+                                if len(text) > 100:
+                                    idx = len(sources) + 1
+                                    sources.append({'url': r_url, 'title': r_title})
+                                    web_context += f"\n\n[Source {idx}]\nURL: {r_url}\nTitle: {r_title}\nContent: {text}"
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
+            if not web_context:
+                try:
+                    from ddgs import DDGS as _DDGS
+                    _ddgs = _DDGS(timeout=5)
+                    raw_results = list(_ddgs.text(q, max_results=3, backend='auto', safesearch='on'))
+                    fetch_urls = []
+                    for r in raw_results:
+                        href = r.get('href', '')
+                        if href and href.startswith('http'):
+                            fetch_urls.append(href)
+                    for fu in fetch_urls[:2]:
+                        try:
+                            resp = _httpx.get(fu, timeout=8, follow_redirects=True,
+                                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0'})
+                            if resp.status_code == 200:
+                                text = resp.text
+                                text = _re.sub(r'<script[^>]*>.*?</script>', '', text, flags=_re.DOTALL|_re.IGNORECASE)
+                                text = _re.sub(r'<style[^>]*>.*?</style>', '', text, flags=_re.DOTALL|_re.IGNORECASE)
+                                text = _re.sub(r'<[^>]+>', ' ', text)
+                                text = _re.sub(r'\s+', ' ', text).strip()
+                                text = text[:1500]
+                                if len(text) > 100:
+                                    idx = len(sources) + 1
+                                    sources.append({'url': fu, 'title': ''})
+                                    web_context += f"\n\n[Source {idx}]\nURL: {fu}\nContent: {text}"
+                        except Exception:
+                            continue
+                except Exception as fetch_err:
+                    app.logger.warning(f"AI web fetch error: {fetch_err}")
 
         if url and snippet:
             prompt = f"""You are a helpful search assistant. Summarize the following web page result concisely.
@@ -4816,13 +5177,27 @@ Snippet: {snippet}
 
 Question from user: {q}
 
-Provide a clear, useful summary (2-4 sentences) that answers the user's question based on this result. Be factual and direct."""
+Provide a clear, useful summary (2-4 sentences) that answers the user's question based on this result. Be factual and direct. When citing the source, use markdown link format like [Source Name]({url})."""
+        elif web_context:
+            prompt = f"""You are a helpful search assistant. Answer the user's question based on the web content below.
+
+Question: {q}
+
+Web content:{web_context}
+
+Provide a clear, factual answer (2-3 sentences) based ONLY on the web content above.
+
+Each source is labeled [Source 1], [Source 2] etc. in the content above.
+After each sentence that uses information from a source, add the source number in brackets.
+Example: "Rome is known for its ancient history [Source 1]. Venice offers unique canal tours [Source 2]."
+Cite sources using ONLY the source number like [Source 1] or [Source 2].
+Do NOT write out URLs. Do NOT make up sources not listed above."""
         else:
             prompt = f"""You are a helpful search assistant. Provide a concise, useful answer to the user's question based on search results.
 
 Question: {q}
 
-Provide a clear answer (2-4 sentences) with key facts. Be direct and helpful. If the question is about a definition or fact, give the answer straight away."""
+Provide a clear answer (2-4 sentences) with key facts. Be direct and helpful. If you're unsure, say so. Do NOT make up URLs or sources."""
 
         from groq import Groq
         groq_client = Groq(api_key=os.environ.get('GROQ_API_KEY'))
@@ -4833,9 +5208,78 @@ Provide a clear answer (2-4 sentences) with key facts. Be direct and helpful. If
             temperature=0.3,
         )
         answer = completion.choices[0].message.content.strip()
-        return jsonify({'ok': True, 'summary': answer})
+
+        # Post-process: replace hallucinated URLs with real source URLs
+        if url and snippet:
+            safe_url = url.replace(')', '%29')
+            answer = _re.sub(r'\[([^\]]+)\]\([^)]+\)', lambda m: f'[{m.group(1)}]({safe_url})', answer)
+        elif sources:
+            for i, src in enumerate(sources):
+                n = i + 1
+                safe_url = src["url"].replace(')', '%29')
+                for pattern in (f'[Source {n}]', f'[source {n}]', f'[{n}]'):
+                    answer = answer.replace(pattern, f'[{n}]({safe_url})')
+            # Fallback: replace empty brackets with first source link
+            first_url = sources[0]["url"].replace(')', '%29')
+            answer = _re.sub(r'\(\s*\)', f'[1]({first_url})', answer)
+            # Clean up any lingering bare brackets or empty links
+            answer = _re.sub(r'\bhttps?://[^\s<)\]]+', '', answer)
+            answer = _re.sub(r'\[\d+\]\(\)', '', answer)
+
+        return jsonify({'ok': True, 'summary': answer, 'sources': sources})
     except Exception as e:
         app.logger.error(f"AI summary error: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/search-supplement')
+def api_search_supplement():
+    query = request.args.get('q', '').strip()
+    if not query:
+        return jsonify({'ok': False, 'error': 'Query required'}), 400
+    existing_urls = set(request.args.get('existing', '').split(',')) if request.args.get('existing') else set()
+    try:
+        extra = []
+        seen_urls = set(existing_urls)
+        # Run Brave search as background supplement
+        try:
+            brave_results = _search_brave(query, max_results=10)
+            for r in brave_results:
+                if r.url not in seen_urls:
+                    seen_urls.add(r.url)
+                    extra.append(r.to_dict())
+        except Exception as e:
+            app.logger.warning(f"Supplement Brave error: {e}")
+        # Also try DDGS library if available
+        if ddgs_available:
+            try:
+                from ddgs import DDGS as _DDGS
+                _ddgs2 = _DDGS(timeout=5)
+                ddgs_raw = list(_ddgs2.text(query, max_results=10, backend='auto', safesearch='on'))
+                for r in ddgs_raw:
+                    href = r.get('href', '')
+                    title = r.get('title', '')
+                    body = r.get('body', '')
+                    if href and title and href not in seen_urls:
+                        seen_urls.add(href)
+                        from urllib.parse import urlparse as _up
+                        extra.append({
+                            'title': title,
+                            'url': href,
+                            'display_url': href[:60] + '...' if len(href) > 60 else href,
+                            'snippet': (body or '')[:300],
+                            'category': 'general',
+                            'favicon': f"https://www.google.com/s2/favicons?domain={href}",
+                            'domain': _up(href).netloc,
+                            'date': None,
+                            'score': 0,
+                            'type': 'regular',
+                        })
+            except Exception as e:
+                app.logger.warning(f"Supplement DDGS error: {e}")
+        return jsonify({'ok': True, 'results': extra})
+    except Exception as e:
+        app.logger.error(f"Supplement search error: {e}")
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
@@ -5466,6 +5910,16 @@ def logout():
     session.clear()
     return redirect(url_for('home'))
 
+@app.route('/api/check-username')
+def api_check_username():
+    username = request.args.get('username', '').strip()
+    if not username or len(username) < 3 or len(username) > 24:
+        return jsonify({'available': False, 'error': 'Invalid username'})
+    loaded = _load_json()
+    users = loaded.get('users', []) if loaded else []
+    taken = any(u['username'].lower() == username.lower() for u in users)
+    return jsonify({'available': not taken})
+
 @app.route('/api/captcha')
 def captcha():
     words = ["apple","beach","cloud","dance","eagle","flame","grape","house","ivory","jewel","knife","lemon","mango","night","ocean","pearl","queen","river","stone","tiger","unity","vivid","water","yacht","zebra","bloom","creek","dwarf","ember","frost","globe","honey","image","jolly","koala","lunar","magic","noble","orbit","piano","quiet","radar","solar","tulip","umbra","vocal","wheat","algae","birch","coral","sunset","midnight","winter","summer","autumn","spring","mountain","forest","desert","garden","silver","golden","crystal","thunder","shadow","spirit"]
@@ -5520,9 +5974,17 @@ def check_captcha(token, answer):
 def api_news():
     category = request.args.get('category', 'top')
     with NEWS_CACHE_LOCK:
-        if category in NEWS_CACHE:
+        if category in NEWS_CACHE and NEWS_CACHE[category]:
             items = NEWS_CACHE[category]
         else:
+            items = None
+    if items is None:
+        # On-demand refresh if cache is empty
+        try:
+            _fetch_and_cache_news()
+            with NEWS_CACHE_LOCK:
+                items = NEWS_CACHE.get(category, [])
+        except Exception:
             items = []
     source_label = CATEGORY_SOURCE_LABELS.get(category, 'News')
     return jsonify({'ok': True, 'items': items, 'source': source_label})

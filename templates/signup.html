@@ -5,148 +5,265 @@
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>{% if login_error %}Sign in{% else %}Sign up{% endif %} - arlong</title>
     <style>
-        :root{--bg:#202124;--bg2:#303134;--text:#e8eaed;--text2:#bdc1c6;--text3:#9aa0a6;--link:#8ab4f8;--border:#3c4043;--hover-bg:#3c4043;--green:#81c995}
+        :root {
+            --bg: #f5f5f7;
+            --card-bg: rgba(255,255,255,.82);
+            --card-border: rgba(0,0,0,.08);
+            --text: #1d1d1f;
+            --text2: #6e6e73;
+            --text3: #86868b;
+            --link: #0071e3;
+            --link-hover: #0077ed;
+            --green: #30d158;
+            --red: #ff453a;
+            --shadow: rgba(0,0,0,.04);
+            --input-bg: rgba(0,0,0,.04);
+            --input-border: rgba(0,0,0,.1);
+            --input-focus: rgba(0,113,227,.3);
+            --ring: 0 0 0 3px rgba(0,113,227,.25);
+            --spring: cubic-bezier(.25,.1,.25,1);
+            --ease: cubic-bezier(.4,0,.2,1);
+        }
+        .dark-mode {
+            --bg: #1c1c1e;
+            --card-bg: rgba(44,44,46,.85);
+            --card-border: rgba(255,255,255,.08);
+            --text: #f5f5f7;
+            --text2: #a1a1a6;
+            --text3: #6e6e73;
+            --link: #2997ff;
+            --link-hover: #40a9ff;
+            --green: #30d158;
+            --red: #ff453a;
+            --shadow: rgba(0,0,0,.2);
+            --input-bg: rgba(255,255,255,.06);
+            --input-border: rgba(255,255,255,.12);
+            --input-focus: rgba(41,151,255,.35);
+            --ring: 0 0 0 3px rgba(41,151,255,.3);
+        }
         *,*::before,*::after{box-sizing:border-box}
-        body{margin:0;padding:40px 20px;font-family:arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;display:flex;flex-direction:column;align-items:center;min-height:100vh}
-        .logo{font-size:36px;font-family:'Product Sans',Arial,sans-serif;letter-spacing:-1px;margin-bottom:4px;display:flex;align-items:center;gap:2px}
-        .sub{color:var(--text3);font-size:14px;margin-bottom:28px;text-align:center}
-        .card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px;width:100%;max-width:400px}
-        .card h2{margin:0 0 6px;font-weight:400;font-size:20px}
-        .card .hint{color:var(--text3);font-size:13px;margin-bottom:20px}
-        .steps{display:flex;gap:6px;margin-bottom:24px;justify-content:center}
-        .step{width:32px;height:4px;border-radius:2px;background:var(--border);transition:.3s}
-        .step.active{background:var(--link)}
-        .step.done{background:var(--green)}
-        .step-form{display:none}
+        body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Helvetica Neue',sans-serif;background:var(--bg);color:var(--text);font-size:15px;display:flex;flex-direction:column;align-items:center;min-height:100vh;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;transition:background .35s var(--ease),color .35s var(--ease)}
+        .top-bar{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:8px 20px;background:var(--card-bg);-webkit-backdrop-filter:blur(40px) saturate(1.4);backdrop-filter:blur(40px) saturate(1.4);border-bottom:1px solid var(--card-border)}
+        .top-bar .mini-logo{font-size:18px;font-weight:600;letter-spacing:-.3px;color:var(--text);text-decoration:none}
+        .top-bar .mini-logo:hover{opacity:.7}
+        .top-bar .theme-toggle{background:none;border:none;color:var(--text2);cursor:pointer;font-size:18px;padding:4px 8px;border-radius:6px;transition:.2s}
+        .top-bar .theme-toggle:hover{background:var(--input-bg);color:var(--text)}
+        .signup-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:60px 20px 40px;width:100%;max-width:420px}
+        .logo{font-size:32px;font-weight:700;letter-spacing:-.5px;color:var(--text);margin-bottom:2px;transition:opacity .5s var(--ease)}
+        .sub{color:var(--text3);font-size:14px;margin-bottom:32px;text-align:center;font-weight:400}
+        .card{background:var(--card-bg);-webkit-backdrop-filter:blur(40px) saturate(1.4);backdrop-filter:blur(40px) saturate(1.4);border:1px solid var(--card-border);border-radius:16px;padding:32px;width:100%;box-shadow:0 8px 40px var(--shadow);transition:background .35s var(--ease),border-color .35s var(--ease)}
+        .card h2{margin:0 0 2px;font-weight:600;font-size:22px;letter-spacing:-.3px}
+        .card .hint{color:var(--text3);font-size:14px;margin-bottom:24px;font-weight:400}
+        .steps{display:flex;gap:8px;margin-bottom:28px;justify-content:center;align-items:center}
+        .step{width:36px;height:4px;border-radius:2px;background:var(--input-border);transition:all .4s var(--spring);position:relative;overflow:hidden}
+        .step::after{content:'';position:absolute;top:0;left:0;height:100%;width:0;background:var(--link);border-radius:2px;transition:width .5s var(--spring)}
+        .step.active::after{width:100%}
+        .step.done::after{width:100%;background:var(--green)}
+        .step-wrap{position:relative;overflow:hidden}
+        .step-form{display:none;animation:slideIn .45s var(--spring)}
         .step-form.active{display:block}
-        label{display:block;font-size:13px;color:var(--text2);margin-bottom:4px;margin-top:14px}
+        @keyframes slideIn{0%{opacity:0;transform:translateX(16px)}100%{opacity:1;transform:translateX(0)}}
+        @keyframes slideOut{0%{opacity:1;transform:translateX(0)}100%{opacity:0;transform:translateX(-16px)}}
+        label{display:block;font-size:13px;font-weight:500;color:var(--text2);margin-bottom:5px;margin-top:18px;letter-spacing:.2px}
         label:first-of-type{margin-top:0}
-        input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);outline:none}
-        input:focus{border-color:var(--link)}
-        .btn{width:100%;padding:10px;border:none;border-radius:6px;font-size:14px;cursor:pointer;margin-top:16px;font-weight:500}
+        .input-wrap{position:relative}
+        .input-wrap input{width:100%;padding:11px 13px;border:1px solid var(--input-border);border-radius:10px;font-size:14px;background:var(--input-bg);color:var(--text);outline:none;transition:all .25s var(--ease);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif;-webkit-appearance:none;appearance:none}
+        .input-wrap input:focus{border-color:var(--link);box-shadow:var(--ring);background:var(--card-bg)}
+        .input-wrap input::placeholder{color:var(--text3)}
+        .input-wrap input.input-error{border-color:var(--red);box-shadow:0 0 0 3px rgba(255,69,58,.2)}
+        .input-wrap input.input-valid{border-color:var(--green);box-shadow:0 0 0 3px rgba(48,209,88,.2)}
+        .input-status{position:absolute;right:11px;top:50%;transform:translateY(-50%);width:18px;height:18px;pointer-events:none;opacity:0;transition:opacity .25s var(--ease)}
+        .input-status.show{opacity:1}
+        .input-status svg{width:18px;height:18px;display:block}
+        .input-status .ck-bg{fill:var(--green)}.input-status .ck-check{fill:none;stroke:#fff;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+        .input-status .x-bg{fill:var(--red)}.input-status .x-line{fill:none;stroke:#fff;stroke-width:2.5;stroke-linecap:round}
+        .input-status .spinner{width:18px;height:18px;border:2px solid var(--input-border);border-top-color:var(--link);border-radius:50%;animation:spin .7s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .field-hint{font-size:12px;color:var(--text3);margin-top:5px;display:flex;align-items:center;gap:4px;transition:all .25s var(--ease);min-height:18px}
+        .field-hint.valid{color:var(--green)}
+        .field-hint.invalid{color:var(--red)}
+        .field-hint .hint-icon{width:14px;height:14px;flex-shrink:0}
+        .btn{width:100%;padding:12px;border:none;border-radius:10px;font-size:15px;cursor:pointer;margin-top:20px;font-weight:500;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',sans-serif;transition:all .25s var(--ease);display:flex;align-items:center;justify-content:center;gap:8px;position:relative;-webkit-appearance:none;appearance:none}
         .btn-primary{background:var(--link);color:#fff}
-        .btn-primary:hover{opacity:.9}
-        .btn-secondary{background:var(--bg);color:var(--text);border:1px solid var(--border)}
-        .btn-secondary:hover{background:var(--hover-bg)}
-        .btn-row{display:flex;gap:8px;margin-top:16px}
+        .btn-primary:hover{background:var(--link-hover)}
+        .btn-primary:active{transform:scale(.97)}
+        .btn-primary.loading{pointer-events:none;opacity:.8}
+        .btn-primary .btn-spinner{display:none;width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+        .btn-primary.loading .btn-spinner{display:block}
+        .btn-primary.loading .btn-text{opacity:.7}
+        .btn-secondary{background:var(--input-bg);color:var(--text2);border:1px solid var(--input-border)}
+        .btn-secondary:hover{background:var(--card-border);color:var(--text)}
+        .btn-secondary:active{transform:scale(.97)}
+        .btn-row{display:flex;gap:10px;margin-top:20px}
         .btn-row .btn{margin-top:0}
-        .btn-row .btn:first-child{flex:0 0 auto}
+        .btn-row .btn:first-child{flex:0 0 auto;padding:12px 20px}
         .btn-row .btn:last-child{flex:1}
-        .error{background:#3c2020;color:#f28b82;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:16px}
-        .switch{text-align:center;margin-top:16px;font-size:13px;color:var(--text3)}
-        .switch a{color:var(--link);text-decoration:none}
+        .error{background:rgba(255,69,58,.1);color:var(--red);padding:11px 14px;border-radius:10px;font-size:13px;margin-bottom:0;border:1px solid rgba(255,69,58,.15);display:flex;align-items:center;gap:8px;font-weight:500}
+        .error svg{width:16px;height:16px;flex-shrink:0}
+        .switch{text-align:center;margin-top:20px;font-size:13px;color:var(--text3)}
+        .switch a{color:var(--link);text-decoration:none;font-weight:500}
         .switch a:hover{text-decoration:underline}
-        .info{font-size:12px;color:var(--text3);margin-top:16px;line-height:1.5}
-        .opt{font-size:11px;color:var(--text3);margin-top:2px}
-        .pw-hint{font-size:11px;color:var(--text3);margin-top:4px}
-        .pw-hint.valid{color:var(--green)}
-        .pw-hint.invalid{color:#f28b82}
-        .loading-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(32,33,36,.85);z-index:9999;flex-direction:column;align-items:center;justify-content:center}
-        .loading-overlay.show{display:flex}
-        .lo-spinner{width:36px;height:36px;border:3px solid var(--border);border-top:3px solid var(--link);border-radius:50%;animation:lo-spin .8s linear infinite}
-        @keyframes lo-spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
-        .lo-text{color:var(--text2);font-size:14px;margin-top:12px}
+        .info{font-size:12px;color:var(--text3);margin-top:20px;line-height:1.6;text-align:center}
+        .info a{color:var(--text3);text-decoration:underline}
+        .info a:hover{color:var(--link)}
+        .opt{font-size:12px;color:var(--text3);margin-top:4px;line-height:1.4}
+        .review-box{background:var(--input-bg);border-radius:10px;padding:14px 18px;font-size:13px;line-height:2;border:1px solid var(--input-border)}
+        .review-box .rv-label{color:var(--text3);font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.5px}
+        .review-box .rv-value{color:var(--text);font-weight:500}
+        .review-box .rv-row{display:flex;justify-content:space-between;align-items:center;padding:2px 0}
+        .review-box .rv-divider{border:none;border-top:1px solid var(--input-border);margin:6px 0}
+        .success-icon{width:56px;height:56px;margin:0 auto 12px;display:block}
+        .success-icon .ck-bg{fill:var(--green)}.success-icon .ck-check{fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+        .chat-bubble{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--card-bg);-webkit-backdrop-filter:blur(40px) saturate(1.4);backdrop-filter:blur(40px) saturate(1.4);border:1px solid var(--card-border);border-radius:14px;padding:12px 20px;box-shadow:0 4px 20px var(--shadow);z-index:200;font-size:13px;color:var(--text2);display:none;align-items:center;gap:8px;transition:all .4s var(--spring)}
+        .chat-bubble.show{display:flex}
+        .chat-bubble .cb-spinner{width:16px;height:16px;border:2px solid var(--input-border);border-top-color:var(--link);border-radius:50%;animation:spin .7s linear infinite}
+        .chat-bubble .cb-icon{width:20px;height:20px}
     </style>
 </head>
 <body>
-    <div class="loading-overlay" id="loading-overlay">
-        <div class="lo-spinner"></div>
-        <div class="lo-text">Creating your account<span class="lo-dots">...</span></div>
+    <div class="top-bar">
+        <a href="/" class="mini-logo">arlong</a>
+        <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">&#9681;</button>
     </div>
-    <div class="logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></div>
-    <div class="sub">Community — anonymous and spam-free</div>
-    <div class="card">
-        {% if login_error or request.args.get('mode') == 'login' %}
-        <h2>Sign in</h2>
-        <div class="hint">Welcome back</div>
-        {% if login_error %}<div class="error">{{ login_error }}</div>{% endif %}
-        <form method="POST" action="/login">
-            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-            <label>Username</label>
-            <input type="text" name="username" required minlength="3" maxlength="24" autocomplete="username">
-            <label>Password</label>
-            <input type="password" name="password" required minlength="6" autocomplete="current-password">
-            <button type="submit" class="btn btn-primary">Sign in</button>
-        </form>
-        <div class="switch">No account? <a href="/signup">Sign up</a></div>
-        {% else %}
-        <h2>Create account</h2>
-        <div class="hint">Join the community in a few steps</div>
-        {% if error %}<div class="error">{{ error }}</div>{% endif %}
-        <form method="POST" action="/signup" id="signup-form">
-            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
 
-            <div class="steps" id="step-indicator">
-                <div class="step active" data-step="1"></div>
-                <div class="step" data-step="2"></div>
-                <div class="step" data-step="3"></div>
-                <div class="step" data-step="4"></div>
-            </div>
-
-            <div class="step-form active" data-step="1">
-                <label>Choose a username</label>
-                <input type="text" name="username" id="f-username" required minlength="3" maxlength="24" autocomplete="off" placeholder="e.g. explorer99" value="{{ request.form.get('username', '') }}">
-                <div class="pw-hint" id="username-hint">3-24 characters, letters and numbers</div>
-                <label>Create a password</label>
-                <input type="password" name="password" id="f-password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters">
-                <div class="pw-hint invalid" id="pw-hint">Must contain letters and numbers</div>
-                <button type="button" class="btn btn-primary" onclick="nextStep(2)">Continue</button>
-            </div>
-
-            <div class="step-form" data-step="2">
-                <label>Email address <span style="color:var(--text3)">(optional)</span></label>
-                <input type="email" name="email" id="f-email" autocomplete="email" placeholder="you@example.com" value="{{ email or '' }}">
-                <div class="opt">Used for account recovery and payment receipts</div>
-                <label>Security question</label>
-                <input type="text" name="security_question" id="f-sq" required autocomplete="off" placeholder="e.g. What is your pet's name?" value="{{ request.form.get('security_question', '') }}">
-                <label>Security answer</label>
-                <input type="text" name="security_answer" id="f-sa" required autocomplete="off" placeholder="Your answer">
-                <div class="btn-row">
-                    <button type="button" class="btn btn-secondary" onclick="prevStep(1)">Back</button>
-                    <button type="button" class="btn btn-primary" onclick="nextStep(3)">Continue</button>
+    {% if login_error or request.args.get('mode') == 'login' %}
+    <div class="signup-wrap">
+        <div class="logo">arlong</div>
+        <div class="sub">Welcome back</div>
+        <div class="card">
+            <h2>Sign in</h2>
+            <div class="hint">Sign in to your account</div>
+            {% if login_error %}<div class="error"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>{{ login_error }}</div>{% endif %}
+            <form method="POST" action="/login" id="login-form" style="margin-top:{% if login_error %}16px{% else %}0{% endif %}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <label>Username</label>
+                <div class="input-wrap">
+                    <input type="text" name="username" required minlength="3" maxlength="24" autocomplete="username" placeholder="Username">
                 </div>
-            </div>
-
-            <div class="step-form" data-step="3">
-                <label>Your location <span style="color:var(--text3)">(for weather)</span></label>
-                <input type="text" name="weather_location" id="f-wloc" autocomplete="off" placeholder="e.g. New York, NY" value="{{ request.form.get('weather_location', '') }}">
-                <div class="opt">Used to show local weather on your homepage</div>
-                <div class="btn-row">
-                    <button type="button" class="btn btn-secondary" onclick="prevStep(2)">Back</button>
-                    <button type="button" class="btn btn-primary" onclick="nextStep(4)">Continue</button>
+                <label>Password</label>
+                <div class="input-wrap">
+                    <input type="password" name="password" required minlength="6" autocomplete="current-password" placeholder="Password">
                 </div>
-            </div>
-
-            <div class="step-form" data-step="4">
-                <div style="text-align:center;padding:10px 0">
-                    <div style="font-size:48px;margin-bottom:8px;opacity:.8">
-                        <svg viewBox="0 0 24 24" style="width:48px;height:48px;fill:var(--link)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-                    </div>
-                    <div style="font-size:16px;font-weight:500;color:var(--text);margin-bottom:4px">Almost done!</div>
-                    <div style="font-size:13px;color:var(--text3);margin-bottom:16px">Review and create your account</div>
-                </div>
-                <div style="background:var(--bg);border-radius:6px;padding:12px 16px;font-size:13px;line-height:1.8">
-                    <div><strong style="color:var(--text2)">Username:</strong> <span id="review-user" style="color:var(--text)"></span></div>
-                    <div><strong style="color:var(--text2)">Email:</strong> <span id="review-email" style="color:var(--text3)">not provided</span></div>
-                    <div><strong style="color:var(--text2)">Location:</strong> <span id="review-wloc" style="color:var(--text3)">not set</span></div>
-                    <div><strong style="color:var(--text2)">Security question:</strong> <span id="review-sq" style="color:var(--text)"></span></div>
-                </div>
-                <div class="btn-row">
-                    <button type="button" class="btn btn-secondary" onclick="prevStep(3)">Back</button>
-                    <button type="submit" class="btn btn-primary">Create account</button>
-                </div>
-            </div>
-        </form>
-        <div class="switch">Have an account? <a href="/login">Sign in</a></div>
-        <div class="info">Your IP is hashed and stored securely for spam prevention. Password is salted and hashed. <a href="/privacy" style="color:var(--link)">Privacy policy</a></div>
-        {% endif %}
+                <button type="submit" class="btn btn-primary" id="login-btn"><span class="btn-text">Sign in</span><span class="btn-spinner"></span></button>
+            </form>
+            <div class="switch">Don't have an account? <a href="/signup">Sign up</a></div>
+        </div>
     </div>
 
     <script>
+        document.getElementById('login-form').addEventListener('submit',function(){
+            var btn=document.getElementById('login-btn');
+            btn.classList.add('loading');
+        });
+    </script>
+
+    {% else %}
+    <div class="signup-wrap">
+        <div class="logo">arlong</div>
+        <div class="sub">Join the community</div>
+        <div class="card">
+            <h2>Create account</h2>
+            <div class="hint">A few details to get started</div>
+            {% if error %}<div class="error"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>{{ error }}</div>{% endif %}
+            <form method="POST" action="/signup" id="signup-form" style="margin-top:{% if error %}16px{% else %}0{% endif %}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+                <div class="steps" id="step-indicator">
+                    <div class="step active" data-step="1"></div>
+                    <div class="step" data-step="2"></div>
+                    <div class="step" data-step="3"></div>
+                    <div class="step" data-step="4"></div>
+                </div>
+
+                <div class="step-wrap">
+                    <div class="step-form active" data-step="1">
+                        <label>Choose a username</label>
+                        <div class="input-wrap">
+                            <input type="text" name="username" id="f-username" required minlength="3" maxlength="24" autocomplete="off" placeholder="e.g. explorer99" value="{{ request.form.get('username', '') }}" spellcheck="false" autofocus>
+                            <div class="input-status" id="username-status"><div class="spinner"></div></div>
+                        </div>
+                        <div class="field-hint" id="username-hint">3&ndash;24 characters, letters and numbers</div>
+                        <label>Create a password</label>
+                        <div class="input-wrap">
+                            <input type="password" name="password" id="f-password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters">
+                            <div class="input-status" id="password-status"></div>
+                        </div>
+                        <div class="field-hint invalid" id="pw-hint">Must contain letters and numbers</div>
+                        <button type="button" class="btn btn-primary" onclick="nextStep(2)" id="step1-btn">Continue</button>
+                    </div>
+
+                    <div class="step-form" data-step="2">
+                        <label>Email address <span style="color:var(--text3);font-weight:400">(optional)</span></label>
+                        <div class="input-wrap">
+                            <input type="email" name="email" id="f-email" autocomplete="email" placeholder="you@example.com" value="{{ email or '' }}">
+                        </div>
+                        <div class="opt">Used for account recovery and payment receipts</div>
+                        <label>Security question</label>
+                        <div class="input-wrap">
+                            <input type="text" name="security_question" id="f-sq" required autocomplete="off" placeholder="e.g. What is your pet's name?" value="{{ request.form.get('security_question', '') }}">
+                        </div>
+                        <label>Security answer</label>
+                        <div class="input-wrap">
+                            <input type="text" name="security_answer" id="f-sa" required autocomplete="off" placeholder="Your answer">
+                        </div>
+                        <div class="btn-row">
+                            <button type="button" class="btn btn-secondary" onclick="prevStep(1)">Back</button>
+                            <button type="button" class="btn btn-primary" onclick="nextStep(3)">Continue</button>
+                        </div>
+                    </div>
+
+                    <div class="step-form" data-step="3">
+                        <label>Your location <span style="color:var(--text3);font-weight:400">(for weather)</span></label>
+                        <div class="input-wrap">
+                            <input type="text" name="weather_location" id="f-wloc" autocomplete="off" placeholder="e.g. New York, NY" value="{{ request.form.get('weather_location', '') }}">
+                        </div>
+                        <div class="opt">Shows local weather on your homepage</div>
+                        <div class="btn-row">
+                            <button type="button" class="btn btn-secondary" onclick="prevStep(2)">Back</button>
+                            <button type="button" class="btn btn-primary" onclick="nextStep(4)">Continue</button>
+                        </div>
+                    </div>
+
+                    <div class="step-form" data-step="4">
+                        <svg class="success-icon" viewBox="0 0 24 24"><circle class="ck-bg" cx="12" cy="12" r="10"/><path class="ck-check" d="M7 12l3 3 7-7"/></svg>
+                        <div style="text-align:center;font-size:16px;font-weight:600;color:var(--text);margin-bottom:3px;letter-spacing:-.2px">Review your details</div>
+                        <div style="text-align:center;font-size:13px;color:var(--text3);margin-bottom:20px">Everything look right?</div>
+                        <div class="review-box">
+                            <div class="rv-row"><span class="rv-label">Username</span><span class="rv-value" id="review-user"></span></div>
+                            <hr class="rv-divider">
+                            <div class="rv-row"><span class="rv-label">Email</span><span class="rv-value" id="review-email" style="color:var(--text3);font-weight:400">not provided</span></div>
+                            <hr class="rv-divider">
+                            <div class="rv-row"><span class="rv-label">Location</span><span class="rv-value" id="review-wloc" style="color:var(--text3);font-weight:400">not set</span></div>
+                            <hr class="rv-divider">
+                            <div class="rv-row"><span class="rv-label">Security</span><span class="rv-value" id="review-sq" style="font-size:12px"></span></div>
+                        </div>
+                        <div class="btn-row">
+                            <button type="button" class="btn btn-secondary" onclick="prevStep(3)">Back</button>
+                            <button type="submit" class="btn btn-primary" id="submit-btn"><span class="btn-text">Create account</span><span class="btn-spinner"></span></button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+            <div class="switch">Already have an account? <a href="/login">Sign in</a></div>
+            <div class="info">Your IP is hashed and stored securely. Password is salted and hashed. <a href="/privacy">Privacy policy</a></div>
+        </div>
+    </div>
+
+    <div class="chat-bubble" id="chat-bubble"></div>
+
+    <script>
         var currentStep = 1;
-        function updateStep(step){
-            document.querySelectorAll('.step-form').forEach(function(el){ el.classList.remove('active') });
-            document.querySelector('.step-form[data-step="'+step+'"]').classList.add('active');
+        var usernameCheckTimer = null;
+        var usernameAvailable = false;
+
+        function updateStep(step, dir){
+            var forms = document.querySelectorAll('.step-form');
+            var entering = document.querySelector('.step-form[data-step="'+step+'"]');
+            forms.forEach(function(el){ el.classList.remove('active') });
+            entering.style.animation = 'none';
+            void entering.offsetHeight;
+            entering.style.animation = 'slideIn .45s cubic-bezier(.25,.1,.25,1)';
+            entering.classList.add('active');
             document.querySelectorAll('.step').forEach(function(el){
                 var s = parseInt(el.getAttribute('data-step'));
                 el.classList.remove('active','done');
@@ -154,68 +271,161 @@
                 else if(s < step) el.classList.add('done');
             });
             if(step === 4){
-                var u = document.getElementById('f-username').value;
+                document.getElementById('review-user').textContent = document.getElementById('f-username').value;
                 var e = document.getElementById('f-email').value;
-                var sq = document.getElementById('f-sq').value;
-                var wl = document.getElementById('f-wloc').value;
-                document.getElementById('review-user').textContent = u;
                 document.getElementById('review-email').textContent = e || 'not provided';
+                document.getElementById('review-email').style.color = e ? '' : 'var(--text3)';
+                document.getElementById('review-email').style.fontWeight = e ? '500' : '400';
+                var wl = document.getElementById('f-wloc').value;
                 document.getElementById('review-wloc').textContent = wl || 'not set';
-                document.getElementById('review-sq').textContent = sq;
+                document.getElementById('review-wloc').style.color = wl ? '' : 'var(--text3)';
+                document.getElementById('review-wloc').style.fontWeight = wl ? '500' : '400';
+                document.getElementById('review-sq').textContent = document.getElementById('f-sq').value;
             }
         }
+
         function nextStep(s){
             if(s === 2){
                 var u = document.getElementById('f-username').value.trim();
                 var p = document.getElementById('f-password').value;
-                if(u.length < 3 || u.length > 24){ alert('Username must be 3-24 characters'); return; }
-                if(p.length < 8){ alert('Password must be at least 8 characters'); return; }
-                if(!/[A-Za-z]/.test(p) || !/[0-9]/.test(p)){ alert('Password must contain both letters and numbers'); return; }
+                if(u.length < 3 || u.length > 24){ showBubble('Username must be 3&ndash;24 characters','error'); return; }
+                if(!usernameAvailable){ showBubble('Username is '+(u ? 'already taken' : 'required'),'error'); return; }
+                if(p.length < 8){ showBubble('Password must be at least 8 characters','error'); return; }
+                if(!/[A-Za-z]/.test(p) || !/[0-9]/.test(p)){ showBubble('Password must contain both letters and numbers','error'); return; }
             }
             if(s === 3){
                 var sq = document.getElementById('f-sq').value.trim();
                 var sa = document.getElementById('f-sa').value.trim();
-                if(!sq || !sa){ alert('Security question and answer are required'); return; }
+                if(!sq || !sa){ showBubble('Security question and answer are required','error'); return; }
             }
-            if(s === 4){ /* weather location is optional, no validation needed */ }
             currentStep = s;
             updateStep(s);
         }
+
         function prevStep(s){
             currentStep = s;
             updateStep(s);
         }
+
+        function showBubble(msg, type){
+            var b = document.getElementById('chat-bubble');
+            b.className = 'chat-bubble show';
+            b.innerHTML = (type==='error'?'<svg class="cb-icon" viewBox="0 0 24 24" fill="var(--red)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>':'') + '<span>'+msg+'</span>';
+            b.style.borderColor = type==='error' ? 'rgba(255,69,58,.2)' : '';
+            clearTimeout(window._bubbleTimer);
+            window._bubbleTimer = setTimeout(function(){ b.classList.remove('show') }, 3000);
+        }
+
+        function checkUsername(username){
+            var status = document.getElementById('username-status');
+            var hint = document.getElementById('username-hint');
+            var input = document.getElementById('f-username');
+            if(username.length < 3){
+                status.className = 'input-status';
+                hint.className = 'field-hint';
+                hint.textContent = '3&ndash;24 characters, letters and numbers';
+                input.className = '';
+                usernameAvailable = false;
+                return;
+            }
+            status.className = 'input-status show';
+            status.innerHTML = '<div class="spinner"></div>';
+            input.className = '';
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/api/check-username?username='+encodeURIComponent(username), true);
+            xhr.onload = function(){
+                if(xhr.status === 200){
+                    var r = JSON.parse(xhr.responseText);
+                    if(r.available){
+                        status.innerHTML = '<svg viewBox="0 0 24 24"><circle class="ck-bg" cx="12" cy="12" r="10"/><path class="ck-check" d="M7 12l3 3 7-7"/></svg>';
+                        hint.className = 'field-hint valid';
+                        hint.textContent = 'Username available';
+                        input.className = 'input-valid';
+                        usernameAvailable = true;
+                    } else {
+                        status.innerHTML = '<svg viewBox="0 0 24 24"><circle class="x-bg" cx="12" cy="12" r="10"/><path class="x-line" d="M8 8l8 8M16 8l-8 8"/></svg>';
+                        hint.className = 'field-hint invalid';
+                        hint.textContent = 'Username taken';
+                        input.className = 'input-error';
+                        usernameAvailable = false;
+                    }
+                } else {
+                    status.className = 'input-status';
+                    hint.className = 'field-hint';
+                    hint.textContent = '3&ndash;24 characters, letters and numbers';
+                    usernameAvailable = false;
+                }
+            };
+            xhr.send();
+        }
+
+        function toggleTheme(){
+            var html = document.documentElement;
+            html.classList.toggle('dark-mode');
+            var t = document.getElementById('theme-toggle');
+            t.innerHTML = html.classList.contains('dark-mode') ? '&#x2600;' : '&#x25D0;';
+            try{ localStorage.setItem('arlong-theme', html.classList.contains('dark-mode') ? 'dark' : 'light') }catch(e){}
+        }
+
         document.addEventListener('DOMContentLoaded', function(){
+            try{
+                var saved = localStorage.getItem('arlong-theme');
+                if(saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme:dark)').matches)){
+                    document.documentElement.classList.add('dark-mode');
+                    document.getElementById('theme-toggle').innerHTML = '&#x2600;';
+                }
+            }catch(e){}
+
             var pw = document.getElementById('f-password');
             if(pw){
                 pw.addEventListener('input', function(){
                     var h = document.getElementById('pw-hint');
+                    var s = document.getElementById('password-status');
                     var v = pw.value;
                     if(v.length >= 8 && /[A-Za-z]/.test(v) && /[0-9]/.test(v)){
                         h.textContent = 'Strong password';
-                        h.className = 'pw-hint valid';
-                    } else {
+                        h.className = 'field-hint valid';
+                        s.className = 'input-status show';
+                        s.innerHTML = '<svg viewBox="0 0 24 24"><circle class="ck-bg" cx="12" cy="12" r="10"/><path class="ck-check" d="M7 12l3 3 7-7"/></svg>';
+                    } else if(v.length > 0){
                         h.textContent = 'Must be 8+ characters with letters and numbers';
-                        h.className = 'pw-hint invalid';
+                        h.className = 'field-hint invalid';
+                        s.className = 'input-status show';
+                        s.innerHTML = '<svg viewBox="0 0 24 24"><circle class="x-bg" cx="12" cy="12" r="10"/><path class="x-line" d="M8 8l8 8M16 8l-8 8"/></svg>';
+                    } else {
+                        h.textContent = 'Must contain letters and numbers';
+                        h.className = 'field-hint invalid';
+                        s.className = 'input-status';
+                        s.innerHTML = '';
                     }
                 });
             }
+
             var uf = document.getElementById('f-username');
             if(uf){
                 uf.addEventListener('input', function(){
-                    var h = document.getElementById('username-hint');
                     var v = uf.value.trim();
-                    if(v.length >= 3 && v.length <= 24){
-                        h.className = 'pw-hint valid';
+                    clearTimeout(usernameCheckTimer);
+                    if(v.length >= 3){
+                        usernameCheckTimer = setTimeout(function(){ checkUsername(v) }, 300);
                     } else {
-                        h.className = 'pw-hint invalid';
+                        var status = document.getElementById('username-status');
+                        var hint = document.getElementById('username-hint');
+                        status.className = 'input-status';
+                        hint.className = 'field-hint';
+                        hint.textContent = '3&ndash;24 characters, letters and numbers';
+                        uf.className = '';
+                        usernameAvailable = false;
                     }
                 });
             }
-        });
-        document.getElementById('signup-form').addEventListener('submit', function(){
-            document.getElementById('loading-overlay').classList.add('show');
+
+            document.getElementById('signup-form').addEventListener('submit', function(){
+                var btn = document.getElementById('submit-btn');
+                btn.classList.add('loading');
+            });
         });
     </script>
+    {% endif %}
 </body>
 </html>
