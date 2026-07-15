@@ -1469,20 +1469,23 @@ class DataManager:
                     pass
             return info
 
-    def set_premium(self, user_id, tier, subscription_id, expires_at):
+    def set_premium(self, user_id, tier, subscription_id, expires_at, customer_id=None):
         with self._lock:
             loaded = _load_json()
             if loaded:
                 self.data = loaded
             self.data.setdefault('premium', {})
             tier_config = PREMIUM_TIERS.get(tier)
-            self.data['premium'][str(user_id)] = {
+            entry = {
                 'tier': tier,
                 'daily_limit': tier_config['daily_limit'] if tier_config else PREMIUM_500_DAILY_LIMIT,
                 'subscription_id': subscription_id,
                 'expires_at': expires_at,
                 'activated_at': datetime.now().isoformat()
             }
+            if customer_id:
+                entry['customer_id'] = customer_id
+            self.data['premium'][str(user_id)] = entry
             _save_json(self.data)
 
     def flush(self):
@@ -5631,7 +5634,12 @@ def changelogs():
 
 @app.route('/settings')
 def settings():
-    return render_template('settings.html')
+    user_id = session.get('user_id')
+    is_premium = False
+    if user_id:
+        premium_info = data_manager.data.get('premium', {}).get(str(user_id))
+        is_premium = bool(premium_info and premium_info.get('subscription_id'))
+    return render_template('settings.html', is_premium=is_premium)
 
 
 @app.route('/robots.txt')
@@ -6404,6 +6412,39 @@ def create_checkout():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+@app.route('/api/customer-portal', methods=['POST'])
+def customer_portal():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'Login required'}), 403
+    premium_info = data_manager.data.get('premium', {}).get(str(user_id))
+    customer_id = (premium_info or {}).get('customer_id', '')
+    sub_id = (premium_info or {}).get('subscription_id', '')
+    if not customer_id:
+        return jsonify({'ok': False, 'error': 'No subscription found'}), 400
+    try:
+        import httpx
+        resp = httpx.post(
+            f'{PADDLE_API_BASE}/customer-portal/sessions',
+            json={
+                'customer_id': customer_id,
+                'subscription_ids': [sub_id] if sub_id else [],
+            },
+            headers={'Authorization': f'Bearer {PADDLE_API_KEY}'},
+            timeout=15
+        )
+        if resp.status_code not in (200, 201):
+            return jsonify({'ok': False, 'error': resp.text}), 500
+        data = resp.json().get('data', {})
+        url = (data.get('urls') or {}).get('general', {}).get('overview', '')
+        if not url:
+            return jsonify({'ok': False, 'error': 'No portal URL returned'}), 500
+        return jsonify({'ok': True, 'url': url})
+    except Exception as e:
+        app.logger.error(f"Paddle customer portal error: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 @app.route('/premium/success')
 def premium_success():
     return render_template('premium.html', success=True, paddle_client_token=PADDLE_CLIENT_TOKEN, paddle_environment=PADDLE_ENVIRONMENT, premium_tiers=PREMIUM_TIERS)
@@ -6451,9 +6492,10 @@ def paddle_webhook():
         user_id = custom_data.get('user_id')
         tier = custom_data.get('tier', 'pass')
         sub_id = data.get('id', '')
+        customer_id = data.get('customer_id', '') or data.get('customer', {}).get('id', '')
         if user_id:
             expires_at = (datetime.now() + timedelta(days=30)).isoformat()
-            data_manager.set_premium(user_id, tier, sub_id, expires_at)
+            data_manager.set_premium(user_id, tier, sub_id, expires_at, customer_id)
             app.logger.info(f"Premium activated via Paddle for user {user_id}, tier={tier}")
             user_obj = data_manager.get_user_by_id(user_id)
             if user_obj and user_obj.get('email'):

@@ -6,9 +6,10 @@
     <title>Premium - arlong</title>
     <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
     <style>
+        html{overflow-x:hidden;zoom:1.15}
         :root{--bg:#202124;--bg2:#303134;--text:#e8eaed;--text2:#bdc1c6;--text3:#9aa0a6;--link:#8ab4f8;--border:#3c4043;--hover-bg:#3c4043;--green-bg:#1e3527;--green-border:#2d4a36;--gold:#fbbc04;--gold-bg:#332e1a;--red:#f28b82}
         *,*::before,*::after{box-sizing:border-box}
-        body{margin:0;padding:40px 20px;font-family:arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+        body{margin:0;padding:40px 20px;font-family:arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow-x:hidden}
         .logo{font-size:36px;font-family:'Product Sans',Arial,sans-serif;letter-spacing:-1px;margin-bottom:2px}
         .sub{color:var(--text3);font-size:14px;margin-bottom:24px;text-align:center}
         .success{background:var(--green-bg);border:1px solid var(--green-border);border-radius:8px;padding:16px 20px;margin-bottom:24px;max-width:540px;text-align:center}
@@ -67,7 +68,11 @@
     <div class="billing-toggle">
         <span id="billing-monthly-label">Monthly</span>
         <div class="toggle-track" id="billing-toggle" onclick="toggleBilling()"></div>
-        <span id="billing-yearly-label">Yearly <span class="save-badge" id="save-badge">Save up to 25%</span></span>
+        <span id="billing-yearly-label">Yearly <span class="save-badge" id="save-badge">Save ~25%</span></span>
+    </div>
+
+    <div style="text-align:center;font-size:12px;color:var(--text3);margin:0 0 12px">
+        Taxes may apply and will be calculated at checkout.
     </div>
 
     <div class="tiers">
@@ -87,7 +92,7 @@
                 <span class="price-yearly">${{ tier.price_yearly }}<span class="period">/year</span></span>
             </div>
             {% if key == 'golden' %}
-            <div class="tier-trial">&#9733; 3-day free trial &mdash; cancel anytime</div>
+            <div class="tier-trial">&#9733; 3-day free trial, then $10/month &mdash; cancel anytime</div>
             {% endif %}
             <ul class="tier-features">
                 {% if tier.daily_limit %}
@@ -107,7 +112,7 @@
             </ul>
             {% if session.get('user_id') %}
             <button class="btn {% if key == 'golden' %}btn-gold{% else %}btn-primary{% endif %}" onclick="checkout('{{ key }}')" id="btn-{{ key }}">
-                {% if key == 'golden' %}Start 3-day free trial{% else %}Subscribe - ${{ tier.price }}/mo{% endif %}
+                {% if key == 'golden' %}Start 3-day free trial{% else %}Subscribe &mdash; ${{ tier.price }}/mo{% endif %}
             </button>
             {% else %}
             <span class="btn btn-disabled">Sign in to subscribe</span>
@@ -157,7 +162,9 @@
             ['pass', 'golden'].forEach(function(k){
                 var btn = document.getElementById('btn-' + k);
                 if(btn){
-                    btn.textContent = k === 'golden' ? 'Start 3-day free trial' : 'Subscribe - $' + prices[k] + (isYearly ? '/yr' : '/mo');
+                    btn.textContent = k === 'golden'
+                        ? 'Start 3-day free trial, then $' + prices[k] + (isYearly ? '/yr' : '/mo')
+                        : 'Subscribe \u2014 $' + prices[k] + (isYearly ? '/yr' : '/mo');
                 }
             });
         }

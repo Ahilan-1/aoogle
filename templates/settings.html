@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Settings - arlong</title>
     <style>
+        html{overflow-x:hidden;zoom:1.15}
         :root{--bg:#fff;--text:#222;--text2:#545454;--text3:#70757a;--link:#1a0dab;--border:#dfe1e5;--blue:#1a73e8;--green:#137333}
         *,*::before,*::after{box-sizing:border-box}
         body{margin:0;padding:0;font-family:arial,sans-serif;color:var(--text);background:var(--bg);font-size:14px;line-height:1.6}
@@ -60,6 +61,20 @@
 
         <h2>About</h2>
         <p style="font-size:13px;color:var(--text3);line-height:1.6">All settings are stored locally in your browser (localStorage). No data is sent to our servers. Clearing your browser data will reset these preferences.</p>
+
+        {% if is_premium %}
+        <h2>Premium Subscription</h2>
+        <div class="setting-group">
+            <div class="toggle-row">
+                <div class="toggle-label">
+                    <h3>Manage Subscription</h3>
+                    <div class="label-desc">Cancel, update payment method, view invoices, or change billing details via Paddle's secure customer portal.</div>
+                </div>
+            </div>
+            <button onclick="openPortal()" class="btn" style="margin-top:12px;display:inline-block;padding:10px 24px;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-weight:500;background:var(--blue);color:#fff">Manage Subscription</button>
+            <div id="portal-status" style="font-size:12px;color:var(--text3);margin-top:8px"></div>
+        </div>
+        {% endif %}
     </div>
 
     <div class="saved-toast" id="saved-toast"></div>
@@ -73,6 +88,17 @@
         function showToast(m){
             var t=document.getElementById('saved-toast');t.textContent=m;t.classList.add('show');
             setTimeout(function(){t.classList.remove('show')},2000)
+        }
+        function openPortal(){
+            var btn=event.target;btn.disabled=true;btn.textContent='Loading...';
+            var st=document.getElementById('portal-status');
+            fetch('/api/customer-portal',{method:'POST'})
+                .then(function(r){return r.json()})
+                .then(function(d){
+                    if(d.ok && d.url){window.location.href=d.url}
+                    else{st.textContent=d.error||'Failed to open portal';btn.disabled=false;btn.textContent='Manage Subscription'}
+                })
+                .catch(function(e){st.textContent='Network error';btn.disabled=false;btn.textContent='Manage Subscription'})
         }
         document.addEventListener('DOMContentLoaded',function(){});
     </script>
