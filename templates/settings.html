@@ -63,7 +63,37 @@
         <div class="sub">Customize your search experience</div>
 
         <h2>About</h2>
-        <p style="font-size:13px;color:var(--text3);line-height:1.6">All settings are stored locally in your browser (localStorage). No data is sent to our servers. Clearing your browser data will reset these preferences.</p>
+        <p style="font-size:13px;color:var(--text3);line-height:1.6">Settings are saved to your account on our servers. You must be logged in to change preferences.</p>
+
+        {% if not is_logged_in %}
+        <div class="setting-group">
+            <div class="toggle-row">
+                <div class="toggle-label">
+                    <h3>Login Required</h3>
+                    <div class="label-desc">Please <a href="/login">log in</a> or <a href="/signup">sign up</a> to manage your search preferences.</div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+
+        <h2>Search</h2>
+        <div class="setting-group">
+            <div class="toggle-row">
+                <div class="toggle-label">
+                    <h3>AI Summary</h3>
+                    <div class="label-desc">Show the AI-generated quick answer at the top of search results. When disabled, the AI Summary button and auto-triggered answers will be completely hidden.</div>
+                </div>
+                <div class="toggle-wrap">
+                    <div class="toggle {{ 'on' if preferences.ai_summary else '' }}" id="toggle-ai-summary" onclick="togglePref('ai_summary', this)"></div>
+                </div>
+            </div>
+            <div class="status-badge {{ 'on' if preferences.ai_summary else 'off' }}" id="badge-ai-summary">
+                <span class="dot"></span>
+                {{ 'Enabled' if preferences.ai_summary else 'Disabled' }}
+            </div>
+        </div>
+
+        {% endif %}
 
         {% if is_premium %}
         <h2>Premium Subscription</h2>
@@ -87,6 +117,24 @@
         function setVal(k,v){
             try{localStorage.setItem(k,v)}catch(e){}
             showToast('Saved')
+        }
+        function togglePref(key, el){
+            var isOn = el.classList.toggle('on');
+            var badge = document.getElementById('badge-' + key.replace('_', '-'));
+            if(badge){
+                badge.className = 'status-badge ' + (isOn ? 'on' : 'off');
+                badge.innerHTML = '<span class="dot"></span> ' + (isOn ? 'Enabled' : 'Disabled');
+            }
+            fetch('/api/user/preferences', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({[key]: isOn})
+            }).then(function(r){return r.json()}).then(function(d){
+                if(d.ok) showToast('Saved');
+                else showToast(d.error || 'Failed to save');
+            }).catch(function(){
+                showToast('Network error');
+            });
         }
         function showToast(m){
             var t=document.getElementById('saved-toast');t.textContent=m;t.classList.add('show');

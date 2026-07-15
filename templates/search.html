@@ -635,6 +635,18 @@
         .rc-report-opt{padding:8px 14px;cursor:pointer;font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px}
         .rc-report-opt:hover{background:var(--hover-bg)}
 
+        /* ── Domain Group (nested results) ── */
+        .domain-group{margin-bottom:26px;padding-bottom:2px}
+        .domain-group .rc-modern{margin-bottom:0}
+        .domain-group .rc-modern + .rc-modern{margin-top:18px;padding-top:18px;border-top:1px solid var(--border2)}
+        .domain-group-children{display:none;padding-left:0;margin-top:0}
+        .domain-group-children.open{display:block}
+        .domain-group-toggle{display:inline-flex;align-items:center;gap:4px;margin-top:10px;padding:5px 12px;border:1px solid var(--border);border-radius:16px;background:var(--bg2);color:var(--text3);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;user-select:none}
+        .domain-group-toggle:hover{background:var(--hover-bg);border-color:var(--text3);color:var(--text)}
+        .domain-group-toggle svg{width:14px;height:14px;fill:currentColor;transition:transform .2s}
+        .domain-group-toggle.open svg{transform:rotate(180deg)}
+        .domain-group-count{background:var(--bg3);color:var(--text3);padding:1px 6px;border-radius:8px;font-size:11px;font-weight:600}
+
         /* ── Pin Modal (high-tech) ── */
         .pin-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.65);z-index:2000;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
         .pin-overlay.open{display:flex}
@@ -870,25 +882,6 @@
                     <div style="display:flex;align-items:center;justify-content:space-between;padding:0 0 8px;font-size:13px;font-weight:600;color:var(--text)">News <span style="font-size:11px;font-weight:400;color:var(--text3)">Top stories</span></div>
                     <div class="portal-news-grid" id="news-grid"></div>
                 </div>
-                {% if featured_blogs %}
-                <div class="portal-news-grid-wrap" style="border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:10px;background:var(--card-bg);box-shadow:0 1px 4px var(--shadow2);padding:12px">
-                    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 0 8px;font-size:13px;font-weight:600;color:var(--text)">&#x270F; Trending Blogs <span style="font-size:11px;font-weight:400;color:var(--text3)">From the community</span></div>
-                    <div style="display:flex;flex-direction:column;gap:8px">
-                        {% for blog in featured_blogs %}
-                        <a href="/explore/{{ blog.id }}" style="display:flex;gap:10px;text-decoration:none;padding:6px 4px;border-radius:8px;transition:.1s" onmouseover="this.style.background='var(--hover-bg)'" onmouseout="this.style.background=''">
-                            {% if blog.thumbnail %}
-                            <div style="width:72px;height:48px;border-radius:6px;overflow:hidden;flex-shrink:0;background:var(--bg3)"><img src="{{ blog.thumbnail }}" alt="" style="width:100%;height:100%;object-fit:cover" loading="lazy"></div>
-                            {% endif %}
-                            <div style="flex:1;min-width:0">
-                                <div style="font-size:13px;font-weight:500;color:var(--link);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ blog.name }}</div>
-                                <div style="font-size:11px;color:var(--text4);margin-top:2px">u/{{ blog.creator_name }} &middot; {{ (blog.created_at or '')[:10] }}</div>
-                            </div>
-                        </a>
-                        {% endfor %}
-                    </div>
-                    <a href="/explore" style="display:block;text-align:center;font-size:12px;color:var(--link);padding:8px 0 4px">View all blogs &rarr;</a>
-                </div>
-                {% endif %}
             </div>
             <div class="portal-sidebar">
                 {% if session.user_id and user_stat %}
@@ -975,7 +968,9 @@
                 <option value="news">News</option>
             </select>
             <span class="filter-count" id="filter-count"></span>
-            {% if quota_exceeded is defined and quota_exceeded %}
+            {% if (ai_summary_enabled is defined and not ai_summary_enabled) %}
+            {# AI Summary disabled by user preference — button hidden #}
+            {% elif quota_exceeded is defined and quota_exceeded %}
             <span style="margin-left:auto;font-size:12px;color:var(--text3);padding:4px 12px;border:1px solid var(--border);border-radius:20px">AI Summary unavailable</span>
             {% else %}
             <button class="ais-btn" id="ais-btn" onclick="globalAiSummary()"><svg viewBox="0 0 24 24"><path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.18l7 3.5v7l-7 3.5-7-3.5v-7l7-3.5zM11 9h2v6h-2V9zm0-3h2v2h-2V6z"/></svg> AI Summary</button>
@@ -1092,6 +1087,7 @@
                     {% elif notice and notice.type == 'redirect' %}No results found
                     {% else %}About {{ total_results }} results{% if search_time is defined %} ({{ search_time }}s){% endif %}{% endif %}
                 </div>
+                {% if ai_summary_enabled is not defined or ai_summary_enabled %}
                 <div class="ais-box" id="ais-box">
                     <div class="ais-head">
                         <div class="ais-title">Quick Answer</div>
@@ -1099,6 +1095,7 @@
                     </div>
                     <div class="ais-body" id="ais-content"></div>
                 </div>
+                {% endif %}
                 {% if board_results %}
                 <div class="board-results" style="margin-bottom:20px">
                     <div style="font-size:13px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;padding:0 4px">&#x270F; Blog Posts</div>
@@ -1131,23 +1128,26 @@
                         {% set ns.disc = ns.disc + [result] %}
                     {% endif %}
                 {% endfor %}
-                {% for result in results %}
+                {% for group in result_groups %}
+                    {% set result = group.results[0] %}
                     {% set is_video = result.category == 'videos' or result.category == 'video' %}
-                    {% set is_disc = result.category == 'discussions' or result.category == 'discussion' or 'reddit' in result.url or 'forum' in result.url or 'stackexchange' in result.url %}
-                    {% if not is_disc %}
-                    <div class="rc-modern" data-url="{{ result.url }}" data-title="{{ result.title }}" data-category="{{ result.category or 'general' }}">
+                    {% set has_siblings = group.results|length > 1 %}
+                    {% if has_siblings %}
+                    <div class="domain-group">
+                    {% endif %}
+                    <div class="rc-modern{% if has_siblings %} domain-parent{% endif %}" data-url="{{ result.url }}" data-title="{{ result.title }}" data-category="{{ result.category or 'general' }}">
                         <div class="rc-row">
                             <div class="rc-body">
                                 <div class="rc-title-line">
                                     <a href="{{ result.url }}" class="rc-title" target="_blank">{{ result.title }}</a>
                                     <div class="rc-acts">
                                          <button class="rc-save" onclick="pinFromSearch(this)" title="Save"><svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z"/></svg></button>
-                                        <div class="rc-pos">
-                                            <button class="rc-dots" onclick="toggleRcMenu(this)" title="More">&#x22EE;</button>
-                                            <div class="rc-report-menu">
-                                                <div class="rc-report-opt" onclick="reportResult(this)"><span>&#x26A0;</span> Report low quality</div>
-                                            </div>
-                                        </div>
+                                         <div class="rc-pos">
+                                             <button class="rc-dots" onclick="toggleRcMenu(this)" title="More">&#x22EE;</button>
+                                             <div class="rc-report-menu">
+                                                 <div class="rc-report-opt" onclick="reportResult(this)"><span>&#x26A0;</span> Report low quality</div>
+                                             </div>
+                                         </div>
                                     </div>
                                 </div>
                                 <div class="rc-bread">
@@ -1164,9 +1164,53 @@
                                     {% if result.date %}<span class="rc-date">{{ result.date }}</span>{% endif %}
                                 </div>
                                 <div class="rc-snip">{{ result.snippet }}</div>
+                                {% if has_siblings %}
+                                <button class="domain-group-toggle" onclick="toggleDomainGroup(this)">
+                                    <svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
+                                    More from {{ group.domain }}
+                                    <span class="domain-group-count">{{ group.results|length - 1 }}</span>
+                                </button>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
+                    {% if has_siblings %}
+                    <div class="domain-group-children">
+                        {% for child in group.results[1:] %}
+                        <div class="rc-modern" data-url="{{ child.url }}" data-title="{{ child.title }}" data-category="{{ child.category or 'general' }}">
+                            <div class="rc-row">
+                                <div class="rc-body">
+                                    <div class="rc-title-line">
+                                        <a href="{{ child.url }}" class="rc-title" target="_blank">{{ child.title }}</a>
+                                        <div class="rc-acts">
+                                             <button class="rc-save" onclick="pinFromSearch(this)" title="Save"><svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z"/></svg></button>
+                                             <div class="rc-pos">
+                                                 <button class="rc-dots" onclick="toggleRcMenu(this)" title="More">&#x22EE;</button>
+                                                 <div class="rc-report-menu">
+                                                     <div class="rc-report-opt" onclick="reportResult(this)"><span>&#x26A0;</span> Report low quality</div>
+                                                 </div>
+                                             </div>
+                                        </div>
+                                    </div>
+                                    <div class="rc-bread">
+                                        <img src="{{ child.favicon }}" alt="" class="rc-fav" onerror="this.style.display='none'">
+                                        {% set cdu = child.url %}
+                                        <span class="rc-dom">{{ child.domain or (cdu.split('/')[2] if '/' in cdu else cdu) }}</span>
+                                        {% set cpath_raw = cdu.split('://', 1)[1] if '://' in cdu else cdu %}
+                                        {% set cpath_clean = cpath_raw.split('/', 1)[1] if '/' in cpath_raw else '' %}
+                                        {% if cpath_clean %}
+                                        <span class="rc-sep">&#x203A;</span>
+                                        <span class="rc-path">{{ cpath_clean[:40] }}{% if cpath_clean|length > 40 %}...{% endif %}</span>
+                                        {% endif %}
+                                        {% if child.date %}<span class="rc-date">{{ child.date }}</span>{% endif %}
+                                    </div>
+                                    <div class="rc-snip">{{ child.snippet }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
                     {% set ns.rcount = ns.rcount + 1 %}
                     {% if ns.rcount >= 2 and ns.disc and not ns.ddone %}
                     <div class="disc-sec" data-category="discussion">
@@ -1196,8 +1240,39 @@
                     </div>
                     {% set ns.ddone = true %}
                     {% endif %}
+                    {% if has_siblings %}
+                    </div>
                     {% endif %}
                 {% endfor %}
+
+                {% if ns.disc and not ns.ddone %}
+                <div class="disc-sec" data-category="discussion">
+                    <div class="disc-head"><svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg> Discussions</div>
+                    <div class="disc-car">
+                    {% for r2 in ns.disc %}
+                        <div class="disc-c" data-url="{{ r2.url }}" data-title="{{ r2.title }}" data-category="discussion">
+                            <div class="disc-ch">
+                                <img src="{{ r2.favicon }}" alt="" class="disc-fav" onerror="this.style.display='none'">
+                                {% set du2 = r2.get('display_url', '') %}
+                                <span class="disc-dom">{{ r2.domain or (du2.split('/')[2] if '/' in du2 else du2) }}</span>
+                            </div>
+                            <a href="{{ r2.url }}" class="disc-ct" target="_blank">{{ r2.title }}</a>
+                            <div class="disc-cs">{{ r2.snippet }}</div>
+                            <div class="disc-cf">
+                                {% if r2.date %}<span class="disc-date">{{ r2.date }}</span>{% endif %}
+                                <span style="display:flex;align-items:center;gap:2px;margin-left:auto">
+                                    <button class="rc-dots" onclick="toggleRcMenu(this)" title="More">&#x22EE;</button>
+                                    <div class="rc-report-menu">
+                                        <div class="rc-report-opt" onclick="reportResult(this)"><span>&#x26A0;</span> Report low quality</div>
+                                    </div>
+                                </span>
+                            </div>
+                        </div>
+                    {% endfor %}
+                    </div>
+                </div>
+                {% set ns.ddone = true %}
+                {% endif %}
 
                 <div class="pagination">
                     {% set total_pages = ((total_results - 1) // 10) + 1 %}
@@ -1433,6 +1508,18 @@
             var isOpen=menu.classList.contains('show');
             document.querySelectorAll('.rc-report-menu').forEach(function(m){m.classList.remove('show')});
             if(!isOpen) menu.classList.add('show');
+        }
+        function toggleDomainGroup(btn){
+            var group=btn.closest('.domain-group');
+            if(!group)return;
+            var children=group.querySelector('.domain-group-children');
+            if(!children)return;
+            var isOpen=children.classList.toggle('open');
+            btn.classList.toggle('open',isOpen);
+            var dom=group.querySelector('.rc-dom');
+            var domainName=dom?dom.textContent:'site';
+            var n=children.querySelectorAll('.rc-modern').length;
+            btn.innerHTML='<svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg> '+(isOpen?'Less':'More')+' from '+domainName+(isOpen?'':' <span class="domain-group-count">'+n+'</span>');
         }
         document.addEventListener('click',function(e){
             if(!e.target.classList.contains('rc-dots')){
@@ -1815,6 +1902,8 @@
 
         function applyFilter(val){
             var cards = document.querySelectorAll('.rc-modern');
+            var discCards = document.querySelectorAll('.disc-c');
+            var discSec = document.querySelector('.disc-sec');
             var count = 0;
             cards.forEach(function(c){
                 var cat = c.getAttribute('data-category') || 'general';
@@ -1825,6 +1914,20 @@
                     c.style.display = 'none';
                 }
             });
+            var discCount = 0;
+            discCards.forEach(function(c){
+                var cat = c.getAttribute('data-category') || 'discussion';
+                if(val === 'all' || cat === val || (val === 'discussions' && cat === 'discussion')){
+                    c.style.display = '';
+                    discCount++;
+                } else {
+                    c.style.display = 'none';
+                }
+            });
+            if(discSec){
+                discSec.style.display = discCount > 0 ? '' : 'none';
+            }
+            count += discCount;
             var el = document.getElementById('filter-count');
             if(el) el.textContent = count + ' results';
         }
@@ -1910,6 +2013,7 @@
                 var sh = '';
                 for(var dup=0;dup<2;dup++){
                     for(var i=0;i<items.length;i++){
+                        if(items[i]._is_blog) continue;
                         sh += '<div class="breaking-item"><span class="br-badge">Breaking</span> <a href="'+items[i].link+'" target="_blank">'+items[i].title+'</a></div>';
                     }
                 }
@@ -1919,9 +2023,13 @@
                 for(var i=0;i<cards.length;i++){
                     var it = cards[i];
                     var img = it.image || '';
+                    var isBlog = it._is_blog;
+                    var linkTarget = isBlog ? '' : ' target="_blank"';
+                    var badge = isBlog ? '<span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;background:#1a3a28;color:#81c995;margin-bottom:4px">Blog</span>' : '';
+                    var sourceLabel = isBlog ? '<span style="display:flex;align-items:center;gap:4px">'+badge+'<span>'+it.source+'</span></span>' : it.source;
                     var card = document.createElement('div');
                     card.className = 'ng-card';
-                    card.innerHTML = '<div class="ng-img-wrap">'+(img ? '<img class="ng-img" src="'+img+'" alt="" loading="lazy" onerror="this.outerHTML=\'<div class=&quot;ng-img&quot; style=&quot;display:flex;align-items:center;justify-content:center;color:var(--text3)&quot;><svg width=&quot;40&quot; height=&quot;40&quot; viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;2&quot;><path d=&quot;M4 19.5A2.5 2.5 0 0 1 6.5 17H20&quot;/><path d=&quot;M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z&quot;/><line x1=&quot;8&quot; y1=&quot;7&quot; x2=&quot;16&quot; y2=&quot;7&quot;/><line x1=&quot;8&quot; y1=&quot;11&quot; x2=&quot;14&quot; y2=&quot;11&quot;/></svg></div>\'">' : '<div class="ng-img" style="display:flex;align-items:center;justify-content:center;color:var(--text3)"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg></div>')+'</div><div class="ng-body"><div class="ng-title"><a href="'+it.link+'" target="_blank">'+it.title.substring(0,100)+'</a></div><div class="ng-source">'+it.source+'</div></div>';
+                    card.innerHTML = '<div class="ng-img-wrap">'+(img ? '<img class="ng-img" src="'+img+'" alt="" loading="lazy" onerror="this.outerHTML=\'<div class=&quot;ng-img&quot; style=&quot;display:flex;align-items:center;justify-content:center;color:var(--text3)&quot;><svg width=&quot;40&quot; height=&quot;40&quot; viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;2&quot;><path d=&quot;M4 19.5A2.5 2.5 0 0 1 6.5 17H20&quot;/><path d=&quot;M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z&quot;/><line x1=&quot;8&quot; y1=&quot;7&quot; x2=&quot;16&quot; y2=&quot;7&quot;/><line x1=&quot;8&quot; y1=&quot;11&quot; x2=&quot;14&quot; y2=&quot;11&quot;/></svg></div>\'">' : '<div class="ng-img" style="display:flex;align-items:center;justify-content:center;color:var(--text3)"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg></div>')+'</div><div class="ng-body"><div class="ng-title"><a href="'+it.link+'"'+linkTarget+'>'+it.title.substring(0,100)+'</a></div><div class="ng-source">'+sourceLabel+'</div></div>';
                     grid.appendChild(card);
                 }
             });

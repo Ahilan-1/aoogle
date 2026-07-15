@@ -137,29 +137,12 @@
             <h2>&#x270F; New Blog Post</h2>
             <form id="create-form" onsubmit="return createPost(event)">
                 <label>Blog Title</label>
-                <input type="text" name="name" required minlength="3" maxlength="100" placeholder="e.g. My Journey with Linux">
-
-                <label>Excerpt <span style="font-weight:400;color:var(--text3);text-transform:none;letter-spacing:0">(short description for listings)</span></label>
-                <input type="text" name="description" maxlength="500" placeholder="Brief summary of your post">
-
-                <label>Thumbnail <span style="font-weight:400;color:var(--text3);text-transform:none;letter-spacing:0">(optional)</span></label>
-                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                    <input type="url" name="thumbnail" id="thumb-url" placeholder="https://... or upload below" style="flex:1;min-width:120px">
-                    <label style="padding:6px 14px;border:1px solid var(--border);border-radius:8px;font-size:12px;cursor:pointer;background:var(--bg3);color:var(--text2);white-space:nowrap;font-family:inherit">
-                        &#x1F4C1; Upload
-                        <input type="file" accept="image/*" style="display:none" id="thumb-file" onchange="uploadThumb(this)">
-                    </label>
-                </div>
-                <div id="thumb-preview" style="display:none;margin-top:6px;border-radius:8px;overflow:hidden;max-height:120px;background:var(--bg3)"><img id="thumb-preview-img" src="" alt="" style="width:100%;object-fit:cover;max-height:120px"></div>
-                <div class="tip">Shown in search results and the blog feed. 16:9 ratio recommended.</div>
-
-                <label>Blog Content <span style="color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0">— Markdown supported</span></label>
-                <textarea name="content" required minlength="50" style="min-height:160px" placeholder="Write your blog post here...&#10;&#10;Markdown: **bold**, *italic*, [links](url), ## headings, > quotes, ```code```"></textarea>
-                <div class="tip">You can edit and format your post after publishing.</div>
+                <input type="text" name="name" required minlength="3" maxlength="100" placeholder="e.g. My Journey with Linux" autofocus>
+                <div class="tip">Give your post a title. You can write and edit the full content after creating.</div>
 
                 <div class="actions">
                     <button type="button" class="cancel" onclick="hideCreate()">Cancel</button>
-                    <button type="submit" class="submit">Publish</button>
+                    <button type="submit" class="submit">Create Draft</button>
                 </div>
             </form>
         </div>
@@ -173,31 +156,9 @@
         var fd = new FormData(e.target);
         fetch('/api/collections',{method:'POST',body:fd}).then(function(r){return r.json()}).then(function(d){
             if(!d.ok){alert(d.error);return}
-            window.location.href='/explore/'+d.collection.id;
+            window.location.href='/explore/'+d.collection.id+'?edit=1';
         });
         return false;
-    }
-    function uploadThumb(input){
-        var file = input.files[0];
-        if(!file) return;
-        // Show local preview
-        var reader = new FileReader();
-        reader.onload = function(e){
-            var pv = document.getElementById('thumb-preview');
-            document.getElementById('thumb-preview-img').src = e.target.result;
-            pv.style.display = 'block';
-        };
-        reader.readAsDataURL(file);
-        // Upload to server
-        var fd = new FormData();
-        fd.append('file', file);
-        fetch('/api/upload', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
-            if(d.ok){
-                document.getElementById('thumb-url').value = d.url;
-            } else {
-                alert(d.error||'Upload failed');
-            }
-        });
     }
     document.getElementById('create-modal').addEventListener('click',function(e){if(e.target===this)hideCreate()});
     </script>
