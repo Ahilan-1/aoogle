@@ -30,7 +30,6 @@ import os
 import ssl
 import httpx
 
-import stripe
 import resend
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
@@ -225,12 +224,14 @@ if not ADMIN_PASSWORD:
     app.logger.warning("No ADMIN_PASSWORD set in environment. Generated random password - check logs to retrieve it.")
 AMAZON_ASSOCIATE_TAG = os.environ.get('AMAZON_ASSOCIATE_TAG', '')
 
-# ── Stripe ──
-STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
-STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
-STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
-if STRIPE_SECRET_KEY:
-    stripe.api_key = STRIPE_SECRET_KEY
+# ── Paddle ──
+PADDLE_LIVE_API_KEY = os.environ.get('PADDLE_LIVE_API_KEY', '')
+PADDLE_SANDBOX_API_KEY = os.environ.get('PADDLE_SANDBOX_API_KEY', '')
+PADDLE_CLIENT_TOKEN = os.environ.get('PADDLE_CLIENT_TOKEN', 'live_7eca3a4bd71044d72a8a2f98911')
+PADDLE_WEBHOOK_SECRET = os.environ.get('PADDLE_WEBHOOK_SECRET', '')
+PADDLE_ENVIRONMENT = os.environ.get('PADDLE_ENVIRONMENT', 'sandbox')
+PADDLE_API_BASE = 'https://api.paddle.com' if PADDLE_ENVIRONMENT == 'live' else 'https://sandbox-api.paddle.com'
+PADDLE_API_KEY = PADDLE_LIVE_API_KEY if PADDLE_ENVIRONMENT == 'live' else PADDLE_SANDBOX_API_KEY
 
 # ── Resend (Email) ──
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY', 're_EqrG6tXG_BHUD5LH5ySBRUyNAEVZ1Ucx6')
@@ -473,8 +474,8 @@ PREMIUM_TIERS = {
         'price': 4,
         'price_yearly': 40,
         'daily_limit': 500,
-        'stripe_price': 400,
-        'stripe_price_yearly': 4000,
+        'paddle_price_id': 'pri_01kxhvp58qatxgkevgrze5szax',
+        'paddle_price_id_yearly': 'pri_01kxhvp6qneeka0r33jqy35hey',
         'trial_days': 0,
     },
     'golden': {
@@ -482,8 +483,8 @@ PREMIUM_TIERS = {
         'price': 10,
         'price_yearly': 90,
         'daily_limit': None,
-        'stripe_price': 1000,
-        'stripe_price_yearly': 9000,
+        'paddle_price_id': 'pri_01kxhvp899nkccv1z6sya7xg47',
+        'paddle_price_id_yearly': 'pri_01kxhvp9smganb43cxdyh6yp4m',
         'trial_days': 3,
     },
 }
@@ -1468,7 +1469,7 @@ class DataManager:
                     pass
             return info
 
-    def set_premium(self, user_id, tier, stripe_sub_id, expires_at):
+    def set_premium(self, user_id, tier, subscription_id, expires_at):
         with self._lock:
             loaded = _load_json()
             if loaded:
@@ -1478,7 +1479,7 @@ class DataManager:
             self.data['premium'][str(user_id)] = {
                 'tier': tier,
                 'daily_limit': tier_config['daily_limit'] if tier_config else PREMIUM_500_DAILY_LIMIT,
-                'stripe_sub_id': stripe_sub_id,
+                'subscription_id': subscription_id,
                 'expires_at': expires_at,
                 'activated_at': datetime.now().isoformat()
             }
@@ -5603,6 +5604,21 @@ def privacy():
     return render_template('privacy.html')
 
 
+@app.route('/privacy-policy')
+def privacy_policy():
+    return render_template('privacy_policy.html')
+
+
+@app.route('/terms-of-service')
+def terms_of_service():
+    return render_template('terms_of_service.html')
+
+
+@app.route('/refund-policy')
+def refund_policy():
+    return render_template('refund_policy.html')
+
+
 @app.route('/faq')
 def faq():
     return render_template('faq.html')
@@ -6354,11 +6370,11 @@ def api_user_update_settings():
 
 @app.route('/premium')
 def premium_page():
-    return render_template('premium.html', stripe_publishable_key=STRIPE_PUBLISHABLE_KEY, premium_tiers=PREMIUM_TIERS)
+    return render_template('premium.html', paddle_client_token=PADDLE_CLIENT_TOKEN, paddle_environment=PADDLE_ENVIRONMENT, premium_tiers=PREMIUM_TIERS)
 
 
-@app.route('/api/create-checkout-session', methods=['POST'])
-def create_checkout_session():
+@app.route('/api/create-checkout', methods=['POST'])
+def create_checkout():
     user_id = session.get('user_id')
     if not user_id:
         return jsonify({'ok': False, 'error': 'Login required'}), 403
@@ -6367,76 +6383,85 @@ def create_checkout_session():
     if tier not in PREMIUM_TIERS:
         return jsonify({'ok': False, 'error': 'Invalid tier'}), 400
     tier_config = PREMIUM_TIERS[tier]
-    if not STRIPE_SECRET_KEY:
-        return jsonify({'ok': False, 'error': 'Stripe not configured'}), 500
-    price_in_cents = tier_config['stripe_price_yearly'] if billing == 'yearly' else tier_config['stripe_price']
-    interval = 'year' if billing == 'yearly' else 'month'
+    price_id = tier_config['paddle_price_id_yearly'] if billing == 'yearly' else tier_config['paddle_price_id']
     try:
-        session_params = {
-            'payment_method_types': ['card'],
-            'line_items': [{
-                'price_data': {
-                    'currency': 'usd',
-                    'product_data': {'name': f"arlong Premium ({tier_config['name']})"},
-                    'unit_amount': price_in_cents,
-                    'recurring': {'interval': interval},
-                },
-                'quantity': 1,
-            }],
-            'mode': 'subscription',
-            'success_url': url_for('premium_success', _external=True) + '?session_id={CHECKOUT_SESSION_ID}',
-            'cancel_url': url_for('premium_page', _external=True),
-            'client_reference_id': str(user_id),
-            'metadata': {'tier': tier, 'user_id': str(user_id)},
-        }
-        trial_days = tier_config.get('trial_days', 0)
-        if trial_days > 0:
-            session_params['subscription_data'] = {'trial_period_days': trial_days}
-        checkout_session = stripe.checkout.Session.create(**session_params)
-        return jsonify({'ok': True, 'url': checkout_session.url})
+        import httpx
+        resp = httpx.post(
+            f'{PADDLE_API_BASE}/transactions',
+            json={
+                'items': [{'price_id': price_id, 'quantity': 1}],
+                'custom_data': {'user_id': str(user_id), 'tier': tier},
+            },
+            headers={'Authorization': f'Bearer {PADDLE_API_KEY}'},
+            timeout=15
+        )
+        if resp.status_code not in (200, 201):
+            return jsonify({'ok': False, 'error': resp.text}), 500
+        data = resp.json().get('data', {})
+        return jsonify({'ok': True, 'transaction_id': data.get('id'), 'checkout_url': None})
     except Exception as e:
-        app.logger.error(f"Stripe checkout error: {e}")
+        app.logger.error(f"Paddle transaction error: {e}")
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
 @app.route('/premium/success')
 def premium_success():
-    session_id = request.args.get('session_id', '')
-    if not session_id:
-        return redirect(url_for('premium_page'))
-    return render_template('premium.html', success=True, stripe_publishable_key=STRIPE_PUBLISHABLE_KEY, premium_tiers=PREMIUM_TIERS)
+    return render_template('premium.html', success=True, paddle_client_token=PADDLE_CLIENT_TOKEN, paddle_environment=PADDLE_ENVIRONMENT, premium_tiers=PREMIUM_TIERS)
 
 
-@app.route('/api/stripe-webhook', methods=['POST'])
-def stripe_webhook():
-    payload = request.get_data()
-    sig_header = request.headers.get('Stripe-Signature')
-    if not STRIPE_WEBHOOK_SECRET:
-        app.logger.error("Stripe webhook secret not configured")
+@app.route('/api/paddle-webhook', methods=['POST'])
+def paddle_webhook():
+    payload = request.get_data(as_text=True)
+    sig_header = request.headers.get('Paddle-Signature', '')
+    if not PADDLE_WEBHOOK_SECRET:
+        app.logger.error("Paddle webhook secret not configured")
         return jsonify({'ok': False, 'error': 'Not configured'}), 500
+
+    # Verify signature
     try:
-        event = stripe.webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
-    except ValueError:
-        return jsonify({'ok': False, 'error': 'Invalid payload'}), 400
-    except stripe.error.SignatureVerificationError:
+        import hmac, hashlib
+        parts = {}
+        for pair in sig_header.split(';'):
+            if '=' in pair:
+                k, v = pair.split('=', 1)
+                parts[k.strip()] = v.strip()
+        ts = parts.get('ts', '')
+        sig = parts.get('h1', '')
+        expected = hmac.new(
+            PADDLE_WEBHOOK_SECRET.encode(),
+            f'{ts}|{payload}'.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(expected, sig):
+            return jsonify({'ok': False, 'error': 'Invalid signature'}), 400
+    except Exception as e:
+        app.logger.error(f"Paddle webhook verification error: {e}")
         return jsonify({'ok': False, 'error': 'Invalid signature'}), 400
 
-    if event['type'] == 'checkout.session.completed':
-        session_obj = event['data']['object']
-        user_id = session_obj.get('metadata', {}).get('user_id')
-        tier = session_obj.get('metadata', {}).get('tier', 'basic')
-        stripe_sub_id = session_obj.get('subscription', '')
+    try:
+        event = json.loads(payload)
+    except json.JSONDecodeError:
+        return jsonify({'ok': False, 'error': 'Invalid payload'}), 400
+
+    event_type = event.get('event_type', '')
+    data = event.get('data', {})
+
+    if event_type == 'subscription.created' or event_type == 'subscription.activated':
+        custom_data = (data.get('custom_data') or {}) or {}
+        user_id = custom_data.get('user_id')
+        tier = custom_data.get('tier', 'pass')
+        sub_id = data.get('id', '')
         if user_id:
             expires_at = (datetime.now() + timedelta(days=30)).isoformat()
-            data_manager.set_premium(user_id, tier, stripe_sub_id, expires_at)
-            app.logger.info(f"Premium activated for user {user_id}, tier={tier}")
-            # Send premium activation email
+            data_manager.set_premium(user_id, tier, sub_id, expires_at)
+            app.logger.info(f"Premium activated via Paddle for user {user_id}, tier={tier}")
             user_obj = data_manager.get_user_by_id(user_id)
             if user_obj and user_obj.get('email'):
                 tier_name = PREMIUM_TIERS.get(tier, {}).get('name', tier)
                 limit = PREMIUM_TIERS.get(tier, {}).get('daily_limit')
                 limit_text = str(limit) if limit else 'Unlimited'
                 send_premium_email(user_obj['email'], user_obj['username'], tier_name, limit_text)
+
     return jsonify({'ok': True})
 
 

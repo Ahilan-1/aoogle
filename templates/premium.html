@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>Premium - arlong</title>
+    <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
     <style>
         :root{--bg:#202124;--bg2:#303134;--text:#e8eaed;--text2:#bdc1c6;--text3:#9aa0a6;--link:#8ab4f8;--border:#3c4043;--hover-bg:#3c4043;--green-bg:#1e3527;--green-border:#2d4a36;--gold:#fbbc04;--gold-bg:#332e1a;--red:#f28b82}
         *,*::before,*::after{box-sizing:border-box}
@@ -105,13 +106,9 @@
                 {% endif %}
             </ul>
             {% if session.get('user_id') %}
-            <form method="POST" action="/api/create-checkout-session">
-                <input type="hidden" name="tier" value="{{ key }}">
-                <input type="hidden" name="billing" value="monthly" class="billing-input">
-                <button type="submit" class="btn {% if key == 'golden' %}btn-gold{% else %}btn-primary{% endif %}">
-                    {% if key == 'golden' %}Start 3-day free trial{% else %}Subscribe - ${{ tier.price }}/mo{% endif %}
-                </button>
-            </form>
+            <button class="btn {% if key == 'golden' %}btn-gold{% else %}btn-primary{% endif %}" onclick="checkout('{{ key }}')" id="btn-{{ key }}">
+                {% if key == 'golden' %}Start 3-day free trial{% else %}Subscribe - ${{ tier.price }}/mo{% endif %}
+            </button>
             {% else %}
             <span class="btn btn-disabled">Sign in to subscribe</span>
             {% endif %}
@@ -119,28 +116,48 @@
         {% endfor %}
     </div>
 
-    <div class="hint">All plans are ad-free and privacy-focused. Cancel anytime. Payments via Stripe.</div>
+    <div class="hint">All plans are ad-free and privacy-focused. Cancel anytime. Payments via Paddle.</div>
 
     <div class="compare"><a href="/faq">Compare plans</a> &middot; <a href="/privacy">Privacy policy</a></div>
 
     <div class="back"><a href="/">Back to search</a></div>
 
     <script>
+        Paddle.Initialize({ token: '{{ paddle_client_token }}', environment: '{{ paddle_environment }}' });
+
         var isYearly = false;
+        var priceIds = {
+            {% for key, tier in premium_tiers.items() %}
+            '{{ key }}': {
+                monthly: '{{ tier.paddle_price_id }}',
+                yearly: '{{ tier.paddle_price_id_yearly }}'
+            }{% if not loop.last %},{% endif %}
+            {% endfor %}
+        };
+
+        function getPriceId(tierKey) {
+            return isYearly ? priceIds[tierKey].yearly : priceIds[tierKey].monthly;
+        }
+
+        function checkout(tierKey) {
+            Paddle.Checkout.open({
+                items: [{ priceId: getPriceId(tierKey), quantity: 1 }],
+                customData: { user_id: '{{ session.get("user_id", "") }}', tier: tierKey }
+            });
+        }
+
         function toggleBilling(){
             isYearly = !isYearly;
             document.getElementById('billing-toggle').classList.toggle('active', isYearly);
             document.getElementById('save-badge').classList.toggle('show', isYearly);
             document.querySelectorAll('.tier').forEach(function(t){ t.classList.toggle('yearly', isYearly); });
-            document.querySelectorAll('.billing-input').forEach(function(i){ i.value = isYearly ? 'yearly' : 'monthly'; });
-            document.querySelectorAll('.tier form .btn').forEach(function(b, idx){
-                var tierKey = idx === 0 ? 'pass' : 'golden';
-                if(isYearly){
-                    var prices = { pass: 40, golden: 90 };
-                    b.textContent = tierKey === 'golden' ? 'Start 3-day free trial' : 'Subscribe - $' + prices[tierKey] + '/yr';
-                } else {
-                    var prices = { pass: 4, golden: 10 };
-                    b.textContent = tierKey === 'golden' ? 'Start 3-day free trial' : 'Subscribe - $' + prices[tierKey] + '/mo';
+            var prices = isYearly
+                ? { pass: 40, golden: 90 }
+                : { pass: 4, golden: 10 };
+            ['pass', 'golden'].forEach(function(k){
+                var btn = document.getElementById('btn-' + k);
+                if(btn){
+                    btn.textContent = k === 'golden' ? 'Start 3-day free trial' : 'Subscribe - $' + prices[k] + (isYearly ? '/yr' : '/mo');
                 }
             });
         }
