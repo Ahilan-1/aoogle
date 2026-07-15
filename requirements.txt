@@ -12,6 +12,7 @@ apscheduler>=3.10
 feedparser>=6.0
 groq>=0.15
 resend>=0.5
+markdown>=3.5
 
 # Testing
 pytest>=8.0
