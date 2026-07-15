@@ -2421,28 +2421,62 @@ class DataManager:
                     return
 
     def search_collections(self, query, limit=5):
-        q = query.lower()
+        import re as _re
+        q = query.lower().strip()
+        query_words = [w for w in q.split() if len(w) > 2]
+        if not query_words or len(q) < 3:
+            return []
         cols = [self._normalize_collection(c) for c in self.data.get('collections', [])
                 if c.get('is_public', True) and (c.get('quality_score', 0) >= self.QUALITY_THRESHOLD or (c.get('is_listed') and c.get('is_approved')))]
+        if not cols:
+            return []
         scored = []
         for c in cols:
             score = 0
             name = (c.get('name', '') or '').lower()
             desc = (c.get('description', '') or '').lower()
-            content = (c.get('content', '') or '').lower()
+            if not name:
+                continue
+
+            # Exact full-phrase in title (strongest signal)
             if q in name:
-                score += 20
-            if q in desc:
-                score += 10
-            if q in content:
-                score += 8
-            # Title match
-            for w in q.split():
-                if w in name:
-                    score += 5
-            # Quality bonus
-            score += c.get('quality_score', 0) * 0.5
-            if score > 0:
+                score += 50
+            else:
+                # Word-level matching — use word boundaries to prevent substring false positives
+                def word_in_text(word, text):
+                    return bool(_re.search(r'(?<!\w)' + _re.escape(word) + r'(?!\w)', text))
+
+                matching_in_name = sum(1 for w in query_words if word_in_text(w, name))
+                if matching_in_name == 0:
+                    continue
+
+                if matching_in_name < len(query_words):
+                    # Not all words match — for multi-word queries, require most
+                    if len(query_words) >= 2 and matching_in_name < len(query_words) * 0.5:
+                        continue
+                    elif len(query_words) >= 2:
+                        score += 8
+                    elif len(query_words) == 1:
+                        # Single word not in title — skip
+                        continue
+
+                # Partial phrase match in title
+                for i in range(len(query_words)):
+                    for j in range(i + 2, len(query_words) + 1):
+                        phrase = ' '.join(query_words[i:j])
+                        if phrase in name:
+                            score += 25
+
+                # All words in title bonus
+                if matching_in_name == len(query_words) and len(query_words) > 1:
+                    score += 25
+                elif matching_in_name == len(query_words):
+                    score += 15
+
+            # Quality bonus (very small — never override relevance)
+            score += min(c.get('quality_score', 0) * 0.1, 5)
+
+            if score >= 15:
                 scored.append((score, c))
         scored.sort(key=lambda x: x[0], reverse=True)
         return [c for _, c in scored[:limit]]
