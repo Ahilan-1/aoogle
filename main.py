@@ -21,6 +21,7 @@ try:
 except ImportError:
     s3_available = False
 from datetime import datetime, timedelta
+import markdown
 import hashlib
 import secrets
 import uuid
@@ -214,8 +215,10 @@ if not app.secret_key:
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
-    SESSION_COOKIE_SECURE=False,  # Set True if using HTTPS
+    SESSION_COOKIE_SECURE=False,
     PERMANENT_SESSION_LIFETIME=timedelta(days=7),
+    MAX_CONTENT_LENGTH=5 * 1024 * 1024,
+    UPLOAD_FOLDER=os.path.join(os.path.dirname(__file__), 'static', 'uploads'),
 )
 
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD')
@@ -227,14 +230,14 @@ AMAZON_ASSOCIATE_TAG = os.environ.get('AMAZON_ASSOCIATE_TAG', '')
 # ── Paddle ──
 PADDLE_LIVE_API_KEY = os.environ.get('PADDLE_LIVE_API_KEY', '')
 PADDLE_SANDBOX_API_KEY = os.environ.get('PADDLE_SANDBOX_API_KEY', '')
-PADDLE_CLIENT_TOKEN = os.environ.get('PADDLE_CLIENT_TOKEN', 'live_7eca3a4bd71044d72a8a2f98911')
+PADDLE_CLIENT_TOKEN = os.environ.get('PADDLE_CLIENT_TOKEN', '')
 PADDLE_WEBHOOK_SECRET = os.environ.get('PADDLE_WEBHOOK_SECRET', '')
 PADDLE_ENVIRONMENT = os.environ.get('PADDLE_ENVIRONMENT', 'sandbox')
 PADDLE_API_BASE = 'https://api.paddle.com' if PADDLE_ENVIRONMENT == 'live' else 'https://sandbox-api.paddle.com'
 PADDLE_API_KEY = PADDLE_LIVE_API_KEY if PADDLE_ENVIRONMENT == 'live' else PADDLE_SANDBOX_API_KEY
 
 # ── Resend (Email) ──
-RESEND_API_KEY = os.environ.get('RESEND_API_KEY', 're_EqrG6tXG_BHUD5LH5ySBRUyNAEVZ1Ucx6')
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
 RESEND_FROM = os.environ.get('RESEND_FROM', 'onboarding@resend.dev')
 resend.api_key = RESEND_API_KEY
 
@@ -1793,7 +1796,7 @@ class DataManager:
 
     # ── Collections (community curation) ──
 
-    def create_collection(self, user_id, username, name, description):
+    def create_collection(self, user_id, username, name, description, content='', pin_color='#800000', transparent=False, background_image='', background_style='cover', theme='', thumbnail=''):
         with self._lock:
             loaded = _load_json()
             if loaded:
@@ -1803,24 +1806,67 @@ class DataManager:
                 'id': str(uuid.uuid4()),
                 'name': name[:100],
                 'description': description[:500] if description else '',
+                'content': content,
+                'pin_color': pin_color,
+                'transparent': transparent,
+                'background_image': background_image,
+                'background_style': background_style if background_style in ('cover','repeat','contain') else 'cover',
+                'theme': theme[:200] if theme else '',
+                'thumbnail': thumbnail[:500] if thumbnail else '',
+                'post_type': 'blog',
                 'creator_id': user_id,
                 'creator_name': username,
                 'created_at': datetime.now().isoformat(),
                 'updated_at': datetime.now().isoformat(),
                 'websites': [],
+                'pinned_links': [],
+                'is_public': True,
+                'is_listed': False,
+                'quality_score': 0,
+                'view_count': 0,
+                'upvote_count': 0,
+                'flags': 0,
+                'is_approved': False,
             }
             self.data['collections'].append(c)
+            self._auto_approve(c)
             _save_json(self.data)
             return c
 
+    def _normalize_collection(self, c):
+        c.setdefault('quality_score', 0)
+        c.setdefault('view_count', 0)
+        c.setdefault('upvote_count', 0)
+        c.setdefault('flags', 0)
+        c.setdefault('websites', [])
+        c.setdefault('pinned_links', [])
+        c.setdefault('thumbnail', '')
+        c.setdefault('post_type', 'blog')
+        c.setdefault('content', '')
+        c.setdefault('description', '')
+        c.setdefault('transparent', False)
+        c.setdefault('background_image', '')
+        c.setdefault('background_style', 'cover')
+        c.setdefault('theme', '')
+        c.setdefault('is_approved', False)
+        c.setdefault('is_listed', False)
+        c.setdefault('pin_color', '#800000')
+        c.setdefault('creator_name', 'Anonymous')
+        c.setdefault('created_at', '')
+        c.setdefault('updated_at', '')
+        c.setdefault('name', 'Untitled')
+        return c
+
     def get_collections(self, sort='new', page=1, per_page=20):
-        cols = list(self.data.get('collections', []))
+        cols = [self._normalize_collection(c) for c in self.data.get('collections', []) if c.get('is_public', True)]
         if sort == 'new':
             cols.sort(key=lambda c: c.get('created_at', ''), reverse=True)
         elif sort == 'popular':
-            cols.sort(key=lambda c: len(c.get('websites', [])), reverse=True)
+            cols.sort(key=lambda c: c.get('upvote_count', 0) + len(c.get('websites', [])), reverse=True)
         elif sort == 'updated':
             cols.sort(key=lambda c: c.get('updated_at', ''), reverse=True)
+        elif sort == 'top':
+            cols.sort(key=lambda c: c.get('quality_score', 0), reverse=True)
         total = len(cols)
         start = (page - 1) * per_page
         return cols[start:start + per_page], total
@@ -1828,37 +1874,50 @@ class DataManager:
     def get_collection(self, collection_id):
         for c in self.data.get('collections', []):
             if c['id'] == collection_id:
-                return c
+                return self._normalize_collection(c)
         return None
 
     def get_user_collections(self, user_id):
-        return [c for c in self.data.get('collections', []) if c['creator_id'] == user_id]
+        return [self._normalize_collection(c) for c in self.data.get('collections', []) if c['creator_id'] == user_id]
 
-    def update_collection(self, collection_id, user_id, name, description):
+    def update_collection(self, collection_id, user_id, **kwargs):
         with self._lock:
             loaded = _load_json()
             if loaded:
                 self.data = loaded
             for c in self.data.get('collections', []):
                 if c['id'] == collection_id and c['creator_id'] == user_id:
-                    if name:
-                        c['name'] = name[:100]
-                    if description is not None:
-                        c['description'] = description[:500]
+                    allowed = ['name','description','content','pin_color','transparent',
+                               'background_image','background_style','theme','thumbnail','is_public','pinned_links']
+                    for k, v in kwargs.items():
+                        if k in allowed and v is not None:
+                            if k == 'name':
+                                c[k] = v[:100]
+                            elif k == 'description':
+                                c[k] = v[:500] if v else ''
+                            elif k == 'content':
+                                c[k] = v
+                            elif k == 'pin_color':
+                                c[k] = v
+                            elif k == 'transparent':
+                                c[k] = bool(v)
+                            elif k == 'background_image':
+                                c[k] = v
+                            elif k == 'background_style':
+                                c[k] = v if v in ('cover','repeat','contain') else 'cover'
+                            elif k == 'theme':
+                                c[k] = v[:200] if v else ''
+                            elif k == 'thumbnail':
+                                c[k] = v[:500] if v else ''
+                            elif k == 'pinned_links':
+                                c[k] = v if isinstance(v, list) else []
+                            elif k == 'is_public':
+                                c[k] = bool(v)
                     c['updated_at'] = datetime.now().isoformat()
+                    self._auto_approve(c)
                     _save_json(self.data)
                     return c
             return None
-
-    def delete_collection(self, collection_id, user_id):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            self.data['collections'] = [c for c in self.data.get('collections', [])
-                                        if not (c['id'] == collection_id and c['creator_id'] == user_id)]
-            _save_json(self.data)
-            return True
 
     def add_website_to_collection(self, collection_id, user_id, url, title, note):
         with self._lock:
@@ -1869,16 +1928,19 @@ class DataManager:
                 if c['id'] == collection_id:
                     if any(w['url'] == url for w in c.get('websites', [])):
                         return None, 'Already in collection'
+                    if not note or len(note.strip()) < 10:
+                        return None, 'Explanation required (min 10 characters)'
                     w = {
                         'id': str(uuid.uuid4()),
                         'url': url,
                         'title': title[:200] if title else url,
-                        'note': note[:300] if note else '',
+                        'note': note.strip()[:500],
                         'added_by': user_id,
                         'added_at': datetime.now().isoformat(),
                     }
                     c.setdefault('websites', []).append(w)
                     c['updated_at'] = datetime.now().isoformat()
+                    c['quality_score'] = self._compute_quality_score(c)
                     _save_json(self.data)
                     return w, None
             return None, 'Collection not found'
@@ -1893,6 +1955,183 @@ class DataManager:
                     c['websites'] = [w for w in c.get('websites', [])
                                      if not (w['id'] == website_id and w['added_by'] == user_id)]
                     c['updated_at'] = datetime.now().isoformat()
+                    c['quality_score'] = self._compute_quality_score(c)
+                    _save_json(self.data)
+                    return True
+            return False
+
+    def delete_collection(self, collection_id, user_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data['collections'] = [c for c in self.data.get('collections', [])
+                                        if not (c['id'] == collection_id and c['creator_id'] == user_id)]
+            _save_json(self.data)
+            return True
+
+    def toggle_pin_link(self, collection_id, user_id, website_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for c in self.data.get('collections', []):
+                if c['id'] == collection_id and c['creator_id'] == user_id:
+                    pinned = c.get('pinned_links', [])
+                    if website_id in pinned:
+                        pinned.remove(website_id)
+                    else:
+                        pinned.append(website_id)
+                    c['pinned_links'] = pinned
+                    c['updated_at'] = datetime.now().isoformat()
+                    _save_json(self.data)
+                    return True, 'unpinned' if website_id not in pinned else 'pinned'
+            return False, None
+
+    def reorder_websites(self, collection_id, user_id, website_ids):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for c in self.data.get('collections', []):
+                if c['id'] == collection_id and c['creator_id'] == user_id:
+                    existing = {w['id']: w for w in c.get('websites', [])}
+                    ordered = []
+                    for wid in website_ids:
+                        if wid in existing:
+                            ordered.append(existing[wid])
+                    for w in c.get('websites', []):
+                        if w['id'] not in website_ids:
+                            ordered.append(w)
+                    c['websites'] = ordered
+                    c['updated_at'] = datetime.now().isoformat()
+                    _save_json(self.data)
+                    return True
+            return False
+
+    QUALITY_THRESHOLD = 20
+
+    def _compute_quality_score(self, collection):
+        score = 0
+        content_len = len(collection.get('content', '') or '')
+        if content_len >= 500:
+            score += 30
+        elif content_len >= 200:
+            score += 20
+        elif content_len >= 80:
+            score += 10
+        # Thumbnail
+        if collection.get('thumbnail', ''):
+            score += 15
+        # Description
+        desc = (collection.get('description', '') or '').strip()
+        if len(desc) >= 30:
+            score += 10
+        elif desc:
+            score += 5
+        # Number of websites with explanations
+        websites = collection.get('websites', [])
+        if websites:
+            expl_len = sum(len(w.get('note', '') or '') for w in websites)
+            avg_expl = expl_len / len(websites)
+            if avg_expl >= 50:
+                score += 25
+            elif avg_expl >= 20:
+                score += 15
+            elif avg_expl >= 10:
+                score += 5
+            score += min(len(websites) * 3, 20)  # up to 20 for quantity
+        # Engagement
+        score += min(collection.get('upvote_count', 0) * 2, 15)
+        # Penalize flagged
+        score -= collection.get('flags', 0) * 10
+        return max(score, 0)
+
+    def _auto_approve(self, collection):
+        score = self._compute_quality_score(collection)
+        collection['quality_score'] = score
+        if score >= self.QUALITY_THRESHOLD:
+            collection['is_approved'] = True
+            collection['is_listed'] = True
+        return collection
+
+    def flag_collection(self, collection_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for c in self.data.get('collections', []):
+                if c['id'] == collection_id:
+                    c['flags'] = c.get('flags', 0) + 1
+                    c['quality_score'] = self._compute_quality_score(c)
+                    _save_json(self.data)
+                    return True
+            return False
+
+    def upvote_collection(self, collection_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for c in self.data.get('collections', []):
+                if c['id'] == collection_id:
+                    c['upvote_count'] = c.get('upvote_count', 0) + 1
+                    c['quality_score'] = self._compute_quality_score(c)
+                    _save_json(self.data)
+                    return True
+            return False
+
+    def increment_collection_views(self, collection_id):
+        with self._lock:
+            for c in self.data.get('collections', []):
+                if c['id'] == collection_id:
+                    c['view_count'] = c.get('view_count', 0) + 1
+                    return
+
+    def search_collections(self, query, limit=5):
+        q = query.lower()
+        cols = [self._normalize_collection(c) for c in self.data.get('collections', [])
+                if c.get('is_public', True) and (c.get('quality_score', 0) >= self.QUALITY_THRESHOLD or (c.get('is_listed') and c.get('is_approved')))]
+        scored = []
+        for c in cols:
+            score = 0
+            name = (c.get('name', '') or '').lower()
+            desc = (c.get('description', '') or '').lower()
+            content = (c.get('content', '') or '').lower()
+            if q in name:
+                score += 20
+            if q in desc:
+                score += 10
+            if q in content:
+                score += 8
+            # Title match
+            for w in q.split():
+                if w in name:
+                    score += 5
+            # Quality bonus
+            score += c.get('quality_score', 0) * 0.5
+            if score > 0:
+                scored.append((score, c))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [c for _, c in scored[:limit]]
+
+    def get_flagged_collections(self):
+        return sorted(
+            [self._normalize_collection(c) for c in self.data.get('collections', []) if c.get('flags', 0) > 0],
+            key=lambda c: c.get('flags', 0), reverse=True
+        )
+
+    def approve_collection(self, collection_id, approve=True):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for c in self.data.get('collections', []):
+                if c['id'] == collection_id:
+                    c['is_approved'] = approve
+                    c['is_listed'] = approve
+                    c['flags'] = 0
+                    c['quality_score'] = self._compute_quality_score(c)
                     _save_json(self.data)
                     return True
             return False
@@ -4821,7 +5060,10 @@ def home():
             else:
                 quota_limit = FREE_DAILY_LIMIT + FREE_BONUS_LIMIT
             user_weather_location = profile.get('weather_location', '') or ''
-    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=session.get('user_country', ''), country_name=COUNTRY_NAMES.get(session.get('user_country', '')), user_stat=user_stats, daily_remaining=daily_remaining, quota_limit=quota_limit, user_weather_location=user_weather_location)
+    featured_blogs = [data_manager._normalize_collection(c) for c in data_manager.data.get('collections', []) if c.get('post_type') == 'blog' and c.get('is_public', True) and c.get('quality_score', 0) >= data_manager.QUALITY_THRESHOLD]
+    featured_blogs.sort(key=lambda c: (c.get('quality_score', 0), c.get('created_at', '')), reverse=True)
+    featured_blogs = featured_blogs[:5]
+    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=session.get('user_country', ''), country_name=COUNTRY_NAMES.get(session.get('user_country', '')), user_stat=user_stats, daily_remaining=daily_remaining, quota_limit=quota_limit, user_weather_location=user_weather_location, board_results=None, featured_blogs=featured_blogs)
 
 @app.route('/search')
 def search():
@@ -4856,7 +5098,7 @@ def search():
                 else:
                     quota_limit = FREE_DAILY_LIMIT + FREE_BONUS_LIMIT
                 user_weather_location = profile.get('weather_location', '') or ''
-        return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=user_country, country_name=COUNTRY_NAMES.get(user_country), user_stat=user_stats, daily_remaining=daily_remaining, quota_limit=quota_limit, user_weather_location=user_weather_location)
+        return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=user_country, country_name=COUNTRY_NAMES.get(user_country), user_stat=user_stats, daily_remaining=daily_remaining, quota_limit=quota_limit, user_weather_location=user_weather_location, board_results=None)
 
     # ── Search Quota ──
     user_id = session.get('user_id')
@@ -4906,7 +5148,8 @@ def search():
             blocked_count=BLOCKLIST_COUNT,
             user_country=user_country,
             country_name=COUNTRY_NAMES.get(user_country, ''),
-            user_stat=user_stats
+            user_stat=user_stats,
+            board_results=None,
         )
 
     notice = detect_notice(query)
@@ -4927,7 +5170,8 @@ def search():
             blocked_count=BLOCKLIST_COUNT,
             user_country=user_country,
             country_name=COUNTRY_NAMES.get(user_country, ''),
-            user_stat=user_stats
+            user_stat=user_stats,
+            board_results=None,
         )
 
     bang_url = get_bang_redirect(query)
@@ -4957,12 +5201,19 @@ def search():
             country_name=COUNTRY_NAMES.get(user_country, ''),
             user_stat=None,
             search_time=0,
+            board_results=None,
         ), 429
 
     try:
         if region:
             session['region'] = region
         results, total_results = search_engine.search(query, page, filter_type, region or None)
+
+        # ── Board search integration ──
+        board_results = data_manager.search_collections(query)
+        if board_results:
+            for b in board_results:
+                b['_type'] = 'board'
 
         verified_info = data_manager.get_verified_info(query.lower().strip(), user_country)
         if not verified_info and results:
@@ -5013,6 +5264,7 @@ def search():
             query=query,
             filter=filter_type,
             results=results,
+            board_results=board_results,
             verified_info=verified_info,
             safety_info=safety_info,
             news_box=news_box,
@@ -5051,6 +5303,7 @@ def search():
             query=query,
             notice=notice,
             error="An error occurred while processing your search. Please try again.",
+            board_results=None,
             shopping_products=None,
             announcement=announcement,
             blocked_count=BLOCKLIST_COUNT,
@@ -5678,12 +5931,12 @@ def api_bangs():
 
 @app.errorhandler(404)
 def not_found_error(error):
-    return render_template('search.html', error="Page not found"), 404
+    return render_template('search.html', error="Page not found", board_results=None), 404
 
 @app.errorhandler(500)
 def internal_error(error):
     app.logger.error(f"Internal server error: {str(error)}")
-    return render_template('search.html', error="An internal error occurred. Please try again."), 500
+    return render_template('search.html', error="An internal error occurred. Please try again.", board_results=None), 500
 
 @app.route('/api/report', methods=['POST'])
 def api_report():
@@ -6226,6 +6479,31 @@ def admin_delete_user():
     return redirect(url_for('admin_accounts'))
 
 
+@app.route('/admin/collections')
+def admin_collections():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    flagged = data_manager.get_flagged_collections()
+    all_cols, _ = data_manager.get_collections(sort='new', page=1, per_page=100)
+    return render_template('admin_collections.html', flagged=flagged, collections=all_cols)
+
+
+@app.route('/admin/collections/<collection_id>/approve', methods=['POST'])
+def admin_approve_collection(collection_id):
+    if not session.get('admin_logged_in'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    data_manager.approve_collection(collection_id, True)
+    return redirect(url_for('admin_collections'))
+
+
+@app.route('/admin/collections/<collection_id>/reject', methods=['POST'])
+def admin_reject_collection(collection_id):
+    if not session.get('admin_logged_in'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    data_manager.approve_collection(collection_id, False)
+    return redirect(url_for('admin_collections'))
+
+
 @app.template_filter('urlencode')
 def urlencode_filter(s):
     import urllib.parse
@@ -6234,11 +6512,44 @@ def urlencode_filter(s):
 
 # ── Explore / Collections routes ──
 
+def strip_markdown(text):
+    if not text:
+        return ''
+    text = re.sub(r'!\[.*?\]\(.*?\)', '', text)
+    text = re.sub(r'\[([^\]]*)\]\(.*?\)', r'\1', text)
+    text = re.sub(r'(?<!\*)\*{1,3}(?!\*)(.+?)(?<!\*)\*{1,3}(?!\*)', r'\1', text)
+    text = re.sub(r'(?<!_)_{1,3}(?!_)(.+?)(?<!_)_{1,3}(?!_)', r'\1', text)
+    text = re.sub(r'~~(.+?)~~', r'\1', text)
+    text = re.sub(r'`([^`]+)`', r'\1', text)
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^>\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^[-*_]{3,}\s*$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^[\s]*[-*+]\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^[\s]*\d+\.\s+', '', text, flags=re.MULTILINE)
+    return text.strip()
+
 @app.route('/explore')
 def explore():
     sort = request.args.get('sort', 'new')
     page = int(request.args.get('page', 1))
-    collections, total = data_manager.get_collections(sort=sort, page=page)
+    threshold = data_manager.QUALITY_THRESHOLD
+    all_cols, _ = data_manager.get_collections(sort='new', page=1, per_page=9999)
+    quality_cols = [c for c in all_cols if c.get('quality_score', 0) >= threshold or (c.get('is_listed') and c.get('is_approved'))]
+    if sort == 'new':
+        quality_cols.sort(key=lambda c: c.get('created_at', ''), reverse=True)
+    elif sort == 'popular':
+        quality_cols.sort(key=lambda c: c.get('upvote_count', 0) + len(c.get('websites', [])), reverse=True)
+    elif sort == 'updated':
+        quality_cols.sort(key=lambda c: c.get('updated_at', ''), reverse=True)
+    elif sort == 'top':
+        quality_cols.sort(key=lambda c: c.get('quality_score', 0), reverse=True)
+    total = len(quality_cols)
+    per_page = 20
+    start = (page - 1) * per_page
+    collections = quality_cols[start:start + per_page]
+    for c in collections:
+        raw = c.get('description', '') or c.get('content', '')
+        c['_excerpt'] = strip_markdown(raw)[:200]
     return render_template('explore.html', collections=collections, sort=sort, page=page, total=total)
 
 
@@ -6247,7 +6558,13 @@ def explore_collection(collection_id):
     collection = data_manager.get_collection(collection_id)
     if not collection:
         return render_template('explore.html', error='Collection not found'), 404
-    return render_template('collection_detail.html', collection=collection)
+    data_manager.increment_collection_views(collection_id)
+    uid = session.get('user_id')
+    is_owner = uid is not None and uid == collection.get('creator_id')
+    content_md = collection.get('content', '')
+    content_html = markdown.markdown(content_md, extensions=['fenced_code', 'codehilite', 'tables'])
+    content_html = re.sub(r'@([a-zA-Z0-9_-]+)', r'<a href="/u/\1">@\1</a>', content_html)
+    return render_template('collection_detail.html', collection=collection, is_owner=is_owner, content_html=content_html)
 
 
 @app.route('/api/collections', methods=['GET', 'POST'])
@@ -6258,10 +6575,19 @@ def api_collections():
             return jsonify({'ok': False, 'error': 'Login required'}), 403
         name = request.form.get('name', '').strip()
         desc = request.form.get('description', '').strip()
+        content = request.form.get('content', '').strip()
+        pin_color = request.form.get('pin_color', '#800000').strip()
+        transparent = request.form.get('transparent', 'false').lower() == 'true'
+        bg_image = request.form.get('background_image', '').strip()
+        bg_style = request.form.get('background_style', 'cover').strip()
+        theme = request.form.get('theme', '').strip()
+        thumbnail = request.form.get('thumbnail', '').strip()
         if not name or len(name) < 2:
             return jsonify({'ok': False, 'error': 'Name at least 2 characters'}), 400
+        if not content or len(content) < 50:
+            return jsonify({'ok': False, 'error': 'Board requires a detailed blog post (min 50 characters)'}), 400
         username = session.get('username', 'Anonymous')
-        c = data_manager.create_collection(user_id, username, name, desc)
+        c = data_manager.create_collection(user_id, username, name, desc, content, pin_color, transparent, bg_image, bg_style, theme, thumbnail)
         return jsonify({'ok': True, 'collection': c})
     if user_id:
         cols = data_manager.get_user_collections(user_id)
@@ -6271,15 +6597,103 @@ def api_collections():
     return jsonify({'ok': True, 'collections': cols})
 
 
+@app.route('/api/link-meta')
+def api_link_meta():
+    url = request.args.get('url', '').strip()
+    if not url:
+        return jsonify({'ok': False, 'error': 'URL required'}), 400
+    try:
+        import httpx
+        resp = httpx.get(url, follow_redirects=True, timeout=8,
+                         headers={'User-Agent': 'Mozilla/5.0 (compatible; arlong-bot/1.0)'})
+        if resp.status_code != 200:
+            return jsonify({'ok': False, 'error': 'Failed to fetch'}), 400
+        html = resp.text
+        title = url
+        desc = ''
+        image = ''
+        import re
+        m = re.search(r'<title[^>]*>([^<]+)</title>', html, re.IGNORECASE)
+        if m:
+            title = m.group(1).strip()[:200]
+        m = re.search(r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)["\']', html, re.IGNORECASE)
+        if m:
+            title = m.group(1).strip()[:200]
+        m = re.search(r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']+)["\']', html, re.IGNORECASE)
+        if m:
+            desc = m.group(1).strip()[:300]
+        m = re.search(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']', html, re.IGNORECASE)
+        if m:
+            image = m.group(1).strip()[:500]
+        # Fallback: first large image
+        if not image:
+            m = re.search(r'<img[^>]+src=["\']([^"\']+\.(?:jpg|jpeg|png|webp)[^"\']*)["\']', html, re.IGNORECASE)
+            if m:
+                image = m.group(1).strip()[:500]
+        # Get favicon
+        favicon = ''
+        m = re.search(r'<link[^>]+rel=["\'](?:shortcut )?icon["\'][^>]+href=["\']([^"\']+)["\']', html, re.IGNORECASE)
+        if m:
+            favicon = m.group(1).strip()
+        if not favicon:
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            favicon = f'{parsed.scheme}://{parsed.netloc}/favicon.ico'
+        return jsonify({'ok': True, 'title': title, 'description': desc, 'image': image, 'favicon': favicon})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/upload', methods=['POST'])
+def api_upload():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'Login required'}), 403
+    if 'file' not in request.files:
+        return jsonify({'ok': False, 'error': 'No file provided'}), 400
+    f = request.files['file']
+    if f.filename == '':
+        return jsonify({'ok': False, 'error': 'Empty filename'}), 400
+    import mimetypes
+    allowed = ('image/jpeg', 'image/png', 'image/webp', 'image/gif')
+    if f.mimetype not in allowed:
+        ct = f.mimetype or mimetypes.guess_type(f.filename)[0] or ''
+        if ct not in allowed:
+            return jsonify({'ok': False, 'error': 'Only JPEG, PNG, WebP, GIF allowed'}), 400
+    ext = {'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif'}.get(f.mimetype, '.jpg')
+    import uuid
+    filename = str(uuid.uuid4()) + ext
+    upload_dir = app.config['UPLOAD_FOLDER']
+    os.makedirs(upload_dir, exist_ok=True)
+    f.save(os.path.join(upload_dir, filename))
+    url = f'/static/uploads/{filename}'
+    return jsonify({'ok': True, 'url': url})
+
+
 @app.route('/api/collections/<collection_id>', methods=['PUT', 'DELETE'])
 def api_collection(collection_id):
     user_id = session.get('user_id')
     if not user_id:
         return jsonify({'ok': False, 'error': 'Login required'}), 403
     if request.method == 'PUT':
-        name = request.form.get('name', '').strip()
-        desc = request.form.get('description', '').strip()
-        c = data_manager.update_collection(collection_id, user_id, name, desc)
+        kwargs = {}
+        for k in ['name','description','content','pin_color','background_image','background_style','theme','thumbnail']:
+            v = request.form.get(k)
+            if v is not None:
+                kwargs[k] = v.strip() if isinstance(v, str) else v
+        pinned_links = request.form.get('pinned_links')
+        if pinned_links is not None:
+            import json as _json
+            try:
+                kwargs['pinned_links'] = _json.loads(pinned_links)
+            except: pass
+        transparent = request.form.get('transparent')
+        if transparent is not None:
+            kwargs['transparent'] = transparent.lower() == 'true'
+        is_public = request.form.get('is_public')
+        if is_public is not None:
+            kwargs['is_public'] = is_public.lower() == 'true'
+        c = data_manager.update_collection(collection_id, user_id, **kwargs)
         if not c:
             return jsonify({'ok': False, 'error': 'Not found or not yours'}), 404
         return jsonify({'ok': True, 'collection': c})
@@ -6298,6 +6712,8 @@ def api_collection_add_website(collection_id):
     note = request.form.get('note', '').strip()
     if not url:
         return jsonify({'ok': False, 'error': 'URL required'}), 400
+    if not note or len(note) < 10:
+        return jsonify({'ok': False, 'error': 'Explanation required (min 10 characters) — tell why this link is valuable'}), 400
     w, err = data_manager.add_website_to_collection(collection_id, user_id, url, title, note)
     if err:
         return jsonify({'ok': False, 'error': err}), 400
@@ -6312,6 +6728,54 @@ def api_collection_remove_website(collection_id, website_id):
     ok = data_manager.remove_website_from_collection(collection_id, user_id, website_id)
     if not ok:
         return jsonify({'ok': False, 'error': 'Not found'}), 404
+    return jsonify({'ok': True})
+
+
+@app.route('/api/collections/<collection_id>/flag', methods=['POST'])
+def api_flag_collection(collection_id):
+    ok = data_manager.flag_collection(collection_id)
+    if not ok:
+        return jsonify({'ok': False, 'error': 'Not found'}), 404
+    return jsonify({'ok': True})
+
+
+@app.route('/api/collections/<collection_id>/upvote', methods=['POST'])
+def api_upvote_collection(collection_id):
+    ok = data_manager.upvote_collection(collection_id)
+    if not ok:
+        return jsonify({'ok': False, 'error': 'Not found'}), 404
+    return jsonify({'ok': True, 'msg': 'Upvoted'})
+
+
+@app.route('/api/collections/<collection_id>/pin-link', methods=['POST'])
+def api_pin_link(collection_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'Login required'}), 403
+    website_id = request.form.get('website_id', '').strip()
+    if not website_id:
+        return jsonify({'ok': False, 'error': 'Website ID required'}), 400
+    ok, action = data_manager.toggle_pin_link(collection_id, user_id, website_id)
+    if not ok:
+        return jsonify({'ok': False, 'error': 'Not found'}), 404
+    return jsonify({'ok': True, 'action': action})
+
+
+@app.route('/api/collections/<collection_id>/reorder', methods=['POST'])
+def api_reorder_links(collection_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'Login required'}), 403
+    import json as _json
+    try:
+        website_ids = _json.loads(request.form.get('website_ids', '[]'))
+    except:
+        return jsonify({'ok': False, 'error': 'Invalid website_ids'}), 400
+    if not isinstance(website_ids, list):
+        return jsonify({'ok': False, 'error': 'website_ids must be a list'}), 400
+    ok = data_manager.reorder_websites(collection_id, user_id, website_ids)
+    if not ok:
+        return jsonify({'ok': False, 'error': 'Not found or not yours'}), 404
     return jsonify({'ok': True})
 
 

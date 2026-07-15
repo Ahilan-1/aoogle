@@ -18,13 +18,13 @@
         }
         html{overflow-x:hidden;zoom:1.15}
         .dark-mode {
-            --bg:#202124; --bg2:#303134; --bg3:#3c4043; --text:#e8eaed; --text2:#bdc1c6;
-            --text3:#9aa0a6; --text4:#9aa0a6; --link:#8ab4f8; --link-v:#c58af9;
-            --border:#5f6368; --border2:#3c4043; --border3:#5f6368; --border4:#5f6368;
-            --nav-active:#8ab4f8; --red:#f28b82; --red-bg:#3c2023; --red-border:#5f2c30;
-            --blue-bg:#1e3a5f; --blue-border:#1e3a5f; --green-bg:#1e3527; --green-border:#1e3527;
-            --shadow:rgba(0,0,0,.28); --shadow2:rgba(0,0,0,.4);
-            --card-bg:#303134; --hover-bg:#3c4043; --input-bg:#303134;
+            --bg:#000000; --bg2:#0d0d0d; --bg3:#1a1a1a; --text:#e8eaed; --text2:#bdc1c6;
+            --text3:#8a8f96; --text4:#7a7f86; --link:#8ab4f8; --link-v:#a78bfa;
+            --border:#333333; --border2:#222222; --border3:#333333; --border4:#333333;
+            --nav-active:#8ab4f8; --red:#f28b82; --red-bg:#2d1517; --red-border:#4a2225;
+            --blue-bg:#0d1f3d; --blue-border:#1a3a5f; --green-bg:#0d2214; --green-border:#1a3a28;
+            --shadow:rgba(0,0,0,.5); --shadow2:rgba(0,0,0,.6);
+            --card-bg:#0d0d0d; --hover-bg:#1a1a1a; --input-bg:#111111;
         }
         *,*::before,*::after{box-sizing:border-box}
         body{margin:0;padding:0;font-family:arial,sans-serif;color:var(--text);background:var(--bg);transition:background .2s,color .2s}
@@ -635,6 +635,42 @@
         .rc-report-opt{padding:8px 14px;cursor:pointer;font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px}
         .rc-report-opt:hover{background:var(--hover-bg)}
 
+        /* ── Pin Modal (high-tech) ── */
+        .pin-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.65);z-index:2000;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+        .pin-overlay.open{display:flex}
+        .pin-modal{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:92%;max-width:520px;max-height:80vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6);animation:pin-slide .25s ease-out}
+        @keyframes pin-slide{from{opacity:0;transform:translateY(20px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+        .pin-modal-header{position:sticky;top:0;background:var(--bg2);border-bottom:1px solid var(--border);padding:16px 20px;display:flex;align-items:center;gap:12px;z-index:1;border-radius:16px 16px 0 0}
+        .pin-modal-header h3{margin:0;font-size:15px;font-weight:500;color:var(--text);flex:1}
+        .pin-close{background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:.1s}
+        .pin-close:hover{background:var(--hover-bg);color:var(--text)}
+        .pin-preview{display:flex;gap:12px;padding:14px 20px;background:var(--bg);margin:0 12px;border-radius:10px;border:1px solid var(--border);align-items:center}
+        .pin-preview img{width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0;background:var(--bg3)}
+        .pin-preview .pp-info{flex:1;min-width:0}
+        .pin-preview .pp-title{font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .pin-preview .pp-url{font-size:11px;color:var(--text4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+        .pin-preview .pp-load{width:36px;height:36px;border:2px solid var(--border);border-top-color:var(--link);border-radius:50%;animation:pd-spin .7s linear infinite;flex-shrink:0}
+        @keyframes pd-spin{to{transform:rotate(360deg)}}
+        .pin-note-area{padding:10px 20px 4px}
+        .pin-note-area label{display:block;font-size:11px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+        .pin-note-area textarea{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--input-bg);color:var(--text);outline:none;font-family:inherit;resize:vertical;min-height:50px;transition:border-color .15s}
+        .pin-note-area textarea:focus{border-color:var(--link)}
+        .pin-board-list{padding:6px 12px 12px;display:flex;flex-direction:column;gap:4px}
+        .pin-board-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;cursor:pointer;transition:.1s;background:var(--bg);border:1px solid var(--border)}
+        .pin-board-item:hover{background:var(--hover-bg);border-color:var(--text3)}
+        .pin-board-item .pb-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+        .pin-board-item .pb-info{flex:1;min-width:0}
+        .pin-board-item .pb-name{font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .pin-board-item .pb-meta{font-size:11px;color:var(--text4)}
+        .pin-board-item .pb-pin-btn{padding:4px 14px;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;background:var(--link);color:#fff;transition:.1s;font-family:inherit}
+        .pin-board-item .pb-pin-btn:hover{opacity:.85;transform:scale(1.03)}
+        .pin-board-item .pb-pin-btn.done{background:var(--bg3);color:var(--text3);pointer-events:none}
+        .pin-create-row{display:flex;gap:8px;padding:8px 20px 16px}
+        .pin-create-row input{flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--input-bg);color:var(--text);outline:none;font-family:inherit;transition:border-color .15s}
+        .pin-create-row input:focus{border-color:var(--link)}
+        .pin-create-row button{padding:8px 18px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--bg3);color:var(--text);transition:.1s;font-family:inherit;white-space:nowrap}
+        .pin-create-row button:hover{background:var(--hover-bg);border-color:var(--text3)}
+
         .rc-badge{display:inline-block;font-size:10px;font-weight:600;padding:1px 7px;border-radius:8px;margin-right:5px;vertical-align:baseline;letter-spacing:.3px}
         .rc-badge.vid{background:rgba(255,255,255,.08);color:var(--text2)}
         .rc-badge.disc{background:rgba(138,180,248,.12);color:#8ab4f8}
@@ -834,6 +870,25 @@
                     <div style="display:flex;align-items:center;justify-content:space-between;padding:0 0 8px;font-size:13px;font-weight:600;color:var(--text)">News <span style="font-size:11px;font-weight:400;color:var(--text3)">Top stories</span></div>
                     <div class="portal-news-grid" id="news-grid"></div>
                 </div>
+                {% if featured_blogs %}
+                <div class="portal-news-grid-wrap" style="border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:10px;background:var(--card-bg);box-shadow:0 1px 4px var(--shadow2);padding:12px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 0 8px;font-size:13px;font-weight:600;color:var(--text)">&#x270F; Trending Blogs <span style="font-size:11px;font-weight:400;color:var(--text3)">From the community</span></div>
+                    <div style="display:flex;flex-direction:column;gap:8px">
+                        {% for blog in featured_blogs %}
+                        <a href="/explore/{{ blog.id }}" style="display:flex;gap:10px;text-decoration:none;padding:6px 4px;border-radius:8px;transition:.1s" onmouseover="this.style.background='var(--hover-bg)'" onmouseout="this.style.background=''">
+                            {% if blog.thumbnail %}
+                            <div style="width:72px;height:48px;border-radius:6px;overflow:hidden;flex-shrink:0;background:var(--bg3)"><img src="{{ blog.thumbnail }}" alt="" style="width:100%;height:100%;object-fit:cover" loading="lazy"></div>
+                            {% endif %}
+                            <div style="flex:1;min-width:0">
+                                <div style="font-size:13px;font-weight:500;color:var(--link);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ blog.name }}</div>
+                                <div style="font-size:11px;color:var(--text4);margin-top:2px">u/{{ blog.creator_name }} &middot; {{ (blog.created_at or '')[:10] }}</div>
+                            </div>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    <a href="/explore" style="display:block;text-align:center;font-size:12px;color:var(--link);padding:8px 0 4px">View all blogs &rarr;</a>
+                </div>
+                {% endif %}
             </div>
             <div class="portal-sidebar">
                 {% if session.user_id and user_stat %}
@@ -1044,6 +1099,31 @@
                     </div>
                     <div class="ais-body" id="ais-content"></div>
                 </div>
+                {% if board_results %}
+                <div class="board-results" style="margin-bottom:20px">
+                    <div style="font-size:13px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;padding:0 4px">&#x270F; Blog Posts</div>
+                    <div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:6px">
+                    {% for board in board_results %}
+                        <a href="/explore/{{ board.id }}" style="flex-shrink:0;width:260px;background:var(--card-bg);border:1px solid var(--border);border-radius:12px;overflow:hidden;text-decoration:none;transition:.15s;display:block" onmouseover="this.style.borderColor='var(--text3)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border)';this.style.transform='translateY(0)'">
+                            {% if board.thumbnail %}
+                            <div style="height:120px;overflow:hidden;background:var(--bg3)"><img src="{{ board.thumbnail }}" alt="" style="width:100%;height:100%;object-fit:cover"></div>
+                            {% else %}
+                            <div style="height:60px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:24px;opacity:.15">&#x270F;</div>
+                            {% endif %}
+                            <div style="padding:12px 14px 14px">
+                                <div style="font-size:14px;font-weight:600;color:var(--link);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ board.name }}</div>
+                                <div style="font-size:12px;color:var(--text3);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:6px">{{ board.description or board.content[:150] if board.content else '' }}</div>
+                                <div style="font-size:11px;color:var(--text4);display:flex;gap:6px;align-items:center">
+                                    <span>u/{{ board.creator_name }}</span>
+                                    <span>&middot;</span>
+                                    <span>{{ (board.created_at or '')[:10] }}</span>
+                                </div>
+                            </div>
+                        </a>
+                    {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
                 {% set ns = namespace(disc=[], rcount=0, ddone=false) %}
                 {% for result in results %}
                     {% set is_disc = result.category == 'discussions' or result.category == 'discussion' or 'reddit' in result.url or 'forum' in result.url or 'stackexchange' in result.url %}
@@ -1651,62 +1731,85 @@
             var container = btn.closest('[data-url]');
             var url = container.getAttribute('data-url');
             var title = container.getAttribute('data-title') || url;
-            openPinDrawer(url, title);
+            openPinModal(url, title);
         }
-        function openPinDrawer(url, title){
-            var existing = document.getElementById('search-pin-drawer');
+        function openPinModal(url, title){
+            var existing = document.getElementById('pin-modal-root');
             if(existing) existing.remove();
-            var d = document.createElement('div'); d.id = 'search-pin-drawer';
-            d.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--border);z-index:900;padding:16px 20px;box-shadow:0 -4px 20px var(--shadow2);max-height:50vh;overflow-y:auto';
-            d.innerHTML = '<div style="max-width:600px;margin:0 auto">' +
-                '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
-                '<h3 style="margin:0;font-size:14px;font-weight:500">Pin to collection</h3>' +
-                '<button onclick="this.closest(\'#search-pin-drawer\').remove()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">&times;</button></div>' +
-                '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;word-break:break-all">' + url + '</div>' +
-                '<div id="spd-collections" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>' +
-                '<div style="display:flex;gap:6px"><input id="spd-new-name" placeholder="New collection name..." style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--bg);color:var(--text);outline:none">' +
-                '<button onclick="createAndPin()" style="padding:6px 14px;border:none;border-radius:4px;font-size:12px;cursor:pointer;background:var(--link);color:#fff">Create & pin</button></div></div>';
-            document.body.appendChild(d);
-            var hid = document.createElement('input'); hid.type='hidden'; hid.id='spd-url'; hid.value=url;
-            d.appendChild(hid);
-            var hid2 = document.createElement('input'); hid2.type='hidden'; hid2.id='spd-title'; hid2.value=title;
-            d.appendChild(hid2);
-            fetch('/api/collections').then(function(r){return r.json()}).then(function(res){
-                if(!res.ok) return;
-                var list = document.getElementById('spd-collections');
-                if(res.collections && res.collections.length){
-                    res.collections.forEach(function(c){
-                        var item = document.createElement('div');
-                        item.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px';
-                        item.innerHTML = '<span style="font-weight:500">'+c.name+'</span> <span style="color:var(--text3);font-size:11px">'+c.websites.length+' websites</span>';
-                        var btn = document.createElement('button');
-                        btn.textContent = 'Pin'; btn.style.cssText = 'padding:3px 12px;border:none;border-radius:4px;font-size:11px;cursor:pointer;font-weight:500;background:var(--link);color:#fff';
-                        btn.onclick = function(){ doPin(c.id, url, title) };
-                        item.appendChild(btn);
-                        list.appendChild(item);
-                    });
+            var root = document.createElement('div'); root.id = 'pin-modal-root';
+            root.className = 'pin-overlay open';
+            root.innerHTML =
+                '<div class="pin-modal">' +
+                '<div class="pin-modal-header"><h3>&#x1F4CC; Pin to Board</h3><button class="pin-close" onclick="closePinModal()">&times;</button></div>' +
+                '<div class="pin-preview" id="pin-preview"><div class="pp-load"></div><div class="pp-info"><div class="pp-title">Loading preview...</div><div class="pp-url">'+url+'</div></div></div>' +
+                '<div class="pin-note-area"><label>Why this link? <span style="color:var(--text3);font-weight:400">(optional explanation)</span></label><textarea id="pin-note-input" placeholder="Tell why this link is worth saving..." maxlength="500"></textarea></div>' +
+                '<div style="padding:0 20px 4px"><label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Choose Board</label></div>' +
+                '<div class="pin-board-list" id="pin-board-list"><div style="padding:20px;text-align:center;color:var(--text3);font-size:13px">Loading your boards...</div></div>' +
+                '<div class="pin-create-row"><input id="pin-new-name" placeholder="+ New board name..." maxlength="100"><button onclick="createBoardAndPin()">Create & Pin</button></div>' +
+                '</div>';
+            root.addEventListener('click', function(e){ if(e.target === root) closePinModal(); });
+            document.body.appendChild(root);
+            // Auto-fetch metadata
+            fetch('/api/link-meta?url='+encodeURIComponent(url)).then(function(r){return r.json()}).then(function(d){
+                var pp = document.getElementById('pin-preview');
+                if(d.ok){
+                    var img = d.image ? '<img src="'+d.image+'" alt="">' : '<img src="'+d.favicon+'" alt="" style="border-radius:50%">';
+                    pp.innerHTML = img + '<div class="pp-info"><div class="pp-title">'+(d.title||title)+'</div><div class="pp-url">'+url+'</div></div>';
+                    if(d.title && d.title !== title) document.getElementById('pin-modal-root').setAttribute('data-meta-title', d.title);
                 } else {
-                    list.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:4px 0">No collections yet. Create one above.</div>';
+                    pp.innerHTML = '<div class="pp-load"></div><div class="pp-info"><div class="pp-title">'+title+'</div><div class="pp-url">'+url+'</div></div>';
+                }
+            });
+            // Load boards
+            fetch('/api/collections').then(function(r){return r.json()}).then(function(res){
+                var list = document.getElementById('pin-board-list');
+                if(!list) return;
+                if(res.ok && res.collections && res.collections.length){
+                    var html = '';
+                    res.collections.forEach(function(c){
+                        var dot = c.pin_color || '#800000';
+                        var linkCount = (c.websites && c.websites.length) || 0;
+                        html += '<div class="pin-board-item" onclick="pinToBoard(\''+c.id+'\',\''+url.replace(/'/g,"\\'")+'\',\''+(title||'').replace(/'/g,"\\'")+'\')">' +
+                            '<span class="pb-dot" style="background:'+dot+'"></span>' +
+                            '<div class="pb-info"><div class="pb-name">'+c.name+'</div><div class="pb-meta">'+linkCount+' links</div></div>' +
+                            '<button class="pb-pin-btn" onclick="event.stopPropagation();pinToBoard(\''+c.id+'\',\''+url.replace(/'/g,"\\'")+'\',\''+(title||'').replace(/'/g,"\\'")+'\')">Pin</button>' +
+                            '</div>';
+                    });
+                    list.innerHTML = html;
+                } else {
+                    list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text3);font-size:13px">No boards yet. Create one below.</div>';
                 }
             });
         }
-        function doPin(cid, url, title){
-            var fd = new FormData(); fd.append('url', url); fd.append('title', title); fd.append('note', '');
+        function closePinModal(){
+            var el = document.getElementById('pin-modal-root');
+            if(el) el.remove();
+        }
+        function pinToBoard(cid, url, title){
+            var note = (document.getElementById('pin-note-input')||{}).value || '';
+            var fd = new FormData();
+            fd.append('url', url);
+            fd.append('title', title);
+            fd.append('note', note);
+            var btn = event && event.target;
+            if(btn) { btn.textContent = '...'; btn.style.pointerEvents = 'none'; }
             fetch('/api/collections/'+cid+'/websites', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
-                if(!d.ok){ alert(d.error); return }
-                var drawer = document.getElementById('search-pin-drawer');
-                if(drawer) { drawer.innerHTML = '<div style="max-width:600px;margin:0 auto;text-align:center;padding:16px;color:var(--text2);font-size:14px">Pinned! <a href="/explore/'+cid+'" style="color:var(--link)">View collection</a></div>'; setTimeout(function(){drawer.remove()},2500); }
+                if(!d.ok){ alert(d.error||'Error'); if(btn){btn.textContent='Pin';btn.style.pointerEvents=''} return; }
+                // Mark all pin buttons as done
+                var allBtns = document.querySelectorAll('.pb-pin-btn');
+                allBtns.forEach(function(b){ b.textContent = '\u2713 Pinned'; b.classList.add('done'); });
+                showToast('\u2713 Pinned to board!');
+                setTimeout(closePinModal, 1200);
             });
         }
-        function createAndPin(){
-            var name = document.getElementById('spd-new-name').value.trim();
-            if(!name){ alert('Enter a name'); return }
+        function createBoardAndPin(){
+            var name = document.getElementById('pin-new-name').value.trim();
+            if(!name){ alert('Enter a board name'); return; }
             var fd = new FormData(); fd.append('name', name); fd.append('description', '');
             fetch('/api/collections', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
-                if(!d.ok){ alert(d.error); return }
-                var url = document.getElementById('spd-url').value;
-                var title = document.getElementById('spd-title').value;
-                doPin(d.collection.id, url, title);
+                if(!d.ok){ alert(d.error||'Error'); return; }
+                var metaTitle = document.getElementById('pin-modal-root').getAttribute('data-meta-title') || '';
+                pinToBoard(d.collection.id, document.querySelector('.pin-preview .pp-url').textContent, metaTitle);
             });
         }
 

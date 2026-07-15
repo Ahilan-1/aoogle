@@ -5,208 +5,354 @@
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>{{ collection.name }} - arlong</title>
     <style>
-        :root{--bg:#202124;--bg2:#2a2a2e;--bg3:#333;--text:#ddd;--text2:#bbb;--text3:#888;--text4:#777;--link:#81a2be;--link-v:#5f8aad;--orange:#0077be;--border:#444;--border2:#3a3a3e;--accent:#800000;--input-bg:#2a2a2e;--hover-bg:#333}
+        :root{--accent:{{ collection.pin_color or '#8ab4f8' }}}
+        :root{--bg:#000;--bg2:#0d0d0d;--bg3:#1a1a1a;--text:#e8eaed;--text2:#bdc1c6;--text3:#8a8f96;--text4:#7a7f86;--link:#8ab4f8;--border:#333;--border2:#222}
         *,*::before,*::after{box-sizing:border-box}
-        body{margin:0;padding:16px 20px;font-family:Verdana,'Bitstream Vera Sans',Arial,sans-serif;color:var(--text);background:var(--bg);font-size:13px;line-height:1.5}
+        body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--text);background:var(--bg);font-size:15px;line-height:1.7;min-height:100vh}
         a{color:var(--link);text-decoration:none}
-        a:hover{text-decoration:underline;color:var(--orange)}
-        .nav-bar{display:flex;align-items:baseline;gap:14px;max-width:900px;margin:0 auto 16px;padding-bottom:10px;border-bottom:1px solid var(--border);flex-wrap:wrap;font-size:13px}
-        .nav-bar .logo{font-family:'Palatino','Palatino Linotype',Georgia,serif;font-size:20px;color:var(--orange);font-weight:700;letter-spacing:-.5px}
-        .nav-bar .logo:hover{color:var(--orange);text-decoration:none}
-        .nav-bar a{font-size:12px}
-        .nav-bar .sep{color:var(--text4)}
-        .layout{display:flex;gap:20px;max-width:900px;margin:0 auto;align-items:flex-start}
+        a:hover{text-decoration:underline}
+
+        .bar{display:flex;align-items:center;gap:12px;padding:12px 24px;border-bottom:1px solid var(--border);background:rgba(0,0,0,.85);backdrop-filter:blur(12px);position:sticky;top:0;z-index:100}
+        .bar .logo{font-size:20px;font-weight:700;background:linear-gradient(to top,#0066cc,#3399ff 50%,var(--text) 50%);background-size:100% 200%;-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-.5px;font-family:'Product Sans',Arial,sans-serif}
+        .bar nav{display:flex;gap:8px;margin-left:auto;align-items:center}
+        .bar nav a,.bar nav button{padding:5px 12px;font-size:12px;border:1px solid var(--border);border-radius:8px;color:var(--text2);background:var(--bg3);cursor:pointer;font-family:inherit;transition:.15s}
+
+        .hero{width:100%;max-height:360px;overflow:hidden;background:var(--bg3);display:flex;align-items:center;justify-content:center}
+        .hero img{width:100%;object-fit:cover;max-height:360px}
+        .wrap{max-width:720px;margin:0 auto;padding:32px 20px 60px}
+        .post-header{margin-bottom:28px}
+        .post-header h1{margin:0 0 10px;font-size:32px;font-weight:700;color:var(--text);letter-spacing:-.5px;line-height:1.2}
+        .post-meta{font-size:13px;color:var(--text4);display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding-bottom:16px;border-bottom:1px solid var(--border2)}
+
+        .content{font-size:16px;line-height:1.75;color:var(--text2);padding-bottom:20px}
+        .content h1,.content h2,.content h3{color:var(--text);font-weight:600;margin:28px 0 10px}
+        .content h1{font-size:28px}.content h2{font-size:22px}.content h3{font-size:18px}
+        .content p{margin:0 0 16px}
+        .content ul,.content ol{padding-left:24px;margin:0 0 16px}
+        .content code{background:var(--bg3);padding:2px 7px;border-radius:4px;font-size:14px;color:var(--accent)}
+        .content pre{background:var(--bg3);padding:16px;border-radius:10px;overflow-x:auto;font-size:14px;border:1px solid var(--border);margin:0 0 16px}
+        .content blockquote{border-left:3px solid var(--accent);padding:10px 18px;margin:0 0 16px;background:var(--bg3);border-radius:0 8px 8px 0;color:var(--text3)}
+        .content img{max-width:100%;border-radius:10px;margin:12px 0}
+        .content hr{border:none;border-top:1px solid var(--border2);margin:24px 0}
+
+        .actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+        .actions .btn{padding:6px 14px;border:1px solid var(--border);border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;color:var(--text2);background:var(--bg3);transition:.15s;display:inline-flex;align-items:center;gap:4px;text-decoration:none}
+        .actions .btn:hover{color:var(--text);background:var(--hover-bg);border-color:var(--text3);text-decoration:none}
+        .actions .btn.danger{color:#f28b82}
+
+        .links-section{background:var(--bg2);border:1px solid var(--border);border-radius:12px;margin-top:24px;overflow:hidden}
+        .links-section h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin:0;padding:14px 18px;border-bottom:1px solid var(--border2)}
+        .link-item{padding:12px 18px;border-bottom:1px solid var(--border2);display:flex;gap:10px;align-items:flex-start}
+        .link-item:last-child{border-bottom:none}
+        .link-item:hover{background:var(--hover-bg)}
+        .link-body{flex:1;min-width:0}
+        .link-body a{font-size:14px;font-weight:500;color:var(--link)}
+        .link-body .url{font-size:11px;color:var(--text4);word-break:break-all}
+        .link-body .note{font-size:13px;color:var(--text2);margin-top:4px;padding:4px 10px;border-left:2px solid var(--accent);background:var(--bg3);border-radius:0 4px 4px 0}
+
+        .side-col{width:260px;flex-shrink:0}
+        .side-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;font-size:12px;position:sticky;top:64px}
+        .side-card h4{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin:0 0 10px}
+        .side-card .row{padding:5px 0;display:flex;justify-content:space-between;color:var(--text3);border-bottom:1px solid var(--border2)}
+        .side-card .row b{color:var(--text2)}
+        .layout{display:flex;gap:20px;max-width:1060px;margin:0 auto;align-items:flex-start}
         .main-col{flex:1;min-width:0}
-        .side-col{width:280px;flex-shrink:0}
-        .thread{border:1px solid var(--border);background:var(--bg2);padding:16px;margin-bottom:12px;border-radius:2px}
-        .thread h1{margin:0 0 2px;font-size:18px;font-weight:500;font-family:Georgia,serif;color:var(--orange)}
-        .thread .byline{color:var(--text3);font-size:11px;margin-bottom:8px}
-        .thread .desc{color:var(--text2);font-size:13px;line-height:1.5;margin-bottom:10px}
-        .thread .actions{display:flex;gap:6px;flex-wrap:wrap}
-        .thread .actions button,.thread .actions .btn{padding:3px 10px;border:1px solid var(--border);border-radius:2px;font-size:11px;cursor:pointer;font-family:Verdana,Arial,sans-serif;background:var(--bg3);color:var(--text)}
-        .thread .actions button:hover,.thread .actions .btn:hover{background:var(--hover-bg);text-decoration:none;color:var(--text)}
-        .thread .actions .pin-btn{background:var(--accent);color:#eee;border-color:var(--accent)}
-        .thread .actions .pin-btn:hover{opacity:.85}
-        .thread .actions .del-btn{color:#c55}
-        .thread .actions .del-btn:hover{background:#3a2020}
-        .post{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border2)}
-        .post:last-child{border-bottom:none}
-        .post .post-num{color:var(--text4);font-size:11px;min-width:24px;text-align:right;font-family:monospace;padding-top:1px}
-        .post .post-body{flex:1;min-width:0}
-        .post .post-title{font-weight:500;font-size:13px;color:var(--link);display:block;margin-bottom:1px}
-        .post .post-title:hover{color:var(--orange)}
-        .post .post-url{font-size:11px;color:var(--text4);word-break:break-all;margin-bottom:1px;font-family:monospace}
-        .post .post-note{font-size:12px;color:var(--text2);line-height:1.4;margin-top:2px;font-style:italic;border-left:2px solid var(--border);padding-left:8px}
-        .post .post-del{background:none;border:none;cursor:pointer;color:var(--text4);font-size:14px;padding:0 2px;opacity:.4;font-family:monospace}
-        .post .post-del:hover{opacity:1;color:#c55}
-        .empty-posts{padding:20px;text-align:center;color:var(--text3);font-size:13px}
-        .empty-posts .big{font-size:28px;margin-bottom:4px;opacity:.35}
 
+        /* ── Editor Overlay (strictly white) ── */
+        .editor-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:500;background:#fff}
+        .editor-overlay.open{display:flex;flex-direction:column}
+        .eo-bar{display:flex;align-items:center;gap:10px;padding:10px 20px;border-bottom:1px solid #e0e0e0;background:#f8f9fa;flex-shrink:0}
+        .eo-bar .eo-title{font-size:15px;font-weight:600;color:#222;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .eo-bar .eo-btn{padding:8px 20px;border:1px solid #ccc;border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;color:#444;background:#fff}
+        .eo-bar .eo-btn:hover{background:#eee}
+        .eo-bar .eo-btn.primary{background:#1a73e8;color:#fff;border-color:#1a73e8;font-weight:600}
+        .eo-bar .eo-btn.primary:hover{background:#1557b0}
+        .eo-body{flex:1;display:flex;overflow:hidden}
+        .eo-editor{flex:1;display:flex;flex-direction:column;overflow:hidden}
+        .eo-toolbar{display:flex;gap:3px;padding:8px 12px;border-bottom:1px solid #e0e0e0;background:#f8f9fa;flex-wrap:wrap;flex-shrink:0}
+        .eo-toolbar button{padding:6px 10px;border:1px solid #ddd;border-radius:5px;background:#fff;color:#333;font-size:12px;font-family:inherit;cursor:pointer;font-weight:500;min-width:32px;text-align:center}
+        .eo-toolbar button:hover{background:#e8f0fe;border-color:#8ab4f8;color:#1a73e8}
+        .eo-toolbar .sep{width:1px;height:24px;background:#ddd;margin:0 4px}
+        .eo-toolbar .spacer{flex:1}
+        .eo-textarea{flex:1;padding:16px 20px;border:none;outline:none;font-size:15px;font-family:'SF Mono',Monaco,'Cascadia Code',monospace;line-height:1.7;color:#222;background:#fff;resize:none;width:100%}
+        .eo-preview{width:45%;border-left:1px solid #e0e0e0;overflow-y:auto;padding:16px 20px;font-size:15px;line-height:1.7;color:#333;background:#fafafa}
+        .eo-preview h1,.eo-preview h2,.eo-preview h3{color:#111;font-weight:600;margin:20px 0 8px}
+        .eo-preview h1{font-size:24px}.eo-preview h2{font-size:20px}.eo-preview h3{font-size:17px}
+        .eo-preview p{margin:0 0 12px}
+        .eo-preview ul,.eo-preview ol{padding-left:20px;margin:0 0 12px}
+        .eo-preview code{background:#f0f0f0;padding:2px 6px;border-radius:3px;font-size:13px;color:#d63384}
+        .eo-preview pre{background:#f5f5f5;padding:12px;border-radius:6px;border:1px solid #e0e0e0;overflow-x:auto;font-size:13px}
+        .eo-preview blockquote{border-left:3px solid #1a73e8;padding:8px 14px;margin:0 0 12px;background:#f5f5f5;border-radius:0 6px 6px 0;color:#555}
+        .eo-preview img{max-width:100%;border-radius:6px;margin:8px 0}
+        .eo-preview a{color:#1a73e8}
 
+        .modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:600}
+        .modal-overlay.show{display:block}
+        .settings-modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border:1px solid #e0e0e0;border-radius:14px;z-index:601;width:440px;max-width:90vw;box-shadow:0 8px 40px rgba(0,0,0,.2)}
+        .settings-modal.show{display:block}
+        .settings-modal .sm-header{padding:16px 20px;font-size:15px;font-weight:600;border-bottom:1px solid #e0e0e0;color:#222}
+        .settings-modal .sm-body{padding:16px 20px}
+        .settings-modal .sm-body label{display:block;font-size:12px;font-weight:500;color:#666;margin:10px 0 4px}
+        .settings-modal .sm-body label:first-child{margin-top:0}
+        .settings-modal .sm-body input,.settings-modal .sm-body textarea{width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;color:#222;background:#fff;outline:none;font-family:inherit}
+        .settings-modal .sm-body textarea{min-height:60px;resize:vertical}
+        .settings-modal .sm-body input:focus,.settings-modal .sm-body textarea:focus{border-color:#1a73e8}
+        .settings-modal .sm-footer{display:flex;gap:8px;justify-content:flex-end;padding:12px 20px;border-top:1px solid #e0e0e0}
+        .settings-modal .sm-btn{padding:7px 16px;border:1px solid #ddd;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;background:#fff;color:#444}
+        .settings-modal .sm-btn:hover{background:#f0f0f0}
+        .settings-modal .sm-btn-primary{background:#1a73e8;color:#fff;border-color:#1a73e8}
 
-        .side-card{border:1px solid var(--border);background:var(--bg2);padding:12px;border-radius:2px;font-size:12px}
-        .side-card h4{margin:0 0 6px;font-size:12px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
-        .side-card .sc-item{padding:3px 0;color:var(--text3);display:flex;align-items:center;gap:4px}
-        .side-card .sc-item b{color:var(--text2)}
-
-        .pin-drawer{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:2px solid var(--orange);z-index:900;padding:16px 20px;max-height:45vh;overflow-y:auto;font-size:13px}
-        .pin-drawer.open{display:block}
-        .pin-drawer .pd-close{float:right;background:none;border:none;color:var(--text3);font-size:16px;cursor:pointer;padding:2px 6px;font-family:monospace}
-        .pin-drawer .pd-close:hover{color:var(--text)}
-        .pin-drawer h3{margin:0 0 6px;font-size:14px;font-weight:400;color:var(--orange);font-family:Georgia,serif}
-
-        @media(max-width:700px){.layout{flex-direction:column-reverse}.side-col{width:100%}}
+        .toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 24px;border-radius:10px;font-size:13px;z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.5);transition:opacity .3s;opacity:0;pointer-events:none}
+        .toast.show{opacity:1}
+        @media(max-width:720px){.layout{flex-direction:column}.side-col{width:100%}.side-card{position:static}.post-header h1{font-size:24px}}
     </style>
 </head>
 <body>
-    <div class="nav-bar">
+    <div class="bar">
         <a href="/" class="logo">arlong</a>
-        <span class="sep">/</span>
-        <a href="/explore">explore</a>
-        <span class="sep">/</span>
-        <span style="color:var(--text2);font-size:13px">{{ collection.name }}</span>
-        {% if session.user_id %}
-        <span class="sep">|</span>
-        <a href="/collections">my</a>
-        {% endif %}
-        <a href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" style="margin-left:auto;width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);display:flex;align-items:center;justify-content:center;flex-shrink:0;text-decoration:none;transition:.15s" aria-label="Account">
-            <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-        </a>
+        <nav>
+            <a href="/explore">Blogs</a>
+            {% if session.user_id %}<a href="/collections">My</a>{% endif %}
+            <a href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);padding:0;color:var(--text3)">
+                <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            </a>
+        </nav>
     </div>
 
-    <div class="layout">
-        <div class="main-col">
-            <div class="thread">
-                <h1>{{ collection.name }}</h1>
-                <div class="byline">by <b>{{ collection.creator_name }}</b> &middot; {{ collection.websites|length }} pin{% if collection.websites|length != 1 %}s{% endif %} &middot; {{ collection.created_at[:10] }}</div>
-                {% if collection.description %}<div class="desc">{{ collection.description }}</div>{% endif %}
-                <div class="actions">
-                    {% if session.user_id %}
-                    <button class="pin-btn" onclick="showPinDrawer('{{ collection.id }}', '{{ collection.name|e }}')">+ Pin</button>
-                    {% endif %}
-                    {% if session.user_id and session.user_id == collection.creator_id %}
-                    <button onclick="editCollection()">Edit</button>
-                    <button class="del-btn" onclick="deleteCollection()">Delete</button>
-                    {% endif %}
-                    <a href="/explore" class="btn">Back</a>
-                </div>
-            </div>
+    {% if collection.thumbnail %}
+    <div class="hero"><img src="{{ collection.thumbnail }}" alt=""></div>
+    {% endif %}
 
-            {% if collection.websites %}
-            <div style="border:1px solid var(--border);background:var(--bg2);padding:4px 16px;border-radius:2px">
-                {% for w in collection.websites %}
-                <div class="post">
-                    <span class="post-num">{{ loop.index }}.</span>
-                    <div class="post-body">
-                        <a href="{{ w.url }}" class="post-title" target="_blank">{{ w.title }}</a>
-                        <div class="post-url">{{ w.url }}</div>
-                        {% if w.note %}<div class="post-note">{{ w.note }}</div>{% endif %}
+    <div class="wrap">
+        <div class="layout">
+            <div class="main-col">
+                <div class="post-header">
+                    <h1>{{ collection.name }}</h1>
+                    <div class="post-meta">
+                        <a href="/u/{{ collection.creator_name }}" style="color:var(--text3);font-weight:500">{{ collection.creator_name }}</a>
+                        <span>&middot;</span>
+                        <span>{{ collection.created_at[:10] }}</span>
+                        {% if collection.websites %}<span>&middot;</span><span>{{ collection.websites|length }} link{% if collection.websites|length != 1 %}s{% endif %}</span>{% endif %}
                     </div>
-                    {% if session.user_id and session.user_id == w.added_by %}
-                    <button class="post-del" onclick="removeWebsite('{{ collection.id }}','{{ w.id }}')" title="Remove">&times;</button>
-                    {% endif %}
+                    <div class="actions">
+                        {% if is_owner %}<button class="btn" onclick="openEditor()">&#x270E; Edit</button>
+                        <button class="btn" onclick="openSettings()">&#x2699; Settings</button>
+                        <button class="btn danger" onclick="deletePost()">&#x1F5D1; Delete</button>{% endif %}
+                        <button class="btn" onclick="share()">&#x1F517; Share</button>
+                    </div>
                 </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <div class="empty-posts">
-                <div class="big">+</div>
-                <p>No pins yet.</p>
-                {% if session.user_id %}
-                <button class="pin-btn" style="background:var(--accent);color:#eee;border:1px solid var(--accent);border-radius:2px;padding:3px 10px;font-size:12px;cursor:pointer" onclick="showPinDrawer('{{ collection.id }}', '{{ collection.name|e }}')">Pin the first</button>
+
+                <div class="content">{{ content_html|safe }}</div>
+
+                {% if collection.websites %}
+                <div class="links-section">
+                    <h2>&#x1F4CC; Referenced Links</h2>
+                    {% for w in collection.websites %}
+                    <div class="link-item">
+                        <span style="font-size:12px;color:var(--text4);min-width:20px;padding-top:1px">{{ loop.index }}</span>
+                        <div class="link-body">
+                            <a href="{{ w.url }}" target="_blank" rel="noopener">{{ w.title }}</a>
+                            <div class="url">{{ w.url }}</div>
+                            {% if w.note %}<div class="note">{{ w.note }}</div>{% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
                 {% endif %}
             </div>
-            {% endif %}
 
-        </div>
-
-        <div class="side-col">
-            <div class="side-card">
-                <h4>Info</h4>
-                <div class="sc-item"><b>Created:</b> {{ collection.created_at[:10] }}</div>
-                <div class="sc-item"><b>By:</b> {{ collection.creator_name }}</div>
-                <div class="sc-item"><b>Pins:</b> {{ collection.websites|length }}</div>
-            </div>
-            {% if session.user_id %}
-            <div class="side-card" style="margin-top:8px">
-                <h4>My collections</h4>
-                <div id="my-collections-sidebar">
-                    <span style="color:var(--text4);font-size:11px">Loading...</span>
+            <div class="side-col">
+                <div class="side-card">
+                    <h4>About</h4>
+                    <div class="row"><span>Author</span><b><a href="/u/{{ collection.creator_name }}" style="color:var(--text2)">{{ collection.creator_name }}</a></b></div>
+                    <div class="row"><span>Published</span><b>{{ collection.created_at[:10] }}</b></div>
+                    <div class="row"><span>Updated</span><b>{{ collection.updated_at[:10] }}</b></div>
+                    {% if session.user_id %}
+                    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border2)">
+                        <h4 style="margin-bottom:6px">Your Blogs</h4>
+                        <div id="my-blogs" style="color:var(--text4);font-size:12px">Loading...</div>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
-            {% endif %}
         </div>
     </div>
 
-    <div class="pin-drawer" id="pin-drawer">
-        <button class="pd-close" onclick="closePinDrawer()">&times;</button>
-        <h3>Pin a website</h3>
-        <div id="pd-url-display" style="font-size:11px;color:var(--text3);margin-bottom:6px;word-break:break-all"></div>
-        <input type="hidden" id="pd-collection-id">
-        <input type="hidden" id="pd-url">
-        <input type="hidden" id="pd-title">
-        <div style="margin-bottom:6px">
-            <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:2px">Note (optional)</label>
-            <input type="text" id="pd-note" placeholder="Why this belongs here" style="width:100%;padding:5px 8px;border:1px solid var(--border);font-size:12px;background:var(--bg);color:var(--text);outline:none">
+    <div class="editor-overlay" id="editor-overlay">
+        <div class="eo-bar">
+            <span class="eo-title">Editing: {{ collection.name }}</span>
+            <button class="eo-btn" onclick="closeEditor()">Cancel</button>
+            <button class="eo-btn primary" onclick="saveEdit()">Save</button>
         </div>
-        <button onclick="pinToCollection()" style="padding:4px 14px;border:1px solid var(--accent);background:var(--accent);color:#eee;border-radius:2px;font-size:12px;cursor:pointer;font-family:Verdana,Arial,sans-serif">Pin it</button>
+        <div class="eo-body">
+            <div class="eo-editor">
+                <div class="eo-toolbar">
+                    <button onclick="wrap('**','**')"><b>B</b></button>
+                    <button onclick="wrap('*','*')"><i>I</i></button>
+                    <button onclick="wrap('<u>','</u>')"><u>U</u></button>
+                    <span class="sep"></span>
+                    <button onclick="wrap('## ','')">H2</button>
+                    <button onclick="wrap('### ','')">H3</button>
+                    <span class="sep"></span>
+                    <button onclick="wrap('- ','')">&#x2022; List</button>
+                    <button onclick="wrap('1. ','')">1. List</button>
+                    <button onclick="wrap('> ','')">&#x275E; Quote</button>
+                    <button onclick="wrap('```\n','\n```')">&lt;/&gt; Code</button>
+                    <span class="sep"></span>
+                    <button onclick="insertLink()">&#x1F517; Link</button>
+                    <button onclick="insertImage()">&#x1F5BC; Img</button>
+                    <button onclick="wrap('---\n','')">&mdash; HR</button>
+                    <button onclick="insertMention()"><b>@</b></button>
+                    <span class="spacer"></span>
+                </div>
+                <textarea class="eo-textarea" id="editor" oninput="updatePreview()">{{ collection.content }}</textarea>
+            </div>
+            <div class="eo-preview" id="preview"></div>
+        </div>
     </div>
 
+    <div class="modal-overlay" id="modal-overlay" onclick="closeSettings()"></div>
+    <div class="settings-modal" id="settings-modal">
+        <div class="sm-header">Blog Settings</div>
+        <div class="sm-body">
+            <label>Title</label>
+            <input type="text" id="sm-title" value="{{ collection.name|e }}" maxlength="100">
+            <label>Excerpt</label>
+            <textarea id="sm-desc" maxlength="500">{{ collection.description or '' }}</textarea>
+            <label>Thumbnail</label>
+            <div style="display:flex;gap:8px;align-items:center">
+                <input type="text" id="sm-thumb-url" placeholder="Paste image URL..." value="{{ collection.thumbnail or '' }}" style="flex:1">
+                <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" id="sm-thumb-file" style="display:none" onchange="uploadThumb(this)">
+                <button class="sm-btn" onclick="document.getElementById('sm-thumb-file').click()">Browse</button>
+            </div>
+        </div>
+        <div class="sm-footer">
+            <button class="sm-btn" onclick="closeSettings()">Cancel</button>
+            <button class="sm-btn sm-btn-primary" onclick="saveSettings()">Save</button>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.7/marked.min.js"></script>
     <script>
-    function showPinDrawer(cid, cname){
-        document.getElementById('pin-drawer').classList.add('open');
-        document.getElementById('pd-collection-id').value=cid;
-    }
-    function closePinDrawer(){document.getElementById('pin-drawer').classList.remove('open')}
-    function pinToCollection(){
-        var cid=document.getElementById('pd-collection-id').value;
-        var url=document.getElementById('pd-url').value;
-        var title=document.getElementById('pd-title').value;
-        var note=document.getElementById('pd-note').value;
-        var fd=new FormData(); fd.append('url', url); fd.append('title', title); fd.append('note', note);
-        fetch('/api/collections/'+cid+'/websites', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
-            if(!d.ok){alert(d.error);return}
-            closePinDrawer();
-            window.location.reload();
-        });
-    }
-    function removeWebsite(cid, wid){
-        if(!confirm('Remove this pin?')) return;
-        fetch('/api/collections/'+cid+'/websites/'+wid, {method:'DELETE'}).then(function(r){return r.json()}).then(function(d){
-            if(!d.ok){alert(d.error);return}
-            window.location.reload();
-        });
-    }
-    function editCollection(){
-        var name=prompt('Name:', '{{ collection.name|e }}');
-        if(!name)return;
-        var desc=prompt('Description:', '{{ collection.description|e }}');
-        var fd=new FormData(); fd.append('name', name); fd.append('description', desc||'');
-        fetch('/api/collections/{{ collection.id }}', {method:'PUT', body:fd}).then(function(r){return r.json()}).then(function(d){
-            if(!d.ok){alert(d.error);return}
-            window.location.reload();
-        });
-    }
-    function deleteCollection(){
-        if(!confirm('Delete this collection permanently?')) return;
-        fetch('/api/collections/{{ collection.id }}', {method:'DELETE'}).then(function(r){return r.json()}).then(function(d){
-            window.location.href='/explore';
-        });
-    }
+        var editor = document.getElementById('editor');
+        var preview = document.getElementById('preview');
+        var contentHtml = {{ content_html|tojson }};
 
-    fetch('/api/collections').then(function(r){return r.json()}).then(function(d){
-        if(d.ok && d.collections && d.collections.length){
-            var html='';
-            d.collections.forEach(function(c){
-                html+='<div class="sc-item"><b>'+c.name+'</b> <span style="color:var(--text4)">('+c.websites.length+')</span></div>';
-            });
-            var el=document.getElementById('my-collections-sidebar');
-            if(el) el.innerHTML=html;
-        } else {
-            var el=document.getElementById('my-collections-sidebar');
-            if(el) el.innerHTML='<div style="color:var(--text4);font-size:11px"><a href="/explore" style="color:var(--link)">Create one</a></div>';
+        function renderMd(text){
+            if(typeof marked !== 'undefined'){
+                return marked.parse(text);
+            }
+            return text;
         }
-    });
+        function updatePreview(){
+            if(preview) preview.innerHTML = renderMd(editor.value);
+        }
+
+        function openEditor(){
+            document.getElementById('editor-overlay').classList.add('open');
+            setTimeout(function(){ editor.focus() }, 100);
+            updatePreview();
+        }
+        function closeEditor(){
+            document.getElementById('editor-overlay').classList.remove('open');
+        }
+
+        function wrap(before, after){
+            var ta = editor;
+            var s = ta.selectionStart, e = ta.selectionEnd;
+            var t = ta.value;
+            var sel = t.substring(s, e) || '';
+            ta.value = t.substring(0, s) + before + sel + after + t.substring(e);
+            ta.focus();
+            ta.selectionStart = s + before.length;
+            ta.selectionEnd = s + before.length + sel.length;
+            updatePreview();
+        }
+        function insertLink(){
+            var url = prompt('URL:');
+            if(!url) return;
+            var text = prompt('Link text:', url) || url;
+            wrap('[', ']('+url+')');
+        }
+        function insertImage(){
+            var url = prompt('Image URL:');
+            if(!url) return;
+            var alt = prompt('Alt text:', 'Image') || 'Image';
+            wrap('![', alt+']('+url+')');
+        }
+        function insertMention(){
+            wrap('@', '');
+        }
+
+        function saveEdit(){
+            var md = editor.value;
+            var fd = new FormData();
+            fd.append('content', md);
+            fd.append('name', '{{ collection.name|e }}');
+            fetch('/api/collections/{{ collection.id }}', {method:'PUT', body:fd}).then(function(r){return r.json()}).then(function(d){
+                if(!d.ok){ showToast(d.error||'Error'); return; }
+                window.location.reload();
+            });
+        }
+
+        function openSettings(){
+            document.getElementById('modal-overlay').classList.add('show');
+            document.getElementById('settings-modal').classList.add('show');
+        }
+        function closeSettings(){
+            document.getElementById('modal-overlay').classList.remove('show');
+            document.getElementById('settings-modal').classList.remove('show');
+        }
+        function uploadThumb(input){
+            var file = input.files[0];
+            if(!file) return;
+            var fd = new FormData();
+            fd.append('file', file);
+            fetch('/api/upload', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
+                if(d.url) document.getElementById('sm-thumb-url').value = d.url;
+                else showToast(d.error||'Upload failed');
+            });
+        }
+        function saveSettings(){
+            var name = document.getElementById('sm-title').value.trim();
+            var desc = document.getElementById('sm-desc').value.trim();
+            var thumb = document.getElementById('sm-thumb-url').value.trim();
+            if(!name){ showToast('Title required'); return; }
+            var fd = new FormData();
+            fd.append('name', name);
+            fd.append('description', desc||'');
+            fd.append('thumbnail', thumb||'');
+            fetch('/api/collections/{{ collection.id }}', {method:'PUT', body:fd}).then(function(r){return r.json()}).then(function(d){
+                if(d.ok) window.location.reload();
+                else showToast(d.error||'Error');
+            });
+        }
+
+        function share(){
+            var url = window.location.href;
+            if(navigator.share) navigator.share({url:url});
+            else { navigator.clipboard.writeText(url); showToast('Copied!'); }
+        }
+        function deletePost(){
+            if(!confirm('Delete this post permanently?')) return;
+            fetch('/api/collections/{{ collection.id }}', {method:'DELETE'}).then(function(){ window.location.href='/explore'; });
+        }
+        function showToast(m){
+            var t = document.getElementById('toast');
+            t.textContent = m; t.classList.add('show');
+            setTimeout(function(){t.classList.remove('show')}, 2500);
+        }
+        fetch('/api/collections').then(function(r){return r.json()}).then(function(d){
+            var el = document.getElementById('my-blogs');
+            if(el && d.ok && d.collections && d.collections.length){
+                el.innerHTML = d.collections.map(function(c){
+                    return '<div style="padding:3px 0"><a href="/explore/'+c.id+'" style="color:var(--text2);font-size:12px">'+c.name+'</a></div>';
+                }).join('');
+            } else if(el) {
+                el.innerHTML = '<a href="/explore" style="color:var(--link);font-size:12px">Write a blog</a>';
+            }
+        });
     </script>
 </body>
 </html>

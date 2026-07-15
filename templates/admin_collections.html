@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Admin Collections - arlong</title>
+    <style>
+        :root{--bg:#000;--bg2:#0d0d0d;--bg3:#1a1a1a;--text:#e8eaed;--text2:#bdc1c6;--text3:#8a8f96;--link:#8ab4f8;--border:#333}
+        *{box-sizing:border-box}
+        body{margin:0;padding:20px;font-family:arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px}
+        a{color:var(--link);text-decoration:none}
+        a:hover{text-decoration:underline}
+        h1{font-size:22px;font-weight:400;margin:0 0 20px}
+        .bar{padding:12px 0;border-bottom:1px solid var(--border);margin-bottom:20px;display:flex;gap:14px;align-items:center}
+        .bar a{font-size:13px;color:var(--text3)}
+        .flagged{border:1px solid #f28b82;background:#2d1517;border-radius:8px;padding:16px;margin-bottom:20px}
+        .flagged h2{font-size:15px;color:#f28b82;margin:0 0 10px}
+        table{width:100%;border-collapse:collapse;font-size:13px}
+        th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--border)}
+        th{color:var(--text3);font-weight:500;font-size:12px;text-transform:uppercase}
+        .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+        .badge.red{background:#3c2023;color:#f28b82}
+        .badge.green{background:#0d2214;color:#81c995}
+        .badge.yellow{background:#332e1a;color:#fbbc04}
+        .btn{display:inline-block;padding:4px 12px;border:1px solid var(--border);border-radius:4px;font-size:12px;cursor:pointer;background:var(--bg2);color:var(--text)}
+        .btn:hover{background:var(--bg3)}
+        .btn.approve{background:#0d2214;border-color:#1a3a28;color:#81c995}
+        .btn.reject{background:#3c2023;border-color:#5f2c30;color:#f28b82}
+    </style>
+</head>
+<body>
+    <div class="bar">
+        <a href="/admin/dashboard">Dashboard</a> &middot;
+        <a href="/admin/reports">Reports</a> &middot;
+        <strong style="color:var(--text)">Collections</strong> &middot;
+        <a href="/admin/accounts">Accounts</a> &middot;
+        <a href="/admin/logout">Sign out</a>
+    </div>
+
+    <h1>Collection Management</h1>
+
+    {% if flagged %}
+    <div class="flagged">
+        <h2>&#x26A0; Flagged Collections ({{ flagged|length }})</h2>
+        <table>
+            <tr><th>Name</th><th>Creator</th><th>Flags</th><th>Score</th><th>Links</th><th>Actions</th></tr>
+            {% for c in flagged %}
+            <tr>
+                <td><a href="/explore/{{ c.id }}">{{ c.name }}</a></td>
+                <td>{{ c.creator_name }}</td>
+                <td><span class="badge red">{{ c.flags }}</span></td>
+                <td>{{ c.quality_score }}</td>
+                <td>{{ c.websites|length }}</td>
+                <td>
+                    <form method="POST" action="/admin/collections/{{ c.id }}/approve" style="display:inline">
+                        <button class="btn approve">Approve &amp; List</button>
+                    </form>
+                    <form method="POST" action="/admin/collections/{{ c.id }}/reject" style="display:inline">
+                        <button class="btn reject">Reject</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+    {% endif %}
+
+    <h2 style="font-size:15px;font-weight:400;margin:20px 0 10px">All Collections</h2>
+    <table>
+        <tr><th>Name</th><th>Creator</th><th>Score</th><th>Links</th><th>Views</th><th>Listed</th><th>Approved</th><th>Action</th></tr>
+        {% for c in collections %}
+        <tr>
+            <td><a href="/explore/{{ c.id }}">{{ c.name }}</a></td>
+            <td>{{ c.creator_name }}</td>
+            <td>{{ c.quality_score }}</td>
+            <td>{{ c.websites|length }}</td>
+            <td>{{ c.view_count }}</td>
+            <td>{% if c.is_listed %}<span class="badge green">Yes</span>{% else %}<span class="badge yellow">No</span>{% endif %}</td>
+            <td>{% if c.is_approved %}<span class="badge green">Approved</span>{% else %}<span class="badge yellow">Pending</span>{% endif %}</td>
+            <td>
+                {% if not c.is_approved %}
+                <form method="POST" action="/admin/collections/{{ c.id }}/approve" style="display:inline">
+                    <button class="btn approve">Approve</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
