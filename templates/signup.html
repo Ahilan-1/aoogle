@@ -41,9 +41,9 @@
             --input-focus: rgba(41,151,255,.35);
             --ring: 0 0 0 3px rgba(41,151,255,.3);
         }
-        html{overflow-x:hidden;zoom:1.15}
+        html{overflow-x:hidden}
         *,*::before,*::after{box-sizing:border-box}
-        body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Helvetica Neue',sans-serif;background:var(--bg);color:var(--text);font-size:15px;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;transition:background .35s var(--ease),color .35s var(--ease)}
+        body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Helvetica Neue',sans-serif;background:var(--bg);color:var(--text);font-size:17px;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;transition:background .35s var(--ease),color .35s var(--ease)}
         .top-bar{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:8px 20px;background:var(--card-bg);-webkit-backdrop-filter:blur(40px) saturate(1.4);backdrop-filter:blur(40px) saturate(1.4);border-bottom:1px solid var(--card-border)}
         .top-bar .mini-logo{font-size:18px;font-weight:600;letter-spacing:-.3px;color:var(--text);text-decoration:none}
         .top-bar .mini-logo:hover{opacity:.7}
@@ -60,7 +60,7 @@
         .step::after{content:'';position:absolute;top:0;left:0;height:100%;width:0;background:var(--link);border-radius:2px;transition:width .5s var(--spring)}
         .step.active::after{width:100%}
         .step.done::after{width:100%;background:var(--green)}
-        .step-wrap{position:relative;overflow:hidden}
+        .step-wrap{position:relative}
         .step-form{display:none;animation:slideIn .45s var(--spring)}
         .step-form.active{display:block}
         @keyframes slideIn{0%{opacity:0;transform:translateX(16px)}100%{opacity:1;transform:translateX(0)}}
@@ -96,9 +96,9 @@
         .btn-secondary:hover{background:var(--card-border);color:var(--text)}
         .btn-secondary:active{transform:scale(.97)}
         .btn-row{display:flex;gap:10px;margin-top:20px}
-        .btn-row .btn{margin-top:0}
-        .btn-row .btn:first-child{flex:0 0 auto;padding:12px 20px}
-        .btn-row .btn:last-child{flex:1}
+        .btn-row .btn{margin-top:0;width:auto}
+        .btn-row .btn:first-child{flex:0 0 auto;padding:12px 20px;min-width:80px}
+        .btn-row .btn:last-child{flex:1;min-width:120px}
         .error{background:rgba(255,69,58,.1);color:var(--red);padding:11px 14px;border-radius:10px;font-size:13px;margin-bottom:0;border:1px solid rgba(255,69,58,.15);display:flex;align-items:center;gap:8px;font-weight:500}
         .error svg{width:16px;height:16px;flex-shrink:0}
         .switch{text-align:center;margin-top:20px;font-size:13px;color:var(--text3)}
@@ -190,7 +190,7 @@
                             <div class="input-status" id="password-status"></div>
                         </div>
                         <div class="field-hint invalid" id="pw-hint">Must contain letters and numbers</div>
-                        <button type="button" class="btn btn-primary" onclick="nextStep(2)" id="step1-btn">Continue</button>
+                        <button type="button" class="btn btn-primary" onclick="nextStep(2)" id="step1-btn">Next Step &rarr;</button>
                     </div>
 
                     <div class="step-form" data-step="2">
@@ -209,7 +209,7 @@
                         </div>
                         <div class="btn-row">
                             <button type="button" class="btn btn-secondary" onclick="prevStep(1)">Back</button>
-                            <button type="button" class="btn btn-primary" onclick="nextStep(3)">Continue</button>
+                            <button type="button" class="btn btn-primary" onclick="nextStep(3)">Next Step &rarr;</button>
                         </div>
                     </div>
 
@@ -221,7 +221,7 @@
                         <div class="opt">Shows local weather on your homepage</div>
                         <div class="btn-row">
                             <button type="button" class="btn btn-secondary" onclick="prevStep(2)">Back</button>
-                            <button type="button" class="btn btn-primary" onclick="nextStep(4)">Continue</button>
+                            <button type="button" class="btn btn-primary" onclick="nextStep(4)">Next Step &rarr;</button>
                         </div>
                     </div>
 
@@ -424,6 +424,18 @@
             document.getElementById('signup-form').addEventListener('submit', function(){
                 var btn = document.getElementById('submit-btn');
                 btn.classList.add('loading');
+            });
+
+            document.addEventListener('keydown', function(e){
+                if(e.key === 'Enter'){
+                    var active = document.querySelector('.step-form.active');
+                    if(active){
+                        var step = parseInt(active.getAttribute('data-step'));
+                        if(step === 1) nextStep(2);
+                        else if(step === 2) nextStep(3);
+                        else if(step === 3) nextStep(4);
+                    }
+                }
             });
         });
     </script>

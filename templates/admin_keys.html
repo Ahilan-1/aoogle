@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Product Keys - arlong Admin</title>
+    <style>
+        :root{--bg:#000;--bg2:#0d0d0d;--bg3:#1a1a1a;--text:#e8eaed;--text2:#bdc1c6;--text3:#8a8f96;--link:#8ab4f8;--border:#333}
+        *{box-sizing:border-box}
+        body{margin:0;padding:20px;font-family:arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px}
+        a{color:var(--link);text-decoration:none}
+        a:hover{text-decoration:underline}
+        h1{font-size:22px;font-weight:400;margin:0 0 20px}
+        .bar{padding:12px 0;border-bottom:1px solid var(--border);margin-bottom:20px;display:flex;gap:14px;align-items:center}
+        .bar a{font-size:13px;color:var(--text3)}
+        .stats{display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap}
+        .stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:18px 24px;flex:1;min-width:140px}
+        .stat-card .num{font-size:28px;font-weight:600;color:#8ab4f8;margin-bottom:2px}
+        .stat-card .label{font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.3px}
+        table{width:100%;border-collapse:collapse;font-size:13px}
+        th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--border)}
+        th{color:var(--text3);font-weight:500;font-size:12px;text-transform:uppercase}
+        .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+        .badge.green{background:#0d2214;color:#81c995}
+        .badge.red{background:#3c2023;color:#f28b82}
+        .badge.yellow{background:#332e1a;color:#fbbc04}
+        .key-code{font-family:monospace;font-size:12px;letter-spacing:.5px;background:var(--bg3);padding:3px 6px;border-radius:4px}
+        .empty{text-align:center;padding:40px 20px;color:var(--text3);font-size:14px}
+    </style>
+</head>
+<body>
+    <div class="bar">
+        <a href="/admin/dashboard">Dashboard</a> &middot;
+        <a href="/admin/collections">Collections</a> &middot;
+        <a href="/admin/accounts">Accounts</a> &middot;
+        <strong style="color:var(--text)">Keys</strong> &middot;
+        <a href="/admin/logout">Sign out</a>
+    </div>
+
+    <h1>Product Keys</h1>
+
+    <div class="stats">
+        <div class="stat-card">
+            <div class="num">{{ stats.total }}</div>
+            <div class="label">Total Keys</div>
+        </div>
+        <div class="stat-card">
+            <div class="num" style="color:#81c995">{{ stats.used }}</div>
+            <div class="label">Redeemed</div>
+        </div>
+        <div class="stat-card">
+            <div class="num" style="color:#fbbc04">{{ stats.available }}</div>
+            <div class="label">Available</div>
+        </div>
+    </div>
+
+    {% if keys %}
+    <table>
+        <tr>
+            <th>Key</th>
+            <th>Tier</th>
+            <th>Created</th>
+            <th>Created By</th>
+            <th>Status</th>
+            <th>Redeemed By</th>
+            <th>Redeemed At</th>
+        </tr>
+        {% for k in keys|reverse %}
+        <tr>
+            <td><span class="key-code">{{ k.key }}</span></td>
+            <td>{{ k.tier }}</td>
+            <td style="font-size:12px;color:var(--text3)">{{ k.created_at[:16] }}</td>
+            <td>{{ k.created_by }}</td>
+            <td>
+                {% if k.redeemed_by %}
+                <span class="badge green">Redeemed</span>
+                {% else %}
+                <span class="badge yellow">Available</span>
+                {% endif %}
+            </td>
+            <td>{{ k.redeemed_username or '—' }}</td>
+            <td style="font-size:12px;color:var(--text3)">{{ k.redeemed_at[:16] if k.redeemed_at else '—' }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <div class="empty">No product keys generated yet.</div>
+    {% endif %}
+</body>
+</html>

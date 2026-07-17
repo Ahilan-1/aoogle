@@ -114,7 +114,7 @@
         <h1>/u/{% if profile %}{{ profile.username }}{% else %}...{% endif %}</h1>
         <nav>
             <a href="/explore">Explore</a>
-            <a href="/premium">Premium</a>
+            <a href="/settings">Settings</a>
         </nav>
         <a href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" class="acc-btn" aria-label="Account">
             <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
@@ -146,33 +146,11 @@
                 <div class="badge badge-free">Free</div>
                 {% endif %}
                 <div class="stat-grid">
-                    <div class="stat"><div class="n">{{ profile.collections_count }}</div><div class="l">collections</div></div>
+                    <div class="stat"><div class="n">{{ profile.blogs_count }}</div><div class="l">blogs</div></div>
                     <div class="stat"><div class="n">{{ profile.pins_count }}</div><div class="l">pins</div></div>
                 </div>
             </div>
 
-            {% if profile.is_owner and daily_remaining is not none %}
-            <div class="main-card" style="margin-top:14px">
-                <div class="mc-title">
-                    <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:var(--text3)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
-                    Daily Searches
-                    <a href="/premium" style="font-size:11px;margin-left:auto;font-weight:400">Upgrade</a>
-                </div>
-                <div style="font-size:22px;font-weight:300;color:var(--text)">{{ daily_remaining }} <span style="font-size:12px;color:var(--text3)">remaining today</span></div>
-                {% if profile.premium_tier %}
-                {% set limit = 500 if 'Basic' in profile.premium_tier else 999999 %}
-                {% else %}
-                {% set limit = 24 %}
-                {% endif %}
-                {% if limit < 999999 %}
-                {% set used = limit - daily_remaining %}
-                {% set pct = (used / limit * 100)|round %}
-                <div class="quota-bar">
-                    <div class="fill {% if pct < 60 %}good{% elif pct < 90 %}warn{% else %}full{% endif %}" style="width:{{ pct }}%"></div>
-                </div>
-                {% endif %}
-            </div>
-            {% endif %}
         </div>
 
         <div class="main">
@@ -203,11 +181,6 @@
                     <button class="btn btn-primary" onclick="updateWeatherLocation()">Save location</button>
                     <div class="s-msg" id="s-wloc-msg"></div>
 
-                    {% if not profile.premium_tier %}
-                    <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border2)">
-                        <a href="/premium" style="font-size:13px;color:var(--link)">Upgrade to Premium &rarr;</a>
-                    </div>
-                    {% endif %}
                 </div>
             </div>
             {% endif %}

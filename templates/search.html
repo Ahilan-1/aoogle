@@ -34,6 +34,8 @@
 
         .glogo{text-align:center;font-size:72px;font-family:'Product Sans',Arial,sans-serif;letter-spacing:-2px}
         .slogan{font-size:14px;color:var(--text3);margin-top:4px;letter-spacing:.3px;font-family:Georgia,serif;font-style:italic}
+        .hp-prem-badge{display:inline-block;font-size:10px;font-family:arial,sans-serif;font-style:normal;font-weight:600;background:#1a73e8;color:#fff!important;padding:2px 8px;border-radius:8px;margin-left:6px;vertical-align:middle;text-decoration:none;letter-spacing:.3px;text-transform:uppercase;transition:opacity .2s}
+        .hp-prem-badge:hover{opacity:.85;text-decoration:none}
         .bottom-links{text-align:center;margin-top:36px;font-size:12px;color:var(--text3);line-height:2}
         .bottom-links a{color:var(--text3);margin:0 8px}
         .bottom-links a:hover{color:var(--text)}
@@ -96,13 +98,7 @@
             50% { background-position: 0 55%; }
         }
 
-        .acc-btn{position:fixed;top:12px;right:16px;z-index:999;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:.15s;text-decoration:none}
-        .acc-btn:hover{background:var(--hover-bg);color:var(--text)}
-        .acc-btn svg{width:18px;height:18px;fill:currentColor}
-        .acc-quota{position:fixed;top:14px;right:60px;z-index:999;display:flex;align-items:center;gap:3px;padding:3px 9px;border-radius:12px;font-size:11px;font-weight:600;background:var(--bg2);border:1px solid var(--border);color:var(--text3);text-decoration:none;cursor:pointer;transition:.15s;line-height:1.3}
-        .acc-quota:hover{background:var(--hover-bg);color:var(--text);border-color:var(--text3);text-decoration:none}
-        .acc-quota .aq-count{color:var(--text);font-weight:700;font-feature-settings:'tnum'}
-        .acc-quota .aq-lbl{font-size:10px;font-weight:400}
+
 
         .homepage{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 16px}
         .homepage .search-form{margin-top:24px;position:relative;width:100%;max-width:760px}
@@ -282,9 +278,52 @@
             .weather-panel .wp-icon{width:40px;height:40px}
             .weather-panel .wp-icon svg{width:40px;height:40px}
             .weather-panel .wp-main{gap:12px}
-            .acc-btn{top:8px;right:8px;width:32px;height:32px}
-            .acc-btn svg{width:16px;height:16px}
-            .acc-quota{top:10px;right:48px;font-size:10px;padding:2px 7px}
+        }
+        /* ── Sports Scorecard ── */
+        .scorecard-container{background:#1a1f2e;border:1px solid rgba(255,255,255,.08);border-radius:16px;overflow:hidden;margin-bottom:24px;font-family:system-ui,-apple-system,sans-serif}
+        .scorecard-header{display:flex;align-items:center;gap:12px;padding:16px 20px 12px;border-bottom:1px solid rgba(255,255,255,.06)}
+        .sc-title-group{flex:1;min-width:0}
+        .sc-title{font-size:12px;font-weight:700;color:#e8b830;text-transform:uppercase;letter-spacing:1.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .sc-subtitle{font-size:11px;color:#6b7280;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .sc-badge{font-size:10px;font-weight:600;padding:4px 12px;border-radius:20px;flex-shrink:0;text-transform:uppercase;letter-spacing:.8px;display:flex;align-items:center;gap:5px}
+        .sc-badge.live{background:rgba(74,222,128,.12);color:#4ade80}
+        .sc-badge.finished{background:rgba(248,113,113,.12);color:#f87171}
+        .sc-badge.scheduled{background:rgba(156,163,175,.1);color:#9ca3af}
+        .sc-badge .pulse-dot{width:7px;height:7px;border-radius:50%;background:#4ade80;animation:pulse-dot 1.5s ease-in-out infinite;display:inline-block}
+        @keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+        .scorecard-body{display:flex;align-items:center;justify-content:center;padding:20px 20px 16px;gap:4px}
+        .team-block{text-align:center;flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+        .team-flag{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);flex-shrink:0}
+        .team-flag.esp{background:linear-gradient(135deg,#aa151b 50%,#f1bf00 50%)}
+        .team-flag.arg{background:linear-gradient(135deg,#75aadb 33%,#fff 33%,#fff 66%,#75aadb 66%)}
+        .team-abbr{font-size:13px;font-weight:700;color:#e8e8ea;letter-spacing:.5px;text-transform:uppercase}
+        .score-display{width:62px;height:62px;border-radius:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center}
+        .score-value{font-size:28px;font-weight:800;color:#f3f4f6;line-height:1;font-feature-settings:'tnum'}
+        .match-state{text-align:center;padding:0 10px;min-width:60px;display:flex;flex-direction:column;align-items:center;gap:2px}
+        .match-minute,.match-date{font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.8px}
+        .match-vs{font-size:14px;font-weight:700;color:#9ca3af;letter-spacing:-.3px;margin:2px 0}
+        .match-number{font-size:9px;color:#6b7280}
+        .scorecard-footer{display:flex;align-items:center;justify-content:space-between;padding:10px 20px 14px;border-top:1px solid rgba(255,255,255,.06)}
+        .sc-info{font-size:11px;color:#6b7280}
+        .sc-action{font-size:11px;color:#3b82f6;text-decoration:none;flex-shrink:0;margin-left:10px;transition:color .15s}
+        .sc-action:hover{color:#60a5fa;text-decoration:underline}
+        .scorecard-container.clickable{cursor:pointer;transition:border-color .2s}
+        .scorecard-container.clickable:hover{border-color:rgba(255,255,255,.15)}
+        @media(max-width:640px){
+            .scorecard-body{padding:14px 10px 12px}
+            .score-display{width:48px;height:48px;border-radius:8px}
+            .score-value{font-size:22px}
+            .team-flag{width:28px;height:28px;font-size:11px}
+            .team-abbr{font-size:11px}
+            .match-state{padding:0 4px;min-width:44px}
+            .match-vs{font-size:12px}
+            .sc-title{font-size:11px}
+            .sc-subtitle{font-size:10px}
+            .scorecard-header{padding:12px 14px 10px}
+            .scorecard-footer{padding:8px 14px 12px}
+            .sc-info{font-size:10px}
+            .sc-action{font-size:10px}
+            .sc-badge{font-size:9px;padding:3px 10px}
         }
         @media(max-width:400px){
             .glogo{font-size:36px}
@@ -303,7 +342,6 @@
         @supports(padding:max(0px)){
             .results-header{padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
             .results-header .top-row{padding-left:0;padding-right:0}
-            .acc-btn{right:max(16px,env(safe-area-inset-right,16px))}
             .results-layout{padding-left:max(16px,env(safe-area-inset-left,16px));padding-right:max(16px,env(safe-area-inset-right,16px))}
         }
 
@@ -386,7 +424,6 @@
         .portal-wrap{display:none}
         .portal-mode .portal-wrap{display:block}
         .portal-mode .homepage,.portal-mode .glogo,.portal-mode .slogan,.portal-mode .bottom-links,.portal-mode .hp-whatsnew{display:none}
-        .portal-mode .acc-btn{display:none}
         .portal-header{display:flex;align-items:flex-start;gap:20px;padding:24px 32px 8px;max-width:1200px;margin:0 auto}
         .portal-header-left{display:flex;align-items:center;gap:12px;padding-top:6px;position:relative;flex-shrink:0}
         .portal-hamburger{width:22px;height:22px;display:flex;flex-direction:column;justify-content:space-around;cursor:pointer;color:var(--text3);padding:2px 0}
@@ -635,6 +672,18 @@
         .rc-report-opt{padding:8px 14px;cursor:pointer;font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px}
         .rc-report-opt:hover{background:var(--hover-bg)}
 
+        /* ── Domain Group (nested results) ── */
+        .domain-group{margin-bottom:26px;padding-bottom:2px}
+        .domain-group .rc-modern{margin-bottom:0}
+        .domain-group .rc-modern + .rc-modern{margin-top:18px;padding-top:18px;border-top:1px solid var(--border2)}
+        .domain-group-children{display:none;padding-left:0;margin-top:0}
+        .domain-group-children.open{display:block}
+        .domain-group-toggle{display:inline-flex;align-items:center;gap:4px;margin-top:10px;padding:5px 12px;border:1px solid var(--border);border-radius:16px;background:var(--bg2);color:var(--text3);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;user-select:none}
+        .domain-group-toggle:hover{background:var(--hover-bg);border-color:var(--text3);color:var(--text)}
+        .domain-group-toggle svg{width:14px;height:14px;fill:currentColor;transition:transform .2s}
+        .domain-group-toggle.open svg{transform:rotate(180deg)}
+        .domain-group-count{background:var(--bg3);color:var(--text3);padding:1px 6px;border-radius:8px;font-size:11px;font-weight:600}
+
         /* ── Pin Modal (high-tech) ── */
         .pin-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.65);z-index:2000;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
         .pin-overlay.open{display:flex}
@@ -708,7 +757,7 @@
     <div class="ao-loading" id="ao-loading">
         <div class="al-spinner"></div>
         <div class="al-logo">arlong</div>
-        <div class="al-text">Searching the web</div>
+        <div class="al-text" id="al-text">Searching the web</div>
     </div>
     <div class="al-intro" id="al-intro">
         <div class="al-i-logo">arlong</div>
@@ -720,30 +769,60 @@
     </div>
 
     <script>
+        var LOADING_PHRASES=[
+            "We run basic servers so we are slow, please don't mind",
+            "Yep we found it but wait...",
+            "Loading... (our hamsters are on a coffee break)",
+            "Your search is very important to us (we promise)",
+            "Fetching results from the cloud... it's foggy today",
+            "Counting to three... 1, 2, ...",
+            "Still searching (the web is quite big you know)",
+            "Booting up the mainframe... just kidding, it's a Raspberry Pi",
+            "Patience is a virtue... or so we're told",
+            "Almost there... (no really, this time for real)",
+            "We'd tell you a joke but we're still loading",
+            "Our hamsters are running as fast as they can",
+            "Loading... this is the exciting part",
+            "Searching... (we hope you find what you're looking for)",
+            "Gathering results from the interwebs",
+            "Please wait while we pretend to be busy",
+            "Your results are being packaged with care",
+            "We're on it (literally, we're sitting on the server)"
+        ];
+        var LOADING_TIMER=null,LOADING_PINDEX=0,LOADING_EL=null,TEXT_EL=null;
+        function startLoading(){
+            LOADING_EL=document.getElementById('ao-loading');
+            TEXT_EL=document.getElementById('al-text');
+            if(!LOADING_EL)return;
+            LOADING_EL.classList.add('show');
+            LOADING_PINDEX=0;
+            if(TEXT_EL)TEXT_EL.textContent=LOADING_PHRASES[0];
+            clearInterval(LOADING_TIMER);
+            LOADING_TIMER=setInterval(function(){
+                LOADING_PINDEX=(LOADING_PINDEX+1)%LOADING_PHRASES.length;
+                if(TEXT_EL)TEXT_EL.textContent=LOADING_PHRASES[LOADING_PINDEX];
+            },600);
+        }
+        function stopLoading(){
+            clearInterval(LOADING_TIMER);
+            LOADING_TIMER=null;
+        }
+        function delayedSubmit(form){
+            if(!form||form._submitting)return false;
+            form._submitting=true;
+            startLoading();
+            setTimeout(function(){
+                form.submit();
+            },1800);
+            return false;
+        }
         (function(){
-            var al=document.getElementById('ao-loading');
             if(window.location.pathname==='/search'&&window.location.search.indexOf('q=')>-1)
-                al.classList.add('show');
-            document.addEventListener('submit',function(e){
-                var f=e.target;
-                if(f&&f.method&&f.action&&f.action.indexOf('/search')>-1)
-                    al.classList.add('show');
-            },true);
+                startLoading();
         })();
     </script>
 
     <button class="flag-toggle" id="flag-btn" title="Toggle flag colors" style="display:none">&#x1F1FA;&#x1F1F8;</button>
-    <div class="acc-group" id="acc-group">
-        <a class="acc-btn" id="acc-btn" href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" aria-label="Account">
-            <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-        </a>
-        {% if session.user_id and daily_remaining is not none %}
-        <a href="/premium" class="acc-quota" id="acc-quota" title="Searches remaining today">
-            <span class="aq-count">{{ daily_remaining }}</span>
-            <span class="aq-lbl">left</span>
-        </a>
-        {% endif %}
-    </div>
     {% if announcement %}
     <div style="background:#c5221f;color:#fff;text-align:center;padding:10px 20px;font-size:14px;font-weight:500;position:sticky;top:0;z-index:1000;box-shadow:0 2px 8px rgba(197,34,31,.3)">
         &#x26A0; {{ announcement }}
@@ -757,7 +836,7 @@
         <div class="glogo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></div>
         <div class="slogan">{% if celebration %}{{ celebration }}{% else %}Sail the web{% endif %}</div>
         <div class="search-form">
-            <form action="/search" method="GET" autocomplete="off" id="hp-form" onsubmit="document.getElementById('ao-loading').classList.add('show')">
+            <form action="/search" method="GET" autocomplete="off" id="hp-form" onsubmit="return delayedSubmit(this)">
                 <input type="hidden" name="filter" value="{{ filter or 'general' }}">
 
                 <div class="search-input-wrap">
@@ -772,18 +851,15 @@
         </div>
         <div class="bottom-links">
             <a href="/explore">Explore</a><span class="sep">|</span>
-            <a href="/about">How it works</a><span class="sep">|</span>
-            <a href="/policy">Policies</a><span class="sep">|</span>
-            <a href="/privacy">Privacy</a><span class="sep">|</span>
+            <a href="/settings">Settings</a><span class="sep">|</span>
             <a href="/privacy-policy">Privacy Policy</a><span class="sep">|</span>
             <a href="/terms-of-service">Terms</a><span class="sep">|</span>
             <a href="/refund-policy">Refunds</a><span class="sep">|</span>
             <a href="/faq">FAQ</a><span class="sep">|</span>
             <a href="/submit">Submit your site</a><span class="sep">|</span>
             <a href="/docs">API</a><span class="sep">|</span>
-            <a href="/blog">Blog</a><span class="sep">|</span>
             <a href="/changelogs">Changelogs</a><span class="sep">|</span>
-            <a href="/settings">Settings</a>
+            <a href="https://ko-fi.com/arlong" target="_blank" rel="noopener">&#x2615; Donate</a>
         </div>
         {% if blocked_count %}
         <div class="about-link" style="margin-top:12px;font-size:12px">&#x1F6AB; <strong>{{ "{:,}".format(blocked_count) }}</strong> gambling, ad, crypto, drug &amp; fraud domains delisted</div>
@@ -800,19 +876,15 @@
                     <span></span><span></span><span></span>
                     <div class="hm-dropdown" id="hm-dropdown">
                         <a href="/explore">Explore</a>
-                        <a href="/about">How it works</a>
-                        <a href="/policy">Policies</a>
-                        <a href="/privacy">Privacy</a>
+                        <a href="/settings">Settings</a>
                         <a href="/privacy-policy">Privacy Policy</a>
                         <a href="/terms-of-service">Terms</a>
                         <a href="/refund-policy">Refunds</a>
                         <a href="/faq">FAQ</a>
-                        <a href="/benchmark">Benchmark</a>
                         <a href="/submit">Submit your site</a>
                         <a href="/docs">API</a>
-                        <a href="/blog">Blog</a>
+                        <a href="https://ko-fi.com/arlong" target="_blank" rel="noopener">&#x2615; Donate</a>
                         <a href="/changelogs">Changelogs</a>
-                        <a href="/settings">Settings</a>
                     </div>
                 </div>
                 <div class="portal-avatar">
@@ -825,28 +897,49 @@
                 <div class="portal-logo">
                     <span class="pl-text"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></span>
                 </div>
-                <form action="/search" method="GET" id="portal-form" onsubmit="document.getElementById('ao-loading').classList.add('show')" style="position:relative">
+                <form action="/search" method="GET" id="portal-form" onsubmit="return delayedSubmit(this)" style="position:relative">
                     <input type="search" name="q" class="portal-search-box" id="portal-search-box" placeholder="Search the web..." autocomplete="off" enterkeyhint="search">
                     <div class="suggestions-box" id="portal-suggest"></div>
                 </form>
             </div>
             <div class="portal-header-right"></div>
         </div>
-        {% if session.user_id and daily_remaining is not none and quota_limit %}
-        <div class="mobile-quota" title="{{ daily_remaining }} / {{ quota_limit if quota_limit < 999999 else 'Unlimited' }} searches remaining today">
-            <div class="mq-row">
-                <span>{{ daily_remaining }} searches left today</span>
-                <span class="mq-val">{{ daily_remaining }} / {{ quota_limit if quota_limit < 999999 else '&#x221E;' }}</span>
-            </div>
-            <div class="mq-bar">
-                {% set used = quota_limit - daily_remaining if quota_limit < 999999 else 0 %}
-                {% set pct = (used / quota_limit * 100)|round if quota_limit < 999999 else 0 %}
-                <div class="mq-fill {% if pct < 60 %}good{% elif pct < 90 %}warn{% else %}full{% endif %}" style="width:{{ pct }}%"></div>
-            </div>
-        </div>
-        {% endif %}
         <div class="portal-body">
             <div class="portal-content">
+                {% set st_home = worldcup_data.status if worldcup_data else 'scheduled' %}
+                <div class="scorecard-container clickable" onclick="window.location.href='/search?q=FIFA+Final'">
+                    <div class="scorecard-header">
+                        <div class="sc-title-group">
+                            <div class="sc-title">FIFA World Cup 2026 &middot; Final</div>
+                            <div class="sc-subtitle">MetLife Stadium &middot; East Rutherford, NJ</div>
+                        </div>
+                        <div class="sc-badge {{ st_home }}">
+                            {% if st_home == 'live' %}<span class="pulse-dot"></span>{% endif %}
+                            {{- st_home -}}
+                        </div>
+                    </div>
+                    <div class="scorecard-body">
+                        <div class="team-block">
+                            <div class="team-flag esp">ES</div>
+                            <div class="team-abbr">ESP</div>
+                            <div class="score-display"><span class="score-value">{{ worldcup_data.home_score if worldcup_data else '0' }}</span></div>
+                        </div>
+                        <div class="match-state">
+                            <div class="match-date">Sun Jul 19</div>
+                            <div class="match-vs">VS</div>
+                            <div class="match-number">3PM ET</div>
+                        </div>
+                        <div class="team-block">
+                            <div class="team-flag arg">AR</div>
+                            <div class="team-abbr">ARG</div>
+                            <div class="score-display"><span class="score-value">{{ worldcup_data.away_score if worldcup_data else '0' }}</span></div>
+                        </div>
+                    </div>
+                    <div class="scorecard-footer">
+                        <span class="sc-info">FOX &middot; Telemundo &middot; Match 104</span>
+                        <span class="sc-action">See live score &rarr;</span>
+                    </div>
+                </div>
                 <div class="portal-tabs">
                     <a href="#" class="active" onclick="return loadNewsTab('top',this)">Newsstand</a>
                     <a href="#" onclick="return loadNewsTab('entertainment',this)">Enter</a>
@@ -870,25 +963,6 @@
                     <div style="display:flex;align-items:center;justify-content:space-between;padding:0 0 8px;font-size:13px;font-weight:600;color:var(--text)">News <span style="font-size:11px;font-weight:400;color:var(--text3)">Top stories</span></div>
                     <div class="portal-news-grid" id="news-grid"></div>
                 </div>
-                {% if featured_blogs %}
-                <div class="portal-news-grid-wrap" style="border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:10px;background:var(--card-bg);box-shadow:0 1px 4px var(--shadow2);padding:12px">
-                    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 0 8px;font-size:13px;font-weight:600;color:var(--text)">&#x270F; Trending Blogs <span style="font-size:11px;font-weight:400;color:var(--text3)">From the community</span></div>
-                    <div style="display:flex;flex-direction:column;gap:8px">
-                        {% for blog in featured_blogs %}
-                        <a href="/explore/{{ blog.id }}" style="display:flex;gap:10px;text-decoration:none;padding:6px 4px;border-radius:8px;transition:.1s" onmouseover="this.style.background='var(--hover-bg)'" onmouseout="this.style.background=''">
-                            {% if blog.thumbnail %}
-                            <div style="width:72px;height:48px;border-radius:6px;overflow:hidden;flex-shrink:0;background:var(--bg3)"><img src="{{ blog.thumbnail }}" alt="" style="width:100%;height:100%;object-fit:cover" loading="lazy"></div>
-                            {% endif %}
-                            <div style="flex:1;min-width:0">
-                                <div style="font-size:13px;font-weight:500;color:var(--link);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ blog.name }}</div>
-                                <div style="font-size:11px;color:var(--text4);margin-top:2px">u/{{ blog.creator_name }} &middot; {{ (blog.created_at or '')[:10] }}</div>
-                            </div>
-                        </a>
-                        {% endfor %}
-                    </div>
-                    <a href="/explore" style="display:block;text-align:center;font-size:12px;color:var(--link);padding:8px 0 4px">View all blogs &rarr;</a>
-                </div>
-                {% endif %}
             </div>
             <div class="portal-sidebar">
                 {% if session.user_id and user_stat %}
@@ -898,19 +972,6 @@
                         <div class="au-stat"><span class="au-stat-val">{{ user_stat.collections_count or 0 }}</span><span class="au-stat-lbl">Collections</span></div>
                         <div class="au-stat"><span class="au-stat-val">{{ user_stat.submissions_count or 0 }}</span><span class="au-stat-lbl">Submissions</span></div>
                     </div>
-                    {% if daily_remaining is not none and quota_limit %}
-                    <div class="au-quota" title="{{ daily_remaining }} / {{ quota_limit if quota_limit < 999999 else 'Unlimited' }} searches remaining today">
-                        <div class="auq-row">
-                            <span class="auq-lbl">Searches today</span>
-                            <span class="auq-val">{{ daily_remaining }} / {{ quota_limit if quota_limit < 999999 else '&#x221E;' }}</span>
-                        </div>
-                        <div class="auq-bar" title="">
-                            {% set used = quota_limit - daily_remaining if quota_limit < 999999 else 0 %}
-                            {% set pct = (used / quota_limit * 100)|round if quota_limit < 999999 else 0 %}
-                            <div class="auq-fill {% if pct < 60 %}good{% elif pct < 90 %}warn{% else %}full{% endif %}" style="width:{{ pct }}%"></div>
-                        </div>
-                    </div>
-                    {% endif %}
                 </div>
                 {% else %}
                 <div class="sidebar-card portal-auth-card" id="portal-auth-card">
@@ -933,6 +994,28 @@
                         </div>
                     </div>
                 </div>
+                <div class="sidebar-card" id="wc-card" style="display:none;cursor:pointer;transition:all .15s" onclick="window.location.href='/search?q=FIFA+Final'" onmouseover="this.style.borderColor='#2a3a5a'" onmouseout="this.style.borderColor='var(--border)'">
+                    <div class="sc-title" style="display:flex;align-items:center;gap:6px">
+                        <span>&#x1F3C6;</span>
+                        <span>World Cup Final</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+                        <div style="flex:1;text-align:center">
+                            <div style="font-size:10px;color:var(--text3);margin-bottom:2px">ESP</div>
+                            <div style="font-size:18px;font-weight:700;color:var(--text)">{{ worldcup_data.home_score if worldcup_data else '0' }}</div>
+                        </div>
+                        <div style="text-align:center">
+                            <div style="font-size:9px;color:var(--text4)">Sun Jul 19</div>
+                            <div style="font-size:12px;font-weight:600;color:#e8b830">VS</div>
+                            <div style="font-size:9px;color:var(--text4)">3PM ET</div>
+                        </div>
+                        <div style="flex:1;text-align:center">
+                            <div style="font-size:10px;color:var(--text3);margin-bottom:2px">ARG</div>
+                            <div style="font-size:18px;font-weight:700;color:var(--text)">{{ worldcup_data.away_score if worldcup_data else '0' }}</div>
+                        </div>
+                    </div>
+                    <div style="font-size:10px;color:var(--link);text-align:center;margin-top:6px">See live score &rarr;</div>
+                </div>
                 <div class="sidebar-card" id="stocks-card">
                     <div class="sc-title">Markets</div>
                     <div class="stocks-mini" id="stocks-mini"><span style="font-size:11px;color:var(--text3)">Loading...</span></div>
@@ -947,7 +1030,7 @@
         <div class="top-row">
             <a href="/" class="mini-logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></a>
             <div class="rs-wrap">
-                <form action="/search" method="GET" id="rs-form" onsubmit="document.getElementById('ao-loading').classList.add('show')">
+                <form action="/search" method="GET" id="rs-form" onsubmit="return delayedSubmit(this)">
                     <input type="search" name="q" class="rs-input" id="rs-input" value="{{ query }}" autocomplete="off" enterkeyhint="search">
                     <button type="submit" class="rs-submit" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">Search</button>
                     <div class="suggestions-box" id="rs-suggest"></div>
@@ -975,7 +1058,9 @@
                 <option value="news">News</option>
             </select>
             <span class="filter-count" id="filter-count"></span>
-            {% if quota_exceeded is defined and quota_exceeded %}
+            {% if (ai_summary_enabled is defined and not ai_summary_enabled) %}
+            {# AI Summary disabled by user preference — button hidden #}
+            {% elif quota_exceeded is defined and quota_exceeded %}
             <span style="margin-left:auto;font-size:12px;color:var(--text3);padding:4px 12px;border:1px solid var(--border);border-radius:20px">AI Summary unavailable</span>
             {% else %}
             <button class="ais-btn" id="ais-btn" onclick="globalAiSummary()"><svg viewBox="0 0 24 24"><path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.18l7 3.5v7l-7 3.5-7-3.5v-7l7-3.5zM11 9h2v6h-2V9zm0-3h2v2h-2V6z"/></svg> AI Summary</button>
@@ -1046,32 +1131,7 @@
             {% endif %}
 
 
-            {% if quota_exceeded is defined and quota_exceeded %}
-            <div class="quota-block">
-                <div class="qb-icon">
-                    <svg viewBox="0 0 24 24" style="width:48px;height:48px;fill:var(--red)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-                </div>
-                <div class="qb-title">Search limit reached</div>
-                {% if quota_is_anonymous %}
-                <div class="qb-text">You've used your <strong>1 free search</strong> for today. Create a free account to get <strong>24 searches per day</strong> with AI summaries, or upgrade to Premium for even more.</div>
-                <div class="qb-actions">
-                    <a href="/signup" class="qb-btn qb-btn-primary">Create free account</a>
-                    <a href="/premium" class="qb-btn qb-btn-secondary">View Premium</a>
-                </div>
-                {% else %}
-                <div class="qb-text">You've used all <strong>49 free searches</strong> today. Upgrade to Premium for 500+ searches per day, AI summaries, and priority support.</div>
-                <div class="qb-actions">
-                    <a href="/premium" class="qb-btn qb-btn-primary">Upgrade to Premium</a>
-                    <a href="/" class="qb-btn qb-btn-secondary">Back to home</a>
-                </div>
-                {% endif %}
-                <div class="qb-foot">Limit resets at midnight. <a href="/premium" style="color:var(--link)">Premium plans</a> start at $4/month.</div>
-            </div>
-
-            {% if results is not none %}
-            {% endif %}
-
-            {% elif query == "1776" %}
+            {% if query == "1776" %}
                 <div class="usa-banner">
                     <div class="ub-stars">&#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733;</div>
                     <div class="ub-year">1776</div>
@@ -1092,6 +1152,7 @@
                     {% elif notice and notice.type == 'redirect' %}No results found
                     {% else %}About {{ total_results }} results{% if search_time is defined %} ({{ search_time }}s){% endif %}{% endif %}
                 </div>
+                {% if ai_summary_enabled is not defined or ai_summary_enabled %}
                 <div class="ais-box" id="ais-box">
                     <div class="ais-head">
                         <div class="ais-title">Quick Answer</div>
@@ -1100,39 +1161,53 @@
                     <div class="ais-body" id="ais-content"></div>
                 </div>
                 {% if worldcup_data %}
-                <div class="wc-card" style="margin-bottom:20px;background:linear-gradient(135deg,#0a1628,#1a1a2e);border:1px solid #2a2a4e;border-radius:16px;padding:20px 24px;position:relative;overflow:hidden">
-                    <div style="position:absolute;top:-30px;right:-30px;width:120px;height:120px;background:radial-gradient(circle,rgba(255,215,0,.08),transparent 70%);border-radius:50%"></div>
-                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-                        <span style="font-size:20px">&#x1F3C6;</span>
-                        <span style="font-size:13px;font-weight:600;color:#ffd700;text-transform:uppercase;letter-spacing:1px">FIFA World Cup 2026 Final</span>
-                    </div>
-                    <div style="display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap">
-                        <div style="text-align:center;min-width:100px">
-                            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px">{{ worldcup_data.home_team }}</div>
-                            <div style="display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:12px;background:{% if worldcup_data.status == 'live' %}#1a4a2a{% elif worldcup_data.status == 'finished' %}#2a1a1a{% else %}#1a1a2e{% endif %};border:1px solid {% if worldcup_data.status == 'live' %}#2a6a3a{% elif worldcup_data.status == 'finished' %}#4a2a2a{% else %}#2a2a4e{% endif %}">
-                                <span style="font-size:24px;font-weight:700;color:{% if worldcup_data.status == 'live' %}#4cdf8b{% elif worldcup_data.status == 'finished' %}#f28b82{% else %}#8a8f96{% endif %}">{{ worldcup_data.home_score }}</span>
-                            </div>
+                {% set st = worldcup_data.status or 'scheduled' %}
+                <div class="scorecard-container">
+                    <div class="scorecard-header">
+                        <div class="sc-title-group">
+                            <div class="sc-title">FIFA World Cup 2026 &middot; Final</div>
+                            <div class="sc-subtitle">MetLife Stadium &middot; East Rutherford, NJ</div>
                         </div>
-                        <div style="text-align:center;padding:0 8px">
-                            <div style="font-size:11px;color:var(--text4);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px">
-                                {% if worldcup_data.status == 'live' %}&#x26AB; {{ worldcup_data.minute }}'
-                                {% elif worldcup_data.status == 'finished' %}FT
-                                {% else %}{{ worldcup_data.date }}
-                                {% endif %}
-                            </div>
-                            <div style="font-size:11px;color:var(--text3)">VS</div>
-                        </div>
-                        <div style="text-align:center;min-width:100px">
-                            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px">{{ worldcup_data.away_team }}</div>
-                            <div style="display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:12px;background:{% if worldcup_data.status == 'live' %}#1a4a2a{% elif worldcup_data.status == 'finished' %}#2a1a1a{% else %}#1a1a2e{% endif %};border:1px solid {% if worldcup_data.status == 'live' %}#2a6a3a{% elif worldcup_data.status == 'finished' %}#4a2a2a{% else %}#2a2a4e{% endif %}">
-                                <span style="font-size:24px;font-weight:700;color:{% if worldcup_data.status == 'live' %}#4cdf8b{% elif worldcup_data.status == 'finished' %}#f28b82{% else %}#8a8f96{% endif %}">{{ worldcup_data.away_score }}</span>
-                            </div>
+                        <div class="sc-badge {{ st }}">
+                            {% if st == 'live' %}<span class="pulse-dot"></span>{% endif %}
+                            {{- st -}}
                         </div>
                     </div>
-                    {% if worldcup_data.status == 'scheduled' %}
-                    <div style="text-align:center;margin-top:12px;font-size:12px;color:var(--text3)">&#x1F551; Kickoff: July 19, 2026 at 3:00 PM ET &middot; MetLife Stadium, NJ</div>
-                    {% endif %}
+                    <div class="scorecard-body">
+                        <div class="team-block">
+                            <div class="team-flag esp">ES</div>
+                            <div class="team-abbr">ESP</div>
+                            <div class="score-display"><span class="score-value">{{ worldcup_data.home_score }}</span></div>
+                        </div>
+                        <div class="match-state">
+                            <div class="match-minute">
+                                {% if st == 'live' %}{{ worldcup_data.minute or "45" }}'
+                                {% elif st == 'finished' %}FT
+                                {% else %}Jul 19{% endif %}
+                            </div>
+                            <div class="match-vs">VS</div>
+                            <div class="match-number">Match 104</div>
+                        </div>
+                        <div class="team-block">
+                            <div class="team-flag arg">AR</div>
+                            <div class="team-abbr">ARG</div>
+                            <div class="score-display"><span class="score-value">{{ worldcup_data.away_score }}</span></div>
+                        </div>
+                    </div>
+                    <div class="scorecard-footer">
+                        <span class="sc-info">
+                            {%- if st == 'scheduled' -%}
+                            Kickoff 3:00 PM ET &middot; FOX, Telemundo
+                            {%- elif st == 'live' -%}
+                            Live on FOX &middot; {{ worldcup_data.minute or "45" }}' played
+                            {%- else -%}
+                            Final score &middot; Match report
+                            {%- endif -%}
+                        </span>
+                        <a href="/search?q=FIFA+Final" class="sc-action">Details &rarr;</a>
+                    </div>
                 </div>
+                {% endif %}
                 {% endif %}
                 {% if board_results %}
                 <div class="board-results" style="margin-bottom:20px">
@@ -1166,23 +1241,26 @@
                         {% set ns.disc = ns.disc + [result] %}
                     {% endif %}
                 {% endfor %}
-                {% for result in results %}
+                {% for group in result_groups %}
+                    {% set result = group.results[0] %}
                     {% set is_video = result.category == 'videos' or result.category == 'video' %}
-                    {% set is_disc = result.category == 'discussions' or result.category == 'discussion' or 'reddit' in result.url or 'forum' in result.url or 'stackexchange' in result.url %}
-                    {% if not is_disc %}
-                    <div class="rc-modern" data-url="{{ result.url }}" data-title="{{ result.title }}" data-category="{{ result.category or 'general' }}">
+                    {% set has_siblings = group.results|length > 1 %}
+                    {% if has_siblings %}
+                    <div class="domain-group">
+                    {% endif %}
+                    <div class="rc-modern{% if has_siblings %} domain-parent{% endif %}" data-url="{{ result.url }}" data-title="{{ result.title }}" data-category="{{ result.category or 'general' }}">
                         <div class="rc-row">
                             <div class="rc-body">
                                 <div class="rc-title-line">
                                     <a href="{{ result.url }}" class="rc-title" target="_blank">{{ result.title }}</a>
                                     <div class="rc-acts">
                                          <button class="rc-save" onclick="pinFromSearch(this)" title="Save"><svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z"/></svg></button>
-                                        <div class="rc-pos">
-                                            <button class="rc-dots" onclick="toggleRcMenu(this)" title="More">&#x22EE;</button>
-                                            <div class="rc-report-menu">
-                                                <div class="rc-report-opt" onclick="reportResult(this)"><span>&#x26A0;</span> Report low quality</div>
-                                            </div>
-                                        </div>
+                                         <div class="rc-pos">
+                                             <button class="rc-dots" onclick="toggleRcMenu(this)" title="More">&#x22EE;</button>
+                                             <div class="rc-report-menu">
+                                                 <div class="rc-report-opt" onclick="reportResult(this)"><span>&#x26A0;</span> Report low quality</div>
+                                             </div>
+                                         </div>
                                     </div>
                                 </div>
                                 <div class="rc-bread">
@@ -1199,9 +1277,53 @@
                                     {% if result.date %}<span class="rc-date">{{ result.date }}</span>{% endif %}
                                 </div>
                                 <div class="rc-snip">{{ result.snippet }}</div>
+                                {% if has_siblings %}
+                                <button class="domain-group-toggle" onclick="toggleDomainGroup(this)">
+                                    <svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
+                                    More from {{ group.domain }}
+                                    <span class="domain-group-count">{{ group.results|length - 1 }}</span>
+                                </button>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
+                    {% if has_siblings %}
+                    <div class="domain-group-children">
+                        {% for child in group.results[1:] %}
+                        <div class="rc-modern" data-url="{{ child.url }}" data-title="{{ child.title }}" data-category="{{ child.category or 'general' }}">
+                            <div class="rc-row">
+                                <div class="rc-body">
+                                    <div class="rc-title-line">
+                                        <a href="{{ child.url }}" class="rc-title" target="_blank">{{ child.title }}</a>
+                                        <div class="rc-acts">
+                                             <button class="rc-save" onclick="pinFromSearch(this)" title="Save"><svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z"/></svg></button>
+                                             <div class="rc-pos">
+                                                 <button class="rc-dots" onclick="toggleRcMenu(this)" title="More">&#x22EE;</button>
+                                                 <div class="rc-report-menu">
+                                                     <div class="rc-report-opt" onclick="reportResult(this)"><span>&#x26A0;</span> Report low quality</div>
+                                                 </div>
+                                             </div>
+                                        </div>
+                                    </div>
+                                    <div class="rc-bread">
+                                        <img src="{{ child.favicon }}" alt="" class="rc-fav" onerror="this.style.display='none'">
+                                        {% set cdu = child.url %}
+                                        <span class="rc-dom">{{ child.domain or (cdu.split('/')[2] if '/' in cdu else cdu) }}</span>
+                                        {% set cpath_raw = cdu.split('://', 1)[1] if '://' in cdu else cdu %}
+                                        {% set cpath_clean = cpath_raw.split('/', 1)[1] if '/' in cpath_raw else '' %}
+                                        {% if cpath_clean %}
+                                        <span class="rc-sep">&#x203A;</span>
+                                        <span class="rc-path">{{ cpath_clean[:40] }}{% if cpath_clean|length > 40 %}...{% endif %}</span>
+                                        {% endif %}
+                                        {% if child.date %}<span class="rc-date">{{ child.date }}</span>{% endif %}
+                                    </div>
+                                    <div class="rc-snip">{{ child.snippet }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
                     {% set ns.rcount = ns.rcount + 1 %}
                     {% if ns.rcount >= 2 and ns.disc and not ns.ddone %}
                     <div class="disc-sec" data-category="discussion">
@@ -1231,8 +1353,39 @@
                     </div>
                     {% set ns.ddone = true %}
                     {% endif %}
+                    {% if has_siblings %}
+                    </div>
                     {% endif %}
                 {% endfor %}
+
+                {% if ns.disc and not ns.ddone %}
+                <div class="disc-sec" data-category="discussion">
+                    <div class="disc-head"><svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg> Discussions</div>
+                    <div class="disc-car">
+                    {% for r2 in ns.disc %}
+                        <div class="disc-c" data-url="{{ r2.url }}" data-title="{{ r2.title }}" data-category="discussion">
+                            <div class="disc-ch">
+                                <img src="{{ r2.favicon }}" alt="" class="disc-fav" onerror="this.style.display='none'">
+                                {% set du2 = r2.get('display_url', '') %}
+                                <span class="disc-dom">{{ r2.domain or (du2.split('/')[2] if '/' in du2 else du2) }}</span>
+                            </div>
+                            <a href="{{ r2.url }}" class="disc-ct" target="_blank">{{ r2.title }}</a>
+                            <div class="disc-cs">{{ r2.snippet }}</div>
+                            <div class="disc-cf">
+                                {% if r2.date %}<span class="disc-date">{{ r2.date }}</span>{% endif %}
+                                <span style="display:flex;align-items:center;gap:2px;margin-left:auto">
+                                    <button class="rc-dots" onclick="toggleRcMenu(this)" title="More">&#x22EE;</button>
+                                    <div class="rc-report-menu">
+                                        <div class="rc-report-opt" onclick="reportResult(this)"><span>&#x26A0;</span> Report low quality</div>
+                                    </div>
+                                </span>
+                            </div>
+                        </div>
+                    {% endfor %}
+                    </div>
+                </div>
+                {% set ns.ddone = true %}
+                {% endif %}
 
                 <div class="pagination">
                     {% set total_pages = ((total_results - 1) // 10) + 1 %}
@@ -1468,6 +1621,18 @@
             var isOpen=menu.classList.contains('show');
             document.querySelectorAll('.rc-report-menu').forEach(function(m){m.classList.remove('show')});
             if(!isOpen) menu.classList.add('show');
+        }
+        function toggleDomainGroup(btn){
+            var group=btn.closest('.domain-group');
+            if(!group)return;
+            var children=group.querySelector('.domain-group-children');
+            if(!children)return;
+            var isOpen=children.classList.toggle('open');
+            btn.classList.toggle('open',isOpen);
+            var dom=group.querySelector('.rc-dom');
+            var domainName=dom?dom.textContent:'site';
+            var n=children.querySelectorAll('.rc-modern').length;
+            btn.innerHTML='<svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg> '+(isOpen?'Less':'More')+' from '+domainName+(isOpen?'':' <span class="domain-group-count">'+n+'</span>');
         }
         document.addEventListener('click',function(e){
             if(!e.target.classList.contains('rc-dots')){
@@ -1719,7 +1884,7 @@
                         if(!currentData.length){box.classList.remove('show');return}
                         currentData.forEach(function(s,i){
                             var d=document.createElement('div');d.className='sug-item';d.textContent=s;
-                            d.addEventListener('click',function(){input.value=s;box.classList.remove('show');var ol=document.getElementById('ao-loading');if(ol)ol.classList.add('show');input.form.submit()});
+                            d.addEventListener('click',function(){input.value=s;box.classList.remove('show');delayedSubmit(input.form)});
                             d.addEventListener('mouseenter',function(){activeIndex=i;box.querySelectorAll('.sug-item').forEach(function(el,j){el.style.background=j===activeIndex?'var(--hover-bg)':''})});
                             box.appendChild(d)
                         });
@@ -1730,8 +1895,7 @@
             input.addEventListener('keydown',function(e){
                 if(e.key==='Enter'){
                     box.classList.remove('show');
-                    var ol=document.getElementById('ao-loading');if(ol)ol.classList.add('show');
-                    input.form.submit();
+                    delayedSubmit(input.form);
                     return;
                 }
                 var items=box.querySelectorAll('.sug-item');
@@ -1850,6 +2014,8 @@
 
         function applyFilter(val){
             var cards = document.querySelectorAll('.rc-modern');
+            var discCards = document.querySelectorAll('.disc-c');
+            var discSec = document.querySelector('.disc-sec');
             var count = 0;
             cards.forEach(function(c){
                 var cat = c.getAttribute('data-category') || 'general';
@@ -1860,6 +2026,20 @@
                     c.style.display = 'none';
                 }
             });
+            var discCount = 0;
+            discCards.forEach(function(c){
+                var cat = c.getAttribute('data-category') || 'discussion';
+                if(val === 'all' || cat === val || (val === 'discussions' && cat === 'discussion')){
+                    c.style.display = '';
+                    discCount++;
+                } else {
+                    c.style.display = 'none';
+                }
+            });
+            if(discSec){
+                discSec.style.display = discCount > 0 ? '' : 'none';
+            }
+            count += discCount;
             var el = document.getElementById('filter-count');
             if(el) el.textContent = count + ' results';
         }
@@ -1887,9 +2067,6 @@
             loadWeather();
             loadNewsTab('top', document.querySelector('.portal-tabs a.active'));
             setInterval(function(){ loadBreakingNews(); }, 3600000);
-            /* Hide the old fixed acc-btn in portal mode */
-            var oldAcc = document.getElementById('acc-btn');
-            if(oldAcc) oldAcc.style.display = 'none';
         })();
 
         /* ── Homepage scroll animation ── */
@@ -1945,6 +2122,7 @@
                 var sh = '';
                 for(var dup=0;dup<2;dup++){
                     for(var i=0;i<items.length;i++){
+                        if(items[i]._is_blog) continue;
                         sh += '<div class="breaking-item"><span class="br-badge">Breaking</span> <a href="'+items[i].link+'" target="_blank">'+items[i].title+'</a></div>';
                     }
                 }
@@ -1954,9 +2132,13 @@
                 for(var i=0;i<cards.length;i++){
                     var it = cards[i];
                     var img = it.image || '';
+                    var isBlog = it._is_blog;
+                    var linkTarget = isBlog ? '' : ' target="_blank"';
+                    var badge = isBlog ? '<span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;background:#1a3a28;color:#81c995;margin-bottom:4px">Blog</span>' : '';
+                    var sourceLabel = isBlog ? '<span style="display:flex;align-items:center;gap:4px">'+badge+'<span>'+it.source+'</span></span>' : it.source;
                     var card = document.createElement('div');
                     card.className = 'ng-card';
-                    card.innerHTML = '<div class="ng-img-wrap">'+(img ? '<img class="ng-img" src="'+img+'" alt="" loading="lazy" onerror="this.outerHTML=\'<div class=&quot;ng-img&quot; style=&quot;display:flex;align-items:center;justify-content:center;color:var(--text3)&quot;><svg width=&quot;40&quot; height=&quot;40&quot; viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;2&quot;><path d=&quot;M4 19.5A2.5 2.5 0 0 1 6.5 17H20&quot;/><path d=&quot;M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z&quot;/><line x1=&quot;8&quot; y1=&quot;7&quot; x2=&quot;16&quot; y2=&quot;7&quot;/><line x1=&quot;8&quot; y1=&quot;11&quot; x2=&quot;14&quot; y2=&quot;11&quot;/></svg></div>\'">' : '<div class="ng-img" style="display:flex;align-items:center;justify-content:center;color:var(--text3)"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg></div>')+'</div><div class="ng-body"><div class="ng-title"><a href="'+it.link+'" target="_blank">'+it.title.substring(0,100)+'</a></div><div class="ng-source">'+it.source+'</div></div>';
+                    card.innerHTML = '<div class="ng-img-wrap">'+(img ? '<img class="ng-img" src="'+img+'" alt="" loading="lazy" onerror="this.outerHTML=\'<div class=&quot;ng-img&quot; style=&quot;display:flex;align-items:center;justify-content:center;color:var(--text3)&quot;><svg width=&quot;40&quot; height=&quot;40&quot; viewBox=&quot;0 0 24 24&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;2&quot;><path d=&quot;M4 19.5A2.5 2.5 0 0 1 6.5 17H20&quot;/><path d=&quot;M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z&quot;/><line x1=&quot;8&quot; y1=&quot;7&quot; x2=&quot;16&quot; y2=&quot;7&quot;/><line x1=&quot;8&quot; y1=&quot;11&quot; x2=&quot;14&quot; y2=&quot;11&quot;/></svg></div>\'">' : '<div class="ng-img" style="display:flex;align-items:center;justify-content:center;color:var(--text3)"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg></div>')+'</div><div class="ng-body"><div class="ng-title"><a href="'+it.link+'"'+linkTarget+'>'+it.title.substring(0,100)+'</a></div><div class="ng-source">'+sourceLabel+'</div></div>';
                     grid.appendChild(card);
                 }
             });
@@ -2232,5 +2414,33 @@
             xhr.send();
         })();
     </script>
+
+    {% if is_home %}
+    <div id="kofi-popup" style="position:fixed;bottom:24px;right:24px;z-index:9999;background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:20px 24px;max-width:340px;box-shadow:0 8px 32px var(--shadow);display:none;flex-direction:column;gap:10px">
+        <style>@keyframes kofiIn{from{opacity:0;transform:translateY(20px) scale(.95)}to{opacity:1;transform:translateY(0) scale(1)}}</style>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+            <div style="font-size:14px;line-height:1.5;color:var(--text)">
+                <strong style="font-size:15px">&#x26A0;&#xFE0F; Save us!</strong><br>
+                <span style="color:var(--text2);font-size:13px">arlong is free but servers aren't. Help us keep the ship sailing.</span>
+            </div>
+            <button onclick="dismissKofi()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;padding:2px;line-height:1" aria-label="Close">&times;</button>
+        </div>
+        <a href="https://ko-fi.com/arlong" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 16px;background:#c5221f;color:#fff;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;transition:opacity .2s" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M21.4 5.8c-1-1.3-2.7-2.1-4.5-2.1-1.4 0-2.7.5-3.8 1.3L12 5.9l-1.1-.9c-1.1-.8-2.4-1.3-3.8-1.3-1.8 0-3.5.8-4.5 2.1C1.3 7.7 1 10 2.8 13.3c1.5 2.8 4.4 5.8 7.5 8.4.5.4 1.1.4 1.6 0 3.1-2.6 6-5.6 7.5-8.4 1.8-3.3 1.5-5.6.5-7.5z"/></svg>
+            Donate on Ko-fi
+        </a>
+    </div>
+    <script>
+    setTimeout(function(){
+        var p = document.getElementById('kofi-popup');
+        if(p) p.style.display = 'flex';
+    }, 2000);
+    function dismissKofi(){
+        var p = document.getElementById('kofi-popup');
+        if(p){p.style.transition='opacity .3s,transform .3s';p.style.opacity='0';p.style.transform='translateY(10px)';setTimeout(function(){p.remove()},300)}
+    }
+    </script>
+    {% endif %}
+
 </body>
 </html>

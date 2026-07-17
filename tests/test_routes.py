@@ -56,7 +56,7 @@ class TestRoutes:
 
     def test_about_page(self, client):
         resp = client.get('/about')
-        assert resp.status_code == 200
+        assert resp.status_code == 302
 
     def test_docs_page(self, client):
         resp = client.get('/docs')
@@ -68,7 +68,7 @@ class TestRoutes:
 
     def test_blog_page(self, client):
         resp = client.get('/blog')
-        assert resp.status_code == 200
+        assert resp.status_code == 302
 
     def test_crisis_page(self, client):
         resp = client.get('/crisis')

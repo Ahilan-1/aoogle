@@ -26,6 +26,7 @@ import hashlib
 import secrets
 import uuid
 import re
+import string
 import threading
 import os
 import ssl
@@ -209,8 +210,15 @@ if os.path.exists(env_path):
 
 app.secret_key = os.environ.get('SECRET_KEY')
 if not app.secret_key:
-    app.secret_key = secrets.token_hex(32)
-    app.logger.warning("No SECRET_KEY set in environment. Using temporary random key - sessions will be invalidated on restart.")
+    key_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.secret_key')
+    if os.path.exists(key_file):
+        with open(key_file, 'r') as f:
+            app.secret_key = f.read().strip()
+    else:
+        app.secret_key = secrets.token_hex(32)
+        with open(key_file, 'w') as f:
+            f.write(app.secret_key)
+        app.logger.info("Generated persistent secret key.")
 
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
@@ -227,19 +235,30 @@ if not ADMIN_PASSWORD:
     app.logger.warning("No ADMIN_PASSWORD set in environment. Generated random password - check logs to retrieve it.")
 AMAZON_ASSOCIATE_TAG = os.environ.get('AMAZON_ASSOCIATE_TAG', '')
 
-# ── Paddle ──
-PADDLE_LIVE_API_KEY = os.environ.get('PADDLE_LIVE_API_KEY', '')
-PADDLE_SANDBOX_API_KEY = os.environ.get('PADDLE_SANDBOX_API_KEY', '')
-PADDLE_CLIENT_TOKEN = os.environ.get('PADDLE_CLIENT_TOKEN', '')
-PADDLE_WEBHOOK_SECRET = os.environ.get('PADDLE_WEBHOOK_SECRET', '')
-PADDLE_ENVIRONMENT = os.environ.get('PADDLE_ENVIRONMENT', 'sandbox')
-PADDLE_API_BASE = 'https://api.paddle.com' if PADDLE_ENVIRONMENT == 'live' else 'https://sandbox-api.paddle.com'
-PADDLE_API_KEY = PADDLE_LIVE_API_KEY if PADDLE_ENVIRONMENT == 'live' else PADDLE_SANDBOX_API_KEY
-
 # ── Resend (Email) ──
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
 RESEND_FROM = os.environ.get('RESEND_FROM', 'onboarding@resend.dev')
 resend.api_key = RESEND_API_KEY
+
+# ── Session validation middleware ──
+PUBLIC_PATHS = {'/', '/search', '/login', '/signup', '/land', '/logout',
+    '/premium', '/explore', '/docs', '/stats', '/settings',
+    '/privacy-policy', '/terms-of-service', '/refund-policy', '/faq',
+    '/about', '/blog', '/redeem', '/changelogs', '/policy', '/submit',
+    '/privacy'}
+
+@app.before_request
+def validate_session():
+    if request.path.startswith('/static/') or request.path.startswith('/api/'):
+        return
+    user_id = session.get('user_id')
+    if user_id and not data_manager.get_user_by_id(user_id):
+        session.clear()
+    # Also Sync username in case it changed
+    if user_id:
+        user = data_manager.get_user_by_id(user_id)
+        if user and session.get('username') != user.get('username'):
+            session['username'] = user['username']
 
 # ── Currents API (News) ──
 CURRENTS_API_KEY = os.environ.get('CURRENTS_API_KEY', '')
@@ -471,32 +490,135 @@ def start_news_updater(app):
 # Start background news updater
 start_news_updater(app)
 
-PREMIUM_TIERS = {
-    'pass': {
-        'name': 'Pass',
-        'price': 4,
-        'price_yearly': 40,
-        'daily_limit': 500,
-        'paddle_price_id': 'pri_01kxhvp58qatxgkevgrze5szax',
-        'paddle_price_id_yearly': 'pri_01kxhvp6qneeka0r33jqy35hey',
-        'trial_days': 0,
-    },
-    'golden': {
-        'name': 'Golden Pass',
-        'price': 10,
-        'price_yearly': 90,
-        'daily_limit': None,
-        'paddle_price_id': 'pri_01kxhvp899nkccv1z6sya7xg47',
-        'paddle_price_id_yearly': 'pri_01kxhvp9smganb43cxdyh6yp4m',
-        'trial_days': 3,
-    },
-}
 
-# ── Search Quota ──
-ANONYMOUS_DAILY_LIMIT = 1
-FREE_DAILY_LIMIT = 24
-FREE_BONUS_LIMIT = 25
-PREMIUM_500_DAILY_LIMIT = 500
+def _score_blog_for_newsstand(blog):
+    """Score a blog post for newsstand inclusion. Higher = more addictive/clickable.
+    Heavily penalizes spammy content and rewards originality."""
+    from datetime import datetime, timezone
+    s = 0
+    quality = blog.get('quality_score', 0)
+
+    # Quality is the primary gate — anti-spam has already penalized spammy blogs
+    if quality < 5:
+        return 0
+
+    s += min(quality / 40, 1.0) * 30
+
+    views = blog.get('view_count', 0)
+    s += min(views / 100, 1.0) * 15
+    upvotes = blog.get('upvote_count', 0)
+    s += min(upvotes / 10, 1.0) * 10
+
+    created = blog.get('created_at', '')
+    if created:
+        try:
+            dt = datetime.fromisoformat(created.replace('Z', '+00:00'))
+            now = datetime.now(timezone.utc)
+            age_hours = max(0.1, (now - dt).total_seconds() / 3600)
+            recency = max(0, 1.0 - age_hours / 168)
+            s += recency * 20
+        except Exception:
+            pass
+
+    content = blog.get('content', '') or ''
+    content_lower = content.lower()
+    words = content_lower.split()
+    word_count = max(1, len(words))
+
+    # Originality bonus: personal experience signals
+    first_person = sum(1 for p in [' i ', ' my ', ' i\'m ', ' i\'ve ', ' i tested ', ' i tried ',
+                                    ' personally', ' my experience', ' my review'] if p in content_lower)
+    if first_person >= 3:
+        s += 15
+    elif first_person >= 1:
+        s += 5
+
+    # Research/data bonus
+    research = sum(1 for p in [' study found', ' research shows', ' according to',
+                                ' i measured', ' i compared', ' results showed',
+                                ' my analysis', ' benchmark', ' case study',
+                                ' performance data', ' side by side'] if p in content_lower)
+    if research >= 3:
+        s += 12
+    elif research >= 1:
+        s += 5
+
+    # Quick spam sniff — penalize hard
+    promo_hits = sum(1 for kw in ['buy now', 'limited time', 'discount code',
+                                   'coupon', 'promo code', 'special offer',
+                                   'free trial', 'click here', 'save big',
+                                   'affiliate', 'lowest price', 'order today'] if kw in content_lower)
+    if promo_hits >= 2:
+        s -= 30
+    elif promo_hits >= 1:
+        s -= 10
+
+    # Affiliate link density
+    affiliate_pats = ['amazon.com/', 'amzn.to', 'shareasale', 'bit.ly/', 'tinyurl.com']
+    aff_count = sum(1 for p in affiliate_pats if p in content_lower)
+    if aff_count >= 2:
+        s -= 20
+    elif aff_count >= 1:
+        s -= 5
+
+    desc = blog.get('description', '') or ''
+    if len(desc) > 60:
+        s += 5
+    elif len(desc) > 20:
+        s += 2
+    if blog.get('thumbnail'):
+        s += 5
+    if len(content) > 500:
+        s += 5
+    elif len(content) > 200:
+        s += 2
+
+    if quality >= 40:
+        s += 5
+    elif quality >= 25:
+        s += 2
+
+    return round(max(s, 0), 2)
+
+
+def _get_blog_news_items(max_items=2):
+    """Get top-scoring blogs formatted as news items for newsstand injection."""
+    if not data_manager:
+        return []
+    try:
+        blogs = [data_manager._normalize_collection(c) for c in data_manager.data.get('collections', [])
+                 if c.get('post_type') == 'blog'
+                 and c.get('is_public', True)
+                 and c.get('quality_score', 0) >= data_manager.QUALITY_THRESHOLD
+                 and c.get('flags', 0) < 3]
+        if not blogs:
+            return []
+        for b in blogs:
+            b['_ns_score'] = _score_blog_for_newsstand(b)
+        blogs.sort(key=lambda x: x['_ns_score'], reverse=True)
+        items = []
+        for b in blogs[:max_items]:
+            title = b.get('name', 'Blog Post')
+            desc = b.get('description', '') or (b.get('content', '') or '')[:150]
+            item = {
+                'title': title,
+                'link': f"/explore/{b['id']}",
+                'image': b.get('thumbnail', ''),
+                'source': 'arlong Blog',
+                'description': desc[:200],
+                '_is_blog': True,
+                '_blog_id': b['id'],
+            }
+            items.append(item)
+        return items
+    except Exception:
+        return []
+
+
+BLOG_NEWSTAND_POSITIONS = [2, 3]
+
+# ── Search Quota (unlimited) ──
+UNLIMITED = 999999
 
 # ── CSRF Protection ──
 def generate_csrf_token():
@@ -1417,7 +1539,7 @@ class DataManager:
             self.data.setdefault('daily_searches', {})
             uid = str(user_id)
             user_data = self.data['daily_searches'].get(uid, {})
-            today = datetime.now().strftime('%Y-%m-%d')
+            today = datetime.utcnow().strftime('%Y-%m-%d')
             if user_data.get('date') != today:
                 user_data = {'date': today, 'count': 0}
                 self.data['daily_searches'][uid] = user_data
@@ -1431,7 +1553,7 @@ class DataManager:
                 self.data = loaded
             self.data.setdefault('daily_searches', {})
             uid = str(user_id)
-            today = datetime.now().strftime('%Y-%m-%d')
+            today = datetime.utcnow().strftime('%Y-%m-%d')
             user_data = self.data['daily_searches'].get(uid, {})
             if user_data.get('date') != today:
                 user_data = {'date': today, 'count': 0}
@@ -1441,55 +1563,7 @@ class DataManager:
             return user_data['count']
 
     def get_daily_remaining(self, user_id):
-        date_str, count = self.get_or_create_daily_count(user_id)
-        premium_info = self.get_premium_info(user_id)
-        if premium_info:
-            limit = premium_info.get('daily_limit', PREMIUM_500_DAILY_LIMIT)
-        else:
-            limit = FREE_DAILY_LIMIT + FREE_BONUS_LIMIT
-        return max(0, limit - count)
-
-    # ── Premium ──
-
-    def get_premium_info(self, user_id):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            self.data.setdefault('premium', {})
-            info = self.data['premium'].get(str(user_id))
-            if not info:
-                return None
-            expires = info.get('expires_at')
-            if expires:
-                try:
-                    exp_date = datetime.fromisoformat(expires)
-                    if datetime.now() > exp_date:
-                        del self.data['premium'][str(user_id)]
-                        _save_json(self.data)
-                        return None
-                except:
-                    pass
-            return info
-
-    def set_premium(self, user_id, tier, subscription_id, expires_at, customer_id=None):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            self.data.setdefault('premium', {})
-            tier_config = PREMIUM_TIERS.get(tier)
-            entry = {
-                'tier': tier,
-                'daily_limit': tier_config['daily_limit'] if tier_config else PREMIUM_500_DAILY_LIMIT,
-                'subscription_id': subscription_id,
-                'expires_at': expires_at,
-                'activated_at': datetime.now().isoformat()
-            }
-            if customer_id:
-                entry['customer_id'] = customer_id
-            self.data['premium'][str(user_id)] = entry
-            _save_json(self.data)
+        return UNLIMITED
 
     def flush(self):
         with self._lock:
@@ -1653,29 +1727,40 @@ class DataManager:
         pages = self.get_all_crawled_pages()
         if not pages or not query:
             return []
-        query_terms = query.lower().split()
+        STOP_WORDS = {'the','a','an','is','are','was','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','shall','can','need','dare','ought','used','to','of','in','for','on','with','at','by','from','as','into','through','during','before','after','above','below','between','out','off','over','under','again','further','then','once','here','there','when','where','why','how','all','each','every','both','few','more','most','other','some','such','no','not','only','own','same','so','than','too','very','just','because','but','and','or','if','while','about','against','up','down'}
+        query_terms = [w.lower() for w in query.split() if len(w) > 2 and w.lower() not in STOP_WORDS]
+        if not query_terms:
+            return []
         scored = []
         for p in pages:
-            text = (p.get('title', '') + ' ' + p.get('description', '') + ' ' + p.get('text', '')).lower()
-            matches = sum(1 for t in query_terms if t in text)
-            if matches / len(query_terms) > 0.5:
-                title = p.get('title', '')
-                snippet = p.get('description', '')[:200]
-                if not snippet:
-                    idx = text.find(query_terms[0])
-                    if idx > 0:
-                        snippet = p.get('text', '')[max(0, idx-50):idx+150]
-                scored.append({
-                    'title': title or p.get('url', ''),
-                    'url': p.get('url', ''),
-                    'snippet': snippet,
-                    'domain': p.get('domain', ''),
-                    'score': matches / len(query_terms) * 15,
-                    'engine': 'kumo',
-                    'category': 'general',
-                })
+            title = (p.get('title', '') or '').lower()
+            desc = (p.get('description', '') or '').lower()
+            text = (p.get('text', '') or '').lower()
+            title_desc = title + ' ' + desc
+            title_matches = sum(1 for t in query_terms if t in title)
+            desc_matches = sum(1 for t in query_terms if t in title_desc)
+            text_matches = sum(1 for t in query_terms if t in text)
+            total_unique = len(set(query_terms))
+            title_ratio = title_matches / total_unique if total_unique else 0
+            desc_ratio = desc_matches / total_unique if total_unique else 0
+            if title_ratio < 0.5 and desc_ratio < 0.5:
+                continue
+            s = title_ratio * 20 + desc_ratio * 10 + (text_matches / total_unique if total_unique else 0) * 3
+            if title_ratio >= 0.8:
+                s += 10
+            elif title_ratio >= 0.5:
+                s += 5
+            scored.append({
+                'title': p.get('title', '') or p.get('url', ''),
+                'url': p.get('url', ''),
+                'snippet': (p.get('description', '') or '')[:200],
+                'domain': p.get('domain', ''),
+                'score': round(s, 2),
+                'engine': 'kumo',
+                'category': 'general',
+            })
         scored.sort(key=lambda x: x['score'], reverse=True)
-        return scored[:5]
+        return scored[:3]
 
     # ── Community system: users, votes, domain reports ──
 
@@ -1690,6 +1775,10 @@ class DataManager:
 
     def hash_ip(self, ip):
         return hashlib.sha256(ip.encode()).hexdigest()[:16]
+
+    def _invalidate_user_cache(self):
+        if hasattr(self, '_user_cache'):
+            del self._user_cache
 
     def create_user(self, username, password, security_question, security_answer, ip, email='', weather_location=''):
         with self._lock:
@@ -1717,6 +1806,7 @@ class DataManager:
             }
             self.data['users'].append(user)
             _save_json(self.data)
+            self._invalidate_user_cache()
             return user, None
 
     def authenticate_user(self, username, password):
@@ -1732,8 +1822,16 @@ class DataManager:
         return None
 
     def get_user_by_id(self, user_id):
+        if not user_id:
+            return None
+        key = str(user_id)
+        if hasattr(self, '_user_cache') and key in self._user_cache:
+            return self._user_cache.get(key)
         for u in self.data.get('users', []):
             if u['user_id'] == user_id:
+                if not hasattr(self, '_user_cache'):
+                    self._user_cache = {}
+                self._user_cache[key] = u
                 return u
         return None
 
@@ -1752,6 +1850,7 @@ class DataManager:
             users = self.data.get('users', [])
             self.data['users'] = [u for u in users if u['user_id'] != user_id]
             _save_json(self.data)
+            self._invalidate_user_cache()
 
     def report_domain(self, user_id, domain, reason):
         with self._lock:
@@ -2012,24 +2111,31 @@ class DataManager:
     QUALITY_THRESHOLD = 20
 
     def _compute_quality_score(self, collection):
+        """Naver-inspired anti-spam + originality scoring.
+        Rewards: human-written, personal experience, depth, originality.
+        Penalizes: affiliate spam, promo overload, duplicate text, keyword stuffing.
+        Shadowbans: content that triggers multiple spam signals."""
         score = 0
-        content_len = len(collection.get('content', '') or '')
+        spam_penalty = 0
+        content = collection.get('content', '') or ''
+        content_lower = content.lower()
+        desc = (collection.get('description', '') or '').strip()
+        name = (collection.get('name', '') or '').strip()
+        content_len = len(content)
+
+        # ── Base quality (original scoring) ──
         if content_len >= 500:
             score += 30
         elif content_len >= 200:
             score += 20
         elif content_len >= 80:
             score += 10
-        # Thumbnail
         if collection.get('thumbnail', ''):
             score += 15
-        # Description
-        desc = (collection.get('description', '') or '').strip()
         if len(desc) >= 30:
             score += 10
         elif desc:
             score += 5
-        # Number of websites with explanations
         websites = collection.get('websites', [])
         if websites:
             expl_len = sum(len(w.get('note', '') or '') for w in websites)
@@ -2040,11 +2146,198 @@ class DataManager:
                 score += 15
             elif avg_expl >= 10:
                 score += 5
-            score += min(len(websites) * 3, 20)  # up to 20 for quantity
-        # Engagement
+            score += min(len(websites) * 3, 20)
         score += min(collection.get('upvote_count', 0) * 2, 15)
-        # Penalize flagged
+
+        # ── ANTI-SPAM: Affiliate & promotional link detection ──
+        AFFILIATE_PATTERNS = [
+            'amazon.com/', 'amzn.to', 'amzn.com',
+            'shareasale.com', 'rakuten.com', 'cj.com',
+            'clickbank.net', 'jvzoo.com', 'warriorplus.com',
+            'affiliate', 'ref=', 'tag=', 'utm_source=affiliate',
+            'bit.ly/', 'tinyurl.com', 't.co/',
+            'bit.do/', 'rb.gy/', 'cutt.ly/',
+        ]
+        affiliate_count = sum(1 for p in AFFILIATE_PATTERNS if p in content_lower)
+        if affiliate_count >= 3:
+            spam_penalty += 30
+        elif affiliate_count >= 2:
+            spam_penalty += 20
+        elif affiliate_count >= 1:
+            spam_penalty += 8
+
+        # Link-to-content ratio (too many links = spam)
+        link_count = content_lower.count('[') + content_lower.count('http')
+        words = content_lower.split()
+        word_count = max(1, len(words))
+        link_ratio = link_count / word_count * 100
+        if link_ratio > 8:
+            spam_penalty += 25
+        elif link_ratio > 5:
+            spam_penalty += 15
+        elif link_ratio > 3:
+            spam_penalty += 5
+
+        # ── ANTI-SPAM: Promotional keyword density ──
+        PROMO_KEYWORDS = [
+            'buy now', 'limited time', 'act fast', 'order today',
+            'discount code', 'coupon', 'promo code', 'special offer',
+            'free trial', 'sign up now', 'click here', 'don\'t miss out',
+            'exclusive deal', 'best price', 'lowest price', 'save big',
+            'money back guarantee', 'risk free', 'no brainer',
+            'once in a lifetime', 'insane deal', 'grab yours',
+            'affiliate disclosure', 'sponsored post', 'paid partnership',
+            'commission', 'earning potential', 'passive income',
+        ]
+        promo_hits = sum(1 for kw in PROMO_KEYWORDS if kw in content_lower)
+        if promo_hits >= 4:
+            spam_penalty += 25
+        elif promo_hits >= 2:
+            spam_penalty += 15
+        elif promo_hits >= 1:
+            spam_penalty += 5
+
+        # ── ANTI-SPAM: Duplicate / repetitive text ──
+        sentences = [s.strip() for s in re.split(r'[.!?]+', content) if len(s.strip()) > 20]
+        if sentences:
+            unique_sentences = set(s.lower()[:80] for s in sentences)
+            dup_ratio = 1.0 - (len(unique_sentences) / len(sentences))
+            if dup_ratio > 0.4:
+                spam_penalty += 25
+            elif dup_ratio > 0.25:
+                spam_penalty += 15
+            elif dup_ratio > 0.15:
+                spam_penalty += 5
+
+        # Repetitive phrase detection
+        if word_count > 50:
+            bigrams = [' '.join(words[i:i+2]) for i in range(len(words)-1)]
+            bigram_counts = {}
+            for b in bigrams:
+                bigram_counts[b] = bigram_counts.get(b, 0) + 1
+            max_rep = max(bigram_counts.values()) if bigram_counts else 0
+            rep_ratio = max_rep / len(bigrams) if bigrams else 0
+            if rep_ratio > 0.08:
+                spam_penalty += 15
+            elif rep_ratio > 0.05:
+                spam_penalty += 8
+
+        # ── ANTI-SPAM: Keyword stuffing ──
+        if word_count > 100:
+            unique_words = set(words)
+            lexical_diversity = len(unique_words) / word_count
+            if lexical_diversity < 0.25:
+                spam_penalty += 20
+            elif lexical_diversity < 0.35:
+                spam_penalty += 10
+
+        # All-caps abuse
+        caps_words = sum(1 for w in words if w.isupper() and len(w) > 2)
+        if caps_words > 5 and caps_words / word_count > 0.03:
+            spam_penalty += 10
+
+        # Excessive exclamation/question marks
+        exclamations = content.count('!') + content.count('!!') + content.count('!!!')
+        if exclamations > 10:
+            spam_penalty += 8
+        elif exclamations > 5:
+            spam_penalty += 3
+
+        # Title clickbait patterns
+        CLICKBAIT = ['you won\'t believe', 'shocking', 'this one trick',
+                      'doctors hate', 'what they don\'t tell you',
+                      'the truth about', 'secret method', 'hack that',
+                      'mind blowing', 'unbelievable', 'insane']
+        title_lower = name.lower()
+        clickbait_hits = sum(1 for kw in CLICKBAIT if kw in title_lower)
+        if clickbait_hits >= 2:
+            spam_penalty += 15
+        elif clickbait_hits >= 1:
+            spam_penalty += 8
+
+        # ── ORIGINALITY REWARDS: Personal experience signals ──
+        FIRST_PERSON = [' i ', ' my ', ' i\'m ', ' i\'ve ', ' i was ',
+                        ' i had ', ' i felt ', ' i tested ', ' i tried ',
+                        ' my experience', ' my opinion', ' my review',
+                        ' personally', ' in my case', ' when i ', ' as i ']
+        first_person_count = sum(1 for p in FIRST_PERSON if p in content_lower)
+        if first_person_count >= 5:
+            score += 20
+        elif first_person_count >= 3:
+            score += 12
+        elif first_person_count >= 1:
+            score += 5
+
+        # ── ORIGINALITY REWARDS: Case study / research signals ──
+        RESEARCH_SIGNALS = [
+            'according to', 'study found', 'research shows', 'data suggests',
+            'in my test', 'i measured', 'i compared', 'results showed',
+            'based on my', 'after testing', 'my analysis', 'i tracked',
+            'my findings', 'benchmark', 'experiment', 'case study',
+            'i conducted', 'survey results', 'statistics show',
+            'performance data', 'side by side', 'head to head',
+        ]
+        research_count = sum(1 for s in RESEARCH_SIGNALS if s in content_lower)
+        if research_count >= 4:
+            score += 20
+        elif research_count >= 2:
+            score += 10
+        elif research_count >= 1:
+            score += 5
+
+        # ── ORIGINALITY REWARDS: Technical depth ──
+        if word_count > 800:
+            score += 10
+        elif word_count > 400:
+            score += 5
+
+        # Paragraph structure (good content has paragraphs)
+        paragraphs = [p.strip() for p in content.split('\n') if p.strip()]
+        if len(paragraphs) >= 5:
+            score += 5
+        elif len(paragraphs) >= 3:
+            score += 3
+
+        # Code blocks or technical formatting (sign of real content)
+        if '```' in content or '    ' in content:
+            score += 5
+
+        # Lists (sign of structured content)
+        list_items = len(re.findall(r'^\s*[-*]\s', content, re.MULTILINE))
+        if list_items >= 3:
+            score += 3
+
+        # Numbers/data in content (signals real research)
+        numbers = len(re.findall(r'\b\d+(\.\d+)?%?\b', content))
+        if numbers >= 8:
+            score += 5
+        elif numbers >= 4:
+            score += 3
+
+        # ── ORIGINALITY REWARDS: Sentiment & opinion signals ──
+        OPINION_SIGNALS = [
+            'i recommend', 'i suggest', 'in my opinion', 'i think',
+            'i believe', 'i prefer', 'honestly', 'truthfully',
+            'pros and cons', 'the downside', 'the upside',
+            'what i liked', 'what i didn\'t like', 'overall',
+            'my verdict', 'my take', 'final thoughts',
+        ]
+        opinion_count = sum(1 for s in OPINION_SIGNALS if s in content_lower)
+        if opinion_count >= 3:
+            score += 8
+        elif opinion_count >= 1:
+            score += 3
+
+        # ── Shadowban: apply spam penalty ──
+        score -= spam_penalty
+
+        # ── Flag penalty (community reports) ──
         score -= collection.get('flags', 0) * 10
+
+        # ── Shadowban threshold: if too spammy, zero out ──
+        if spam_penalty >= 40:
+            score = min(score, 0)
+
         return max(score, 0)
 
     def _auto_approve(self, collection):
@@ -2089,28 +2382,62 @@ class DataManager:
                     return
 
     def search_collections(self, query, limit=5):
-        q = query.lower()
+        import re as _re
+        q = query.lower().strip()
+        query_words = [w for w in q.split() if len(w) > 2]
+        if not query_words or len(q) < 3:
+            return []
         cols = [self._normalize_collection(c) for c in self.data.get('collections', [])
                 if c.get('is_public', True) and (c.get('quality_score', 0) >= self.QUALITY_THRESHOLD or (c.get('is_listed') and c.get('is_approved')))]
+        if not cols:
+            return []
         scored = []
         for c in cols:
             score = 0
             name = (c.get('name', '') or '').lower()
             desc = (c.get('description', '') or '').lower()
-            content = (c.get('content', '') or '').lower()
+            if not name:
+                continue
+
+            # Exact full-phrase in title (strongest signal)
             if q in name:
-                score += 20
-            if q in desc:
-                score += 10
-            if q in content:
-                score += 8
-            # Title match
-            for w in q.split():
-                if w in name:
-                    score += 5
-            # Quality bonus
-            score += c.get('quality_score', 0) * 0.5
-            if score > 0:
+                score += 50
+            else:
+                # Word-level matching — use word boundaries to prevent substring false positives
+                def word_in_text(word, text):
+                    return bool(_re.search(r'(?<!\w)' + _re.escape(word) + r'(?!\w)', text))
+
+                matching_in_name = sum(1 for w in query_words if word_in_text(w, name))
+                if matching_in_name == 0:
+                    continue
+
+                if matching_in_name < len(query_words):
+                    # Not all words match — for multi-word queries, require most
+                    if len(query_words) >= 2 and matching_in_name < len(query_words) * 0.5:
+                        continue
+                    elif len(query_words) >= 2:
+                        score += 8
+                    elif len(query_words) == 1:
+                        # Single word not in title — skip
+                        continue
+
+                # Partial phrase match in title
+                for i in range(len(query_words)):
+                    for j in range(i + 2, len(query_words) + 1):
+                        phrase = ' '.join(query_words[i:j])
+                        if phrase in name:
+                            score += 25
+
+                # All words in title bonus
+                if matching_in_name == len(query_words) and len(query_words) > 1:
+                    score += 25
+                elif matching_in_name == len(query_words):
+                    score += 15
+
+            # Quality bonus (very small — never override relevance)
+            score += min(c.get('quality_score', 0) * 0.1, 5)
+
+            if score >= 15:
                 scored.append((score, c))
         scored.sort(key=lambda x: x[0], reverse=True)
         return [c for _, c in scored[:limit]]
@@ -2183,6 +2510,28 @@ class DataManager:
                     return True
             return False
 
+    def get_user_preferences(self, user_id):
+        """Get user preferences (ai_summary, etc.)."""
+        for u in self.data.get('users', []):
+            if u['user_id'] == user_id:
+                return u.get('preferences', {'ai_summary': True})
+        return {'ai_summary': True}
+
+    def update_user_preferences(self, user_id, prefs):
+        """Update user preferences. prefs is a dict like {'ai_summary': True}."""
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for u in self.data.get('users', []):
+                if u['user_id'] == user_id:
+                    existing = u.get('preferences', {'ai_summary': True})
+                    existing.update(prefs)
+                    u['preferences'] = existing
+                    _save_json(self.data)
+                    return True
+            return False
+
     def get_user_profile(self, username):
         with self._lock:
             loaded = _load_json()
@@ -2200,6 +2549,7 @@ class DataManager:
         user_id = user['user_id']
 
         collections_count = sum(1 for c in self.data.get('collections', []) if c['creator_id'] == user_id)
+        blogs_count = sum(1 for c in self.data.get('collections', []) if c['creator_id'] == user_id and c.get('post_type') == 'blog')
         pins_count = sum(len(c.get('websites', [])) for c in self.data.get('collections', []) if c['creator_id'] == user_id)
         submissions_count = sum(1 for s in self.data.get('submitted_sites', []) if s.get('submitted_by') == user_id and s.get('crawl_status') in ('approved', 'completed'))
         reports_approved = sum(1 for r in self.data.get('domain_reports', []) if user_id in r.get('reported_by', []) and r.get('status') == 'approved')
@@ -2216,14 +2566,6 @@ class DataManager:
         recent = recent[:30]
 
         joined_date = user.get('created_at', '')[:10] if user.get('created_at') else ''
-        premium_info = self.get_premium_info(user_id)
-        premium_tier = None
-        if premium_info:
-            premium_tier = premium_info.get('tier', 'pass')
-            for k, v in PREMIUM_TIERS.items():
-                if k == premium_tier:
-                    premium_tier = v['name']
-                    break
 
         return {
             'username': username,
@@ -2231,14 +2573,19 @@ class DataManager:
             'weather_location': user.get('weather_location', '') or '',
             'created_at': user.get('created_at', ''),
             'joined_date': joined_date,
-            'premium_tier': premium_tier,
+            'premium_tier': None,
             'collections_count': collections_count,
+            'blogs_count': blogs_count,
             'pins_count': pins_count,
             'submissions_count': submissions_count,
             'reports_approved': reports_approved,
             'recent': recent,
             'is_owner': False,
         }
+
+    # ── Product Key System ──
+
+
 
 
 data_manager = DataManager()
@@ -2525,6 +2872,9 @@ class ImprovedSearch:
         score = exact_match_bonus
         score += min(phrase_in_title * 5, 15)
 
+        if term_ratio > 0 and not exact_match_bonus:
+            score += term_ratio * 8
+
         if matching_terms == len(query_terms) and not exact_match_bonus:
             score += 12
 
@@ -2551,7 +2901,7 @@ class ImprovedSearch:
 
         # Check hardcoded domain authority first (authoritative overrides)
         for known_domain, authority in DOMAIN_AUTHORITY.items():
-            if known_domain in domain or domain.endswith('.' + known_domain):
+            if domain == known_domain or domain.endswith('.' + known_domain):
                 return authority
 
         # Check Tranco list (top 1M ranked domains)
@@ -2655,9 +3005,9 @@ class ImprovedSearch:
                 if phrase in snippet_lower:
                     score += 15
 
-        return max(0, score)
+        return min(60, max(0, score))
 
-    def _score_freshness(self, result):
+    def _score_freshness(self, result, query_intent='general'):
         if not result.date:
             return 5
 
@@ -2672,18 +3022,33 @@ class ImprovedSearch:
                 return 5
 
             days_old = (datetime.now() - date).days
-            if days_old < 7:
-                return 30
-            elif days_old < 30:
-                return 25
-            elif days_old < 90:
-                return 20
-            elif days_old < 365:
-                return 12
-            elif days_old < 730:
-                return 8
+            if query_intent in ('definition', 'explanation'):
+                # For timeless queries, reduce freshness pressure
+                if days_old < 7:
+                    return 15
+                elif days_old < 30:
+                    return 13
+                elif days_old < 90:
+                    return 12
+                elif days_old < 365:
+                    return 10
+                elif days_old < 730:
+                    return 8
+                else:
+                    return 5
             else:
-                return 4
+                if days_old < 7:
+                    return 30
+                elif days_old < 30:
+                    return 25
+                elif days_old < 90:
+                    return 20
+                elif days_old < 365:
+                    return 12
+                elif days_old < 730:
+                    return 8
+                else:
+                    return 4
         except:
             return 5
 
@@ -2892,14 +3257,28 @@ class ImprovedSearch:
         domain = urlparse(result.url).netloc.lower()
         domain = re.sub(r'^www\.', '', domain)
         domain_parts = domain.split('.')
+        title_lower = (result.title or '').lower()
+        snippet_lower = (result.snippet or '').lower()
+        body = title_lower + ' ' + snippet_lower
+        body_terms = set(body.split())
+        matching_in_body = len(query_terms & body_terms)
+
+        # Exact domain match: query itself is the domain (e.g. "github.com")
+        for term in query_terms:
+            if term == domain or term == '.'.join(domain_parts[-2:]):
+                return 50
+
+        # Relevance gate: require at least 2 query terms in body for domain boost
+        if matching_in_body < 2:
+            return 0
 
         for term in query_terms:
             if len(term) <= 2:
                 continue
             if any(term == part for part in domain_parts):
-                return 80
-            if any(term in part for part in domain_parts):
                 return 40
+            if any(term in part for part in domain_parts):
+                return 20
         return 0
 
     def _score_academic_boost(self, query, intent, result):
@@ -3126,10 +3505,11 @@ class ImprovedSearch:
             return 'quantitative'
         return 'general'
 
-    def _score_intent_match(self, query_intent, title, snippet):
+    def _score_intent_match(self, query_intent, title, snippet, query=''):
         tl = (title or '').lower()
         sl = (snippet or '').lower()
         combined = tl + ' ' + sl
+        query_lower = query.lower()
         if query_intent == 'explanation':
             if tl.startswith('how does') or tl.startswith('how do'):
                 return 30
@@ -3154,10 +3534,38 @@ class ImprovedSearch:
             if 'what is' in combined[:60]:
                 return 15
             return 0
+        if query_intent == 'comparison':
+            if 'vs' in combined or 'versus' in combined or 'compared' in combined or 'comparison' in combined or 'difference' in combined:
+                return 25
+            if 'review' in tl or 'best' in tl:
+                return 15
+            return 0
+        if query_intent == 'reason':
+            if 'why' in tl or 'cause' in combined or 'reason' in combined or 'because' in combined:
+                return 25
+            return 0
+        if query_intent == 'fact':
+            if any(w in tl for w in ['when', 'who', 'where', 'founded', 'born', 'located', 'established']):
+                return 25
+            if re.search(r'\d{4}', combined[:80]):
+                return 10
+            return 0
+        if query_intent == 'quantitative':
+            if re.search(r'\d+%|\$\d+|\d+ (million|billion|trillion|year|people)', combined):
+                return 25
+            if any(w in combined for w in ['price', 'cost', 'revenue', 'population', 'statistics', 'data']):
+                return 15
+            return 0
+        if query_intent == 'general':
+            matching = sum(1 for w in query_lower.split() if w in combined)
+            if matching >= 2:
+                return 5
+            return 0
         return 0
 
     def _rank_results(self, query, results, filter_type='general'):
         intent = SearchIntent(query)
+        query_lower = query.lower().strip()
         query_intent_subtype = self._classify_query_intent(query)
         blacklist = data_manager.get_blacklist()
 
@@ -3170,18 +3578,18 @@ class ImprovedSearch:
             s += self._score_domain_authority(result.url) * 0.08
             s += self._score_exact_domain_match(query, result) * 0.10
             s += self._score_url_quality(query, result.url) * 0.06
-            s += self._score_freshness(result) * 0.08
+            s += self._score_freshness(result, query_intent_subtype) * 0.08
             s += self._score_category_relevance(query, intent, result) * 0.06
             s += self._score_content_quality(result) * 0.10
             s += self._score_reddit_boost(query, intent, result) * 0.07
-            s += self._score_navigational_domain_boost(query, result)
+            s += self._score_navigational_domain_boost(query, result) * 0.10
             s += self._score_answer_quality(query, result.snippet) * 0.08
             s += self._score_snippet_substance(result.snippet) * 0.07
             s += self._score_clickbait_penalty(result.title)
             s += self._score_title_naturalness(result.title)
             s += self._score_url_depth_penalty(result.url)
             s += self._score_academic_boost(query, intent, result)
-            s += self._score_intent_match(query_intent_subtype, result.title, result.snippet) * 0.20
+            s += self._score_intent_match(query_intent_subtype, result.title, result.snippet, query) * 0.20
 
             domain = urlparse(result.url).netloc.lower()
             domain = re.sub(r'^www\.', '', domain)
@@ -3230,6 +3638,9 @@ class ImprovedSearch:
                     s += 30
 
             result.score = round(s, 2)
+            # Exact-match amplifier: if the exact query appears in the title, boost it
+            if query_lower in (result.title or '').lower():
+                result.score = round(result.score * 1.3, 2)
             scored.append(result)
 
         scored.sort(key=lambda x: x.score, reverse=True)
@@ -3257,7 +3668,11 @@ class ImprovedSearch:
             domain = re.sub(r'^www\.', '', domain)
             parts = domain.split('.')
             if len(parts) > 2:
-                domain = '.'.join(parts[-2:]) if len(parts[-1]) <= 3 and len(parts) > 2 else '.'.join(parts[-2:])
+                # Handle multi-part TLDs like co.uk, com.au
+                if parts[-2] in ('co', 'com', 'org', 'net', 'ac', 'edu', 'gov', 'or', 'ne'):
+                    domain = '.'.join(parts[-3:])
+                else:
+                    domain = '.'.join(parts[-2:])
             title_norm = r.title.lower().strip()
 
             if title_norm in seen_titles:
@@ -3285,10 +3700,47 @@ class ImprovedSearch:
 
         # Drop very low-scored results (likely irrelevant)
         if deduplicated and deduplicated[0].score > 0:
-            threshold = deduplicated[0].score * 0.08
+            threshold = deduplicated[0].score * 0.05
             deduplicated = [r for r in deduplicated if r.score >= threshold]
 
         return deduplicated[:50]
+
+    def _group_results_by_domain(self, results):
+        """Group non-discussion results by domain. Returns list of groups.
+        Each group: {'domain': str, 'favicon': str, 'results': [SearchResult, ...]}
+        Discussion results are excluded (handled separately in template).
+        Handles both SearchResult objects and dicts.
+        """
+        DISC_KEYWORDS = ('reddit', 'forum', 'stackexchange')
+        groups = []
+        seen = {}
+        for r in results:
+            if isinstance(r, dict):
+                r_cat = r.get('category', 'general')
+                r_url = r.get('url', '')
+                r_domain = r.get('domain', '')
+                r_favicon = r.get('favicon', '')
+            else:
+                r_cat = r.category
+                r_url = r.url
+                r_domain = r.domain or ''
+                r_favicon = r.favicon
+            is_disc = r_cat in ('discussions', 'discussion') or any(k in r_url for k in DISC_KEYWORDS)
+            if is_disc:
+                continue
+            domain = r_domain.lower().replace('www.', '')
+            if not domain:
+                try:
+                    domain = urlparse(r_url).netloc.lower().replace('www.', '')
+                except Exception:
+                    domain = 'unknown'
+            if domain not in seen:
+                g = {'domain': domain, 'favicon': r_favicon, 'results': [r]}
+                seen[domain] = g
+                groups.append(g)
+            else:
+                seen[domain]['results'].append(r)
+        return groups
 
     def _parse_duckduckgo_results(self, html):
         results = []
@@ -3608,11 +4060,14 @@ class ImprovedSearch:
                 all_results = [result.to_dict() for result in ranked_results]
                 self._save_to_cache(cache_key, all_results)
 
-        # Merge locally indexed crawled pages into results
-        if data_manager:
+        # Merge locally indexed crawled pages into results (only if not enough web results)
+        if data_manager and len(all_results) < per_page:
             try:
                 crawled = data_manager.search_crawled_pages(query)
+                existing_urls = {r.get('url', '') for r in all_results}
                 for c in crawled:
+                    if c.get('url', '') in existing_urls:
+                        continue
                     c['type'] = 'regular'
                     c['favicon'] = f"https://www.google.com/s2/favicons?domain={c.get('domain', '')}"
                     c['display_url'] = c['url'][:60] + '...' if len(c['url']) > 60 else c['url']
@@ -4875,32 +5330,6 @@ search_stats = SearchStats()
 # Initialize search engine
 search_engine = ImprovedSearch()
 
-# ── Anonymous Quota Helper ──
-def check_anonymous_quota():
-    cookie_val = request.cookies.get('aoogle_sq', '')
-    today = datetime.now().strftime('%Y-%m-%d')
-    count = 0
-    reset = False
-    if cookie_val:
-        try:
-            data = json.loads(cookie_val)
-            if data.get('d') == today:
-                count = data.get('c', 0)
-            else:
-                count = 0
-                reset = True
-        except:
-            count = 0
-            reset = True
-    else:
-        reset = True
-    return count, today, reset
-
-def make_anonymous_quota_cookie(count, today):
-    seconds_until_midnight = int((datetime.now().replace(hour=23, minute=59, second=59) - datetime.now()).total_seconds())
-    return json.dumps({'d': today, 'c': count}), seconds_until_midnight
-
-
 # ── Email Helpers ──
 WELCOME_EMAIL_HTML = """<!DOCTYPE html>
 <html>
@@ -4934,43 +5363,6 @@ body{font-family:Arial,sans-serif;background:#202124;color:#e8eaed;margin:0;padd
 <a href="https://aoogle-production.up.railway.app/premium">Premium</a> &middot;
 <a href="https://aoogle-production.up.railway.app/privacy">Privacy</a> &middot;
 <a href="https://aoogle-production.up.railway.app/faq">FAQ</a>
-</div>
-</div>
-</body>
-</html>"""
-
-PREMIUM_EMAIL_HTML = """<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><style>
-body{font-family:Arial,sans-serif;background:#202124;color:#e8eaed;margin:0;padding:0}
-.container{max-width:560px;margin:0 auto;padding:32px 24px}
-.logo{font-size:28px;font-weight:700;letter-spacing:-1px;text-align:center;margin-bottom:24px;color:#e8eaed}
-.logo span{background:linear-gradient(to top,#0066cc,#3399ff 50%,#e8eaed 50%);background-size:100% 200%;-webkit-background-clip:text;background-clip:text;color:transparent}
-.card{background:#303134;border:1px solid #5f6368;border-radius:12px;padding:28px}
-.card h1{margin:0 0 8px;font-size:20px;font-weight:400}
-.card .badge{display:inline-block;padding:4px 12px;border-radius:12px;font-size:11px;font-weight:500;background:#1e3527;color:#81c995;margin:8px 0}
-.card p{color:#bdc1c6;font-size:14px;line-height:1.6;margin:12px 0}
-.btn{display:inline-block;padding:10px 24px;background:#8ab4f8;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:500;margin:8px 0}
-.footer{text-align:center;font-size:12px;color:#9aa0a6;margin-top:24px}
-.footer a{color:#8ab4f8;text-decoration:none}
-</style></head>
-<body>
-<div class="container">
-<div class="logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></div>
-<div class="card">
-<h1>Welcome to Premium, {username}!</h1>
-<div class="badge">&#9733; {tier}</div>
-<p>Your premium plan is now active. Here's what you get:</p>
-<p>&bull; <strong>{daily_limit_text}</strong> searches per day<br>
-&bull; AI-powered summaries on every search<br>
-&bull; Priority support<br>
-&bull; Ad-free experience</p>
-<p style="text-align:center"><a href="https://aoogle-production.up.railway.app/" class="btn">Start searching</a></p>
-<p style="font-size:12px;color:#9aa0a6;margin-top:16px">Need help? Reply to this email or visit our FAQ.</p>
-</div>
-<div class="footer">
-<a href="https://aoogle-production.up.railway.app/premium">Manage subscription</a> &middot;
-<a href="https://aoogle-production.up.railway.app/privacy">Privacy</a>
 </div>
 </div>
 </body>
@@ -5028,15 +5420,15 @@ def send_welcome_email(email, username):
     html = WELCOME_EMAIL_HTML.replace('{username}', username)
     return send_resend_email(email, 'Welcome to arlong!', html)
 
-def send_premium_email(email, username, tier, daily_limit_text):
-    html = PREMIUM_EMAIL_HTML.replace('{username}', username).replace('{tier}', tier).replace('{daily_limit_text}', daily_limit_text)
-    return send_resend_email(email, f'Welcome to arlong Premium ({tier})!', html)
-
 def send_login_notification(email, username, ip):
     now_str = datetime.now().strftime('%B %d, %Y at %I:%M %p UTC')
     html = LOGIN_EMAIL_HTML.replace('{username}', username).replace('{time}', now_str).replace('{ip}', ip or 'Unknown')
     return send_resend_email(email, 'New sign-in to your arlong account', html)
 
+
+@app.route('/land')
+def land():
+    return render_template('land.html')
 
 @app.route('/')
 def home():
@@ -5051,19 +5443,9 @@ def home():
     if session.get('user_id'):
         profile = data_manager.get_user_profile(session.get('username'))
         user_stats = profile
-        daily_remaining = data_manager.get_daily_remaining(session['user_id'])
-        if profile:
-            tier_key = profile.get('premium_tier', 'free')
-            if tier_key in PREMIUM_TIERS:
-                tier_info = PREMIUM_TIERS[tier_key]
-                quota_limit = tier_info.get('daily_limit')
-            else:
-                quota_limit = FREE_DAILY_LIMIT + FREE_BONUS_LIMIT
-            user_weather_location = profile.get('weather_location', '') or ''
-    featured_blogs = [data_manager._normalize_collection(c) for c in data_manager.data.get('collections', []) if c.get('post_type') == 'blog' and c.get('is_public', True) and c.get('quality_score', 0) >= data_manager.QUALITY_THRESHOLD]
-    featured_blogs.sort(key=lambda c: (c.get('quality_score', 0), c.get('created_at', '')), reverse=True)
-    featured_blogs = featured_blogs[:5]
-    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=session.get('user_country', ''), country_name=COUNTRY_NAMES.get(session.get('user_country', '')), user_stat=user_stats, daily_remaining=daily_remaining, quota_limit=quota_limit, user_weather_location=user_weather_location, board_results=None, featured_blogs=featured_blogs)
+        user_weather_location = (profile or {}).get('weather_location', '') or ''
+    worldcup_data = fetch_worldcup_data()
+    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=session.get('user_country', ''), country_name=COUNTRY_NAMES.get(session.get('user_country', '')), user_stat=user_stats, daily_remaining=UNLIMITED, quota_limit=UNLIMITED, user_weather_location=user_weather_location, board_results=None, result_groups=[], ai_summary_enabled=True, worldcup_data=worldcup_data)
 
 @app.route('/search')
 def search():
@@ -5083,50 +5465,15 @@ def search():
     announcement = data_manager.get_announcement()
     if not query:
         user_stats = None
-        daily_remaining = None
-        quota_limit = None
         user_weather_location = ''
         if session.get('user_id'):
             profile = data_manager.get_user_profile(session.get('username'))
             user_stats = profile
-            daily_remaining = data_manager.get_daily_remaining(session['user_id'])
-            if profile:
-                tier_key = profile.get('premium_tier', 'free')
-                if tier_key in PREMIUM_TIERS:
-                    tier_info = PREMIUM_TIERS[tier_key]
-                    quota_limit = tier_info.get('daily_limit')
-                else:
-                    quota_limit = FREE_DAILY_LIMIT + FREE_BONUS_LIMIT
-                user_weather_location = profile.get('weather_location', '') or ''
-        return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=user_country, country_name=COUNTRY_NAMES.get(user_country), user_stat=user_stats, daily_remaining=daily_remaining, quota_limit=quota_limit, user_weather_location=user_weather_location, board_results=None)
+            user_weather_location = (profile or {}).get('weather_location', '') or ''
+        worldcup_data = fetch_worldcup_data()
+        return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=user_country, country_name=COUNTRY_NAMES.get(user_country), user_stat=user_stats, daily_remaining=UNLIMITED, quota_limit=UNLIMITED, user_weather_location=user_weather_location, board_results=None, result_groups=[], ai_summary_enabled=True, worldcup_data=worldcup_data)
 
-    # ── Search Quota ──
     user_id = session.get('user_id')
-    quota_exceeded = False
-    quota_remaining = 0
-    quota_limit = 0
-    quota_is_anonymous = False
-    anon_count = 0
-    anon_today = ''
-
-    quota_bonus_active = False
-    if user_id:
-        premium_info = data_manager.get_premium_info(user_id)
-        if premium_info:
-            quota_limit = premium_info.get('daily_limit', PREMIUM_500_DAILY_LIMIT)
-        else:
-            quota_limit = FREE_DAILY_LIMIT + FREE_BONUS_LIMIT
-        _, count = data_manager.get_or_create_daily_count(user_id)
-        if not premium_info and count > FREE_DAILY_LIMIT and count < quota_limit:
-            quota_bonus_active = True
-        quota_remaining = max(0, quota_limit - count)
-        quota_exceeded = quota_remaining <= 0
-    else:
-        quota_is_anonymous = True
-        quota_limit = ANONYMOUS_DAILY_LIMIT
-        anon_count, anon_today, _ = check_anonymous_quota()
-        quota_remaining = max(0, quota_limit - anon_count)
-        quota_exceeded = quota_remaining <= 0
 
     crisis = detect_crisis(query)
 
@@ -5150,6 +5497,8 @@ def search():
             country_name=COUNTRY_NAMES.get(user_country, ''),
             user_stat=user_stats,
             board_results=None,
+            result_groups=[],
+            ai_summary_enabled=True,
         )
 
     notice = detect_notice(query)
@@ -5177,32 +5526,6 @@ def search():
     bang_url = get_bang_redirect(query)
     if bang_url:
         return redirect(bang_url)
-
-    # ── Quota exceeded: block search entirely ──
-    if quota_exceeded:
-        if not session.get('user_id'):
-            anon_count, anon_today, _ = check_anonymous_quota()
-        return render_template(
-            'search.html',
-            query=query,
-            results=None,
-            quota_exceeded=True,
-            quota_remaining=0,
-            quota_limit=quota_limit,
-            quota_is_anonymous=quota_is_anonymous,
-            quota_bonus_active=False,
-            page=1,
-            total_results=0,
-            info_box=None,
-            shopping_products=None,
-            announcement=announcement,
-            blocked_count=BLOCKLIST_COUNT,
-            user_country=user_country,
-            country_name=COUNTRY_NAMES.get(user_country, ''),
-            user_stat=None,
-            search_time=0,
-            board_results=None,
-        ), 429
 
     try:
         if region:
@@ -5259,17 +5582,21 @@ def search():
 
         search_time = round(time.time() - _search_start, 2)
 
-        # Increment quota if search succeeded
-        if user_id and not quota_exceeded:
-            data_manager.increment_daily_count(user_id)
-        elif quota_is_anonymous and not quota_exceeded:
-            anon_count += 1
+        # Group results by domain for nested display
+        result_groups = search_engine._group_results_by_domain(results)
+
+        # Check user preference for AI summary
+        ai_summary_enabled = True
+        if user_id:
+            prefs = data_manager.get_user_preferences(user_id)
+            ai_summary_enabled = prefs.get('ai_summary', True)
 
         resp = make_response(render_template(
             'search.html',
             query=query,
             filter=filter_type,
             results=results,
+            result_groups=result_groups,
             board_results=board_results,
             worldcup_data=worldcup_data,
             verified_info=verified_info,
@@ -5287,24 +5614,13 @@ def search():
             country_name=COUNTRY_NAMES.get(user_country, ''),
             search_time=search_time,
             user_stat=None,
-            quota_exceeded=quota_exceeded,
-            quota_remaining=quota_remaining,
-            quota_limit=quota_limit,
-            quota_is_anonymous=quota_is_anonymous,
-            quota_bonus_active=quota_bonus_active,
+            ai_summary_enabled=ai_summary_enabled,
         ))
-        if quota_is_anonymous:
-            cookie_val, max_age = make_anonymous_quota_cookie(anon_count, anon_today)
-            resp.set_cookie('aoogle_sq', cookie_val, max_age=max_age, httponly=True, samesite='Lax')
         return resp
 
     except Exception as e:
         import traceback
         app.logger.error(f"Search route error: {str(e)}\n{traceback.format_exc()}")
-        if user_id and not quota_exceeded:
-            data_manager.increment_daily_count(user_id)
-        elif quota_is_anonymous and not quota_exceeded:
-            anon_count += 1
         resp = make_response(render_template(
             'search.html',
             query=query,
@@ -5318,36 +5634,11 @@ def search():
             country_name=COUNTRY_NAMES.get(user_country, ''),
             user_stat=None,
             search_time=round(time.time() - _search_start, 2),
-            quota_exceeded=quota_exceeded,
-            quota_remaining=quota_remaining,
-            quota_limit=quota_limit,
-            quota_is_anonymous=quota_is_anonymous,
-            quota_bonus_active=quota_bonus_active,
+            result_groups=[],
+            ai_summary_enabled=True,
         ))
-        if quota_is_anonymous:
-            cookie_val, max_age = make_anonymous_quota_cookie(anon_count, anon_today)
-            resp.set_cookie('aoogle_sq', cookie_val, max_age=max_age, httponly=True, samesite='Lax')
-        return resp
-
-
 @app.route('/api/ai-summary', methods=['GET', 'POST'])
 def api_ai_summary():
-    # ── Quota check: block AI if search limit exceeded ──
-    user_id = session.get('user_id')
-    if user_id:
-        premium_info = data_manager.get_premium_info(user_id)
-        if premium_info:
-            ai_limit = premium_info.get('daily_limit', PREMIUM_500_DAILY_LIMIT)
-        else:
-            ai_limit = FREE_DAILY_LIMIT + FREE_BONUS_LIMIT
-        _, count = data_manager.get_or_create_daily_count(user_id)
-        if count >= ai_limit:
-            return jsonify({'ok': False, 'error': 'Daily search limit reached. Upgrade to Premium for more searches.'}), 403
-    else:
-        anon_count, _, _ = check_anonymous_quota()
-        if anon_count >= ANONYMOUS_DAILY_LIMIT:
-            return jsonify({'ok': False, 'error': 'Free search limit reached. Create an account for more searches.'}), 403
-
     try:
         if request.method == 'GET':
             q = (request.args.get('q') or '').strip()
@@ -5663,148 +5954,11 @@ def videos():
 
 @app.route('/blog')
 def blog():
-    return render_template('blog.html')
+    return redirect(url_for('land'))
 
 @app.route('/about')
 def about():
-    comparisons = [
-        {
-            "id": "cmp-vscode-vim",
-            "label": "vs code vs vim",
-            "engines": {
-                "Google": {"cls": "g", "results": [
-                    {"title": "VS Code vs Vim: Which Editor Should You Use?", "domain": "dev.to", "badge": "community", "bc": "good"},
-                    {"title": "Vim vs Visual Studio Code", "domain": "stackshare.io", "badge": "comparison", "bc": "ok"},
-                    {"title": "VS Code vs Vim for Programming", "domain": "freecodecamp.org", "badge": "tutorial", "bc": "good"},
-                    {"title": "Vim vs VS Code: Honest Comparison", "domain": "medium.com", "badge": "blog", "bc": "ok"},
-                    {"title": "What are your reasons to use vim?", "domain": "reddit.com", "badge": "discussion", "bc": "good"},
-                    {"title": "Visual Studio Code vs Vim", "domain": "toolradar.com", "badge": "review", "bc": "ok"},
-                    {"title": "Vim vs VSCode: Which Code Editor?", "domain": "blog.logrocket.com", "badge": "blog", "bc": "ok"},
-                    {"title": "VS Code vs Vim Comparison 2026", "domain": "tech.co", "badge": "tech site", "bc": "ok"},
-                ]},
-                "DuckDuckGo": {"cls": "d", "results": [
-                    {"title": "VS Code vs Vim: Which Editor Should You Use?", "domain": "dev.to", "badge": "community", "bc": "good"},
-                    {"title": "What are your reasons to use vim?", "domain": "reddit.com", "badge": "discussion", "bc": "good"},
-                    {"title": "VS Code vs. Vim", "domain": "thisvsthat.io", "badge": "comparison", "bc": "ok"},
-                    {"title": "Visual Studio Code vs Vim", "domain": "toolradar.com", "badge": "review", "bc": "ok"},
-                    {"title": "Vim vs. VS Code", "domain": "aimadetools.com", "badge": "review", "bc": "ok"},
-                    {"title": "Vim vs VS Code: Honest Comparison", "domain": "devplaybook.cc", "badge": "blog", "bc": "ok"},
-                    {"title": "Vim vs Visual Studio Code", "domain": "stackshare.io", "badge": "comparison", "bc": "ok"},
-                    {"title": "VSCode vs. Vim", "domain": "thisvsthat.io", "badge": "comparison", "bc": "ok"},
-                ]},
-                "Our Engine": {"cls": "o", "results": [
-                    {"title": "VS Code vs Vim: Which Editor Should You Use?", "domain": "dev.to \u00b7 36.8", "badge": "community", "bc": "good"},
-                    {"title": "What are your reasons to use vim?", "domain": "reddit.com \u00b7 30.5", "badge": "Reddit boost +7%", "bc": "good"},
-                    {"title": "VS Code vs. Vim", "domain": "thisvsthat.io \u00b7 25.6", "badge": "comparison", "bc": "ok"},
-                    {"title": "Visual Studio Code vs Vim", "domain": "toolradar.com \u00b7 24.4", "badge": "review", "bc": "ok"},
-                    {"title": "Vim vs. VS Code", "domain": "aimadetools.com \u00b7 24.3", "badge": "review", "bc": "ok"},
-                    {"title": "Vim vs VS Code: Honest Comparison", "domain": "devplaybook.cc \u00b7 22.6", "badge": "blog", "bc": "ok"},
-                    {"title": "Vim vs Visual Studio Code", "domain": "stackshare.io \u00b7 21.6", "badge": "comparison", "bc": "ok"},
-                    {"title": "VSCode vs. Vim", "domain": "thisvsthat.io \u00b7 20.2", "badge": "comparison", "bc": "ok"},
-                ]},
-            },
-            "stats": [
-                {"label": "Google relevance", "val": "87%", "best": False},
-                {"label": "DuckDuckGo relevance", "val": "83%", "best": False},
-                {"label": "Our relevance", "val": "92%", "best": True},
-                {"label": "Google spam blocked", "val": "88%", "best": False},
-                {"label": "DuckDuckGo spam blocked", "val": "83%", "worst": True},
-                {"label": "Our spam blocked", "val": "89%", "best": True},
-            ],
-            "takeaway": "For discussion queries like editor comparisons, Reddit boost is a game changer. Google buries Reddit at #5 behind corporate blogs and generic comparisons. DuckDuckGo surfaces Reddit at #2 but leaves it buried behind meta comparison sites. Our engine pushes Reddit to #2 with the boost and keeps dev.to (real community content) at #1 where it belongs. When you want actual developer opinions, not SEO-optimized fluff, our engine delivers. We beat both Google and DuckDuckGo on relevance."
-        },
-        {
-            "id": "cmp-tailwind",
-            "label": "tailwind css vs bootstrap",
-            "engines": {
-                "Google": {"cls": "g", "results": [
-                    {"title": "Tailwind CSS vs Bootstrap", "domain": "dev.to", "badge": "community", "bc": "good"},
-                    {"title": "Tailwind CSS vs Bootstrap", "domain": "geeksforgeeks.org", "badge": "tutorial", "bc": "ok"},
-                    {"title": "Bootstrap vs Tailwind CSS", "domain": "blog.logrocket.com", "badge": "blog", "bc": "ok"},
-                    {"title": "Tailwind CSS vs Bootstrap", "domain": "freecodecamp.org", "badge": "tutorial", "bc": "good"},
-                    {"title": "Bootstrap vs Tailwind CSS", "domain": "strapi.io", "badge": "tech site", "bc": "ok"},
-                    {"title": "Tailwind vs Bootstrap", "domain": "designrevision.com", "badge": "review", "bc": "ok"},
-                    {"title": "Tailwind CSS vs Bootstrap", "domain": "stackshare.io", "badge": "comparison", "bc": "ok"},
-                    {"title": "Comparing Tailwind CSS to Bootstrap", "domain": "blog.logrocket.com", "badge": "blog", "bc": "ok"},
-                ]},
-                "DuckDuckGo": {"cls": "d", "results": [
-                    {"title": "Tailwind CSS vs Bootstrap", "domain": "dev.to", "badge": "community", "bc": "good"},
-                    {"title": "Tailwind CSS vs Bootstrap 2026", "domain": "toolshref.com", "badge": "SEO site", "bc": "ok"},
-                    {"title": "Tailwind CSS vs Bootstrap", "domain": "geeksforgeeks.org", "badge": "content farm", "bc": "bad"},
-                    {"title": "Bootstrap vs Tailwind CSS", "domain": "strapi.io", "badge": "tech site", "bc": "ok"},
-                    {"title": "Bootstrap vs Tailwind CSS", "domain": "itpathsolutions.com", "badge": "SEO site", "bc": "ok"},
-                    {"title": "Tailwind vs Bootstrap", "domain": "designrevision.com", "badge": "review", "bc": "ok"},
-                    {"title": "Tailwind vs Bootstrap 2026", "domain": "tech-insider.org", "badge": "blog", "bc": "ok"},
-                    {"title": "Comparing Tailwind CSS to Bootstrap", "domain": "blog.logrocket.com", "badge": "blog", "bc": "ok"},
-                ]},
-                "Our Engine": {"cls": "o", "results": [
-                    {"title": "Tailwind CSS vs Bootstrap", "domain": "dev.to \u00b7 35.1", "badge": "community", "bc": "good"},
-                    {"title": "Tailwind CSS vs Bootstrap 2026", "domain": "toolshref.com \u00b7 32.0", "badge": "comparison", "bc": "ok"},
-                    {"title": "Tailwind CSS vs Bootstrap", "domain": "geeksforgeeks.org \u00b7 30.3", "badge": "penalized -20", "bc": "bad"},
-                    {"title": "Bootstrap vs Tailwind CSS", "domain": "strapi.io \u00b7 24.8", "badge": "tech site", "bc": "ok"},
-                    {"title": "Bootstrap vs Tailwind CSS", "domain": "itpathsolutions.com \u00b7 24.2", "badge": "SEO site", "bc": "ok"},
-                    {"title": "Tailwind vs Bootstrap", "domain": "designrevision.com \u00b7 22.9", "badge": "review", "bc": "ok"},
-                    {"title": "Tailwind vs Bootstrap 2026", "domain": "tech-insider.org \u00b7 22.3", "badge": "blog", "bc": "ok"},
-                    {"title": "Comparing Tailwind CSS to Bootstrap", "domain": "blog.logrocket.com \u00b7 19.8", "badge": "blog", "bc": "ok"},
-                ]},
-            },
-            "stats": [
-                {"label": "Google relevance", "val": "89%", "best": False},
-                {"label": "DuckDuckGo relevance", "val": "76%", "worst": True},
-                {"label": "Our relevance", "val": "90%", "best": True},
-                {"label": "Google spam blocked", "val": "86%", "best": False},
-                {"label": "DuckDuckGo spam blocked", "val": "73%", "worst": True},
-                {"label": "Our spam blocked", "val": "87%", "best": True},
-            ],
-            "takeaway": "For technical comparisons, our content quality penalty makes the difference. Google leaves GeeksforGeeks at #2 despite being a known content farm. DuckDuckGo lets it into the top 3 and also surfaces SEO-optimized comparison sites (toolshref, itpathsolutions). Our engine penalizes GeeksforGeeks with \u221220 (drops it to #3) and keeps dev.to\u2019s community-written comparison at #1. We beat DuckDuckGo by 14% on relevance and 14% on spam blocking. On developer queries, community voices win over SEO spam."
-        },
-        {
-            "id": "cmp-headphones",
-            "label": "best noise cancelling headphones 2026",
-            "engines": {
-                "Google": {"cls": "g", "results": [
-                    {"title": "Best Noise-Cancelling Headphones 2026", "domain": "nytimes.com/wirecutter", "badge": "expert tested", "bc": "good"},
-                    {"title": "Best Noise Cancelling Headphones 2026", "domain": "rtings.com", "badge": "expert tested", "bc": "good"},
-                    {"title": "Best Noise Cancelling Headphones 2026", "domain": "pcmag.com", "badge": "expert tested", "bc": "good"},
-                    {"title": "Best noise-cancelling headphones 2026", "domain": "whathifi.com", "badge": "review", "bc": "ok"},
-                    {"title": "Best Noise-Canceling Headphones", "domain": "tomsguide.com", "badge": "review", "bc": "ok"},
-                    {"title": "Best Noise Cancelling Headphones", "domain": "cnet.com", "badge": "expert tested", "bc": "good"},
-                    {"title": "Best Noise Canceling Headphones", "domain": "soundguys.com", "badge": "review", "bc": "ok"},
-                    {"title": "Best Noise Cancelling Headphones 2026", "domain": "techradar.com", "badge": "review", "bc": "ok"},
-                ]},
-                "DuckDuckGo": {"cls": "d", "results": [
-                    {"title": "Best Noise Cancelling Headphones 2026", "domain": "recordingnow.com", "badge": "unknown domain", "bc": "ok"},
-                    {"title": "Best Noise-Cancelling Headphones 2026", "domain": "nytimes.com/wirecutter", "badge": "expert tested", "bc": "good"},
-                    {"title": "Best Noise Cancelling Headphones 2026", "domain": "rtings.com", "badge": "expert tested", "bc": "good"},
-                    {"title": "Best noise-cancelling headphones 2026", "domain": "whathifi.com", "badge": "review", "bc": "ok"},
-                    {"title": "Best Noise-Cancelling Headphones 2026", "domain": "pcmag.com", "badge": "expert tested", "bc": "good"},
-                    {"title": "Best Noise Canceling Headphones 2026", "domain": "audiophileon.com", "badge": "review", "bc": "ok"},
-                    {"title": "Best noise-canceling headphones 2026", "domain": "tomsguide.com", "badge": "review", "bc": "ok"},
-                    {"title": "Best Noise-Canceling Headphones 2026", "domain": "people.com", "badge": "general", "bc": "ok"},
-                ]},
-                "Our Engine": {"cls": "o", "results": [
-                    {"title": "Best Noise Cancelling Headphones 2026", "domain": "recordingnow.com \u00b7 31.3", "badge": "title match", "bc": "good"},
-                    {"title": "Best Noise-Cancelling Headphones 2026", "domain": "nytimes.com/wirecutter \u00b7 27.7", "badge": "authoritative", "bc": "good"},
-                    {"title": "Best Noise Cancelling Headphones 2026", "domain": "rtings.com \u00b7 25.3", "badge": "expert tested", "bc": "good"},
-                    {"title": "Best noise-cancelling headphones 2026", "domain": "whathifi.com \u00b7 25.0", "badge": "review", "bc": "ok"},
-                    {"title": "Best Noise-Cancelling Headphones 2026", "domain": "pcmag.com \u00b7 24.1", "badge": "expert tested", "bc": "good"},
-                    {"title": "Best Noise Canceling Headphones 2026", "domain": "audiophileon.com \u00b7 19.9", "badge": "review", "bc": "ok"},
-                    {"title": "Best noise-canceling headphones 2026", "domain": "tomsguide.com \u00b7 19.8", "badge": "review", "bc": "ok"},
-                    {"title": "Best Noise-Canceling Headphones 2026", "domain": "people.com \u00b7 18.8", "badge": "general", "bc": "ok"},
-                ]},
-            },
-            "stats": [
-                {"label": "Google relevance", "val": "93%", "best": True},
-                {"label": "DuckDuckGo relevance", "val": "81%", "worst": True},
-                {"label": "Our relevance", "val": "84%", "best": False},
-                {"label": "Google spam blocked", "val": "91%", "best": True},
-                {"label": "DuckDuckGo spam blocked", "val": "72%", "worst": True},
-                {"label": "Our spam blocked", "val": "82%", "best": False},
-            ],
-            "takeaway": "Google dominates shopping queries with authoritative review sites (Wirecutter, RTINGS, PCMag) at the top. DuckDuckGo lets an unknown SEO domain (recordingnow.com) grab #1 despite being less authoritative. Our engine keeps recordingnow.com at #1 on strong title match, but promotes Wirecutter to #2 and RTINGS to #3 \u2014 ahead of where DuckDuckGo places them. We beat DuckDuckGo by 3% on relevance and 10% on spam blocking. For product research, our domain authority scoring elevates trusted reviewers above SEO-first sites."
-        }
-    ]
-    return render_template('about.html', comparisons=comparisons)
+    return redirect(url_for('land'))
 
 @app.route('/docs')
 def docs():
@@ -5895,11 +6049,10 @@ def changelogs():
 @app.route('/settings')
 def settings():
     user_id = session.get('user_id')
-    is_premium = False
+    preferences = {'ai_summary': True}
     if user_id:
-        premium_info = data_manager.data.get('premium', {}).get(str(user_id))
-        is_premium = bool(premium_info and premium_info.get('subscription_id'))
-    return render_template('settings.html', is_premium=is_premium)
+        preferences = data_manager.get_user_preferences(user_id)
+    return render_template('settings.html', preferences=preferences, is_logged_in=bool(user_id))
 
 
 @app.route('/robots.txt')
@@ -5938,12 +6091,12 @@ def api_bangs():
 
 @app.errorhandler(404)
 def not_found_error(error):
-    return render_template('search.html', error="Page not found", board_results=None), 404
+    return render_template('search.html', error="Page not found", board_results=None, result_groups=[], ai_summary_enabled=True), 404
 
 @app.errorhandler(500)
 def internal_error(error):
     app.logger.error(f"Internal server error: {str(error)}")
-    return render_template('search.html', error="An internal error occurred. Please try again.", board_results=None), 500
+    return render_template('search.html', error="An internal error occurred. Please try again.", board_results=None, result_groups=[], ai_summary_enabled=True), 500
 
 @app.route('/api/report', methods=['POST'])
 def api_report():
@@ -6183,9 +6336,12 @@ def login():
         session['user_id'] = user['user_id']
         session['username'] = user['username']
         user_email = user.get('email', '')
-        if user_email:
-            ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
-            send_login_notification(user_email, username, ip)
+        if user_email and RESEND_API_KEY:
+            try:
+                ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
+                send_login_notification(user_email, username, ip)
+            except:
+                pass
         return redirect(url_for('home'))
     return redirect(url_for('signup', mode='login'))
 
@@ -6271,6 +6427,14 @@ def api_news():
         except Exception:
             items = []
     source_label = CATEGORY_SOURCE_LABELS.get(category, 'News')
+    if category == 'top' and items:
+        blog_items = _get_blog_news_items(max_items=2)
+        if blog_items:
+            items = list(items)
+            insert_at = [p for p in BLOG_NEWSTAND_POSITIONS if p < len(items)]
+            for i, blog_item in enumerate(blog_items):
+                pos = insert_at[i] if i < len(insert_at) else len(items)
+                items.insert(pos, blog_item)
     return jsonify({'ok': True, 'items': items, 'source': source_label})
 
 
@@ -6629,8 +6793,6 @@ def api_collections():
         thumbnail = request.form.get('thumbnail', '').strip()
         if not name or len(name) < 2:
             return jsonify({'ok': False, 'error': 'Name at least 2 characters'}), 400
-        if not content or len(content) < 50:
-            return jsonify({'ok': False, 'error': 'Board requires a detailed blog post (min 50 characters)'}), 400
         username = session.get('username', 'Anonymous')
         c = data_manager.create_collection(user_id, username, name, desc, content, pin_color, transparent, bg_image, bg_style, theme, thumbnail)
         return jsonify({'ok': True, 'collection': c})
@@ -6843,12 +7005,7 @@ def user_profile(username):
     if not profile:
         return render_template('user_profile.html', error='User not found'), 404
     profile['is_owner'] = session.get('username') == username
-    if profile['is_owner']:
-        daily_remaining = data_manager.get_daily_remaining(session['user_id'])
-    else:
-        daily_remaining = None
-    premium_tiers_info = PREMIUM_TIERS
-    return render_template('user_profile.html', profile=profile, daily_remaining=daily_remaining, premium_tiers=premium_tiers_info)
+    return render_template('user_profile.html', profile=profile)
 
 
 @app.route('/api/user/update-settings', methods=['POST'])
@@ -6883,138 +7040,22 @@ def api_user_update_settings():
     return jsonify({'ok': False, 'error': 'Unknown action'}), 400
 
 
+@app.route('/api/user/preferences', methods=['GET', 'POST'])
+def api_user_preferences():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'Login required'}), 403
+    if request.method == 'GET':
+        prefs = data_manager.get_user_preferences(user_id)
+        return jsonify({'ok': True, 'preferences': prefs})
+    prefs = request.get_json(silent=True) or {}
+    allowed_keys = {'ai_summary'}
+    filtered = {k: v for k, v in prefs.items() if k in allowed_keys}
+    ok = data_manager.update_user_preferences(user_id, filtered)
+    return jsonify({'ok': ok})
+
+
 # ── Premium ──
-
-@app.route('/premium')
-def premium_page():
-    return render_template('premium.html', paddle_client_token=PADDLE_CLIENT_TOKEN, paddle_environment=PADDLE_ENVIRONMENT, premium_tiers=PREMIUM_TIERS)
-
-
-@app.route('/api/create-checkout', methods=['POST'])
-def create_checkout():
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'ok': False, 'error': 'Login required'}), 403
-    tier = request.form.get('tier', 'pass')
-    billing = request.form.get('billing', 'monthly')
-    if tier not in PREMIUM_TIERS:
-        return jsonify({'ok': False, 'error': 'Invalid tier'}), 400
-    tier_config = PREMIUM_TIERS[tier]
-    price_id = tier_config['paddle_price_id_yearly'] if billing == 'yearly' else tier_config['paddle_price_id']
-    try:
-        import httpx
-        resp = httpx.post(
-            f'{PADDLE_API_BASE}/transactions',
-            json={
-                'items': [{'price_id': price_id, 'quantity': 1}],
-                'custom_data': {'user_id': str(user_id), 'tier': tier},
-            },
-            headers={'Authorization': f'Bearer {PADDLE_API_KEY}'},
-            timeout=15
-        )
-        if resp.status_code not in (200, 201):
-            return jsonify({'ok': False, 'error': resp.text}), 500
-        data = resp.json().get('data', {})
-        return jsonify({'ok': True, 'transaction_id': data.get('id'), 'checkout_url': None})
-    except Exception as e:
-        app.logger.error(f"Paddle transaction error: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
-
-
-@app.route('/api/customer-portal', methods=['POST'])
-def customer_portal():
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'ok': False, 'error': 'Login required'}), 403
-    premium_info = data_manager.data.get('premium', {}).get(str(user_id))
-    customer_id = (premium_info or {}).get('customer_id', '')
-    sub_id = (premium_info or {}).get('subscription_id', '')
-    if not customer_id:
-        return jsonify({'ok': False, 'error': 'No subscription found'}), 400
-    try:
-        import httpx
-        resp = httpx.post(
-            f'{PADDLE_API_BASE}/customer-portal/sessions',
-            json={
-                'customer_id': customer_id,
-                'subscription_ids': [sub_id] if sub_id else [],
-            },
-            headers={'Authorization': f'Bearer {PADDLE_API_KEY}'},
-            timeout=15
-        )
-        if resp.status_code not in (200, 201):
-            return jsonify({'ok': False, 'error': resp.text}), 500
-        data = resp.json().get('data', {})
-        url = (data.get('urls') or {}).get('general', {}).get('overview', '')
-        if not url:
-            return jsonify({'ok': False, 'error': 'No portal URL returned'}), 500
-        return jsonify({'ok': True, 'url': url})
-    except Exception as e:
-        app.logger.error(f"Paddle customer portal error: {e}")
-        return jsonify({'ok': False, 'error': str(e)}), 500
-
-
-@app.route('/premium/success')
-def premium_success():
-    return render_template('premium.html', success=True, paddle_client_token=PADDLE_CLIENT_TOKEN, paddle_environment=PADDLE_ENVIRONMENT, premium_tiers=PREMIUM_TIERS)
-
-
-@app.route('/api/paddle-webhook', methods=['POST'])
-def paddle_webhook():
-    payload = request.get_data(as_text=True)
-    sig_header = request.headers.get('Paddle-Signature', '')
-    if not PADDLE_WEBHOOK_SECRET:
-        app.logger.error("Paddle webhook secret not configured")
-        return jsonify({'ok': False, 'error': 'Not configured'}), 500
-
-    # Verify signature
-    try:
-        import hmac, hashlib
-        parts = {}
-        for pair in sig_header.split(';'):
-            if '=' in pair:
-                k, v = pair.split('=', 1)
-                parts[k.strip()] = v.strip()
-        ts = parts.get('ts', '')
-        sig = parts.get('h1', '')
-        expected = hmac.new(
-            PADDLE_WEBHOOK_SECRET.encode(),
-            f'{ts}|{payload}'.encode(),
-            hashlib.sha256
-        ).hexdigest()
-        if not hmac.compare_digest(expected, sig):
-            return jsonify({'ok': False, 'error': 'Invalid signature'}), 400
-    except Exception as e:
-        app.logger.error(f"Paddle webhook verification error: {e}")
-        return jsonify({'ok': False, 'error': 'Invalid signature'}), 400
-
-    try:
-        event = json.loads(payload)
-    except json.JSONDecodeError:
-        return jsonify({'ok': False, 'error': 'Invalid payload'}), 400
-
-    event_type = event.get('event_type', '')
-    data = event.get('data', {})
-
-    if event_type == 'subscription.created' or event_type == 'subscription.activated':
-        custom_data = (data.get('custom_data') or {}) or {}
-        user_id = custom_data.get('user_id')
-        tier = custom_data.get('tier', 'pass')
-        sub_id = data.get('id', '')
-        customer_id = data.get('customer_id', '') or data.get('customer', {}).get('id', '')
-        if user_id:
-            expires_at = (datetime.now() + timedelta(days=30)).isoformat()
-            data_manager.set_premium(user_id, tier, sub_id, expires_at, customer_id)
-            app.logger.info(f"Premium activated via Paddle for user {user_id}, tier={tier}")
-            user_obj = data_manager.get_user_by_id(user_id)
-            if user_obj and user_obj.get('email'):
-                tier_name = PREMIUM_TIERS.get(tier, {}).get('name', tier)
-                limit = PREMIUM_TIERS.get(tier, {}).get('daily_limit')
-                limit_text = str(limit) if limit else 'Unlimited'
-                send_premium_email(user_obj['email'], user_obj['username'], tier_name, limit_text)
-
-    return jsonify({'ok': True})
-
 
 def weekly_crawl_job():
     with app.app_context():
