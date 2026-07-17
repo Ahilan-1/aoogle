@@ -1099,6 +1099,41 @@
                     </div>
                     <div class="ais-body" id="ais-content"></div>
                 </div>
+                {% if worldcup_data %}
+                <div class="wc-card" style="margin-bottom:20px;background:linear-gradient(135deg,#0a1628,#1a1a2e);border:1px solid #2a2a4e;border-radius:16px;padding:20px 24px;position:relative;overflow:hidden">
+                    <div style="position:absolute;top:-30px;right:-30px;width:120px;height:120px;background:radial-gradient(circle,rgba(255,215,0,.08),transparent 70%);border-radius:50%"></div>
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+                        <span style="font-size:20px">&#x1F3C6;</span>
+                        <span style="font-size:13px;font-weight:600;color:#ffd700;text-transform:uppercase;letter-spacing:1px">FIFA World Cup 2026 Final</span>
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap">
+                        <div style="text-align:center;min-width:100px">
+                            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px">{{ worldcup_data.home_team }}</div>
+                            <div style="display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:12px;background:{% if worldcup_data.status == 'live' %}#1a4a2a{% elif worldcup_data.status == 'finished' %}#2a1a1a{% else %}#1a1a2e{% endif %};border:1px solid {% if worldcup_data.status == 'live' %}#2a6a3a{% elif worldcup_data.status == 'finished' %}#4a2a2a{% else %}#2a2a4e{% endif %}">
+                                <span style="font-size:24px;font-weight:700;color:{% if worldcup_data.status == 'live' %}#4cdf8b{% elif worldcup_data.status == 'finished' %}#f28b82{% else %}#8a8f96{% endif %}">{{ worldcup_data.home_score }}</span>
+                            </div>
+                        </div>
+                        <div style="text-align:center;padding:0 8px">
+                            <div style="font-size:11px;color:var(--text4);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px">
+                                {% if worldcup_data.status == 'live' %}&#x26AB; {{ worldcup_data.minute }}'
+                                {% elif worldcup_data.status == 'finished' %}FT
+                                {% else %}{{ worldcup_data.date }}
+                                {% endif %}
+                            </div>
+                            <div style="font-size:11px;color:var(--text3)">VS</div>
+                        </div>
+                        <div style="text-align:center;min-width:100px">
+                            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px">{{ worldcup_data.away_team }}</div>
+                            <div style="display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:12px;background:{% if worldcup_data.status == 'live' %}#1a4a2a{% elif worldcup_data.status == 'finished' %}#2a1a1a{% else %}#1a1a2e{% endif %};border:1px solid {% if worldcup_data.status == 'live' %}#2a6a3a{% elif worldcup_data.status == 'finished' %}#4a2a2a{% else %}#2a2a4e{% endif %}">
+                                <span style="font-size:24px;font-weight:700;color:{% if worldcup_data.status == 'live' %}#4cdf8b{% elif worldcup_data.status == 'finished' %}#f28b82{% else %}#8a8f96{% endif %}">{{ worldcup_data.away_score }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% if worldcup_data.status == 'scheduled' %}
+                    <div style="text-align:center;margin-top:12px;font-size:12px;color:var(--text3)">&#x1F551; Kickoff: July 19, 2026 at 3:00 PM ET &middot; MetLife Stadium, NJ</div>
+                    {% endif %}
+                </div>
+                {% endif %}
                 {% if board_results %}
                 <div class="board-results" style="margin-bottom:20px">
                     <div style="font-size:13px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;padding:0 4px">&#x270F; Blog Posts</div>

@@ -5215,6 +5215,12 @@ def search():
             for b in board_results:
                 b['_type'] = 'board'
 
+        # ── World Cup 2026 live score ──
+        worldcup_data = None
+        ql = query.lower().strip()
+        if any(kw in ql for kw in WORLDCUP_KEYWORDS):
+            worldcup_data = fetch_worldcup_data()
+
         verified_info = data_manager.get_verified_info(query.lower().strip(), user_country)
         if not verified_info and results:
             q_parts = query.lower().strip().split()
@@ -5265,6 +5271,7 @@ def search():
             filter=filter_type,
             results=results,
             board_results=board_results,
+            worldcup_data=worldcup_data,
             verified_info=verified_info,
             safety_info=safety_info,
             news_box=news_box,
@@ -6527,6 +6534,44 @@ def strip_markdown(text):
     text = re.sub(r'^[\s]*[-*+]\s+', '', text, flags=re.MULTILINE)
     text = re.sub(r'^[\s]*\d+\.\s+', '', text, flags=re.MULTILINE)
     return text.strip()
+
+# ── World Cup 2026 live score integration ──
+WORLDCUP_FINAL_TEAMS = {'Spain': 29, 'Argentina': 37}
+WORLDCUP_KEYWORDS = ['fifa final','world cup final','fifa world cup final','spain vs argentina','argentina vs spain','wc final','worldcup final']
+
+def fetch_worldcup_data():
+    try:
+        import urllib.request
+        resp = urllib.request.urlopen('https://worldcup26.ir/get/games', timeout=6)
+        data = json.loads(resp.read().decode())
+        games = data.get('games', data.get('data', []))
+        for g in games:
+            if g.get('id') == '104':
+                home_id = g.get('home_team_id', '0')
+                away_id = g.get('away_team_id', '0')
+                home_name = g.get('home_team_name_en', '') or ''
+                away_name = g.get('away_team_name_en', '') or ''
+                if not home_name or home_name == 'null':
+                    home_name = 'Spain'
+                if not away_name or away_name == 'null':
+                    away_name = 'Argentina'
+                finished = g.get('finished', 'FALSE').upper() == 'TRUE'
+                return {
+                    'home_team': home_name,
+                    'away_team': away_name,
+                    'home_score': int(g.get('home_score', 0) or 0),
+                    'away_score': int(g.get('away_score', 0) or 0),
+                    'status': 'live' if g.get('time_elapsed') == 'inprogress' else ('finished' if finished else 'scheduled'),
+                    'minute': g.get('match_minute', ''),
+                    'date': g.get('local_date', ''),
+                    'scorers': {
+                        'home': g.get('home_scorers', ''),
+                        'away': g.get('away_scorers', ''),
+                    }
+                }
+    except Exception:
+        pass
+    return None
 
 @app.route('/explore')
 def explore():
