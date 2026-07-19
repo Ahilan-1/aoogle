@@ -13,6 +13,7 @@ feedparser>=6.0
 groq>=0.15
 resend>=0.5
 markdown>=3.5
+cryptography>=42.0
 
 # Testing
 pytest>=8.0

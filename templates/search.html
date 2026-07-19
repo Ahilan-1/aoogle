@@ -811,15 +811,222 @@
             if(!form||form._submitting)return false;
             form._submitting=true;
             startLoading();
-            setTimeout(function(){
-                form.submit();
-            },1800);
+            form.submit();
             return false;
         }
         (function(){
-            if(window.location.pathname==='/search'&&window.location.search.indexOf('q=')>-1)
-                startLoading();
+            var aol=document.getElementById('ao-loading');
+            if(aol&&aol.classList.contains('show')){
+                aol.classList.remove('show');
+            }
         })();
+    </script>
+
+    <script>
+    (function(){
+        var _EK_HEX='{{ enc_key }}';
+        var _EKBuf=new Uint8Array(_EK_HEX.match(/.{2}/g).map(function(b){return parseInt(b,16)}));
+        var _cryptoKey=null;
+
+        async function getKey(){
+            if(_cryptoKey) return _cryptoKey;
+            _cryptoKey=await crypto.subtle.importKey('raw',_EKBuf,{name:'AES-GCM'},false,['encrypt','decrypt']);
+            return _cryptoKey;
+        }
+
+        async function encText(plaintext){
+            var enc=new TextEncoder();
+            var iv=crypto.getRandomValues(new Uint8Array(12));
+            var key=await getKey();
+            var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv},key,enc.encode(plaintext));
+            return {iv:btoa(String.fromCharCode.apply(null,iv)),data:btoa(String.fromCharCode.apply(null,new Uint8Array(ct)))};
+        }
+
+        async function decText(ivB64,ctB64){
+            var key=await getKey();
+            var iv=Uint8Array.from(atob(ivB64),function(c){return c.charCodeAt(0)});
+            var ct=Uint8Array.from(atob(ctB64),function(c){return c.charCodeAt(0)});
+            var pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:iv},key,ct);
+            return new TextDecoder().decode(pt);
+        }
+
+        function renderResultCard(r){
+            var domain=r.domain||'';
+            var url=r.url||'#';
+            var title=r.title||'';
+            var snippet=r.snippet||'';
+            var favicon=r.favicon||'';
+            var date=r.date||'';
+            var category=r.category||'general';
+            var isVideo=category==='videos'||category==='video';
+            var du=r.display_url||url;
+            var pathRaw=du.split('://')[1]||du;
+            var pathClean=pathRaw.split('/').slice(1).join('/');
+            if(pathClean.length>40) pathClean=pathClean.slice(0,40)+'...';
+            var domainClean=domain||((url.split('/')[2]||'').replace('www.',''));
+
+            var html='<div class="rc-modern" data-url="'+url.replace(/"/g,'&quot;')+'" data-title="'+title.replace(/"/g,'&quot;')+'" data-category="'+category+'">'+
+                '<div class="rc-row"><div class="rc-body">'+
+                '<div class="rc-title-line">'+
+                '<a href="'+url+'" class="rc-title" target="_blank">'+title+'</a>'+
+                '<div class="rc-acts">'+
+                '<button class="rc-save" onclick="pinFromSearch(this)" title="Save"><svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z"/></svg></button>'+
+                '<div class="rc-pos"><button class="rc-dots" onclick="toggleRcMenu(this)" title="More">&#x22EE;</button>'+
+                '<div class="rc-report-menu"><div class="rc-report-opt" onclick="reportResult(this)"><span>&#x26A0;</span> Report low quality</div></div></div>'+
+                '</div></div>'+
+                '<div class="rc-bread">'+
+                (favicon?'<img src="'+favicon+'" alt="" class="rc-fav" onerror="this.style.display=\'none\'">':'')+
+                '<span class="rc-dom">'+domainClean+'</span>'+
+                (pathClean?'<span class="rc-sep">&#x203A;</span><span class="rc-path">'+pathClean+'</span>':'')+
+                (isVideo?'<span class="rc-badge vid">Video</span>':'')+
+                (date?'<span class="rc-date">'+date+'</span>':'')+
+                '</div>'+
+                '<div class="rc-snip">'+snippet+'</div>'+
+                '</div></div></div>';
+            return html;
+        }
+
+        function renderEncResults(data){
+            var results=data.results||[];
+            var resultGroups=data.result_groups||[];
+            var total=data.total||results.length;
+            var container=document.querySelector('.results-main');
+            if(!container) return;
+            var html='<div style="color:var(--text3);font-size:13px;margin-bottom:14px;">About '+total+' results</div>';
+            var discKeyWords=['reddit','forum','stackexchange'];
+            var discResults=[];
+            var rcCount=0;
+
+            resultGroups.forEach(function(group){
+                var first=group.results[0];
+                var hasSiblings=group.results.length>1;
+                if(hasSiblings) html+='<div class="domain-group">';
+                html+=renderResultCard(first);
+                if(hasSiblings){
+                    html+='<div class="domain-group-children">';
+                    group.results.slice(1).forEach(function(child){
+                        html+=renderResultCard(child);
+                    });
+                    html+='</div></div>';
+                }
+                rcCount++;
+            });
+
+            var nonGrouped=results.filter(function(r){
+                if(r.category==='discussions'||r.category==='discussion') return false;
+                return !resultGroups.some(function(g){return g.results.some(function(gr){return gr.url===r.url})});
+            });
+            nonGrouped.forEach(function(r){
+                html+=renderResultCard(r);
+            });
+
+            discResults=results.filter(function(r){
+                var cat=r.category||'';
+                return cat==='discussions'||cat==='discussion'||discKeyWords.some(function(k){return r.url.indexOf(k)!==-1});
+            });
+            if(discResults.length>0){
+                html+='<div class="disc-sec" data-category="discussion">'+
+                    '<div class="disc-head"><svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg> Discussions</div>'+
+                    '<div class="disc-car">';
+                discResults.forEach(function(r2){
+                    var domain2=r2.domain||'';
+                    var url2=r2.url||'#';
+                    var du2=r2.display_url||'';
+                    var domClean2=domain2||((du2.split('/')[2]||'').replace('www.',''));
+                    html+='<div class="disc-c" data-url="'+url2.replace(/"/g,'&quot;')+'" data-title="'+(r2.title||'').replace(/"/g,'&quot;')+'" data-category="discussion">'+
+                        '<div class="disc-ch">'+
+                        (r2.favicon?'<img src="'+r2.favicon+'" alt="" class="disc-fav" onerror="this.style.display=\'none\'">':'')+
+                        '<span class="disc-dom">'+domClean2+'</span>'+
+                        '</div>'+
+                        '<a href="'+url2+'" class="disc-ct" target="_blank">'+r2.title+'</a>'+
+                        '<div class="disc-cs">'+(r2.snippet||'')+'</div>'+
+                        '<div class="disc-cf">'+
+                        (r2.date?'<span class="disc-date">'+r2.date+'</span>':'')+
+                        '<span style="display:flex;align-items:center;gap:2px;margin-left:auto">'+
+                        '<button class="rc-dots" onclick="toggleRcMenu(this)" title="More">&#x22EE;</button>'+
+                        '<div class="rc-report-menu"><div class="rc-report-opt" onclick="reportResult(this)"><span>&#x26A0;</span> Report low quality</div></div>'+
+                        '</span></div></div>';
+                });
+                html+='</div></div>';
+            }
+
+            if(results.length===0){
+                html='<div style="text-align:center;padding:60px 20px;color:var(--text3);font-size:16px;line-height:1.6">'+
+                    '<div style="font-size:40px;margin-bottom:16px;opacity:0.4">&#x1F50D;</div>'+
+                    '<div style="font-size:18px;font-weight:500;margin-bottom:8px;color:var(--text)">No results found</div>'+
+                    '<div>Try different keywords or check your spelling</div></div>';
+            }
+
+            container.innerHTML=html;
+            container.style.display='';
+        }
+
+        function doEncSearch(query){
+            startLoading();
+            encText(query).then(function(enc){
+                return fetch('/api/enc-search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(enc)});
+            }).then(function(resp){return resp.json()}).then(function(encResp){
+                return decText(encResp.iv,encResp.data);
+            }).then(function(raw){
+                var data=JSON.parse(raw);
+                if(data.bang){window.location.href=data.bang;return;}
+                if(data.notice){window.location.href='/search?q='+encodeURIComponent(query);return;}
+                document.getElementById('hp-search').value=query;
+                document.getElementById('portal-search-box').value=query;
+                if(document.getElementById('rs-input')) document.getElementById('rs-input').value=query;
+                var homepage=document.getElementById('homepage');
+                if(homepage) homepage.style.display='none';
+                var portalWrap=document.getElementById('portal-wrap');
+                if(portalWrap) portalWrap.style.display='';
+                var existingMain=document.querySelector('.results-main');
+                if(!existingMain){
+                    var rl=document.createElement('div');
+                    rl.className='results-layout';
+                    rl.innerHTML='<div class="results-main"></div>';
+                    if(portalWrap){portalWrap.parentNode.insertBefore(rl,portalWrap.nextSibling);}
+                    else{document.body.appendChild(rl);}
+                }
+                var resultsLayout=document.querySelector('.results-layout');
+                if(resultsLayout) resultsLayout.style.display='';
+                var pgResults=document.querySelector('.pg-results');
+                if(pgResults) pgResults.style.display='none';
+                var pgStatus=document.querySelector('.pg-status');
+                if(pgStatus) pgStatus.style.display='none';
+                var pgCounter=document.querySelector('.pg-counter');
+                if(pgCounter) pgCounter.style.display='none';
+                window.history.pushState({q:query},'',location.pathname+'?q='+encodeURIComponent(query));
+                renderEncResults(data);
+                stopLoading();
+                var lf=document.getElementById('ao-loading');if(lf)lf.classList.remove('show');
+            }).catch(function(e){
+                console.error('Enc search failed:',e);
+                stopLoading();
+                var lf=document.getElementById('ao-loading');if(lf)lf.classList.remove('show');
+                var main=document.querySelector('.results-main');
+                if(main) main.innerHTML='<div class="error-message">Search failed. Please try again.</div>';
+            });
+            return false;
+        }
+
+        function setupEncForm(formId,inputId){
+            var form=document.getElementById(formId);
+            var input=document.getElementById(inputId);
+            if(!form||!input) return;
+            form.addEventListener('submit',function(e){
+                e.preventDefault();
+                e.stopPropagation();
+                var q=input.value.trim();
+                if(!q){return false;}
+                form._submitting=true;
+                doEncSearch(q);
+                return false;
+            });
+        }
+
+        setupEncForm('hp-form','hp-search');
+        setupEncForm('portal-form','portal-search-box');
+        setupEncForm('rs-form','rs-input');
+    })();
     </script>
 
     <button class="flag-toggle" id="flag-btn" title="Toggle flag colors" style="display:none">&#x1F1FA;&#x1F1F8;</button>

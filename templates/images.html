@@ -5,195 +5,86 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% if query %}{{ query }} - {% endif %}arlong Images</title>
     <style>
-        :root {
-            --apple-gray: #86868b;
-            --apple-light-gray: #f5f5f7;
-            --apple-blue: #0066cc;
-            --apple-dark: #1d1d1f;
-            --border: #d2d2d7;
-            --hover-bg: #e8e8ed;
-        }
-        .dark-mode {
-            --apple-gray: #a1a1a6;
-            --apple-light-gray: #2c2c2e;
-            --apple-blue: #64a8ff;
-            --apple-dark: #f5f5f7;
-            --border: #48484a;
-            --hover-bg: #3a3a3c;
-            background: #1c1c1e;
-        }
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-        }
-        body {
-            background: #fff;
-            color: var(--apple-dark);
-            transition: background .2s, color .2s;
-        }
-        .header {
-            padding: 16px 20px;
-            background: rgba(255, 255, 255, 0.98);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            backdrop-filter: blur(20px);
-            box-shadow: 0 1px 8px rgba(0, 0, 0, 0.08);
-        }
-        .dark-mode .header { background: rgba(28, 28, 30, 0.98); }
-        .header-inner {
-            max-width: 1400px;
-            margin: 0 auto;
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-        .logo {
-            font-size: 22px;
-            font-weight: bold;
-            color: var(--apple-dark);
-            text-decoration: none;
-            white-space: nowrap;
-        }
-        .logo:hover { text-decoration: none; }
-        .search-box {
-            display: flex;
-            align-items: center;
-            background: var(--apple-light-gray);
-            border-radius: 12px;
-            padding: 10px 16px;
-            flex: 1;
-            max-width: 520px;
-            transition: all 0.3s;
-        }
-        .search-box:focus-within {
-            background: var(--bg);
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-        }
-        .search-input {
-            flex: 1;
-            border: none;
-            outline: none;
-            font-size: 15px;
-            background: transparent;
-            color: inherit;
-        }
-        .search-button {
-            background: none;
-            border: none;
-            cursor: pointer;
-            color: var(--apple-gray);
-            padding: 0 4px;
-        }
-        .tabs {
-            display: flex;
-            gap: 4px;
-            margin-left: auto;
-        }
-        .tab {
-            padding: 7px 16px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-size: 13px;
-            color: var(--apple-gray);
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-        .tab:hover { background: var(--apple-light-gray); text-decoration: none; }
-        .tab.active { background: var(--apple-blue); color: #fff; }
+        :root{--bg:#000;--bg2:#0d0d0d;--bg3:#1a1a1a;--text:#e8eaed;--text2:#bdc1c6;--text3:#8a8f96;--text4:#7a7f86;--link:#8ab4f8;--link-v:#a78bfa;--border:#333;--border2:#222;--border3:#333;--border4:#333;--nav-active:#8ab4f8;--shadow:rgba(0,0,0,.5);--card-bg:#0d0d0d;--hover-bg:#1a1a1a;--input-bg:#111}
+        *{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,arial,sans-serif}
+        html{overflow-x:hidden}
+        body{background:var(--bg);color:var(--text);transition:background .2s,color .2s}
+        a{text-decoration:none;color:var(--link)}a:hover{text-decoration:underline}a:visited{color:var(--link-v)}
 
-        .images-grid {
-            max-width: 1400px;
-            margin: 20px auto;
-            padding: 0 16px;
-            columns: 5;
-            column-gap: 12px;
-        }
-        @media (max-width: 1200px) { .images-grid { columns: 4; } }
-        @media (max-width: 900px) { .images-grid { columns: 3; } }
-        @media (max-width: 640px) { .images-grid { columns: 2; } }
-        @media (max-width: 400px) { .images-grid { columns: 1; } }
+        @keyframes al-spin{to{transform:rotate(360deg)}}
+        .ao-loading{display:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:99999;background:var(--bg);flex-direction:column;align-items:center;justify-content:center;opacity:0;transition:opacity .35s ease}
+        .ao-loading.show{display:flex;opacity:1}
+        .ao-loading .al-spinner{width:22px;height:22px;border:2.5px solid var(--border);border-top-color:var(--link);border-radius:50%;animation:al-spin .7s linear infinite;margin-bottom:18px}
+        .ao-loading .al-logo{font-size:20px;font-weight:600;letter-spacing:-.3px;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',sans-serif;margin-bottom:2px}
+        .ao-loading .al-text{font-size:13px;color:var(--text3);font-weight:400;transition:opacity .3s;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
 
-        .image-card {
-            break-inside: avoid;
-            margin-bottom: 12px;
-            border-radius: 10px;
-            overflow: hidden;
-            background: var(--apple-light-gray);
-            position: relative;
-            transition: transform 0.2s, box-shadow 0.2s;
-            cursor: pointer;
-        }
-        .image-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-        }
-        .image-card img {
-            width: 100%;
-            display: block;
-        }
-        .image-card .info {
-            padding: 8px 10px;
-        }
-        .image-card .info .title {
-            font-size: 12px;
-            font-weight: 500;
-            color: var(--apple-dark);
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-        .image-card .info .source {
-            font-size: 11px;
-            color: var(--apple-gray);
-            margin-top: 2px;
-        }
+        .header{padding:12px 16px 0;position:sticky;top:0;background:var(--bg);z-index:100;border-bottom:1px solid var(--border2)}
+        .header .top-row{display:flex;align-items:center;gap:12px;max-width:1400px;margin:0 auto}
+        .mini-logo{font-size:26px;font-family:'Product Sans',Arial,sans-serif;white-space:nowrap;letter-spacing:-1px;line-height:1;flex-shrink:0;text-decoration:none;color:var(--text)}
+        .mini-logo span{background:linear-gradient(to top,#0066cc,#3399ff 50%,var(--text) 50%);background-size:100% 200%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:arlong-wave 4s ease-in-out infinite}
+        .mini-logo span:nth-child(1){animation-delay:0s}.mini-logo span:nth-child(2){animation-delay:.15s}.mini-logo span:nth-child(3){animation-delay:.3s}.mini-logo span:nth-child(4){animation-delay:.45s}.mini-logo span:nth-child(5){animation-delay:.6s}.mini-logo span:nth-child(6){animation-delay:.75s}
+        @keyframes arlong-wave{0%,100%{background-position:0 45%}50%{background-position:0 55%}}
+        .rs-wrap{flex:1;max-width:640px}
+        .rs-input{width:100%;height:40px;border:1px solid var(--border);border-radius:24px;padding:0 16px;font-size:14px;outline:none;transition:box-shadow .2s;background:var(--input-bg);color:var(--text)}
+        .rs-input:focus{box-shadow:0 1px 6px var(--shadow)}
+        .results-nav{max-width:1400px;margin:0 auto;padding:2px 0 0;display:flex}
+        .results-nav a{padding:10px 14px 8px;font-size:13px;color:var(--text3);display:inline-block;border-bottom:3px solid transparent;white-space:nowrap;text-decoration:none}
+        .results-nav a.active{color:var(--nav-active);border-bottom-color:var(--nav-active)}
+        .results-nav a:hover{color:var(--nav-active);text-decoration:none}
 
-        .no-results {
-            text-align: center;
-            padding: 80px 20px;
-            color: var(--apple-gray);
-            font-size: 18px;
-        }
-        .error-message {
-            text-align: center;
-            padding: 60px 20px;
-            color: var(--apple-gray);
-        }
+        .images-grid{max-width:1400px;margin:16px auto;padding:0 16px;columns:5;column-gap:12px}
+        @media(max-width:1200px){.images-grid{columns:4}}
+        @media(max-width:900px){.images-grid{columns:3}}
+        @media(max-width:640px){.images-grid{columns:2}}
 
-        .acc-btn {
-            position: fixed; top: 14px; right: 16px; z-index: 999;
-            width: 32px; height: 32px; border-radius: 50%;
-            border: 1px solid var(--border); background: var(--bg);
-            color: var(--apple-gray); font-size: 14px;
-            display: flex; align-items: center; justify-content: center; transition: .15s; text-decoration: none;
+        .image-card{break-inside:avoid;margin-bottom:12px;border-radius:10px;overflow:hidden;background:var(--card-bg);position:relative;transition:transform .2s,box-shadow .2s;cursor:pointer;border:1px solid var(--border2)}
+        .image-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.4)}
+        .image-card img{width:100%;display:block}
+        .image-card .info{padding:8px 10px}
+        .image-card .info .title{font-size:12px;font-weight:500;color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+        .image-card .info .source{font-size:11px;color:var(--text3);margin-top:2px}
+
+        .no-results{text-align:center;padding:80px 20px;color:var(--text3);font-size:16px}
+        .error-message{text-align:center;padding:60px 20px;color:var(--text3)}
+        .acc-btn{position:fixed;top:12px;right:16px;z-index:999;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);font-size:16px;display:flex;align-items:center;justify-content:center;transition:.15s;text-decoration:none}
+        .acc-btn:hover{background:var(--hover-bg);color:var(--text)}
+        .acc-btn svg{width:18px;height:18px;fill:currentColor}
+
+        .img-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:9999;background:rgba(0,0,0,.92);backdrop-filter:blur(8px);overflow-y:auto;animation:ov-fade .2s ease}
+        .img-overlay.show{display:block}
+        @keyframes ov-fade{from{opacity:0}to{opacity:1}}
+        .img-overlay .ov-close{position:fixed;top:16px;right:20px;z-index:10;background:rgba(255,255,255,.1);border:none;color:#fff;width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:20px;display:flex;align-items:center;justify-content:center;transition:background .15s}
+        .img-overlay .ov-close:hover{background:rgba(255,255,255,.2)}
+        .ov-panel{display:flex;max-width:1200px;margin:0 auto;padding:60px 20px 40px;gap:40px;min-height:100vh}
+        .ov-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;min-width:0}
+        .ov-main img{max-width:100%;max-height:75vh;border-radius:8px;object-fit:contain;box-shadow:0 4px 30px rgba(0,0,0,.5)}
+        .ov-title{font-size:18px;font-weight:500;color:#fff;margin-top:20px;text-align:center;line-height:1.4}
+        .ov-domain{font-size:13px;color:rgba(255,255,255,.5);margin-top:6px}
+        .ov-domain a{color:var(--link);text-decoration:none}
+        .ov-domain a:hover{text-decoration:underline}
+        .ov-visit{display:inline-block;margin-top:14px;padding:10px 24px;background:var(--link);color:#000;border-radius:24px;font-size:14px;font-weight:500;text-decoration:none;transition:opacity .15s}
+        .ov-visit:hover{opacity:.85;text-decoration:none}
+        .ov-sidebar{width:380px;flex-shrink:0}
+        .ov-sidebar .ov-sb-title{font-size:14px;font-weight:600;color:#fff;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.1)}
+        .ov-suggestion{display:flex;gap:12px;padding:10px;border-radius:8px;cursor:pointer;transition:background .15s;text-decoration:none;margin-bottom:4px}
+        .ov-suggestion:hover{background:rgba(255,255,255,.08);text-decoration:none}
+        .ov-suggestion img{width:80px;height:56px;object-fit:cover;border-radius:6px;flex-shrink:0;background:rgba(255,255,255,.05)}
+        .ov-suggestion .ov-sg-info{min-width:0;flex:1}
+        .ov-suggestion .ov-sg-title{font-size:13px;color:rgba(255,255,255,.85);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.3}
+        .ov-suggestion .ov-sg-source{font-size:11px;color:rgba(255,255,255,.4);margin-top:3px}
+        @media(max-width:800px){
+            .ov-panel{flex-direction:column;align-items:center;padding:50px 12px 20px;gap:20px}
+            .ov-sidebar{width:100%}
+            .ov-main img{max-height:50vh}
         }
-        .acc-btn:hover { background: var(--hover-bg); }
-        .acc-btn svg { width: 18px; height: 18px; fill: currentColor; }
         @media(max-width:640px){
-            .header{padding:10px 12px}
-            .header-inner{gap:8px;flex-wrap:wrap}
-            .logo{font-size:18px}
-            .search-box{padding:8px 12px;max-width:none;order:3;flex-basis:100%}
-            .search-input{font-size:14px}
-            .tabs{margin-left:0;gap:2px}
-            .tab{padding:5px 10px;font-size:12px}
-            .images-grid{margin:12px auto;padding:0 10px;column-gap:8px}
+            .header{padding:8px 12px 0}
+            .header .top-row{gap:8px}
+            .mini-logo{font-size:20px}
+            .rs-input{height:36px;font-size:13px}
+            .results-nav a{padding:8px 10px 6px;font-size:12px}
+            .images-grid{margin:10px auto;padding:0 10px;column-gap:8px}
             .image-card{border-radius:8px;margin-bottom:8px}
-            .image-card .info{padding:6px 8px}
-            .image-card .info .title{font-size:11px}
-            .image-card .info .source{font-size:10px}
-            .acc-btn{top:8px;right:8px;width:30px;height:30px}
-            .acc-btn svg{width:16px;height:16px}
-        }
-        @media(max-width:400px){
-            .images-grid{columns:2;column-gap:6px;padding:0 8px}
-            .image-card{margin-bottom:6px}
-            .header{padding:8px 10px}
-            .tab{padding:4px 8px;font-size:11px}
         }
         @supports(padding:max(0px)){
             .header{padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
@@ -203,43 +94,43 @@
     </style>
 </head>
 <body>
+    <div class="ao-loading" id="ao-loading">
+        <div class="al-spinner"></div>
+        <div class="al-logo">arlong</div>
+        <div class="al-text" id="al-text">Searching images</div>
+    </div>
+
     <a class="acc-btn" id="acc-btn" href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" aria-label="Account">
         <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
     </a>
 
     <header class="header">
-        <div class="header-inner">
-            <a href="/" class="logo">arlong</a>
-            <form class="search-box" action="/images" method="GET">
-                <input type="search" name="q" class="search-input" value="{{ query if query else '' }}" required autocomplete="off" placeholder="Search images..." enterkeyhint="search">
-                <button type="submit" class="search-button">
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                        <path d="M9 17A8 8 0 1 0 9 1a8 8 0 0 0 0 16zM19 19l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    </svg>
-                </button>
-            </form>
-            <div class="tabs">
-                <a href="/search?q={{ query }}" class="tab">Web</a>
-                <a href="/images?q={{ query }}" class="tab active">Images</a>
-                <a href="/videos?q={{ query }}" class="tab">Videos</a>
+        <div class="top-row">
+            <a href="/" class="mini-logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></a>
+            <div class="rs-wrap">
+                <form action="/images" method="GET" onsubmit="return delayedSubmit(this)">
+                    <input type="search" name="q" class="rs-input" value="{{ query if query else '' }}" required autocomplete="off" placeholder="Search images..." enterkeyhint="search">
+                </form>
             </div>
-            <a href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" style="width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--bg);color:var(--apple-gray);display:flex;align-items:center;justify-content:center;flex-shrink:0;text-decoration:none;transition:.15s" aria-label="Account">
-                <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            <a href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" style="flex-shrink:0;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);display:flex;align-items:center;justify-content:center;text-decoration:none;transition:.15s" aria-label="Account">
+                <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
             </a>
+        </div>
+        <div class="results-nav">
+            <a href="/search?q={{ query }}">Web</a>
+            <a href="/images?q={{ query }}" class="active">Images</a>
+            <a href="/videos?q={{ query }}">Videos</a>
         </div>
     </header>
 
     <main>
         {% if error %}
-            <div class="error-message">
-                <h3>{{ error }}</h3>
-            </div>
+            <div class="error-message"><h3>{{ error }}</h3></div>
         {% endif %}
-
         {% if images %}
-            <div class="images-grid">
+            <div class="images-grid" id="images-grid">
                 {% for img in images %}
-                    <div class="image-card" onclick="window.open('{{ img.source_url }}', '_blank')">
+                    <div class="image-card" data-idx="{{ loop.index0 }}" data-src="{{ img.source_url }}" data-thumb="{{ img.thumbnail }}" data-title="{{ img.title | e }}" data-domain="{{ img.source_domain }}">
                         <img src="{{ img.thumbnail }}" alt="{{ img.title }}" loading="lazy">
                         <div class="info">
                             <div class="title">{{ img.title }}</div>
@@ -249,12 +140,108 @@
                 {% endfor %}
             </div>
         {% elif query and not error %}
-            <div class="no-results">
-                <p>No images found for "{{ query }}"</p>
-            </div>
+            <div class="no-results"><p>No images found for "{{ query }}"</p></div>
         {% endif %}
     </main>
 
-    <script>document.body.classList.add('dark-mode');</script>
+    <div class="img-overlay" id="img-overlay">
+        <button class="ov-close" id="ov-close">&times;</button>
+        <div class="ov-panel">
+            <div class="ov-main">
+                <img id="ov-img" src="" alt="">
+                <div class="ov-title" id="ov-title"></div>
+                <div class="ov-domain" id="ov-domain"></div>
+                <a class="ov-visit" id="ov-visit" href="" target="_blank" rel="noopener">Visit page</a>
+            </div>
+            <div class="ov-sidebar">
+                <div class="ov-sb-title">Related images</div>
+                <div id="ov-suggestions"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var LOADING_PHRASES=["Searching the web for images","Finding the best results","Scanning the interwebs","Almost there...","Loading pixels..."];
+        var LOADING_TIMER=null,LOADING_PINDEX=0,TEXT_EL=null;
+        function startLoading(){
+            var el=document.getElementById('ao-loading');
+            TEXT_EL=document.getElementById('al-text');
+            if(!el)return;
+            el.classList.add('show');
+            LOADING_PINDEX=0;
+            if(TEXT_EL)TEXT_EL.textContent=LOADING_PHRASES[0];
+            clearInterval(LOADING_TIMER);
+            LOADING_TIMER=setInterval(function(){
+                LOADING_PINDEX=(LOADING_PINDEX+1)%LOADING_PHRASES.length;
+                if(TEXT_EL)TEXT_EL.textContent=LOADING_PHRASES[LOADING_PINDEX];
+            },500);
+        }
+        function stopLoading(){clearInterval(LOADING_TIMER);LOADING_TIMER=null}
+        function delayedSubmit(form){
+            if(!form||form._submitting)return false;
+            form._submitting=true;
+            startLoading();
+            form.submit();
+            return false;
+        }
+
+        var overlay=document.getElementById('img-overlay');
+        var ovImg=document.getElementById('ov-img');
+        var ovTitle=document.getElementById('ov-title');
+        var ovDomain=document.getElementById('ov-domain');
+        var ovVisit=document.getElementById('ov-visit');
+        var ovSuggestions=document.getElementById('ov-suggestions');
+        var allCards=document.querySelectorAll('.image-card');
+
+        function openOverlay(idx){
+            var card=allCards[idx];
+            if(!card)return;
+            ovImg.src=card.dataset.thumb;
+            ovImg.alt=card.dataset.title;
+            ovTitle.textContent=card.dataset.title;
+            var domain=card.dataset.domain||'';
+            ovDomain.textContent=domain;
+            ovVisit.href=card.dataset.src;
+
+            ovSuggestions.innerHTML='';
+            var others=[];
+            for(var i=0;i<allCards.length;i++){if(i!==idx)others.push(allCards[i])}
+            others.sort(function(){return .5-Math.random()});
+            var shown=others.slice(0,12);
+            for(var j=0;j<shown.length;j++){
+                var c=shown[j];
+                var a=document.createElement('a');
+                a.className='ov-suggestion';
+                a.href='javascript:void(0)';
+                a.dataset.idx=c.dataset.idx;
+                a.innerHTML='<img src="'+c.dataset.thumb+'" alt="" loading="lazy"><div class="ov-sg-info"><div class="ov-sg-title">'+c.dataset.title+'</div><div class="ov-sg-source">'+c.dataset.domain+'</div></div>';
+                (function(ci){a.onclick=function(){openOverlay(ci)}})(parseInt(c.dataset.idx));
+                ovSuggestions.appendChild(a);
+            }
+            overlay.classList.add('show');
+            document.body.style.overflow='hidden';
+        }
+
+        function closeOverlay(){
+            overlay.classList.remove('show');
+            document.body.style.overflow='';
+        }
+
+        for(var i=0;i<allCards.length;i++){
+            (function(idx){
+                allCards[idx].onclick=function(e){
+                    e.preventDefault();
+                    openOverlay(idx);
+                };
+            })(i);
+        }
+
+        document.getElementById('ov-close').onclick=closeOverlay;
+        overlay.onclick=function(e){if(e.target===overlay)closeOverlay()};
+        document.onkeydown=function(e){if(e.key==='Escape')closeOverlay()};
+
+        var aol=document.getElementById('ao-loading');
+        if(aol&&aol.classList.contains('show')){aol.classList.remove('show')}
+    </script>
 </body>
 </html>

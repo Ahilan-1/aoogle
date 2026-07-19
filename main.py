@@ -23,6 +23,8 @@ except ImportError:
 from datetime import datetime, timedelta
 import markdown
 import hashlib
+import base64 as _b64mod
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 import secrets
 import uuid
 import re
@@ -47,6 +49,23 @@ try:
     ddgs_available = True
 except ImportError:
     ddgs_available = False
+
+# ── Encryption layer (AES-256-GCM) ──
+_ENCRYPTION_KEY_HEX = os.environ.get('ENCRYPTION_KEY', '')
+if not _ENCRYPTION_KEY_HEX:
+    _ENCRYPTION_KEY_HEX = secrets.token_hex(32)
+    app.logger.warning("Generated random ENCRYPTION_KEY — set ENCRYPTION_KEY env var for persistence")
+_ENC_KEY = bytes.fromhex(_ENCRYPTION_KEY_HEX)
+
+def _enc(plaintext):
+    iv = os.urandom(12)
+    ct = AESGCM(_ENC_KEY).encrypt(iv, plaintext.encode('utf-8'), None)
+    return _b64mod.b64encode(iv).decode(), _b64mod.b64encode(ct).decode()
+
+def _dec(iv_b64, ct_b64):
+    iv = _b64mod.b64decode(iv_b64)
+    ct = _b64mod.b64decode(ct_b64)
+    return AESGCM(_ENC_KEY).decrypt(iv, ct, None).decode('utf-8')
 
 # ── Engine suspension (anti-block) ──
 ENGINE_BAN_TIMES = {}  # engine_name -> timestamp until suspended
@@ -634,6 +653,7 @@ def validate_csrf():
     return True
 
 app.jinja_env.globals['csrf_token'] = generate_csrf_token
+app.jinja_env.globals['enc_key'] = _ENCRYPTION_KEY_HEX
 
 @app.after_request
 def add_security_headers(response):
@@ -1307,28 +1327,6 @@ def detect_notice(query):
             }
     return None
 
-COUNTRY_NAMES = {
-    'us': 'United States', 'uk': 'United Kingdom', 'ca': 'Canada',
-    'de': 'Germany', 'fr': 'France', 'jp': 'Japan', 'in': 'India',
-    'au': 'Australia', 'br': 'Brazil', 'es': 'Spain', 'it': 'Italy',
-}
-
-def detect_user_country():
-    try:
-        r = requests.get('https://ip-api.com/json/?fields=countryCode,country',
-                          headers={'User-Agent': 'arlong-search/1.0'}, timeout=4)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get('status') == 'success':
-                cc = data.get('countryCode', '').lower()
-                country = data.get('country', '')
-                for code, name in COUNTRY_NAMES.items():
-                    if cc == code or country.lower() == name.lower():
-                        return code, cc
-                return None, cc
-    except:
-        pass
-    return None, None
 
 DATA_FILE = os.environ.get('DATA_FILE') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data.json')
 
@@ -2505,8 +2503,22 @@ class DataManager:
                 self.data = loaded
             for u in self.data.get('users', []):
                 if u['user_id'] == user_id:
-                    u['weather_location'] = location.strip()[:100] if location else ''
+                    u['weather_location'] = location[:100] if location else ''
                     _save_json(self.data)
+                    self._invalidate_user_cache()
+                    return True
+            return False
+
+    def update_user_bio(self, user_id, bio):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for u in self.data.get('users', []):
+                if u['user_id'] == user_id:
+                    u['bio'] = bio[:300] if bio else ''
+                    _save_json(self.data)
+                    self._invalidate_user_cache()
                     return True
             return False
 
@@ -2554,6 +2566,24 @@ class DataManager:
         submissions_count = sum(1 for s in self.data.get('submitted_sites', []) if s.get('submitted_by') == user_id and s.get('crawl_status') in ('approved', 'completed'))
         reports_approved = sum(1 for r in self.data.get('domain_reports', []) if user_id in r.get('reported_by', []) and r.get('status') == 'approved')
 
+        # User's collections (for card grid)
+        user_collections = []
+        for c in self.data.get('collections', []):
+            if c['creator_id'] == user_id:
+                nc = self._normalize_collection(c)
+                user_collections.append({
+                    'id': nc['id'],
+                    'name': nc['name'],
+                    'description': nc.get('description', ''),
+                    'thumbnail': nc.get('thumbnail', ''),
+                    'pin_color': nc.get('pin_color', '#800000'),
+                    'pin_count': len(nc.get('websites', [])),
+                    'upvote_count': nc.get('upvote_count', 0),
+                    'view_count': nc.get('view_count', 0),
+                    'created_at': nc.get('created_at', ''),
+                })
+        user_collections.sort(key=lambda c: c.get('created_at', ''), reverse=True)
+
         # Recent activity
         recent = []
         for c in self.data.get('collections', []):
@@ -2569,7 +2599,7 @@ class DataManager:
 
         return {
             'username': username,
-            'email': user.get('email', '') or '',
+            'bio': user.get('bio', '') or '',
             'weather_location': user.get('weather_location', '') or '',
             'created_at': user.get('created_at', ''),
             'joined_date': joined_date,
@@ -2579,6 +2609,7 @@ class DataManager:
             'pins_count': pins_count,
             'submissions_count': submissions_count,
             'reports_approved': reports_approved,
+            'user_collections': user_collections[:12],
             'recent': recent,
             'is_owner': False,
         }
@@ -5433,9 +5464,6 @@ def land():
 @app.route('/')
 def home():
     announcement = data_manager.get_announcement()
-    if 'user_country' not in session:
-        country_code, raw_cc = detect_user_country()
-        session['user_country'] = country_code or ''
     user_stats = None
     daily_remaining = None
     quota_limit = None
@@ -5445,7 +5473,7 @@ def home():
         user_stats = profile
         user_weather_location = (profile or {}).get('weather_location', '') or ''
     worldcup_data = fetch_worldcup_data()
-    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=session.get('user_country', ''), country_name=COUNTRY_NAMES.get(session.get('user_country', '')), user_stat=user_stats, daily_remaining=UNLIMITED, quota_limit=UNLIMITED, user_weather_location=user_weather_location, board_results=None, result_groups=[], ai_summary_enabled=True, worldcup_data=worldcup_data)
+    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country='', country_name='', user_stat=user_stats, daily_remaining=UNLIMITED, quota_limit=UNLIMITED, user_weather_location=user_weather_location, board_results=None, result_groups=[], ai_summary_enabled=True, worldcup_data=worldcup_data)
 
 @app.route('/search')
 def search():
@@ -5457,11 +5485,6 @@ def search():
         filter_type = 'general'
     region = request.args.get('region', session.get('region', ''))
 
-    if 'user_country' not in session:
-        country_code, raw_cc = detect_user_country()
-        session['user_country'] = country_code or ''
-    user_country = session.get('user_country', '')
-
     announcement = data_manager.get_announcement()
     if not query:
         user_stats = None
@@ -5471,7 +5494,13 @@ def search():
             user_stats = profile
             user_weather_location = (profile or {}).get('weather_location', '') or ''
         worldcup_data = fetch_worldcup_data()
-        return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=user_country, country_name=COUNTRY_NAMES.get(user_country), user_stat=user_stats, daily_remaining=UNLIMITED, quota_limit=UNLIMITED, user_weather_location=user_weather_location, board_results=None, result_groups=[], ai_summary_enabled=True, worldcup_data=worldcup_data)
+        return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=user_country, country_name='', user_stat=user_stats, daily_remaining=UNLIMITED, quota_limit=UNLIMITED, user_weather_location=user_weather_location, board_results=None, result_groups=[], ai_summary_enabled=True, worldcup_data=worldcup_data)
+
+    bang_url = get_bang_redirect(query)
+    if bang_url:
+        return redirect(bang_url)
+
+    user_country = ''
 
     user_id = session.get('user_id')
 
@@ -5494,7 +5523,7 @@ def search():
             announcement=announcement,
             blocked_count=BLOCKLIST_COUNT,
             user_country=user_country,
-            country_name=COUNTRY_NAMES.get(user_country, ''),
+            country_name='',
             user_stat=user_stats,
             board_results=None,
             result_groups=[],
@@ -5518,14 +5547,10 @@ def search():
             announcement=announcement,
             blocked_count=BLOCKLIST_COUNT,
             user_country=user_country,
-            country_name=COUNTRY_NAMES.get(user_country, ''),
+            country_name='',
             user_stat=user_stats,
             board_results=None,
         )
-
-    bang_url = get_bang_redirect(query)
-    if bang_url:
-        return redirect(bang_url)
 
     try:
         if region:
@@ -5611,7 +5636,7 @@ def search():
             announcement=announcement,
             blocked_count=BLOCKLIST_COUNT,
             user_country=user_country,
-            country_name=COUNTRY_NAMES.get(user_country, ''),
+            country_name='',
             search_time=search_time,
             user_stat=None,
             ai_summary_enabled=ai_summary_enabled,
@@ -5631,7 +5656,7 @@ def search():
             announcement=announcement,
             blocked_count=BLOCKLIST_COUNT,
             user_country=user_country,
-            country_name=COUNTRY_NAMES.get(user_country, ''),
+            country_name='',
             user_stat=None,
             search_time=round(time.time() - _search_start, 2),
             result_groups=[],
@@ -5922,6 +5947,66 @@ def api_search():
         resp.status_code = 500
         resp.headers['X-RateLimit-Remaining'] = str(rate['remaining'])
         return resp
+
+@app.route('/api/enc-search', methods=['POST'])
+def enc_search():
+    try:
+        body = request.get_json()
+        query = _dec(body['iv'], body['data']).strip()
+        if not query:
+            return jsonify({'iv': '', 'data': ''}), 400
+        crisis = detect_crisis(query)
+        if crisis and crisis['type'] in ('harmful', 'crisis'):
+            iv, ct = _enc(json.dumps({'results': LIFE_RESOURCES, 'total': len(LIFE_RESOURCES), 'crisis': crisis}))
+            return jsonify({'iv': iv, 'data': ct})
+        notice = detect_notice(query)
+        bang_url = get_bang_redirect(query)
+        if bang_url:
+            iv, ct = _enc(json.dumps({'bang': bang_url}))
+            return jsonify({'iv': iv, 'data': ct})
+        results, total = search_engine.search(query, 1, 'general', None)
+        board_results = data_manager.search_collections(query) if data_manager else []
+        result_groups = search_engine._group_results_by_domain(results) if results else []
+        out = {
+            'results': results or [],
+            'total': total,
+            'result_groups': result_groups,
+            'board_results': [{'name': b.get('name',''), 'id': b['id'], 'description': b.get('description','')} for b in (board_results or [])],
+            'notice': notice,
+        }
+        iv, ct = _enc(json.dumps(out))
+        return jsonify({'iv': iv, 'data': ct})
+    except Exception as e:
+        app.logger.error(f"Enc search error: {e}")
+        return jsonify({'iv': '', 'data': _b64mod.b64encode(json.dumps({'error': str(e)}).encode()).decode()}), 500
+
+@app.route('/api/enc-images', methods=['POST'])
+def enc_images():
+    try:
+        body = request.get_json()
+        query = _dec(body['iv'], body['data']).strip()
+        if not query:
+            return jsonify({'iv': '', 'data': ''}), 400
+        img_results = search_engine.search_images(query)
+        iv, ct = _enc(json.dumps({'images': img_results or []}))
+        return jsonify({'iv': iv, 'data': ct})
+    except Exception as e:
+        app.logger.error(f"Enc images error: {e}")
+        return jsonify({'iv': '', 'data': ''}), 500
+
+@app.route('/api/enc-videos', methods=['POST'])
+def enc_videos():
+    try:
+        body = request.get_json()
+        query = _dec(body['iv'], body['data']).strip()
+        if not query:
+            return jsonify({'iv': '', 'data': ''}), 400
+        vid_results = search_engine.search_videos(query)
+        iv, ct = _enc(json.dumps({'videos': vid_results or []}))
+        return jsonify({'iv': iv, 'data': ct})
+    except Exception as e:
+        app.logger.error(f"Enc videos error: {e}")
+        return jsonify({'iv': '', 'data': ''}), 500
 
 @app.route('/images')
 def images():
@@ -7003,8 +7088,13 @@ def user_collections():
 def user_profile(username):
     profile = data_manager.get_user_profile(username)
     if not profile:
-        return render_template('user_profile.html', error='User not found'), 404
+        return render_template('user_profile.html', profile=None, error='User not found'), 404
     profile['is_owner'] = session.get('username') == username
+    if profile['is_owner']:
+        user = data_manager.get_user_by_id(session.get('user_id'))
+        profile['email'] = user.get('email', '') if user else ''
+    else:
+        profile['email'] = ''
     return render_template('user_profile.html', profile=profile)
 
 
@@ -7037,6 +7127,20 @@ def api_user_update_settings():
         wl = request.form.get('weather_location', '').strip()
         ok = data_manager.update_user_weather_location(user_id, wl)
         return jsonify({'ok': ok, 'error': None if ok else 'Failed to update'})
+    elif action == 'bio':
+        bio = request.form.get('bio', '').strip()
+        ok = data_manager.update_user_bio(user_id, bio)
+        return jsonify({'ok': ok, 'error': None if ok else 'Failed to update'})
+    elif action == 'delete_account':
+        current = request.form.get('current_password', '')
+        if not current:
+            return jsonify({'ok': False, 'error': 'Password required to delete account'}), 400
+        user = data_manager.get_user_by_id(user_id)
+        if not user or not data_manager.check_password(current, user['password_hash']):
+            return jsonify({'ok': False, 'error': 'Incorrect password'}), 403
+        data_manager.delete_user(user_id)
+        session.clear()
+        return jsonify({'ok': True})
     return jsonify({'ok': False, 'error': 'Unknown action'}), 400
 
 
