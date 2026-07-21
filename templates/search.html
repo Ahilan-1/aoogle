@@ -758,7 +758,7 @@
         }
     </style>
 </head>
-<body data-loggedin="{% if session.user_id %}true{% else %}false{% endif %}" class="portal-mode">
+<body data-loggedin="{% if session.user_id %}true{% else %}false{% endif %}" class="dark-mode portal-mode">
     <canvas id="fireworks-canvas"></canvas>
     <div class="ao-loading" id="ao-loading">
         <div class="al-spinner"></div>
@@ -1948,8 +1948,6 @@
             })
         });
 
-        document.body.classList.add('dark-mode');
-
         var BANG_LIST = [];
         function loadBangList(){
             fetch('/api/bangs').then(function(r){return r.json()}).then(function(data){BANG_LIST=data}).catch(function(){})
@@ -2637,6 +2635,7 @@
                 };
                 xhr.onerror = function(){ tc.innerHTML='<div class="tr-error">Network error</div>'; };
                 xhr.send();
+                }
             }
             loadTrending();
         })();
