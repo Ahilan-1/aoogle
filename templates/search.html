@@ -550,9 +550,9 @@
             .portal-header{padding:4px 8px 0;gap:6px}
             .portal-body{padding:0 10px 16px;gap:12px}
             .portal-header-left{gap:4px;order:1}
-            .portal-logo{order:2;flex:1}
-            .portal-logo .pl-text{font-size:1.8rem}
-            .portal-header-right{order:3}
+            .portal-logo{order:2;flex:1;text-align:center}
+            .portal-logo .pl-text{font-size:2.2rem}
+            .portal-header-right{order:3;display:none}
             .portal-header-center{flex:0 0 100%;padding:0 4px;order:4}
             .portal-search-box{height:42px;font-size:15px;border-radius:24px;padding:0 18px}
             .portal-header-center > a[href="/ads"]{order:1;flex:1 1 100%;text-align:center;font-size:11px;padding-bottom:4px}
@@ -573,11 +573,12 @@
             .portal-avatar{width:30px;height:30px}
             .portal-avatar svg{width:16px;height:16px}
             .hm-dropdown{position:fixed;top:50px;left:10px;right:10px;width:auto;min-width:0;max-height:60vh;overflow-y:auto;z-index:300}
+            .rc-dots{display:none}
         }
         @media(max-width:400px){
             .portal-header{padding:2px 4px 0;gap:2px}
             .portal-header-left{gap:2px}
-            .portal-logo .pl-text{font-size:1.4rem}
+            .portal-logo .pl-text{font-size:1.8rem}
             .portal-header-center{flex:0 0 100%;padding:0 2px}
             .portal-search-box{height:34px;font-size:14px;padding:0 12px}
             .portal-body{padding:0 6px 10px;gap:6px}
@@ -757,7 +758,7 @@
         }
     </style>
 </head>
-<body data-loggedin="{% if session.user_id %}true{% else %}false{% endif %}">
+<body data-loggedin="{% if session.user_id %}true{% else %}false{% endif %}" class="portal-mode">
     <canvas id="fireworks-canvas"></canvas>
     <div class="ao-loading" id="ao-loading">
         <div class="al-spinner"></div>
@@ -1154,13 +1155,13 @@
                     <div id="trending-content"><div class="tr-loading">Loading trends...</div></div>
                 </div>
                 {% if session.user_id and user_stat %}
-                <div class="sidebar-card portal-auth-card" id="portal-user-card">
+                <a href="/u/{{ session.username }}" class="sidebar-card portal-auth-card" id="portal-user-card" style="text-decoration:none;color:inherit;display:block">
                     <div class="au-header"><span class="au-avatar">{{ session.username[0]|upper }}</span><span class="au-name">{{ session.username }}</span></div>
                     <div class="au-stats">
                         <div class="au-stat"><span class="au-stat-val">{{ user_stat.collections_count or 0 }}</span><span class="au-stat-lbl">Collections</span></div>
                         <div class="au-stat"><span class="au-stat-val">{{ user_stat.submissions_count or 0 }}</span><span class="au-stat-lbl">Submissions</span></div>
                     </div>
-                </div>
+                </a>
                 {% else %}
                 <div class="sidebar-card portal-auth-card" id="portal-auth-card">
                     <div class="auth-title">Make use of arlong more secure and convenient</div>
@@ -2188,7 +2189,6 @@
         /* ── Portal Mode (homepage only) ── */
         (function(){
             if(!document.getElementById('portal-wrap')) return;
-            document.body.classList.add('portal-mode');
             loadBreakingNews();
             loadStocks();
             loadWeather();
@@ -2544,6 +2544,12 @@
             xhr.send();
         })();
 
+        // ── Sync saved trending country into sessionStorage ──
+        (function(){
+            var val = '{{ preferences.get("trending_country", "") if preferences is defined else "" }}';
+            if(val) try { sessionStorage.setItem('arlong_trending_country', val); } catch(e){}
+        })();
+
         // ── Trending news widget ──
         (function(){
             var tc = document.getElementById('trending-content');
@@ -2587,10 +2593,14 @@
                 } catch(e){}
                 if(cached && cached.regional && cached.global){ renderTrending(cached); return; }
 
-                // Detect country from timezone (client-side, accurate)
+                // Check for saved country preference first
                 var cc = '';
-                try {
-                    var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                try { cc = sessionStorage.getItem('arlong_trending_country') || ''; } catch(e){}
+
+                if(!cc){
+                    // Detect country from timezone (client-side, accurate)
+                    try {
+                        var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
                     var tzMap = {
                         'Asia/Kolkata':'in','Asia/Shanghai':'cn','Asia/Tokyo':'jp','Asia/Seoul':'kr',
                         'Europe/London':'uk','Europe/Paris':'fr','Europe/Berlin':'de','Europe/Madrid':'es',

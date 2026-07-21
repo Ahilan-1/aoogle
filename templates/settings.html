@@ -108,6 +108,35 @@
             </div>
         </div>
 
+        <h2>Regional</h2>
+        <div class="card">
+            <div class="toggle-row">
+                <div class="toggle-label">
+                    <h3>Trending Country</h3>
+                    <div class="label-desc">Select a country to see trending news from that region. Leave as "Auto-detect" to use your IP/location.</div>
+                </div>
+            </div>
+            <div style="margin-top:10px">
+                <select id="trending-country-select" onchange="saveTrendingCountry(this)" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:arial,sans-serif;background:var(--bg);color:var(--text);cursor:pointer">
+                    <option value="">Auto-detect</option>
+                    <option value="us" {{ 'selected' if preferences.trending_country == 'us' else '' }}>United States</option>
+                    <option value="uk" {{ 'selected' if preferences.trending_country == 'uk' else '' }}>United Kingdom</option>
+                    <option value="ca" {{ 'selected' if preferences.trending_country == 'ca' else '' }}>Canada</option>
+                    <option value="de" {{ 'selected' if preferences.trending_country == 'de' else '' }}>Germany</option>
+                    <option value="fr" {{ 'selected' if preferences.trending_country == 'fr' else '' }}>France</option>
+                    <option value="jp" {{ 'selected' if preferences.trending_country == 'jp' else '' }}>Japan</option>
+                    <option value="in" {{ 'selected' if preferences.trending_country == 'in' else '' }}>India</option>
+                    <option value="au" {{ 'selected' if preferences.trending_country == 'au' else '' }}>Australia</option>
+                    <option value="br" {{ 'selected' if preferences.trending_country == 'br' else '' }}>Brazil</option>
+                    <option value="es" {{ 'selected' if preferences.trending_country == 'es' else '' }}>Spain</option>
+                    <option value="it" {{ 'selected' if preferences.trending_country == 'it' else '' }}>Italy</option>
+                </select>
+            </div>
+            <div class="status-badge off" id="badge-trending-country">
+                <span class="dot"></span> <span id="trending-country-status">{{ 'Auto-detect' if not preferences.trending_country else preferences.trending_country|upper }}</span>
+            </div>
+        </div>
+
         <h2>Account</h2>
         <div class="card">
             <div class="toggle-label">
@@ -140,6 +169,30 @@
                 showToast('Network error');
             });
         }
+        function saveTrendingCountry(sel){
+            var val = sel.value;
+            fetch('/api/user/preferences', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({trending_country: val})
+            }).then(function(r){return r.json()}).then(function(d){
+                if(d.ok){
+                    var badge = document.getElementById('badge-trending-country');
+                    var status = document.getElementById('trending-country-status');
+                    if(badge) badge.className = 'status-badge off';
+                    if(status) status.textContent = val ? val.toUpperCase() : 'Auto-detect';
+                    try { sessionStorage.setItem('arlong_trending_country', val); } catch(e){}
+                    showToast('Saved');
+                } else showToast(d.error || 'Failed to save');
+            }).catch(function(){
+                showToast('Network error');
+            });
+        }
+        // Sync saved preference into sessionStorage on page load
+        (function(){
+            var val = '{{ preferences.trending_country }}';
+            if(val) try { sessionStorage.setItem('arlong_trending_country', val); } catch(e){}
+        })();
         function showToast(m){
             var t=document.getElementById('saved-toast');t.textContent=m;t.classList.add('show');
             setTimeout(function(){t.classList.remove('show')},2000)

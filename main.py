@@ -5632,11 +5632,13 @@ def home():
     daily_remaining = None
     quota_limit = None
     user_weather_location = ''
+    preferences = {}
     if session.get('user_id'):
         profile = data_manager.get_user_profile(session.get('username'))
         user_stats = profile
         user_weather_location = (profile or {}).get('weather_location', '') or ''
-    return render_template('search.html', announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=session.get('user_country', ''), country_name=COUNTRY_NAMES.get(session.get('user_country', '')), user_stat=user_stats, daily_remaining=UNLIMITED, quota_limit=UNLIMITED, user_weather_location=user_weather_location, board_results=None, result_groups=[], ai_summary_enabled=True)
+        preferences = data_manager.get_user_preferences(session['user_id'])
+    return render_template('search.html', announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=session.get('user_country', ''), country_name=COUNTRY_NAMES.get(session.get('user_country', '')), user_stat=user_stats, daily_remaining=UNLIMITED, quota_limit=UNLIMITED, user_weather_location=user_weather_location, board_results=None, result_groups=[], ai_summary_enabled=True, preferences=preferences)
 
 @app.route('/search')
 def search():
@@ -5649,14 +5651,17 @@ def search():
     region = request.args.get('region', session.get('region', ''))
 
     announcement = data_manager.get_announcement()
+    preferences = {}
     if not query:
         user_stats = None
         user_weather_location = ''
+        user_country = session.get('user_country', '')
         if session.get('user_id'):
             profile = data_manager.get_user_profile(session.get('username'))
             user_stats = profile
             user_weather_location = (profile or {}).get('weather_location', '') or ''
-        return render_template('search.html', announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=user_country, country_name=COUNTRY_NAMES.get(user_country), user_stat=user_stats, daily_remaining=UNLIMITED, quota_limit=UNLIMITED, user_weather_location=user_weather_location, board_results=None, result_groups=[], ai_summary_enabled=True)
+            preferences = data_manager.get_user_preferences(session['user_id'])
+        return render_template('search.html', announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=user_country, country_name=COUNTRY_NAMES.get(user_country), user_stat=user_stats, daily_remaining=UNLIMITED, quota_limit=UNLIMITED, user_weather_location=user_weather_location, board_results=None, result_groups=[], ai_summary_enabled=True, preferences=preferences)
 
     bang_url = get_bang_redirect(query)
     if bang_url:
@@ -5690,6 +5695,7 @@ def search():
             board_results=None,
             result_groups=[],
             ai_summary_enabled=True,
+            preferences={},
         )
 
     notice = detect_notice(query)
@@ -5712,6 +5718,7 @@ def search():
             country_name='',
             user_stat=user_stats,
             board_results=None,
+            preferences={},
         )
 
     try:
@@ -5801,6 +5808,7 @@ def search():
             search_time=search_time,
             user_stat=None,
             ai_summary_enabled=ai_summary_enabled,
+            preferences={},
         ))
         return resp
 
@@ -5822,6 +5830,7 @@ def search():
             search_time=round(time.time() - _search_start, 2),
             result_groups=[],
             ai_summary_enabled=True,
+            preferences={},
         ))
 @app.route('/api/ai-summary', methods=['GET', 'POST'])
 def api_ai_summary():
@@ -6337,12 +6346,12 @@ def api_bangs():
 
 @app.errorhandler(404)
 def not_found_error(error):
-    return render_template('search.html', error="Page not found", board_results=None, result_groups=[], ai_summary_enabled=True), 404
+    return render_template('search.html', error="Page not found", board_results=None, result_groups=[], ai_summary_enabled=True, preferences={}), 404
 
 @app.errorhandler(500)
 def internal_error(error):
     app.logger.error(f"Internal server error: {str(error)}")
-    return render_template('search.html', error="An internal error occurred. Please try again.", board_results=None, result_groups=[], ai_summary_enabled=True), 500
+    return render_template('search.html', error="An internal error occurred. Please try again.", board_results=None, result_groups=[], ai_summary_enabled=True, preferences={}), 500
 
 @app.route('/api/report', methods=['POST'])
 def api_report():
@@ -7344,7 +7353,7 @@ def api_user_preferences():
         prefs = data_manager.get_user_preferences(user_id)
         return jsonify({'ok': True, 'preferences': prefs})
     prefs = request.get_json(silent=True) or {}
-    allowed_keys = {'ai_summary'}
+    allowed_keys = {'ai_summary', 'trending_country'}
     filtered = {k: v for k, v in prefs.items() if k in allowed_keys}
     ok = data_manager.update_user_preferences(user_id, filtered)
     return jsonify({'ok': ok})
