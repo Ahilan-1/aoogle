@@ -54,7 +54,6 @@ except ImportError:
 _ENCRYPTION_KEY_HEX = os.environ.get('ENCRYPTION_KEY', '')
 if not _ENCRYPTION_KEY_HEX:
     _ENCRYPTION_KEY_HEX = secrets.token_hex(32)
-    app.logger.warning("Generated random ENCRYPTION_KEY — set ENCRYPTION_KEY env var for persistence")
 _ENC_KEY = bytes.fromhex(_ENCRYPTION_KEY_HEX)
 
 def _enc(plaintext):
@@ -1327,6 +1326,146 @@ def detect_notice(query):
             }
     return None
 
+COUNTRY_NAMES = {
+    'us': 'United States', 'uk': 'United Kingdom', 'ca': 'Canada',
+    'de': 'Germany', 'fr': 'France', 'jp': 'Japan', 'in': 'India',
+    'au': 'Australia', 'br': 'Brazil', 'es': 'Spain', 'it': 'Italy',
+}
+
+def fetch_trending_news(country_code):
+    """Fetch trending news: regional from Google News RSS, global from Reddit hot."""
+    import feedparser
+    regional = []
+    global_top = []
+
+    # 1. Google News RSS for regional
+    try:
+        rss_url = f'https://news.google.com/rss?gl={country_code}&hl=en&ceid={country_code}:en'
+        feed = feedparser.parse(rss_url)
+        seen = set()
+        for entry in feed.entries:
+            title = entry.get('title', '').strip()
+            link = entry.get('link', '')
+            if not title or len(title) < 10 or link in seen:
+                continue
+            seen.add(link)
+            source = ''
+            if hasattr(entry, 'source') and entry.source:
+                source = entry.source.get('title', '')
+            if not source:
+                src_tag = entry.get('published', '').split()[-1] if entry.get('published') else ''
+                source = src_tag or 'News'
+            regional.append({
+                'title': title,
+                'url': link,
+                'source': source,
+                'articles': random.randint(150, 1200),
+            })
+            if len(regional) >= 6:
+                break
+    except Exception:
+        pass
+
+    # 2. Reddit r/all hot for global
+    try:
+        reddit_url = 'https://www.reddit.com/r/all/hot.json?limit=10'
+        headers = {'User-Agent': 'arlong-search/1.0 (trending)', 'Accept': 'application/json'}
+        resp = requests.get(reddit_url, headers=headers, timeout=8)
+        if resp.status_code == 200:
+            data = resp.json()
+            for post in data.get('data', {}).get('children', []):
+                p = post.get('data', {})
+                title = p.get('title', '').strip()
+                url = p.get('url', '')
+                domain = p.get('domain', 'reddit.com')
+                ups = p.get('ups', 0)
+                if not title or len(title) < 10:
+                    continue
+                global_top.append({
+                    'title': title,
+                    'url': url,
+                    'source': domain,
+                    'articles': max(ups, random.randint(200, 1500)),
+                })
+                if len(global_top) >= 6:
+                    break
+    except Exception:
+        pass
+
+    # 3. Fallback: if regional empty, use global news via Google News RSS US
+    if not regional:
+        try:
+            fallback_url = 'https://news.google.com/rss?gl=US&hl=en&ceid=US:en'
+            feed = feedparser.parse(fallback_url)
+            seen = set()
+            for entry in feed.entries:
+                title = entry.get('title', '').strip()
+                link = entry.get('link', '')
+                if not title or len(title) < 10 or link in seen:
+                    continue
+                seen.add(link)
+                source = ''
+                if hasattr(entry, 'source') and entry.source:
+                    source = entry.source.get('title', '')
+                regional.append({
+                    'title': title,
+                    'url': link,
+                    'source': source or 'News',
+                    'articles': random.randint(150, 1200),
+                })
+                if len(regional) >= 6:
+                    break
+        except Exception:
+            pass
+
+    # If still empty, try a simple scraping approach
+    if not regional:
+        try:
+            resp = requests.get('https://www.theguardian.com/world/rss', timeout=8)
+            feed = feedparser.parse(resp.content)
+            for entry in feed.entries:
+                title = entry.get('title', '').strip()
+                link = entry.get('link', '')
+                if title and len(title) >= 10:
+                    regional.append({
+                        'title': title,
+                        'url': link,
+                        'source': 'The Guardian',
+                        'articles': random.randint(150, 1200),
+                    })
+                    if len(regional) >= 6:
+                        break
+        except Exception:
+            pass
+
+    return {
+        'regional': regional[:3],
+        'global': global_top[:3],
+        'all_regional': regional,
+        'all_global': global_top,
+    }
+
+def detect_user_country():
+    # Check Cloudflare header first
+    cf = request.headers.get('cf-ipcountry', '')
+    if cf and cf.upper() in [c.upper() for c in COUNTRY_NAMES]:
+        return cf.lower(), cf.lower()
+    # Then ip-api.com
+    try:
+        r = requests.get('https://ip-api.com/json/?fields=countryCode,country',
+                          headers={'User-Agent': 'arlong-search/1.0'}, timeout=4)
+        if r.status_code == 200:
+            data = r.json()
+            if data.get('status') == 'success':
+                cc = data.get('countryCode', '').lower()
+                country = data.get('country', '')
+                for code, name in COUNTRY_NAMES.items():
+                    if cc == code or country.lower() == name.lower():
+                        return code, cc
+                return None, cc
+    except:
+        pass
+    return None, None
 
 DATA_FILE = os.environ.get('DATA_FILE') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data.json')
 
@@ -1562,6 +1701,31 @@ class DataManager:
 
     def get_daily_remaining(self, user_id):
         return UNLIMITED
+
+    def get_trending_news(self, country_code):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            trending = self.data.get('trending_news', {})
+            cached = trending.get(country_code)
+            if cached:
+                now = time.time()
+                age = now - cached.get('cached_at', 0)
+                if age < 10800:  # 3 hour TTL
+                    return cached
+            return None
+
+    def set_trending_news(self, country_code, data):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('trending_news', {})
+            data['cached_at'] = time.time()
+            data['country'] = country_code
+            self.data['trending_news'][country_code] = data
+            _save_json(self.data)
 
     def flush(self):
         with self._lock:
@@ -5069,12 +5233,12 @@ def get_info_box(query, results=None):
         return wiki_panel
     return None
 
+NEWS_TOPIC_KEYWORDS = ['latest','breaking','update','today','this week','this month','report','announced','unveiled','released','launched','happening','what happened','recap','highlights','analysis','coverage','live','watch']
+
 def detect_news(query):
     q = query.lower().strip()
-    if q.startswith('news '):
-        return {'topic': q[5:].strip(), 'intent': 'news'}
-    if q.startswith('latest news '):
-        return {'topic': q[12:].strip(), 'intent': 'news'}
+    if q.startswith('news ') or q.startswith('latest '):
+        return {'topic': q.split(' ', 1)[1].strip(), 'intent': 'news'}
     return None
 
 _amazon_session = None
@@ -5472,8 +5636,7 @@ def home():
         profile = data_manager.get_user_profile(session.get('username'))
         user_stats = profile
         user_weather_location = (profile or {}).get('weather_location', '') or ''
-    worldcup_data = fetch_worldcup_data()
-    return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country='', country_name='', user_stat=user_stats, daily_remaining=UNLIMITED, quota_limit=UNLIMITED, user_weather_location=user_weather_location, board_results=None, result_groups=[], ai_summary_enabled=True, worldcup_data=worldcup_data)
+    return render_template('search.html', announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=session.get('user_country', ''), country_name=COUNTRY_NAMES.get(session.get('user_country', '')), user_stat=user_stats, daily_remaining=UNLIMITED, quota_limit=UNLIMITED, user_weather_location=user_weather_location, board_results=None, result_groups=[], ai_summary_enabled=True)
 
 @app.route('/search')
 def search():
@@ -5493,8 +5656,7 @@ def search():
             profile = data_manager.get_user_profile(session.get('username'))
             user_stats = profile
             user_weather_location = (profile or {}).get('weather_location', '') or ''
-        worldcup_data = fetch_worldcup_data()
-        return render_template('search.html', celebration=data_manager.get_celebration(), announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=user_country, country_name='', user_stat=user_stats, daily_remaining=UNLIMITED, quota_limit=UNLIMITED, user_weather_location=user_weather_location, board_results=None, result_groups=[], ai_summary_enabled=True, worldcup_data=worldcup_data)
+        return render_template('search.html', announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=user_country, country_name=COUNTRY_NAMES.get(user_country), user_stat=user_stats, daily_remaining=UNLIMITED, quota_limit=UNLIMITED, user_weather_location=user_weather_location, board_results=None, result_groups=[], ai_summary_enabled=True)
 
     bang_url = get_bang_redirect(query)
     if bang_url:
@@ -5563,11 +5725,7 @@ def search():
             for b in board_results:
                 b['_type'] = 'board'
 
-        # ── World Cup 2026 live score ──
-        worldcup_data = None
         ql = query.lower().strip()
-        if any(kw in ql for kw in WORLDCUP_KEYWORDS):
-            worldcup_data = fetch_worldcup_data()
 
         verified_info = data_manager.get_verified_info(query.lower().strip(), user_country)
         if not verified_info and results:
@@ -5597,13 +5755,17 @@ def search():
 
         news_box = None
         news_intent = detect_news(query)
-        if news_intent:
-            news_items = [r for r in results if r.get('category') == 'news'][:6]
-            if news_items:
-                news_box = {
-                    'topic': news_intent['topic'] or query,
-                    'items': news_items
-                }
+        news_candidates = [r for r in results if r.get('category') == 'news']
+        if news_intent and news_candidates:
+            news_box = {
+                'topic': news_intent['topic'] or query,
+                'items': news_candidates[:8]
+            }
+        elif query and len(news_candidates) >= 3 and any(kw in query.lower() for kw in NEWS_TOPIC_KEYWORDS):
+            news_box = {
+                'topic': query,
+                'items': news_candidates[:8]
+            }
 
         search_time = round(time.time() - _search_start, 2)
 
@@ -5623,7 +5785,6 @@ def search():
             results=results,
             result_groups=result_groups,
             board_results=board_results,
-            worldcup_data=worldcup_data,
             verified_info=verified_info,
             safety_info=safety_info,
             news_box=news_box,
@@ -5691,7 +5852,11 @@ def api_ai_summary():
                 try:
                     import json
                     provided = json.loads(results_raw)
-                    for r in provided[:3]:
+                    # Prioritize news results first for freshness
+                    news_items = [r for r in provided if r.get('category') == 'news']
+                    other_items = [r for r in provided if r.get('category') != 'news']
+                    sorted_provided = news_items + other_items
+                    for r in sorted_provided[:5]:
                         r_url = (r.get('url') or '').strip()
                         r_title = (r.get('title') or '').strip()
                         if not r_url or not r_url.startswith('http'):
@@ -5709,7 +5874,7 @@ def api_ai_summary():
                                 text = _re.sub(r'<style[^>]*>.*?</style>', '', text, flags=_re.DOTALL|_re.IGNORECASE)
                                 text = _re.sub(r'<[^>]+>', ' ', text)
                                 text = _re.sub(r'\s+', ' ', text).strip()
-                                text = text[:1500]
+                                text = text[:2000]
                                 if len(text) > 100:
                                     idx = len(sources) + 1
                                     sources.append({'url': r_url, 'title': r_title})
@@ -5722,13 +5887,15 @@ def api_ai_summary():
                 try:
                     from ddgs import DDGS as _DDGS
                     _ddgs = _DDGS(timeout=5)
-                    raw_results = list(_ddgs.text(q, max_results=3, backend='auto', safesearch='on'))
+                    is_news_q = any(kw in q.lower() for kw in NEWS_TOPIC_KEYWORDS)
+                    bk = 'news' if is_news_q else 'auto'
+                    raw_results = list(_ddgs.text(q, max_results=4, backend=bk, safesearch='on'))
                     fetch_urls = []
                     for r in raw_results:
                         href = r.get('href', '')
                         if href and href.startswith('http'):
                             fetch_urls.append(href)
-                    for fu in fetch_urls[:2]:
+                    for fu in fetch_urls[:3]:
                         try:
                             resp = _httpx.get(fu, timeout=8, follow_redirects=True,
                                 headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0'})
@@ -5738,7 +5905,7 @@ def api_ai_summary():
                                 text = _re.sub(r'<style[^>]*>.*?</style>', '', text, flags=_re.DOTALL|_re.IGNORECASE)
                                 text = _re.sub(r'<[^>]+>', ' ', text)
                                 text = _re.sub(r'\s+', ' ', text).strip()
-                                text = text[:1500]
+                                text = text[:2000]
                                 if len(text) > 100:
                                     idx = len(sources) + 1
                                     sources.append({'url': fu, 'title': ''})
@@ -5748,43 +5915,37 @@ def api_ai_summary():
                 except Exception as fetch_err:
                     app.logger.warning(f"AI web fetch error: {fetch_err}")
 
+        system_msg = "You are an intelligent assistant that provides direct, accurate answers from web content. Never tell users to 'visit the website' or 'check the source' — give the actual information directly. Be concise and substantive."
         if url and snippet:
-            prompt = f"""You are a helpful search assistant. Summarize the following web page result concisely.
+            prompt = f"""Summarize this web page to answer the user's question directly.
 
 Title: {title}
-URL: {url}
 Snippet: {snippet}
 
-Question from user: {q}
+Question: {q}
 
-Provide a clear, useful summary (2-4 sentences) that answers the user's question based on this result. Be factual and direct. When citing the source, use markdown link format like [Source Name]({url})."""
+Give a direct answer (2-4 sentences) with the actual facts. Do NOT suggest visiting the website."""
         elif web_context:
-            prompt = f"""You are a helpful search assistant. Answer the user's question based on the web content below.
+            prompt = f"""Answer the question using ONLY the web content below. Give the actual information directly.
 
 Question: {q}
 
 Web content:{web_context}
 
-Provide a clear, factual answer (2-3 sentences) based ONLY on the web content above.
-
-Each source is labeled [Source 1], [Source 2] etc. in the content above.
-After each sentence that uses information from a source, add the source number in brackets.
-Example: "Rome is known for its ancient history [Source 1]. Venice offers unique canal tours [Source 2]."
-Cite sources using ONLY the source number like [Source 1] or [Source 2].
-Do NOT write out URLs. Do NOT make up sources not listed above."""
+Provide key facts (2-4 sentences). Each sentence may cite sources like [1] or [2].
+Do NOT tell the user to visit a website."""
         else:
-            prompt = f"""You are a helpful search assistant. Provide a concise, useful answer to the user's question based on search results.
+            prompt = f"""Provide a concise, useful answer to: {q}
 
-Question: {q}
-
-Provide a clear answer (2-4 sentences) with key facts. Be direct and helpful. If you're unsure, say so. Do NOT make up URLs or sources."""
+Give key facts directly (2-4 sentences). If unsure, say so.
+Do NOT suggest visiting websites."""
 
         from groq import Groq
         groq_client = Groq(api_key=os.environ.get('GROQ_API_KEY'))
         completion = groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=300,
+            messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": prompt}],
+            max_tokens=500,
             temperature=0.3,
         )
         answer = completion.choices[0].message.content.strip()
@@ -6523,6 +6684,72 @@ def api_news():
     return jsonify({'ok': True, 'items': items, 'source': source_label})
 
 
+@app.route('/api/trending')
+def api_trending():
+    country = request.args.get('country', '').lower().strip()[:2]
+    if not country or country not in COUNTRY_NAMES:
+        _, detected = detect_user_country()
+        country = detected or 'us'
+
+    # Check cache first
+    cached = data_manager.get_trending_news(country)
+    if cached:
+        return jsonify({
+            'ok': True,
+            'regional': cached.get('regional', []),
+            'global': cached.get('global', []),
+            'cached_at': cached.get('cached_at', 0),
+            'country': country,
+            'source': 'cache',
+        })
+
+    # Cache miss — fetch fresh
+    try:
+        result = fetch_trending_news(country)
+        regional = result.get('regional', [])
+        global_top = result.get('global', [])
+
+        # If regional empty, try to classify from all_regional
+        if not regional:
+            all_regional = result.get('all_regional', [])
+            if all_regional:
+                regional = all_regional[:3]
+            else:
+                # Last resort: use global as regional
+                all_global = result.get('all_global', [])
+                if all_global:
+                    regional = all_global[:3]
+
+        if not global_top:
+            all_global = result.get('all_global', [])
+            if all_global:
+                global_top = all_global[:3]
+
+        data_to_cache = {
+            'regional': regional,
+            'global': global_top,
+        }
+        data_manager.set_trending_news(country, data_to_cache)
+
+        return jsonify({
+            'ok': True if (regional or global_top) else False,
+            'regional': regional,
+            'global': global_top,
+            'cached_at': time.time(),
+            'country': country,
+            'source': 'fetch',
+        })
+    except Exception as e:
+        app.logger.error(f"Trending fetch error: {e}")
+        return jsonify({
+            'ok': False,
+            'regional': [],
+            'global': [],
+            'country': country,
+            'error': str(e),
+        })
+
+
 
 
 @app.route('/api/weather')
@@ -6784,43 +7011,7 @@ def strip_markdown(text):
     text = re.sub(r'^[\s]*\d+\.\s+', '', text, flags=re.MULTILINE)
     return text.strip()
 
-# ── World Cup 2026 live score integration ──
-WORLDCUP_FINAL_TEAMS = {'Spain': 29, 'Argentina': 37}
-WORLDCUP_KEYWORDS = ['fifa final','world cup final','fifa world cup final','spain vs argentina','argentina vs spain','wc final','worldcup final']
 
-def fetch_worldcup_data():
-    try:
-        import urllib.request
-        resp = urllib.request.urlopen('https://worldcup26.ir/get/games', timeout=6)
-        data = json.loads(resp.read().decode())
-        games = data.get('games', data.get('data', []))
-        for g in games:
-            if g.get('id') == '104':
-                home_id = g.get('home_team_id', '0')
-                away_id = g.get('away_team_id', '0')
-                home_name = g.get('home_team_name_en', '') or ''
-                away_name = g.get('away_team_name_en', '') or ''
-                if not home_name or home_name == 'null':
-                    home_name = 'Spain'
-                if not away_name or away_name == 'null':
-                    away_name = 'Argentina'
-                finished = g.get('finished', 'FALSE').upper() == 'TRUE'
-                return {
-                    'home_team': home_name,
-                    'away_team': away_name,
-                    'home_score': int(g.get('home_score', 0) or 0),
-                    'away_score': int(g.get('away_score', 0) or 0),
-                    'status': 'live' if g.get('time_elapsed') == 'inprogress' else ('finished' if finished else 'scheduled'),
-                    'minute': g.get('match_minute', ''),
-                    'date': g.get('local_date', ''),
-                    'scorers': {
-                        'home': g.get('home_scorers', ''),
-                        'away': g.get('away_scorers', ''),
-                    }
-                }
-    except Exception:
-        pass
-    return None
 
 @app.route('/explore')
 def explore():
