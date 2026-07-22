@@ -648,6 +648,7 @@
         .ais-show-more:hover{background:var(--hover-bg);border-color:var(--border);color:var(--text)}
         .ais-show-more svg{display:inline-block;width:12px;height:12px;fill:currentColor;margin-left:3px;vertical-align:middle;transition:transform .2s}
         .ais-show-more.expanded svg{transform:rotate(180deg)}
+        .ais-disclaimer{font-size:11px;color:var(--text4);padding:0 20px 12px;line-height:1.4;text-align:center}
         .ais-loading{color:var(--text3);font-size:13px;padding:16px 20px}
         .ais-error{color:var(--red,#f28b82);font-size:13px;padding:16px 20px}
         .ais-cursor{display:inline-block;width:2px;height:1.1em;background:var(--link);margin-left:1px;vertical-align:text-bottom;animation:ais-blink .8s step-end infinite;border-radius:1px}
@@ -1338,6 +1339,7 @@
                         <div class="ais-fade"></div>
                     </div>
                     <button class="ais-show-more" id="ais-show-more" onclick="toggleAisFull()">Show more <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg></button>
+                    <div class="ais-disclaimer">AI-generated summary. This may not be fully accurate or up-to-date. Please visit the source websites to verify important information.</div>
                 </div>
                 {% endif %}
                 {% if board_results %}
@@ -2615,9 +2617,10 @@
                     for(var key in tzMap){
                         if(tz.indexOf(key) === 0 || tz === key){ cc = tzMap[key]; break; }
                     }
-                } catch(e){}
+                    } catch(e){}
+                }
 
-                // Check country-aware cache
+                // Check country-aware cache (ALWAYS runs, regardless of cc)
                 var CACHE_KEY = getCacheKey(cc);
                 var cached = null;
                 try {
@@ -2626,6 +2629,7 @@
                 } catch(e){}
                 if(cached && cached.regional && cached.global){ renderTrending(cached); return; }
 
+                // Fetch fresh trending data
                 var xhr = new XMLHttpRequest();
                 xhr.open('GET', '/api/trending' + (cc ? '?country='+cc : ''), true);
                 xhr.onload = function(){
