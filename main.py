@@ -5898,6 +5898,15 @@ def search():
         # Group results by domain for nested display
         result_groups = search_engine._group_results_by_domain(results)
 
+        # Fetch inline video results (top 2)
+        video_results = []
+        try:
+            all_videos = search_engine.search_videos(query)
+            if all_videos:
+                video_results = all_videos[:2]
+        except Exception:
+            pass
+
         # Check user preference for AI summary
         ai_summary_enabled = True
         if user_id:
@@ -5928,6 +5937,7 @@ def search():
             user_stat=None,
             ai_summary_enabled=ai_summary_enabled,
             preferences={},
+            video_results=video_results,
         ))
         return resp
 

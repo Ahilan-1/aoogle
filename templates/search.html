@@ -750,6 +750,26 @@
         .disc-cs{font-size:12px;color:var(--text3);line-height:1.55;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;flex:1;margin-top:1px}
         .disc-cf{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text3);margin-top:auto;padding-top:7px;border-top:1px solid var(--border2)}
 
+        /* ── Inline Video Snippet ── */
+        .vid-sec{margin-bottom:28px;padding-bottom:4px}
+        .vid-head{display:flex;align-items:center;gap:8px;margin-bottom:14px;color:var(--text2);font-size:14px;font-weight:600;letter-spacing:.2px}
+        .vid-head svg{width:16px;height:16px;fill:currentColor;opacity:.7}
+        .vid-row{display:flex;gap:14px;overflow-x:auto;padding-bottom:10px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+        .vid-row::-webkit-scrollbar{height:4px}
+        .vid-row::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+        .vid-card{flex:0 0 320px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s}
+        .vid-card:hover{border-color:var(--text4)}
+        .vid-thumb{position:relative;width:100%;aspect-ratio:16/9;background:var(--border2);overflow:hidden}
+        .vid-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+        .vid-dur{position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,.82);color:#fff;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:.3px}
+        .vid-info{padding:12px 14px 14px;display:flex;flex-direction:column;gap:4px;flex:1}
+        .vid-title{font-size:14px;font-weight:600;color:var(--link);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-decoration:none}
+        .vid-title:hover{text-decoration:underline}
+        .vid-meta{font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px;margin-top:2px}
+        .vid-meta .vid-ch{color:var(--text2);font-weight:500}
+        .vid-meta .vid-dot::before{content:'\00B7'}
+        @media(max-width:640px){.vid-card{flex:0 0 280px}}
+
         @media(max-width:640px){
             .rc-save{opacity:1}
             .rc-title{font-size:16px}
@@ -1367,7 +1387,7 @@
                     </div>
                 </div>
                 {% endif %}
-                {% set ns = namespace(disc=[], rcount=0, ddone=false) %}
+                {% set ns = namespace(disc=[], rcount=0, ddone=false, vdone=false) %}
                 {% for result in results %}
                     {% set is_disc = result.category == 'discussions' or result.category == 'discussion' or 'reddit' in result.url or 'forum' in result.url or 'stackexchange' in result.url %}
                     {% if is_disc %}
@@ -1486,6 +1506,29 @@
                     </div>
                     {% set ns.ddone = true %}
                     {% endif %}
+                    {% if ns.rcount >= 3 and video_results and not ns.vdone %}
+                    <div class="vid-sec" data-category="video">
+                        <div class="vid-head"><svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg> Videos</div>
+                        <div class="vid-row">
+                        {% for v in video_results %}
+                            <a href="{{ v.url }}" class="vid-card" target="_blank" rel="noopener">
+                                <div class="vid-thumb">
+                                    {% if v.thumbnail %}<img src="{{ v.thumbnail }}" alt="" loading="lazy">{% endif %}
+                                    {% if v.duration %}<span class="vid-dur">{{ v.duration }}</span>{% endif %}
+                                </div>
+                                <div class="vid-info">
+                                    <div class="vid-title">{{ v.title }}</div>
+                                    <div class="vid-meta">
+                                        {% if v.channel %}<span class="vid-ch">{{ v.channel }}</span>{% endif %}
+                                        {% if v.duration %}<span class="vid-dot"></span><span>{{ v.duration }}</span>{% endif %}
+                                    </div>
+                                </div>
+                            </a>
+                        {% endfor %}
+                        </div>
+                    </div>
+                    {% set ns.vdone = true %}
+                    {% endif %}
                     {% if has_siblings %}
                     </div>
                     {% endif %}
@@ -1518,6 +1561,29 @@
                     </div>
                 </div>
                 {% set ns.ddone = true %}
+                {% endif %}
+
+                {% if video_results and not ns.vdone %}
+                <div class="vid-sec" data-category="video">
+                    <div class="vid-head"><svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg> Videos</div>
+                    <div class="vid-row">
+                    {% for v in video_results %}
+                        <a href="{{ v.url }}" class="vid-card" target="_blank" rel="noopener">
+                            <div class="vid-thumb">
+                                {% if v.thumbnail %}<img src="{{ v.thumbnail }}" alt="" loading="lazy">{% endif %}
+                                {% if v.duration %}<span class="vid-dur">{{ v.duration }}</span>{% endif %}
+                            </div>
+                            <div class="vid-info">
+                                <div class="vid-title">{{ v.title }}</div>
+                                <div class="vid-meta">
+                                    {% if v.channel %}<span class="vid-ch">{{ v.channel }}</span>{% endif %}
+                                    {% if v.duration %}<span class="vid-dot"></span><span>{{ v.duration }}</span>{% endif %}
+                                </div>
+                            </div>
+                        </a>
+                    {% endfor %}
+                    </div>
+                </div>
                 {% endif %}
 
                 <div class="pagination">
