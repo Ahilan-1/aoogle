@@ -4975,6 +4975,8 @@ STOP_SNIPPET_WORDS = frozenset({
 AI_FACTUAL_QUERY_KEYWORDS = (
     'education', 'born', 'birth', 'age', 'who is', 'who was', 'what is', 'when did',
     'founder', 'co-founder', 'ceo', 'net worth', 'married', 'nationality', 'degree',
+    'email', 'phone', 'address', 'contact', 'number', 'website', 'salary', 'price',
+    'how much', 'how many', 'population', 'area', 'distance', 'height', 'weight',
 )
 
 
@@ -4986,7 +4988,7 @@ def clean_snippet_text(text):
     text = re.sub(r'\s+', ' ', text).strip()
     text = re.sub(r'\s+([.,!?;:])', r'\1', text)
     text = re.sub(r'(\w)\1{3,}', r'\1\1', text)
-    return text[:320]
+    return text[:500]
 
 
 def _wiki_page_title_from_url(url):
@@ -6058,6 +6060,8 @@ def api_ai_summary():
             "Answer search queries with direct, specific, factual answers — like Google's featured snippet. "
             "Lead with the answer itself, not preamble like \"Based on\" or \"According to\". "
             "Use numbers, dates, names, and concrete details — not vague generalities. "
+            "MATCH THE QUESTION TYPE: "
+            "If the question asks for a specific detail (email, phone, address, price, date, etc.), give ONLY that detail — not a biography. "
             "If the query asks \"what is X\", define X in one crisp sentence first, then add 1-2 key facts. "
             "If the query asks \"who\", give the name + one defining fact. "
             "If the query asks \"when\", give the date/time directly. "
@@ -6079,12 +6083,14 @@ Give the answer directly in 2-3 sentences. Include the key fact or definition up
         elif web_context:
             prompt = f"""Answer this question using ONLY the web content below.
 
+CRITICAL: If the question asks for a specific piece of information (email, phone number, address, date, price, website, etc.), extract ONLY that specific information. Do NOT give a general biography or overview.
+
 Question: {q}
 
 Web sources:
 {web_context}
 
-Start with the direct answer. Include specific facts, numbers, or dates. Cite sources as [1], [2] when citing different sources. Keep it to 2-4 sentences."""
+Start with the direct answer to the specific question. Extract the exact information requested (e.g., if asked for email, give the email address). If the question asks "what is X's email/phone/address", answer with just the contact detail and source, not a biography. Cite sources as [1], [2] when citing different sources. Keep it to 1-4 sentences."""
         else:
             prompt = f"""Answer this question directly and concisely.
 
