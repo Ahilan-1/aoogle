@@ -4967,6 +4967,119 @@ def get_definition_panel(query):
         return None
 
 
+STOP_SNIPPET_WORDS = frozenset({
+    'the', 'and', 'for', 'with', 'from', 'that', 'this', 'what', 'when', 'where', 'who',
+    'how', 'are', 'was', 'were', 'has', 'have', 'had', 'about', 'into', 'your', 'their',
+})
+
+AI_FACTUAL_QUERY_KEYWORDS = (
+    'education', 'born', 'birth', 'age', 'who is', 'who was', 'what is', 'when did',
+    'founder', 'co-founder', 'ceo', 'net worth', 'married', 'nationality', 'degree',
+)
+
+
+def clean_snippet_text(text):
+    """Normalize engine snippets for display."""
+    if not text:
+        return ''
+    text = re.sub(r'<[^>]+>', ' ', str(text))
+    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r'\s+([.,!?;:])', r'\1', text)
+    text = re.sub(r'(\w)\1{3,}', r'\1\1', text)
+    return text[:320]
+
+
+def _wiki_page_title_from_url(url):
+    if not url:
+        return None
+    m = re.search(r'wikipedia\.org/wiki/([^#?]+)', url, re.I)
+    if not m:
+        return None
+    return unquote(m.group(1).replace('_', ' ')).strip()
+
+
+def _query_focused_excerpt(text, query, max_len=280):
+    text = clean_snippet_text(text)
+    if not text:
+        return ''
+    if len(text) <= max_len:
+        return text
+    terms = [t.lower() for t in query.split() if len(t) > 2 and t.lower() not in STOP_SNIPPET_WORDS]
+    if not terms:
+        return text[: max_len - 3].rstrip() + '...'
+    lower = text.lower()
+    best_pos = 0
+    best_score = -1
+    step = max(1, len(text) // 40)
+    for i in range(0, len(text) - 40, step):
+        window = lower[i : i + 140]
+        score = sum(1 for t in terms if t in window)
+        if score > best_score:
+            best_score = score
+            best_pos = i
+    excerpt = text[best_pos : best_pos + max_len].strip()
+    if best_pos > 0:
+        excerpt = '...' + excerpt
+    if best_pos + max_len < len(text):
+        excerpt = excerpt.rstrip() + '...'
+    return excerpt
+
+
+def highlight_snippet(snippet, query):
+    text = clean_snippet_text(snippet)
+    if not text:
+        return ''
+    from html import escape as _html_escape
+    escaped = _html_escape(text)
+    terms = []
+    seen = set()
+    for raw in query.lower().split():
+        term = raw.strip('.,?!\'"')
+        if len(term) <= 2 or term in STOP_SNIPPET_WORDS or term in seen:
+            continue
+        seen.add(term)
+        terms.append(term)
+    for term in sorted(terms, key=len, reverse=True):
+        pattern = re.compile(re.escape(term), re.IGNORECASE)
+        escaped = pattern.sub(lambda m: f'<b class="rc-hl">{m.group(0)}</b>', escaped)
+    return escaped
+
+
+def polish_ai_summary_text(text):
+    if not text:
+        return text
+    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r'\s+([.,!?;:])', r'\1', text)
+    text = re.sub(r'\s+\)', ')', text)
+    text = re.sub(r'\[\s*(\d+)\s*\]\s*\(\s*([^)]+?)\s*\)', r'[\1](\2)', text)
+    text = re.sub(r'^(According to .+?,\s*)', '', text)
+    text = re.sub(r'^(Based on .+?,\s*)', '', text)
+    text = re.sub(r'^(In summary,?\s*)', '', text)
+    text = re.sub(r'^(To summarize,?\s*)', '', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+
+def polish_result_snippets(results, query):
+    """Clean snippets, enrich Wikipedia rows, add query-aware highlights."""
+    if not results:
+        return results
+    wiki_enriched = 0
+    for r in results:
+        url = (r.get('url') or '').lower()
+        snippet = clean_snippet_text(r.get('snippet') or '')
+        if wiki_enriched < 2 and 'wikipedia.org/wiki/' in url:
+            page_title = _wiki_page_title_from_url(r.get('url'))
+            if page_title:
+                panel = get_wikipedia_panel(page_title)
+                if panel and panel.get('description'):
+                    snippet = _query_focused_excerpt(panel['description'], query)
+                    wiki_enriched += 1
+        r['snippet'] = snippet
+        r['snippet_html'] = highlight_snippet(snippet, query)
+    return results
+
+
 def get_wikipedia_panel(query):
     query_lower = query.lower().strip()
     if not query_lower or len(query_lower) < 3:
@@ -4981,10 +5094,11 @@ def get_wikipedia_panel(query):
             'action': 'query',
             'format': 'json',
             'titles': query_lower,
-            'prop': 'extracts|pageimages|info',
+            'prop': 'extracts|pageimages|info|categories',
             'exintro': 1,
             'explaintext': 1,
             'pithumbsize': 300,
+            'cllimit': 3,
             'inprop': 'url',
             'redirects': 1,
         }
@@ -5000,21 +5114,23 @@ def get_wikipedia_panel(query):
         if 'missing' in page or not page.get('extract'):
             return None
         title = page.get('title', query)
-        extract = page.get('extract', '')[:400]
+        extract = clean_snippet_text(page.get('extract', ''))[:500]
         thumb_url = None
         thumb = page.get('thumbnail')
         if thumb:
             thumb_url = thumb.get('source')
         page_url = page.get('fullurl', f'https://en.wikipedia.org/wiki/{title.replace(" ", "_")}')
+        cats = page.get('categories', [])
+        cat_names = [c.get('title', '').replace('Category:', '') for c in cats[:3] if c.get('title')]
+        facts = [('Source', 'Wikipedia'), ('Read more', page_url)]
+        if cat_names:
+            facts.insert(0, ('Type', ' · '.join(cat_names)))
         panel = {
             'title': title,
             'image': thumb_url,
             'type': 'Wikipedia article',
             'description': extract,
-            'facts': [
-                ('Source', 'Wikipedia'),
-                ('Read more', page_url),
-            ],
+            'facts': facts,
         }
         with WIKI_CACHE_LOCK:
             WIKI_CACHE[cache_key] = {'data': panel, 'expires': time.time() + WIKI_CACHE_TTL}
@@ -5754,6 +5870,7 @@ def search():
             verified_results = [r for r in results if r.get('verified')]
             other_results = [r for r in results if not r.get('verified')]
             results = verified_results + other_results
+            results = polish_result_snippets(results, query)
 
         search_stats.record()
         data_manager.increment_total_searches()
@@ -5861,10 +5978,22 @@ def api_ai_summary():
                 try:
                     import json
                     provided = json.loads(results_raw)
-                    # Prioritize news results first for freshness
                     news_items = [r for r in provided if r.get('category') == 'news']
-                    other_items = [r for r in provided if r.get('category') != 'news']
-                    sorted_provided = news_items + other_items
+                    wiki_items = [r for r in provided if 'wikipedia.org' in (r.get('url') or '').lower()]
+                    rest_items = [r for r in provided if r not in news_items and r not in wiki_items]
+                    q_lower = q.lower()
+                    if any(kw in q_lower for kw in AI_FACTUAL_QUERY_KEYWORDS):
+                        sorted_provided = wiki_items + news_items + rest_items
+                    else:
+                        sorted_provided = news_items + wiki_items + rest_items
+                    snippet_context = ''
+                    for r in sorted_provided[:5]:
+                        r_snip = clean_snippet_text(r.get('snippet') or '')
+                        r_url = (r.get('url') or '').strip()
+                        if r_snip and r_url:
+                            snippet_context += f"\n[Snippet] {r.get('title', '')}: {r_snip} ({r_url})"
+                    if snippet_context:
+                        web_context += snippet_context
                     for r in sorted_provided[:5]:
                         r_url = (r.get('url') or '').strip()
                         r_title = (r.get('title') or '').strip()
@@ -5924,40 +6053,55 @@ def api_ai_summary():
                 except Exception as fetch_err:
                     app.logger.warning(f"AI web fetch error: {fetch_err}")
 
-        system_msg = "You are an intelligent assistant that provides direct, accurate answers from web content. Never tell users to 'visit the website' or 'check the source' — give the actual information directly. Be concise and substantive."
+        system_msg = (
+            "You are a world-class search assistant. "
+            "Answer search queries with direct, specific, factual answers — like Google's featured snippet. "
+            "Lead with the answer itself, not preamble like \"Based on\" or \"According to\". "
+            "Use numbers, dates, names, and concrete details — not vague generalities. "
+            "If the query asks \"what is X\", define X in one crisp sentence first, then add 1-2 key facts. "
+            "If the query asks \"who\", give the name + one defining fact. "
+            "If the query asks \"when\", give the date/time directly. "
+            "If the query asks \"how\", give the step or mechanism concisely. "
+            "Never tell users to visit websites. Never use phrases like \"you can find\" or \"for more details\". "
+            "Cite sources inline as [1], [2] only when there are multiple distinct facts from different sources. "
+            "Keep total length to 2-4 sentences unless the question clearly requires more. "
+            "Write in clean prose: no extra spaces before punctuation, no bullet symbols unless the user sees a list format."
+        )
         if url and snippet:
-            prompt = f"""Summarize this web page to answer the user's question directly.
+            prompt = f"""Answer this question using the page content below. Start with the direct answer.
 
-Title: {title}
-Snippet: {snippet}
+Page title: {title}
+Page content: {clean_snippet_text(snippet)}
 
 Question: {q}
 
-Give a direct answer (2-4 sentences) with the actual facts. Do NOT suggest visiting the website."""
+Give the answer directly in 2-3 sentences. Include the key fact or definition upfront."""
         elif web_context:
-            prompt = f"""Answer the question using ONLY the web content below. Give the actual information directly.
+            prompt = f"""Answer this question using ONLY the web content below.
 
 Question: {q}
 
-Web content:{web_context}
+Web sources:
+{web_context}
 
-Provide key facts (2-4 sentences). Each sentence may cite sources like [1] or [2].
-Do NOT tell the user to visit a website."""
+Start with the direct answer. Include specific facts, numbers, or dates. Cite sources as [1], [2] when citing different sources. Keep it to 2-4 sentences."""
         else:
-            prompt = f"""Provide a concise, useful answer to: {q}
+            prompt = f"""Answer this question directly and concisely.
 
-Give key facts directly (2-4 sentences). If unsure, say so.
-Do NOT suggest visiting websites."""
+Question: {q}
+
+Give the most accurate answer you can in 2-3 sentences. If you are not certain, say what you know and note the uncertainty."""
 
         from groq import Groq
         groq_client = Groq(api_key=os.environ.get('GROQ_API_KEY'))
+        ai_model = os.environ.get('GROQ_AI_MODEL', 'llama-3.3-70b-versatile')
         completion = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model=ai_model,
             messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": prompt}],
-            max_tokens=500,
-            temperature=0.3,
+            max_tokens=650,
+            temperature=0.15,
         )
-        answer = completion.choices[0].message.content.strip()
+        answer = polish_ai_summary_text(completion.choices[0].message.content.strip())
 
         # Post-process: replace hallucinated URLs with real source URLs
         if url and snippet:
@@ -6135,6 +6279,8 @@ def enc_search():
             iv, ct = _enc(json.dumps({'bang': bang_url}))
             return jsonify({'iv': iv, 'data': ct})
         results, total = search_engine.search(query, 1, 'general', None)
+        if results:
+            results = polish_result_snippets(results, query)
         board_results = data_manager.search_collections(query) if data_manager else []
         result_groups = search_engine._group_results_by_domain(results) if results else []
         out = {

@@ -193,14 +193,15 @@
         .suggestions-box .sug-item{padding:8px 20px;font-size:14px;color:var(--text);cursor:pointer;text-align:left}
         .suggestions-box .sug-item:hover{background:var(--hover-bg)}
 
-        .info-box{border:1px solid var(--border3);border-radius:12px;padding:20px;margin-bottom:22px;background:var(--card-bg)}
-        .info-box .ib-title{font-size:20px;font-weight:400;margin:0 0 4px;color:var(--text)}
-        .info-box .ib-type{font-size:14px;color:var(--text3);margin-bottom:10px}
-        .info-box .ib-img{width:100%;max-height:120px;object-fit:contain;margin-bottom:10px}
-        .info-box .ib-desc{font-size:14px;color:var(--text2);line-height:1.5;margin-bottom:10px}
-        .info-box .ib-facts{width:100%;border-collapse:collapse}
-        .info-box .ib-facts td{padding:4px 0;font-size:13px;vertical-align:top;color:var(--text)}
-        .info-box .ib-facts td:first-child{color:var(--text3);white-space:nowrap;padding-right:12px;font-weight:500}
+        .info-box{border:1px solid var(--border3);border-radius:14px;padding:20px;margin-bottom:22px;background:var(--card-bg);overflow:hidden;word-break:break-word;overflow-wrap:anywhere;animation:kb-fade-in .3s ease-out}
+        @keyframes kb-fade-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+        .info-box .ib-title{font-size:20px;font-weight:400;margin:0 0 4px;color:var(--text);line-height:1.3}
+        .info-box .ib-type{font-size:13px;color:var(--text3);margin-bottom:10px;font-weight:500}
+        .info-box .ib-img{width:100%;max-height:160px;object-fit:contain;margin-bottom:12px;border-radius:8px}
+        .info-box .ib-desc{font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:12px;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;word-break:break-word}
+        .info-box .ib-facts{width:100%;border-collapse:collapse;margin-top:4px}
+        .info-box .ib-facts td{padding:5px 0;font-size:13px;vertical-align:top;color:var(--text);overflow-wrap:anywhere;word-break:break-word}
+        .info-box .ib-facts td:first-child{color:var(--text3);white-space:nowrap;padding-right:12px;font-weight:500;width:1%}
 
         .weather-panel .wp-main{display:flex;align-items:center;gap:16px;margin-bottom:12px}
         .weather-panel .wp-temp{font-size:44px;font-weight:300;color:var(--text);line-height:1}
@@ -300,7 +301,7 @@
             .pagination a{padding:6px 10px;font-size:12px}
         }
         @media(hover:none){
-            .rc-modern:active{background:var(--hover-bg);margin:0 -8px;padding:0 8px;border-radius:6px}
+            .rc-modern:active{background:var(--hover-bg);border-color:var(--border2)}
             .pagination a{display:block;margin:6px 0;padding:14px;border-radius:10px;background:var(--bg2);border:1px solid var(--border);text-align:center;font-size:15px;font-weight:500}
             .suggestions-box .sug-item{padding:14px 16px;font-size:15px}
         }
@@ -612,7 +613,8 @@
         .ais-btn svg{width:14px;height:14px;fill:currentColor}
         .ais-btn.loading{opacity:.6;pointer-events:none}
         .ais-box{display:none;margin:0 0 28px;border-radius:12px;border:1px solid var(--border);background:var(--card-bg);overflow:hidden}
-        .ais-box.show{display:block}
+        .ais-box.show{display:block;animation:ais-fade-in .25s ease-out}
+        @keyframes ais-fade-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
         .ais-head{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border2)}
         .ais-head .ais-icon{width:18px;height:18px;flex-shrink:0;color:var(--text3)}
         .ais-head .ais-title{font-size:14px;font-weight:600;color:var(--text);flex:1}
@@ -625,8 +627,8 @@
         .ais-head .ais-close{background:none;border:none;color:var(--text4);cursor:pointer;font-size:16px;padding:2px 6px;border-radius:4px;line-height:1;transition:all .1s;flex-shrink:0}
         .ais-head .ais-close:hover{background:var(--hover-bg);color:var(--text)}
         .ais-body-wrap{position:relative;padding:0}
-        .ais-body{color:var(--text);font-size:14px;line-height:1.7;padding:16px 20px 48px;font-weight:400}
-        .ais-body .ais-intro{margin-bottom:16px;color:var(--text2)}
+        .ais-body{color:var(--text);font-size:14px;line-height:1.7;padding:16px 20px 48px;font-weight:400;overflow-wrap:anywhere;word-break:break-word}
+        .ais-body .ais-intro{margin-bottom:16px;color:var(--text);font-weight:500}
         .ais-body .ais-sh{font-size:14px;font-weight:600;color:var(--text);margin:20px 0 8px;letter-spacing:-.1px}
         .ais-body .ais-sh:first-child{margin-top:0}
         .ais-body strong{color:var(--text);font-weight:600}
@@ -652,11 +654,12 @@
         @keyframes ais-blink{50%{opacity:0}}
 
         /* ── Search result cards ── */
-        .rc-modern{margin-bottom:26px;padding-bottom:2px}
+        .rc-modern{margin-bottom:26px;padding:12px 14px;border-radius:10px;border:1px solid transparent;transition:background .12s,border-color .12s}
+        .rc-modern:hover{background:var(--hover-bg);border-color:var(--border2)}
         .rc-row{display:flex;align-items:flex-start;gap:8px}
         .rc-body{flex:1;min-width:0}
         .rc-title-line{display:flex;align-items:center;gap:8px}
-        .rc-title{font-size:18px;font-weight:600;color:#8ab4f8;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;text-decoration:none}
+        .rc-title{font-size:18px;font-weight:600;color:#8ab4f8;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;flex:1;min-width:0;text-decoration:none;overflow-wrap:anywhere;word-break:break-word}
         .rc-title:hover{text-decoration:underline}
         .rc-title:visited{color:#c58af9}
         .rc-acts{display:flex;align-items:center;gap:2px;flex-shrink:0;margin-top:1px}
@@ -665,12 +668,12 @@
         .rc-save:hover{border-color:var(--link);color:var(--link);background:rgba(138,180,248,.08)}
         .rc-dots{background:none;border:none;cursor:pointer;color:var(--text3);font-size:18px;padding:2px 6px;border-radius:50%;line-height:1;transition:all .12s;flex-shrink:0}
         .rc-dots:hover{background:var(--hover-bg);color:var(--text)}
-        .rc-bread{display:flex;align-items:center;gap:4px;font-size:13px;color:var(--text3);margin-top:1px;line-height:1.4;flex-wrap:wrap}
+        .rc-bread{display:flex;align-items:center;gap:4px;font-size:13px;color:var(--text3);margin-top:1px;line-height:1.4;flex-wrap:wrap;overflow:hidden}
         .rc-bread .rc-fav{width:16px;height:16px;border-radius:50%;flex-shrink:0}
         .rc-bread .rc-dom{font-weight:600;color:var(--text)}
         .rc-bread .rc-path{color:var(--text3)}
         .rc-bread .rc-sep{color:var(--text4);margin:0 2px;font-size:11px}
-        .rc-snip{color:var(--text2);font-size:14px;line-height:1.58;margin-top:5px;word-wrap:break-word}
+        .rc-snip{color:var(--text2);font-size:14px;line-height:1.6;margin-top:6px;overflow-wrap:anywhere;word-break:break-word;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
         .rc-date{display:inline-block;background:var(--bg3);border-radius:12px;padding:1px 8px;font-size:11px;color:var(--text3);margin-right:6px;vertical-align:baseline}
         .rc-pos{position:relative}
         .rc-report-menu{display:none;position:absolute;right:0;top:100%;background:var(--bg2);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px var(--shadow2);z-index:300;min-width:180px;padding:4px 0;margin-top:2px}
@@ -1728,7 +1731,7 @@
                 {% if info_box.facts %}
                 <table class="ib-facts">
                     {% for label, value in info_box.facts %}
-                    <tr><td>{{ label }}</td><td>{{ value }}</td></tr>
+                    <tr><td>{{ label }}</td><td>{% if label == 'Read more' %}<a href="{{ value }}" target="_blank" rel="noopener" style="color:var(--link);text-decoration:none">{{ value }}</a>{% else %}{{ value }}{% endif %}</td></tr>
                     {% endfor %}
                 </table>
                 {% endif %}
