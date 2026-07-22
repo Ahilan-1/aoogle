@@ -2555,8 +2555,8 @@
         (function(){
             var tc = document.getElementById('trending-content');
             if(!tc) return;
-            var CACHE_KEY = 'arlong_trending';
             var TTL = 300000;
+            function getCacheKey(cc){ return 'arlong_trending_' + (cc || 'auto'); }
             function renderTrending(data){
                 var html = '';
                 var items = [];
@@ -2587,14 +2587,7 @@
                 tc.innerHTML = html;
             }
             function loadTrending(){
-                var cached = null;
-                try {
-                    var raw = sessionStorage.getItem(CACHE_KEY);
-                    if(raw){ cached = JSON.parse(raw); if(Date.now()-cached._ts>TTL) cached=null; }
-                } catch(e){}
-                if(cached && cached.regional && cached.global){ renderTrending(cached); return; }
-
-                // Check for saved country preference first
+                // Determine country code
                 var cc = '';
                 try { cc = sessionStorage.getItem('arlong_trending_country') || ''; } catch(e){}
 
@@ -2624,6 +2617,15 @@
                     }
                 } catch(e){}
 
+                // Check country-aware cache
+                var CACHE_KEY = getCacheKey(cc);
+                var cached = null;
+                try {
+                    var raw = sessionStorage.getItem(CACHE_KEY);
+                    if(raw){ cached = JSON.parse(raw); if(Date.now()-cached._ts>TTL) cached=null; }
+                } catch(e){}
+                if(cached && cached.regional && cached.global){ renderTrending(cached); return; }
+
                 var xhr = new XMLHttpRequest();
                 xhr.open('GET', '/api/trending' + (cc ? '?country='+cc : ''), true);
                 xhr.onload = function(){
@@ -2638,7 +2640,6 @@
                 };
                 xhr.onerror = function(){ tc.innerHTML='<div class="tr-error">Network error</div>'; };
                 xhr.send();
-                }
             }
             loadTrending();
         })();
