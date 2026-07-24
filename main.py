@@ -4421,7 +4421,7 @@ class ImprovedSearch:
 
     def search_videos(self, query):
         cache_key = f"videos:{query.lower().strip()}"
-        with self._lock:
+        with self.cache_lock:
             cached = self.in_memory_cache.get(cache_key)
             if cached and time.time() < cached.get('expires', 0):
                 return cached['data']
@@ -4563,7 +4563,7 @@ class ImprovedSearch:
                 if videos:
                     break
 
-        with self._lock:
+        with self.cache_lock:
             self.in_memory_cache[cache_key] = {'data': videos, 'expires': time.time() + 1800}
         return videos
 
