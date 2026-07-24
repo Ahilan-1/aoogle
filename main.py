@@ -511,8 +511,9 @@ start_news_updater(app)
 
 def _score_blog_for_newsstand(blog):
     """Score a blog post for newsstand inclusion. Higher = more addictive/clickable.
-    Heavily penalizes spammy content and rewards originality."""
+    Heavily penalizes spammy content and rewards originality, engagement velocity, and structure."""
     from datetime import datetime, timezone
+    import math
     s = 0
     quality = blog.get('quality_score', 0)
 
@@ -520,75 +521,105 @@ def _score_blog_for_newsstand(blog):
     if quality < 5:
         return 0
 
+    # ── Core quality (30 pts) ──
     s += min(quality / 40, 1.0) * 30
 
+    # ── Engagement (20 pts) ──
     views = blog.get('view_count', 0)
-    s += min(views / 100, 1.0) * 15
     upvotes = blog.get('upvote_count', 0)
-    s += min(upvotes / 10, 1.0) * 10
+    s += min(views / 80, 1.0) * 12
+    s += min(upvotes / 8, 1.0) * 8
 
+    # ── Recency with exponential decay (25 pts) ──
+    # New posts get a massive boost; older posts fade faster than linear
     created = blog.get('created_at', '')
+    age_hours = 168  # default 1 week
     if created:
         try:
             dt = datetime.fromisoformat(created.replace('Z', '+00:00'))
             now = datetime.now(timezone.utc)
             age_hours = max(0.1, (now - dt).total_seconds() / 3600)
-            recency = max(0, 1.0 - age_hours / 168)
-            s += recency * 20
         except Exception:
             pass
+    # Exponential half-life of 48 hours — posts stay hot for ~2 days
+    recency = math.exp(-age_hours / 48)
+    s += recency * 25
+
+    # ── Engagement velocity boost (15 pts) ──
+    # New posts with fast engagement get a huge signal
+    if age_hours < 72:
+        velocity = (views + upvotes * 5) / max(age_hours, 0.5)
+        s += min(velocity / 3, 1.0) * 15
 
     content = blog.get('content', '') or ''
     content_lower = content.lower()
     words = content_lower.split()
     word_count = max(1, len(words))
 
-    # Originality bonus: personal experience signals
+    # ── Originality bonus: personal experience signals (15 pts) ──
     first_person = sum(1 for p in [' i ', ' my ', ' i\'m ', ' i\'ve ', ' i tested ', ' i tried ',
-                                    ' personally', ' my experience', ' my review'] if p in content_lower)
+                                    ' personally', ' my experience', ' my review',
+                                    ' what i found', ' in my opinion', ' from my'] if p in content_lower)
     if first_person >= 3:
         s += 15
     elif first_person >= 1:
         s += 5
 
-    # Research/data bonus
+    # ── Research/data bonus (12 pts) ──
     research = sum(1 for p in [' study found', ' research shows', ' according to',
                                 ' i measured', ' i compared', ' results showed',
                                 ' my analysis', ' benchmark', ' case study',
-                                ' performance data', ' side by side'] if p in content_lower)
+                                ' performance data', ' side by side', ' data shows',
+                                ' statistics show', ' evidence suggests'] if p in content_lower)
     if research >= 3:
         s += 12
     elif research >= 1:
         s += 5
 
-    # Quick spam sniff — penalize hard
+    # ── Content structure bonus (10 pts) ──
+    # Well-structured posts with headings, lists, and paragraphs rank higher
+    structure_score = 0
+    if content.count('\n#') >= 2 or content.count('\n##') >= 2:
+        structure_score += 3  # has headings
+    if content.count('\n- ') >= 3 or content.count('\n* ') >= 3 or re.search(r'\n\d+\.\s', content):
+        structure_score += 3  # has lists
+    paragraphs = [p.strip() for p in content.split('\n\n') if len(p.strip()) > 50]
+    if len(paragraphs) >= 3:
+        structure_score += 2  # has multiple substantial paragraphs
+    if word_count >= 300:
+        structure_score += 2  # decent length
+    s += min(structure_score, 10)
+
+    # ── Quick spam sniff — penalize hard ──
     promo_hits = sum(1 for kw in ['buy now', 'limited time', 'discount code',
                                    'coupon', 'promo code', 'special offer',
                                    'free trial', 'click here', 'save big',
-                                   'affiliate', 'lowest price', 'order today'] if kw in content_lower)
+                                   'affiliate', 'lowest price', 'order today',
+                                   'act now', 'dont miss', 'hurry'] if kw in content_lower)
     if promo_hits >= 2:
         s -= 30
     elif promo_hits >= 1:
         s -= 10
 
-    # Affiliate link density
-    affiliate_pats = ['amazon.com/', 'amzn.to', 'shareasale', 'bit.ly/', 'tinyurl.com']
+    # ── Affiliate link density ──
+    affiliate_pats = ['amazon.com/', 'amzn.to', 'shareasale', 'bit.ly/', 'tinyurl.com', 'cutt.ly']
     aff_count = sum(1 for p in affiliate_pats if p in content_lower)
     if aff_count >= 2:
         s -= 20
     elif aff_count >= 1:
         s -= 5
 
+    # ── Presentation bonuses ──
     desc = blog.get('description', '') or ''
-    if len(desc) > 60:
+    if len(desc) > 80:
         s += 5
-    elif len(desc) > 20:
+    elif len(desc) > 30:
         s += 2
     if blog.get('thumbnail'):
+        s += 8
+    if len(content) > 800:
         s += 5
-    if len(content) > 500:
-        s += 5
-    elif len(content) > 200:
+    elif len(content) > 300:
         s += 2
 
     if quality >= 40:
@@ -599,7 +630,7 @@ def _score_blog_for_newsstand(blog):
     return round(max(s, 0), 2)
 
 
-def _get_blog_news_items(max_items=2):
+def _get_blog_news_items(max_items=3):
     """Get top-scoring blogs formatted as news items for newsstand injection."""
     if not data_manager:
         return []
@@ -633,7 +664,7 @@ def _get_blog_news_items(max_items=2):
         return []
 
 
-BLOG_NEWSTAND_POSITIONS = [2, 3]
+BLOG_NEWSTAND_POSITIONS = [1, 3, 5]
 
 # ── Search Quota (unlimited) ──
 UNLIMITED = 999999
