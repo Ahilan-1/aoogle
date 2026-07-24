@@ -1469,29 +1469,43 @@ def detect_user_country():
 
 DATA_FILE = os.environ.get('DATA_FILE') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data.json')
 
+_json_cache = {'data': None, 'ts': 0}
+_JSON_CACHE_TTL = 2
+
 def _load_json():
+    now = time.time()
+    if _json_cache['data'] is not None and (now - _json_cache['ts']) < _JSON_CACHE_TTL:
+        return _json_cache['data']
+    result = None
     if S3_ENABLED and s3_client:
         try:
             resp = s3_client.get_object(Bucket=S3_BUCKET, Key=S3_DATA_KEY)
-            return json.loads(resp['Body'].read().decode('utf-8'))
+            result = json.loads(resp['Body'].read().decode('utf-8'))
         except ClientError as e:
             if e.response['Error']['Code'] == 'NoSuchKey':
-                return None
-            app.logger.error(f"S3 load error: {e}")
-            return None
+                pass
+            else:
+                app.logger.error(f"S3 load error: {e}")
         except Exception as e:
             app.logger.error(f"S3 load error: {e}")
-            return None
     else:
         if os.path.exists(DATA_FILE):
             try:
                 with open(DATA_FILE, 'r') as f:
-                    return json.load(f)
+                    result = json.load(f)
             except:
-                return None
-        return None
+                pass
+    if result is not None:
+        _json_cache['data'] = result
+        _json_cache['ts'] = now
+    return result
+
+def _invalidate_json_cache():
+    _json_cache['data'] = None
+    _json_cache['ts'] = 0
 
 def _save_json(data):
+    _invalidate_json_cache()
     if S3_ENABLED and s3_client:
         try:
             s3_client.put_object(
@@ -1635,6 +1649,17 @@ class DataManager:
                 self.data = loaded
             self.data['total_searches'] = self.data.get('total_searches', 0) + 1
             _save_json(self.data)
+
+    def _increment_searches_deferred(self):
+        try:
+            with self._lock:
+                loaded = _load_json()
+                if loaded:
+                    self.data = loaded
+                self.data['total_searches'] = self.data.get('total_searches', 0) + 1
+                _save_json(self.data)
+        except Exception:
+            pass
 
     def get_celebration(self):
         with self._lock:
@@ -4215,7 +4240,7 @@ class ImprovedSearch:
 
             try:
                 # Stage 1: collect fast results (DDG sources typically finish in 1-2s)
-                done, not_done = wait(list(futures.keys()), timeout=3, return_when=FIRST_COMPLETED)
+                done, not_done = wait(list(futures.keys()), timeout=2.5, return_when=FIRST_COMPLETED)
                 seen_urls = set()
                 for future in done:
                     try:
@@ -4395,6 +4420,12 @@ class ImprovedSearch:
         return images[:50]
 
     def search_videos(self, query):
+        cache_key = f"videos:{query.lower().strip()}"
+        with self._lock:
+            cached = self.in_memory_cache.get(cache_key)
+            if cached and time.time() < cached.get('expires', 0):
+                return cached['data']
+
         videos = []
         seen_ids = set()
 
@@ -4532,6 +4563,8 @@ class ImprovedSearch:
                 if videos:
                     break
 
+        with self._lock:
+            self.in_memory_cache[cache_key] = {'data': videos, 'expires': time.time() + 1800}
         return videos
 
     def get_suggestions(self, query):
@@ -5329,26 +5362,39 @@ def get_media_panel(query):
 
 
 def get_info_box(query, results=None):
-    weather = get_weather_panel(query)
-    if weather:
-        return weather
-    definition = get_definition_panel(query)
-    if definition:
-        return definition
-    if results:
-        wiki_panel = get_wiki_panel_from_results(results)
-        if wiki_panel:
-            return wiki_panel
     query_lower = query.lower().strip()
     for key, panel in KNOWLEDGE_PANELS.items():
         if key in query_lower:
             return panel
-    media = get_media_panel(query)
-    if media:
-        return media
-    wiki_panel = get_wikipedia_panel(query)
-    if wiki_panel:
-        return wiki_panel
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    def _try_weather():
+        return get_weather_panel(query)
+    def _try_definition():
+        return get_definition_panel(query)
+    def _try_wiki_results():
+        return get_wiki_panel_from_results(results) if results else None
+    def _try_media():
+        return get_media_panel(query)
+    def _try_wiki():
+        return get_wikipedia_panel(query)
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futures = {
+            pool.submit(_try_weather): 'weather',
+            pool.submit(_try_definition): 'definition',
+            pool.submit(_try_wiki_results): 'wiki_results',
+            pool.submit(_try_media): 'media',
+            pool.submit(_try_wiki): 'wiki',
+        }
+        for future in as_completed(futures, timeout=3):
+            try:
+                result = future.result(timeout=0)
+                if result:
+                    return result
+            except Exception:
+                pass
     return None
 
 NEWS_TOPIC_KEYWORDS = ['latest','breaking','update','today','this week','this month','report','announced','unveiled','released','launched','happening','what happened','recap','highlights','analysis','coverage','live','watch']
@@ -5844,13 +5890,14 @@ def search():
             session['region'] = region
         results, total_results = search_engine.search(query, page, filter_type, region or None)
 
-        # ── Board search integration ──
-        board_results = data_manager.search_collections(query)
-        if board_results:
-            for b in board_results:
-                b['_type'] = 'board'
+        # ── Parallelize supplementary fetches alongside result processing ──
+        from concurrent.futures import ThreadPoolExecutor as _SupPool, Future
+        _sup_pool = _SupPool(max_workers=4)
 
-        ql = query.lower().strip()
+        _f_videos = _sup_pool.submit(search_engine.search_videos, query)
+        _f_info_box = _sup_pool.submit(get_info_box, query, results)
+        _f_shopping = _sup_pool.submit(get_shopping_panel, query, results)
+        _f_collections = _sup_pool.submit(data_manager.search_collections, query)
 
         verified_info = data_manager.get_verified_info(query.lower().strip(), user_country)
         if not verified_info and results:
@@ -5874,8 +5921,8 @@ def search():
             results = verified_results + other_results
             results = polish_result_snippets(results, query)
 
-        search_stats.record()
-        data_manager.increment_total_searches()
+        _sup_pool.submit(search_stats.record)
+        _sup_pool.submit(data_manager._increment_searches_deferred)
 
         safety_info = crisis if crisis and crisis['type'] == 'disaster' else None
 
@@ -5893,25 +5940,40 @@ def search():
                 'items': news_candidates[:8]
             }
 
-        search_time = round(time.time() - _search_start, 2)
-
-        # Group results by domain for nested display
         result_groups = search_engine._group_results_by_domain(results)
 
-        # Fetch inline video results (top 2)
         video_results = []
+        info_box_data = None
+        shopping_products = None
+        board_results = None
         try:
-            all_videos = search_engine.search_videos(query)
-            if all_videos:
-                video_results = all_videos[:2]
+            video_results = _f_videos.result(timeout=1.5)
+            if video_results:
+                video_results = video_results[:2]
         except Exception:
-            pass
+            video_results = []
+        try:
+            info_box_data = _f_info_box.result(timeout=1.5)
+        except Exception:
+            info_box_data = None
+        try:
+            shopping_products = _f_shopping.result(timeout=1.5)
+        except Exception:
+            shopping_products = None
+        try:
+            board_results = _f_collections.result(timeout=1.5)
+            if board_results:
+                for b in board_results:
+                    b['_type'] = 'board'
+        except Exception:
+            board_results = None
 
-        # Check user preference for AI summary
         ai_summary_enabled = True
         if user_id:
             prefs = data_manager.get_user_preferences(user_id)
             ai_summary_enabled = prefs.get('ai_summary', True)
+
+        search_time = round(time.time() - _search_start, 2)
 
         resp = make_response(render_template(
             'search.html',
@@ -5926,8 +5988,8 @@ def search():
             notice=notice,
             page=page,
             total_results=total_results,
-            info_box=get_info_box(query, results),
-            shopping_products=get_shopping_panel(query, results),
+            info_box=info_box_data,
+            shopping_products=shopping_products,
             region=region or session.get('region', ''),
             announcement=announcement,
             blocked_count=BLOCKLIST_COUNT,
@@ -5939,6 +6001,7 @@ def search():
             preferences={},
             video_results=video_results,
         ))
+        _sup_pool.shutdown(wait=False)
         return resp
 
     except Exception as e:
