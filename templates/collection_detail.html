@@ -104,6 +104,8 @@
 
         .toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 24px;border-radius:10px;font-size:13px;z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.5);transition:opacity .3s;opacity:0;pointer-events:none}
         .toast.show{opacity:1}
+        .save-meta-badge{display:none;position:absolute;top:10px;right:10px;background:#1a73e8;color:#fff;font-size:10px;font-weight:600;padding:3px 8px;border-radius:6px;z-index:10;letter-spacing:.3px}
+        .save-meta-badge.show{display:block}
         @media(max-width:720px){.layout{flex-direction:column}.side-col{width:100%}.side-card{position:static}.post-header h1{font-size:24px}}
     </style>
 </head>
@@ -136,7 +138,7 @@
                     </div>
                     <div class="actions">
                         {% if is_owner %}<button class="btn" onclick="openEditor()">&#x270E; Edit</button>
-                        <button class="btn" onclick="openSettings()">&#x2699; Settings</button>
+                        <button class="btn" onclick="openSettings()">&#x2699; Details</button>
                         <button class="btn danger" onclick="deletePost()">&#x1F5D1; Delete</button>{% endif %}
                         <button class="btn" onclick="share()">&#x1F517; Share</button>
                     </div>
@@ -213,18 +215,19 @@
 
     <div class="modal-overlay" id="modal-overlay" onclick="closeSettings()"></div>
     <div class="settings-modal" id="settings-modal">
-        <div class="sm-header">Blog Settings</div>
+        <div class="sm-header">Save Post</div>
         <div class="sm-body">
             <label>Title</label>
             <input type="text" id="sm-title" value="{{ collection.name|e }}" maxlength="100">
-            <label>Excerpt</label>
-            <textarea id="sm-desc" maxlength="500">{{ collection.description or '' }}</textarea>
-            <label>Thumbnail</label>
+            <label>Excerpt <span style="color:#999;font-weight:400">(shown in blog feed)</span></label>
+            <textarea id="sm-desc" maxlength="500" placeholder="A short summary of your post...">{{ collection.description or '' }}</textarea>
+            <label>Thumbnail <span style="color:#999;font-weight:400">(optional)</span></label>
             <div style="display:flex;gap:8px;align-items:center">
                 <input type="text" id="sm-thumb-url" placeholder="Paste image URL..." value="{{ collection.thumbnail or '' }}" style="flex:1">
                 <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" id="sm-thumb-file" style="display:none" onchange="uploadThumb(this)">
                 <button class="sm-btn" onclick="document.getElementById('sm-thumb-file').click()">Browse</button>
             </div>
+            <div id="sm-thumb-preview" style="margin-top:8px;display:none"><img src="" style="max-width:100%;max-height:120px;border-radius:6px;border:1px solid #ddd"></div>
         </div>
         <div class="sm-footer">
             <button class="sm-btn" onclick="closeSettings()">Cancel</button>
@@ -286,19 +289,19 @@
         }
 
         function saveEdit(){
-            var md = editor.value;
-            var fd = new FormData();
-            fd.append('content', md);
-            fd.append('name', {{ collection.name|tojson }});
-            fetch('/api/collections/{{ collection.id }}', {method:'PUT', body:fd}).then(function(r){return r.json()}).then(function(d){
-                if(!d.ok){ showToast(d.error||'Error'); return; }
-                window.location.reload();
-            });
+            document.getElementById('editor-overlay').classList.remove('open');
+            openSettings();
         }
 
         function openSettings(){
             document.getElementById('modal-overlay').classList.add('show');
             document.getElementById('settings-modal').classList.add('show');
+            var thumb = document.getElementById('sm-thumb-url').value.trim();
+            var prev = document.getElementById('sm-thumb-preview');
+            if(thumb && (thumb.startsWith('http://') || thumb.startsWith('https://') || thumb.startsWith('/'))){
+                prev.style.display = 'block';
+                prev.querySelector('img').src = thumb;
+            }
         }
         function closeSettings(){
             document.getElementById('modal-overlay').classList.remove('show');
@@ -310,8 +313,26 @@
             var fd = new FormData();
             fd.append('file', file);
             fetch('/api/upload', {method:'POST', body:fd}).then(function(r){return r.json()}).then(function(d){
-                if(d.url) document.getElementById('sm-thumb-url').value = d.url;
-                else showToast(d.error||'Upload failed');
+                if(d.url){
+                    document.getElementById('sm-thumb-url').value = d.url;
+                    var prev = document.getElementById('sm-thumb-preview');
+                    prev.style.display = 'block';
+                    prev.querySelector('img').src = d.url;
+                } else showToast(d.error||'Upload failed');
+            });
+        }
+
+        var thumbUrlInput = document.getElementById('sm-thumb-url');
+        if(thumbUrlInput){
+            thumbUrlInput.addEventListener('input', function(){
+                var v = this.value.trim();
+                var prev = document.getElementById('sm-thumb-preview');
+                if(v && (v.startsWith('http://') || v.startsWith('https://') || v.startsWith('/'))){
+                    prev.style.display = 'block';
+                    prev.querySelector('img').src = v;
+                } else {
+                    prev.style.display = 'none';
+                }
             });
         }
         function saveSettings(){
@@ -323,6 +344,9 @@
             fd.append('name', name);
             fd.append('description', desc||'');
             fd.append('thumbnail', thumb||'');
+            if(editor && editor.value !== undefined){
+                fd.append('content', editor.value);
+            }
             fetch('/api/collections/{{ collection.id }}', {method:'PUT', body:fd}).then(function(r){return r.json()}).then(function(d){
                 if(d.ok) window.location.reload();
                 else showToast(d.error||'Error');

@@ -3,164 +3,205 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>Explore - arlong blogs</title>
+    <title>Blogs - arlong</title>
+    <link rel="icon" type="image/x-icon" href="data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+vr6/y4uLqcAAAAAAAAAAAAAAAAAAAAALS0t0i0tLdIAAAAAAAAAAAAAAAAAAAAAMTExrvr6+v8AAAAA+vr6//7+/v4sLCx4AAAAAAAAAAAAAAAA/v7+/uvr6//m5ub//v7+/gAAAAAAAAAAAAAAACQkJH7+/v7++vr6/zExMa4kJCR+/v7+/igoKGoAAAAADgsJ42RkZPv39/f99fX1/2lpaP8OCwnjAAAAACIiIm/+/v7+LCwseC4uLqcAAAAAAAAAACIiIm/+/v7+akUh/0syGP/8/Pz/kZGR/4yMjP/8/Pz/Py4a/mRAH//+/v7+KCgoagAAAAAAAAAAAAAAAAAAAAAcHyEIakUh//7+/+64uLj//v7+/v7+/v7+/v7+/v7+/v7+/tLS0v/+/v7+akUh/zgzLBUAAAAAAAAAAAAAAAAAAAAArG40/7x8PP/y8vL+8vLy/v7+/v5NTU3/XFxc//7+/v7u7u7//f39/7x8PP+zdzn/AAAAAAAAAAAAAAAAHB8hCMODP/9TPij+KSkp/wAAAP4AAAD+8vLy/vr6+v8AAAD+AAAA/hgTDv9aUEX/w4M//y0kFyIAAAAAAAAAABsUCaPHiEL/9fX1/wAAAP4AAAD+AAAA/np6e/+fn5/+AAAA/gAAAP4AAAD+/v7+/seIQv8jGQzTAAAAAAAAAAAAHzT6AJL0//7+/v7i4uL/AAAA/gAAAP7+/v7+/v7+/gAAAP4AAAD+zMzM//7+/v4AlPj/AB80+gAAAAAAAAAAAFiU/wCX/v4Agtn/N1Bg/5GRkf/Hx8f+29vb/9vb2//Hx8f+l5iY/zdQYP8Aecr/AJf+/gBYlP8AAAAAAAAAADIxMBnZnU7/Hx8e/gAKmv4ACYX/AAdr/wAIYP8ACGD/AAdr/wAJhf8ACpr+AQ02/9mdTv8pHQ41AAAAAAAAAAAAAAAA26BP/31dLv4Al/7+AJf+/gCX/v4Al/7+AJf+/gCX/v4Al/7+AJf+/oRiMf/do1H/AAAAAAAAAAAAAAAAAAAAAB0aFoH+/v7+hGIx/wCU+P8Al/7+AJf+/gCX/v4Al/7+AJf+/nZYLf7+/v7+GxoaiwAAAAAAAAAAMTExriQkJH7+/v7+GxQJo+ivWP/or1j/r4BA/xdBVv4XQVb+mXA4/+ivWP/or1j/GBIKuf7+/v4sLCx4Li4up/r6+v/+/v7+LCwseAAAAAAAAAAAa1Ep/uyzWv/ss1r/7LNa/+yzWv99XS7+JiIeBAAAAAAkJCR+/v7+/vr6+v8AAAAA+vr6/y4uLqcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMTExrvr6+v8AAAAAnnkAADw8AABYGgAA4AcAAOAHAADAAwAAwAMAAIABAACAAQAAgAEAAMADAADAAwAAwAMAAEACAAA4HAAAn/kAAA==">
     <style>
-        *{box-sizing:border-box}
-        :root{--bg:#000;--bg2:#0d0d0d;--bg3:#1a1a1a;--text:#e8eaed;--text2:#bdc1c6;--text3:#8a8f96;--text4:#7a7f86;--link:#8ab4f8;--link-v:#a78bfa;--border:#333;--border2:#222;--input-bg:#111}
+        :root {
+            --bg:#fff; --bg2:#fff; --bg3:#f8f9fa; --text:#222; --text2:#545454;
+            --text3:#70757a; --text4:#808080; --link:#1a0dab; --link-v:#609;
+            --border:#dfe1e5; --border2:#ebebeb; --border3:#e0e0e0; --border4:#dadce0;
+            --nav-active:#1a73e8; --red:#c5221f; --red-bg:#fce8e6;
+            --blue-bg:#e8f0fe; --blue-border:#c5d9f2; --green-bg:#e6f4ea; --green-border:#b8e6c0;
+            --shadow:rgba(32,33,36,.28); --shadow2:rgba(0,0,0,.12);
+            --card-bg:#fff; --hover-bg:#f1f3f4; --input-bg:#fff;
+        }
+        .dark-mode {
+            --bg:#000000; --bg2:#0d0d0d; --bg3:#1a1a1a; --text:#e8eaed; --text2:#bdc1c6;
+            --text3:#8a8f96; --text4:#7a7f86; --link:#8ab4f8; --link-v:#a78bfa;
+            --border:#333333; --border2:#222222; --border3:#333333; --border4:#333333;
+            --nav-active:#8ab4f8; --red:#f28b82; --red-bg:#2d1517;
+            --blue-bg:#0d1f3d; --blue-border:#1a3a5f; --green-bg:#0d2214; --green-border:#1a3a28;
+            --shadow:rgba(0,0,0,.5); --shadow2:rgba(0,0,0,.6);
+            --card-bg:#0d0d0d; --hover-bg:#1a1a1a; --input-bg:#111111;
+        }
+        *,*::before,*::after{box-sizing:border-box}
         body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--text);background:var(--bg);min-height:100vh}
         a{text-decoration:none;color:var(--link)}
         a:hover{text-decoration:underline}
-        .header{display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(0,0,0,.85);backdrop-filter:blur(12px);z-index:100}
-        .logo{font-size:22px;font-weight:700;background:linear-gradient(to top,#0066cc,#3399ff 50%,var(--text) 50%);background-size:100% 200%;-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-1px;font-family:'Product Sans',Arial,sans-serif}
-        .header h1{margin:0;font-size:14px;font-weight:400;color:var(--text3)}
-        .header nav{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
-        .header nav a,.header nav button{padding:6px 14px;font-size:13px;color:var(--text2);border:1px solid var(--border);border-radius:8px;background:var(--bg2);transition:.15s;cursor:pointer;font-family:inherit}
-        .header nav a:hover,.header nav button:hover{color:var(--text);background:var(--hover-bg);text-decoration:none;border-color:var(--text3)}
-        .acc-btn{width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:.15s}
-        .acc-btn:hover{background:var(--hover-bg);color:var(--text);border-color:var(--text3)}
-        .acc-btn svg{width:16px;height:16px;fill:currentColor}
-        .sort-tabs{display:flex;gap:6px;padding:12px 24px 0;max-width:960px;margin:0 auto}
-        .sort-tabs a{padding:6px 16px;font-size:13px;color:var(--text3);border:1px solid var(--border);border-radius:8px;background:var(--bg2);transition:.15s}
-        .sort-tabs a.active{background:var(--bg3);color:var(--text);border-color:var(--link);box-shadow:0 0 0 1px var(--link)}
-        .sort-tabs a:hover{text-decoration:none;color:var(--text);background:var(--hover-bg)}
 
-        .feed{max-width:720px;margin:16px auto;padding:0 20px}
-        .post{border-bottom:1px solid var(--border2);padding:20px 0;display:flex;gap:20px;transition:.15s}
-        .post:hover{padding-left:4px}
-        .post-thumb{width:210px;min-width:210px;aspect-ratio:16/9;border-radius:10px;overflow:hidden;flex-shrink:0;background:var(--bg3);border:1px solid var(--border);position:relative}
-        .post-thumb img{width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0}
-        .post-thumb .placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--bg3),var(--border))}
-        .post-thumb .placeholder svg{width:36px;height:36px;opacity:.4}
-        .post-body{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
-        .post-title{font-size:17px;font-weight:600;color:var(--link);line-height:1.3;margin-bottom:4px;display:block}
-        .post-title:hover{text-decoration:underline}
-        .post-meta{font-size:12px;color:var(--text4);margin-bottom:5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-        .post-meta .author{font-weight:500;color:var(--text3)}
-        .post-excerpt{font-size:13px;color:var(--text2);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+        .exp-header{display:flex;align-items:center;gap:14px;padding:12px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(0,0,0,.85);backdrop-filter:blur(12px);z-index:100}
+        .exp-logo{font-size:22px;font-weight:700;background:linear-gradient(to top,#0066cc,#3399ff 50%,var(--text) 50%);background-size:100% 200%;-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-1px;font-family:'Product Sans',Arial,sans-serif;text-decoration:none}
+        .exp-logo:hover{text-decoration:none}
+        .exp-title{margin:0;font-size:14px;font-weight:400;color:var(--text3)}
+        .exp-nav{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;align-items:center}
+        .exp-nav a,.exp-nav button{padding:6px 14px;font-size:13px;color:var(--text2);border:1px solid var(--border);border-radius:8px;background:var(--bg2);transition:.15s;cursor:pointer;font-family:inherit}
+        .exp-nav a:hover,.exp-nav button:hover{color:var(--text);background:var(--hover-bg);text-decoration:none;border-color:var(--text3)}
+        .exp-nav .write-btn{background:#0077be;color:#fff;border-color:#0077be;font-weight:500}
+        .exp-nav .write-btn:hover{background:#0099e5;border-color:#0099e5}
+        .exp-acc{width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:.15s}
+        .exp-acc:hover{background:var(--hover-bg);color:var(--text);border-color:var(--text3)}
+        .exp-acc svg{width:16px;height:16px;fill:currentColor}
 
-        .empty-state{text-align:center;padding:80px 20px;color:var(--text3);max-width:960px;margin:0 auto}
-        .empty-state .big{font-size:56px;margin-bottom:12px;opacity:.15;font-weight:100}
-        .empty-state p{font-size:14px}
-        .empty-state .create-btn{margin-top:10px;padding:10px 24px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;cursor:pointer;font-family:inherit}
-        .empty-state .create-btn:hover{background:var(--hover-bg)}
-        .pagination{text-align:center;margin:24px auto 40px;font-size:13px;max-width:680px;padding:0 20px}
-        .pagination a{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;margin:0 3px;border:1px solid var(--border);border-radius:8px;color:var(--text2);background:var(--bg2);transition:.1s}
-        .pagination a:hover{text-decoration:none;color:var(--text);background:var(--hover-bg)}
-        .pagination .cur{display:inline-flex;align-items:center;padding:8px 16px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-weight:500}
+        .exp-tabs{display:flex;gap:8px;padding:16px 24px 0;max-width:1200px;margin:0 auto;overflow-x:auto}
+        .exp-tabs a{padding:6px 16px;font-size:13px;color:var(--text3);border:1px solid var(--border);border-radius:20px;background:var(--bg2);transition:.15s;white-space:nowrap}
+        .exp-tabs a.active{background:var(--nav-active);color:#fff;border-color:var(--nav-active)}
+        .exp-tabs a:hover{text-decoration:none;color:var(--text);background:var(--hover-bg)}
 
-        .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
-        .modal-overlay.open{display:flex}
-        .modal{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:24px;width:92%;max-width:520px;max-height:85vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.5);animation:mslide .25s ease-out}
-        @keyframes mslide{from{opacity:0;transform:translateY(20px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
-        .modal h2{margin:0 0 16px;font-size:18px;font-weight:500;color:var(--text)}
-        .modal label{display:block;font-size:12px;color:var(--text3);margin-bottom:4px;margin-top:14px;text-transform:uppercase;letter-spacing:.5px}
-        .modal label:first-of-type{margin-top:0}
-        .modal input,.modal textarea{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--input-bg);color:var(--text);outline:none;font-family:inherit}
-        .modal input:focus,.modal textarea:focus{border-color:var(--link)}
-        .modal textarea{resize:vertical;min-height:60px}
-        .modal .tip{font-size:11px;color:var(--text4);margin-top:3px}
-        .modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
-        .modal .actions button{padding:9px 22px;border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500;transition:.15s}
-        .modal .actions .cancel{background:var(--bg2);color:var(--text2)}
-        .modal .actions .cancel:hover{background:var(--hover-bg);color:var(--text)}
-        .modal .actions .submit{background:var(--bg3);color:var(--text)}
-        .modal .actions .submit:hover{background:var(--hover-bg);border-color:var(--link)}
+        .exp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;padding:20px 24px;max-width:1200px;margin:0 auto}
+        .exp-card{border-radius:12px;overflow:hidden;background:var(--card-bg);border:1px solid var(--border);transition:box-shadow .2s,border-color .2s;cursor:pointer;text-decoration:none;color:inherit;display:block}
+        .exp-card:hover{box-shadow:0 4px 16px var(--shadow2);border-color:var(--text3);text-decoration:none}
+        .exp-card:hover .exp-card-title{color:var(--link)}
+        .exp-thumb{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:var(--bg3)}
+        .exp-thumb-placeholder{width:100%;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--bg3),var(--border2));color:var(--text4)}
+        .exp-thumb-placeholder svg{width:40px;height:40px;opacity:.3}
+        .exp-card-body{padding:12px 14px 16px}
+        .exp-card-meta{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+        .exp-card-avatar{width:28px;height:28px;border-radius:50%;background:var(--nav-active);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+        .exp-card-info{min-width:0}
+        .exp-card-author{font-size:12px;color:var(--text3);font-weight:500}
+        .exp-card-date{font-size:11px;color:var(--text4)}
+        .exp-card-title{font-size:14px;font-weight:500;color:var(--text);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:4px}
+        .exp-card-excerpt{font-size:12px;color:var(--text3);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+        .exp-card-stats{display:flex;gap:12px;margin-top:8px;font-size:11px;color:var(--text4)}
 
-        @media(max-width:640px){.post{flex-direction:column}.post-thumb{width:100%}}
+        .exp-create-inline{margin:0 auto;max-width:1200px;padding:16px 24px 0;display:none}
+        .exp-create-inline.open{display:block}
+        .exp-create-card{background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:20px 24px;animation:mslide .2s ease-out}
+        .exp-create-card h3{margin:0 0 12px;font-size:15px;font-weight:500;color:var(--text)}
+        .exp-create-row{display:flex;gap:10px;align-items:center}
+        .exp-create-row input{flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--input-bg);color:var(--text);outline:none;font-family:inherit}
+        .exp-create-row input:focus{border-color:var(--link)}
+        .exp-create-row .create-go{padding:10px 22px;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;background:#0077be;color:#fff;transition:.15s;white-space:nowrap}
+        .exp-create-row .create-go:hover{background:#0099e5}
+        .exp-create-row .create-cancel{padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit;background:var(--bg2);color:var(--text2);transition:.15s}
+        .exp-create-row .create-cancel:hover{background:var(--hover-bg);color:var(--text)}
+        .exp-create-tip{font-size:11px;color:var(--text4);margin-top:8px}
+
+        .exp-empty{text-align:center;padding:100px 20px;color:var(--text3)}
+        .exp-empty .big{font-size:64px;margin-bottom:16px;opacity:.1}
+        .exp-empty p{font-size:15px;margin:6px 0}
+        .exp-empty .create-btn{margin-top:16px;padding:10px 28px;background:#0077be;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit;transition:background .2s}
+        .exp-empty .create-btn:hover{background:#0099e5}
+
+        .exp-pagination{text-align:center;margin:24px auto 60px;font-size:13px;max-width:1200px;padding:0 24px}
+        .exp-pagination a{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;margin:0 3px;border:1px solid var(--border);border-radius:8px;color:var(--text2);background:var(--bg2);transition:.1s}
+        .exp-pagination a:hover{text-decoration:none;color:var(--text);background:var(--hover-bg)}
+        .exp-pagination .cur{display:inline-flex;align-items:center;padding:8px 16px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-weight:500}
+
+
+        @media(max-width:640px){
+            .exp-grid{grid-template-columns:1fr;gap:12px;padding:12px 16px}
+            .exp-header{padding:10px 16px}
+            .exp-tabs{padding:12px 16px 0}
+            .exp-create-inline{padding:12px 16px 0}
+            .exp-create-row{flex-wrap:wrap}
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        <a href="/" class="logo">arlong</a>
-        <h1>/blogs</h1>
-        <nav>
+    <div class="exp-header">
+        <a href="/" class="exp-logo">arlong</a>
+        <h1 class="exp-title">/blogs</h1>
+        <div class="exp-nav">
             <a href="/explore">All</a>
-            {% if session.user_id %}<a href="/collections">My</a>{% endif %}
-            {% if session.user_id %}<button onclick="showCreate()">+ Write</button>{% endif %}
-        </nav>
-        <a href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" class="acc-btn">
-            <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-        </a>
+            {% if session.user_id %}<a href="/collections">My blogs</a>{% endif %}
+            {% if session.user_id %}<button class="write-btn" onclick="toggleCreate()">+ Write</button>{% endif %}
+            <a href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" class="exp-acc">
+                <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            </a>
+        </div>
     </div>
 
-    <div class="sort-tabs">
-        <a href="/explore?sort=new" class="{% if sort=='new' %}active{% endif %}">&#x1F4C5; New</a>
-        <a href="/explore?sort=popular" class="{% if sort=='popular' %}active{% endif %}">&#x1F525; Popular</a>
-        <a href="/explore?sort=top" class="{% if sort=='top' %}active{% endif %}">&#x2B50; Top</a>
-        <a href="/explore?sort=updated" class="{% if sort=='updated' %}active{% endif %}">&#x1F504; Updated</a>
+    <div class="exp-tabs">
+        <a href="/explore?sort=new" class="{% if sort=='new' %}active{% endif %}">New</a>
+        <a href="/explore?sort=popular" class="{% if sort=='popular' %}active{% endif %}">Popular</a>
+        <a href="/explore?sort=top" class="{% if sort=='top' %}active{% endif %}">Top</a>
+        <a href="/explore?sort=updated" class="{% if sort=='updated' %}active{% endif %}">Updated</a>
     </div>
 
     {% if error %}
-    <div class="empty-state"><div class="big">!</div><p>{{ error }}</p></div>
+    <div class="exp-empty"><div class="big">!</div><p>{{ error }}</p></div>
     {% elif collections %}
-    <div class="feed">
+    <div class="exp-grid">
         {% for c in collections %}
-        <div class="post">
-            <a href="/explore/{{ c.id }}" class="post-thumb">
-                {% if c.thumbnail %}
-                <img src="{{ c.thumbnail }}" alt="" loading="lazy" onerror="this.style.display='none'">
-                {% else %}
-                <div class="placeholder">{% include 'thumb_placeholder.svg' %}</div>
-                {% endif %}
-            </a>
-            <div class="post-body">
-                <a href="/explore/{{ c.id }}" class="post-title">{{ c.name }}</a>
-                <div class="post-meta">
-                    <span class="author">u/{{ c.creator_name }}</span>
-                    <span>&middot;</span>
-                    <span>{{ c.created_at[:10] }}</span>
-                    <span>&middot;</span>
-                    <span>{{ c.websites|length }} link{% if c.websites|length != 1 %}s{% endif %}</span>
-                </div>
-                <div class="post-excerpt">{{ c._excerpt }}{% if c._excerpt|length >= 200 %}...{% endif %}</div>
+        <a href="/explore/{{ c.id }}" class="exp-card">
+            {% if c.thumbnail %}
+            <img src="{{ c.thumbnail }}" alt="" class="exp-thumb" loading="lazy" onerror="this.outerHTML='<div class=exp-thumb-placeholder><svg width=40 height=40 viewBox=&quot;0 0 24 24&quot; fill=none stroke=currentColor stroke-width=2><path d=&quot;M4 19.5A2.5 2.5 0 0 1 6.5 17H20&quot;/><path d=&quot;M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z&quot;/><line x1=8 y1=7 x2=16 y2=7/><line x1=8 y1=11 x2=14 y2=11/></svg></div>'">
+            {% else %}
+            <div class="exp-thumb-placeholder">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
             </div>
-        </div>
+            {% endif %}
+            <div class="exp-card-body">
+                <div class="exp-card-meta">
+                    <div class="exp-card-avatar">{{ c.creator_name[0]|upper }}</div>
+                    <div class="exp-card-info">
+                        <div class="exp-card-author">u/{{ c.creator_name }}</div>
+                        <div class="exp-card-date">{{ c.created_at[:10] }}</div>
+                    </div>
+                </div>
+                <div class="exp-card-title">{{ c.name }}</div>
+                <div class="exp-card-excerpt">{{ c._excerpt }}</div>
+                {% if c.upvote_count or c.view_count %}
+                <div class="exp-card-stats">
+                    {% if c.view_count %}<span>{{ c.view_count }} views</span>{% endif %}
+                    {% if c.upvote_count %}<span>{{ c.upvote_count }} upvotes</span>{% endif %}
+                    {% if c.websites|length %}<span>{{ c.websites|length }} links</span>{% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </a>
         {% endfor %}
     </div>
     {% if total > 20 %}
-    <div class="pagination">
+    <div class="exp-pagination">
         {% if page > 1 %}<a href="/explore?sort={{ sort }}&page={{ page-1 }}">&larr; prev</a>{% endif %}
         <span class="cur">{{ page }}</span>
         {% if total > page * 20 %}<a href="/explore?sort={{ sort }}&page={{ page+1 }}">next &rarr;</a>{% endif %}
     </div>
     {% endif %}
     {% else %}
-    <div class="empty-state">
+    <div class="exp-empty">
         <div class="big">&#x270F;</div>
         <p>No blog posts yet.</p>
-        {% if session.user_id %}<button class="create-btn" onclick="showCreate()">Write the first post</button>{% else %}<p><a href="/login">Sign in</a> to write a blog.</p>{% endif %}
+        {% if session.user_id %}
+        <p style="font-size:13px;color:var(--text4)">Be the first to share something with arlong.</p>
+        <button class="create-btn" onclick="toggleCreate()">Write the first post</button>
+        {% else %}
+        <p><a href="/login">Sign in</a> to write a blog.</p>
+        {% endif %}
     </div>
     {% endif %}
 
-    <div class="modal-overlay" id="create-modal">
-        <div class="modal">
-            <h2>&#x270F; New Blog Post</h2>
-            <form id="create-form" onsubmit="return createPost(event)">
-                <label>Blog Title</label>
-                <input type="text" name="name" required minlength="3" maxlength="100" placeholder="e.g. My Journey with Linux" autofocus>
-                <div class="tip">Give your post a title. You can write and edit the full content after creating.</div>
-
-                <div class="actions">
-                    <button type="button" class="cancel" onclick="hideCreate()">Cancel</button>
-                    <button type="submit" class="submit">Create Draft</button>
-                </div>
-            </form>
+    <div class="exp-create-inline" id="create-inline">
+        <div class="exp-create-card">
+            <h3>New Blog Post</h3>
+            <div class="exp-create-row">
+                <input type="text" id="create-name" placeholder="Give your post a title…" minlength="3" maxlength="100">
+                <button class="create-go" onclick="createPost()">Create Draft</button>
+                <button class="create-cancel" onclick="toggleCreate()">Cancel</button>
+            </div>
+            <div class="exp-create-tip">You can write and edit the full content after creating.</div>
         </div>
     </div>
 
     <script>
-    function showCreate(){document.getElementById('create-modal').classList.add('open')}
-    function hideCreate(){document.getElementById('create-modal').classList.remove('open')}
-    function createPost(e){
-        e.preventDefault();
-        var fd = new FormData(e.target);
+    function toggleCreate(){
+        var el=document.getElementById('create-inline');
+        el.classList.toggle('open');
+        if(el.classList.contains('open'))document.getElementById('create-name').focus();
+    }
+    function createPost(){
+        var name=document.getElementById('create-name').value.trim();
+        if(!name||name.length<3){alert('Title must be at least 3 characters.');return}
+        var fd=new FormData();fd.append('name',name);
         fetch('/api/collections',{method:'POST',body:fd}).then(function(r){return r.json()}).then(function(d){
             if(!d.ok){alert(d.error);return}
             window.location.href='/explore/'+d.collection.id+'?edit=1';
         });
-        return false;
     }
-    document.getElementById('create-modal').addEventListener('click',function(e){if(e.target===this)hideCreate()});
+    document.getElementById('create-name').addEventListener('keydown',function(e){if(e.key==='Enter')createPost()});
+    if(window.matchMedia('(prefers-color-scheme:dark)').matches || document.documentElement.classList.contains('dark-mode')){document.body.classList.add('dark-mode')}
     </script>
 </body>
 </html>

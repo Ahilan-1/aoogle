@@ -723,6 +723,23 @@ if s3_available:
         except Exception as e:
             app.logger.warning(f"S3 init failed, falling back to local file: {e}")
 
+# Persist/load secret key via S3 for session continuity across deploys
+if S3_ENABLED and s3_client:
+    try:
+        resp = s3_client.get_object(Bucket=S3_BUCKET, Key='.secret_key')
+        s3_key = resp['Body'].read().decode('utf-8').strip()
+        if s3_key:
+            app.secret_key = s3_key
+            app.logger.info("Loaded persistent secret key from S3")
+    except ClientError:
+        try:
+            s3_client.put_object(Bucket=S3_BUCKET, Key='.secret_key', Body=app.secret_key.encode('utf-8'), ContentType='text/plain')
+            app.logger.info("Persisted new secret key to S3")
+        except Exception as e:
+            app.logger.error(f"Failed to persist secret key to S3: {e}")
+    except Exception as e:
+        app.logger.error(f"Failed to load secret key from S3: {e}")
+
 # Enhanced logging configuration
 handler = RotatingFileHandler(
     'search_engine.log',
@@ -1499,6 +1516,7 @@ def detect_user_country():
     return None, None
 
 DATA_FILE = os.environ.get('DATA_FILE') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data.json')
+BACKUP_DIR = os.environ.get('BACKUP_DIR') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backups')
 
 _json_cache = {'data': None, 'ts': 0}
 _JSON_CACHE_TTL = 2
@@ -1550,6 +1568,58 @@ def _save_json(data):
     else:
         with open(DATA_FILE, 'w') as f:
             json.dump(data, f, indent=2)
+
+def _create_backup():
+    try:
+        data = _load_json()
+        if not data:
+            app.logger.warning("Backup skipped: no data loaded")
+            return
+        ts = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        backup_name = f"data_{ts}.json"
+        backup_payload = json.dumps(data, indent=2).encode('utf-8')
+        if S3_ENABLED and s3_client:
+            try:
+                s3_client.put_object(
+                    Bucket=S3_BUCKET,
+                    Key=f"backups/{backup_name}",
+                    Body=backup_payload,
+                    ContentType='application/json'
+                )
+                app.logger.info(f"Backup saved to S3: backups/{backup_name}")
+            except Exception as e:
+                app.logger.error(f"S3 backup error: {e}")
+        os.makedirs(BACKUP_DIR, exist_ok=True)
+        local_path = os.path.join(BACKUP_DIR, backup_name)
+        with open(local_path, 'wb') as f:
+            f.write(backup_payload)
+        app.logger.info(f"Backup saved locally: {local_path}")
+        _prune_old_backups()
+    except Exception as e:
+        app.logger.error(f"Backup failed: {e}")
+
+def _prune_old_backups(keep=48):
+    try:
+        if S3_ENABLED and s3_client:
+            try:
+                resp = s3_client.list_objects_v2(Bucket=S3_BUCKET, Prefix='backups/')
+                objs = resp.get('Contents', [])
+                if len(objs) > keep:
+                    objs.sort(key=lambda o: o['Key'])
+                    to_delete = objs[:len(objs) - keep]
+                    for obj in to_delete:
+                        s3_client.delete_object(Bucket=S3_BUCKET, Key=obj['Key'])
+                    app.logger.info(f"Pruned {len(to_delete)} old S3 backups")
+            except Exception as e:
+                app.logger.error(f"S3 backup prune error: {e}")
+        if os.path.isdir(BACKUP_DIR):
+            files = sorted([f for f in os.listdir(BACKUP_DIR) if f.startswith('data_') and f.endswith('.json')])
+            if len(files) > keep:
+                for f in files[:len(files) - keep]:
+                    os.remove(os.path.join(BACKUP_DIR, f))
+                    app.logger.info(f"Pruned old local backup: {f}")
+    except Exception as e:
+        app.logger.error(f"Backup prune failed: {e}")
 
 class DataManager:
     def __init__(self):
@@ -6871,6 +6941,16 @@ def api_check_username():
     taken = any(u['username'].lower() == username.lower() for u in users)
     return jsonify({'available': not taken})
 
+@app.route('/api/check-email')
+def api_check_email():
+    email = request.args.get('email', '').strip().lower()
+    if not email or '@' not in email or '.' not in email.split('@')[-1]:
+        return jsonify({'available': False, 'error': 'Invalid email'})
+    loaded = _load_json()
+    users = loaded.get('users', []) if loaded else []
+    taken = any(u.get('email', '').lower() == email for u in users if u.get('email'))
+    return jsonify({'available': not taken})
+
 @app.route('/api/captcha')
 def captcha():
     words = ["apple","beach","cloud","dance","eagle","flame","grape","house","ivory","jewel","knife","lemon","mango","night","ocean","pearl","queen","river","stone","tiger","unity","vivid","water","yacht","zebra","bloom","creek","dwarf","ember","frost","globe","honey","image","jolly","koala","lunar","magic","noble","orbit","piano","quiet","radar","solar","tulip","umbra","vocal","wheat","algae","birch","coral","sunset","midnight","winter","summer","autumn","spring","mountain","forest","desert","garden","silver","golden","crystal","thunder","shadow","spirit"]
@@ -7647,8 +7727,15 @@ if scheduler_available:
         name='Crawl all submitted sites weekly',
         replace_existing=True,
     )
+    scheduler.add_job(
+        _create_backup,
+        IntervalTrigger(hours=24),
+        id='daily_backup',
+        name='Daily data backup',
+        replace_existing=True,
+    )
     scheduler.start()
-    app.logger.info("Weekly Kumo Crawler scheduler started")
+    app.logger.info("Scheduler started: weekly crawl + daily backup")
 
 
 if __name__ == "__main__":

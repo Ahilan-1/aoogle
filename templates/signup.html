@@ -197,8 +197,9 @@
                         <label>Email address <span style="color:var(--text3);font-weight:400">(optional)</span></label>
                         <div class="input-wrap">
                             <input type="email" name="email" id="f-email" autocomplete="email" placeholder="you@example.com" value="{{ email or '' }}">
+                            <div class="input-status" id="email-status"></div>
                         </div>
-                        <div class="opt">Used for account recovery and payment receipts</div>
+                        <div class="field-hint" id="email-hint">Used for account recovery and payment receipts</div>
                         <label>Security question</label>
                         <div class="input-wrap">
                             <input type="text" name="security_question" id="f-sq" required autocomplete="off" placeholder="e.g. What is your pet's name?" value="{{ request.form.get('security_question', '') }}">
@@ -256,6 +257,8 @@
         var currentStep = 1;
         var usernameCheckTimer = null;
         var usernameAvailable = false;
+        var emailCheckTimer = null;
+        var emailAvailable = true;
 
         function updateStep(step, dir){
             var forms = document.querySelectorAll('.step-form');
@@ -298,6 +301,8 @@
                 var sq = document.getElementById('f-sq').value.trim();
                 var sa = document.getElementById('f-sa').value.trim();
                 if(!sq || !sa){ showBubble('Security question and answer are required','error'); return; }
+                var em = document.getElementById('f-email').value.trim();
+                if(em && !emailAvailable){ showBubble('This email is already in use','error'); return; }
             }
             currentStep = s;
             updateStep(s);
@@ -360,6 +365,49 @@
             xhr.send();
         }
 
+        function checkEmail(email){
+            var status = document.getElementById('email-status');
+            var hint = document.getElementById('email-hint');
+            var input = document.getElementById('f-email');
+            if(!email || email.indexOf('@') === -1){
+                status.className = 'input-status';
+                hint.className = 'field-hint';
+                hint.textContent = 'Used for account recovery and payment receipts';
+                input.className = '';
+                emailAvailable = true;
+                return;
+            }
+            status.className = 'input-status show';
+            status.innerHTML = '<div class="spinner"></div>';
+            input.className = '';
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/api/check-email?email='+encodeURIComponent(email), true);
+            xhr.onload = function(){
+                if(xhr.status === 200){
+                    var r = JSON.parse(xhr.responseText);
+                    if(r.available){
+                        status.innerHTML = '<svg viewBox="0 0 24 24"><circle class="ck-bg" cx="12" cy="12" r="10"/><path class="ck-check" d="M7 12l3 3 7-7"/></svg>';
+                        hint.className = 'field-hint valid';
+                        hint.textContent = 'Email available';
+                        input.className = 'input-valid';
+                        emailAvailable = true;
+                    } else {
+                        status.innerHTML = '<svg viewBox="0 0 24 24"><circle class="x-bg" cx="12" cy="12" r="10"/><path class="x-line" d="M8 8l8 8M16 8l-8 8"/></svg>';
+                        hint.className = 'field-hint invalid';
+                        hint.textContent = 'Email already in use';
+                        input.className = 'input-error';
+                        emailAvailable = false;
+                    }
+                } else {
+                    status.className = 'input-status';
+                    hint.className = 'field-hint';
+                    hint.textContent = 'Used for account recovery and payment receipts';
+                    emailAvailable = true;
+                }
+            };
+            xhr.send();
+        }
+
         function toggleTheme(){
             var html = document.documentElement;
             html.classList.toggle('dark-mode');
@@ -417,6 +465,25 @@
                         hint.textContent = '3&ndash;24 characters, letters and numbers';
                         uf.className = '';
                         usernameAvailable = false;
+                    }
+                });
+            }
+
+            var ef = document.getElementById('f-email');
+            if(ef){
+                ef.addEventListener('input', function(){
+                    var v = ef.value.trim();
+                    clearTimeout(emailCheckTimer);
+                    if(v.length > 5){
+                        emailCheckTimer = setTimeout(function(){ checkEmail(v) }, 400);
+                    } else {
+                        var status = document.getElementById('email-status');
+                        var hint = document.getElementById('email-hint');
+                        status.className = 'input-status';
+                        hint.className = 'field-hint';
+                        hint.textContent = 'Used for account recovery and payment receipts';
+                        ef.className = '';
+                        emailAvailable = true;
                     }
                 });
             }

@@ -13,3 +13,4 @@ test_*.py
 *.zip
 tmp.html
 top-1m.csv
+backups/
