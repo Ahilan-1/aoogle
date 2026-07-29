@@ -310,7 +310,7 @@ class Crawler:
     # ── Seeds ──
 
     def load_seeds(self):
-        seeds = OrderedDict()
+        seeds = {}
         if os.path.exists(TOP_1M_CSV):
             try:
                 with open(TOP_1M_CSV, 'r') as f:
