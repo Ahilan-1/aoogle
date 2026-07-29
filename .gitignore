@@ -14,5 +14,3 @@ test_*.py
 tmp.html
 top-1m.csv
 backups/
-crawldata.json
-crawl-status.json
