@@ -779,7 +779,7 @@ DISCUSSION_DOMAINS = {
 
 
 class SearchResult:
-    def __init__(self, title, url, snippet, category='general', date=None, favicon=None, domain=None):
+    def __init__(self, title, url, snippet, category='general', date=None, favicon=None, domain=None, source=None):
         self.title = title
         self.url = url
         self.snippet = snippet
@@ -788,6 +788,7 @@ class SearchResult:
         self.favicon = favicon or f"https://www.google.com/s2/favicons?domain={url}"
         self.score = 0
         self.domain = domain or urlparse(url).netloc if url else ''
+        self.source = source
 
     def to_dict(self):
         return {
@@ -800,8 +801,17 @@ class SearchResult:
             'favicon': self.favicon,
             'score': self.score,
             'type': 'regular',
-            'domain': self.domain
+            'domain': self.domain,
+            'source': self.source
         }
+
+
+BLOCKED_DOMAINS = {
+    'zooporn.show', 'porn', 'xxx', 'xvideos', 'xnxx', 'redtube', 'youporn',
+    'pornhub', 'tube8', 'xhamster', 'adult', 'sex', 'escort', 'dating',
+    'whistleblowersoftware.com', 'healthplix.com', 'mashalearning.com',
+    'elearningindustry.com',
+}
 
 
 QUERY_INTENTS = {
@@ -1939,7 +1949,6 @@ class DataManager:
                 'sitemap_url': sitemap_url, 'robots_txt_url': robots_txt_url,
                 'email': email, 'submitted_by': submitted_by,
                 'submitted_at': datetime.now().isoformat(),
-                'crawl_status': 'pending', 'pages_crawled': 0
             }
             self.data['submitted_sites'].append(site)
             _save_json(self.data)
@@ -1951,20 +1960,6 @@ class DataManager:
             if loaded:
                 self.data = loaded
             return list(self.data.get('submitted_sites', []))
-
-    def update_crawl_status(self, domain, status, pages_crawled=None):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            for site in self.data.get('submitted_sites', []):
-                if site['domain'] == domain:
-                    site['crawl_status'] = status
-                    if pages_crawled is not None:
-                        site['pages_crawled'] = pages_crawled
-                    _save_json(self.data)
-                    return True
-            return False
 
     def get_submitted_site(self, domain):
         sites = self.get_submitted_sites()
@@ -1980,75 +1975,10 @@ class DataManager:
                 self.data = loaded
             for s in self.data.get('submitted_sites', []):
                 if s['domain'] == domain:
-                    s['crawl_status'] = 'approved'
+                    s['verified'] = True
                     _save_json(self.data)
                     return True
             return False
-
-    def store_crawled_pages(self, domain, pages):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            self.data.setdefault('crawled_pages', [])
-            self.data['crawled_pages'] = [p for p in self.data['crawled_pages'] if p['domain'] != domain]
-            for page in pages:
-                entry = {
-                    'domain': domain,
-                    'url': page.get('url', ''),
-                    'title': page.get('title', '')[:300],
-                    'description': page.get('description', '')[:500],
-                    'text': page.get('text', '')[:5000],
-                    'indexed_at': datetime.now().isoformat(),
-                }
-                self.data['crawled_pages'].append(entry)
-            _save_json(self.data)
-
-    def get_all_crawled_pages(self):
-        with self._lock:
-            loaded = _load_json()
-            if loaded:
-                self.data = loaded
-            return list(self.data.get('crawled_pages', []))
-
-    def search_crawled_pages(self, query):
-        pages = self.get_all_crawled_pages()
-        if not pages or not query:
-            return []
-        STOP_WORDS = {'the','a','an','is','are','was','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','shall','can','need','dare','ought','used','to','of','in','for','on','with','at','by','from','as','into','through','during','before','after','above','below','between','out','off','over','under','again','further','then','once','here','there','when','where','why','how','all','each','every','both','few','more','most','other','some','such','no','not','only','own','same','so','than','too','very','just','because','but','and','or','if','while','about','against','up','down'}
-        query_terms = [w.lower() for w in query.split() if len(w) > 2 and w.lower() not in STOP_WORDS]
-        if not query_terms:
-            return []
-        scored = []
-        for p in pages:
-            title = (p.get('title', '') or '').lower()
-            desc = (p.get('description', '') or '').lower()
-            text = (p.get('text', '') or '').lower()
-            title_desc = title + ' ' + desc
-            title_matches = sum(1 for t in query_terms if t in title)
-            desc_matches = sum(1 for t in query_terms if t in title_desc)
-            text_matches = sum(1 for t in query_terms if t in text)
-            total_unique = len(set(query_terms))
-            title_ratio = title_matches / total_unique if total_unique else 0
-            desc_ratio = desc_matches / total_unique if total_unique else 0
-            if title_ratio < 0.5 and desc_ratio < 0.5:
-                continue
-            s = title_ratio * 20 + desc_ratio * 10 + (text_matches / total_unique if total_unique else 0) * 3
-            if title_ratio >= 0.8:
-                s += 10
-            elif title_ratio >= 0.5:
-                s += 5
-            scored.append({
-                'title': p.get('title', '') or p.get('url', ''),
-                'url': p.get('url', ''),
-                'snippet': (p.get('description', '') or '')[:200],
-                'domain': p.get('domain', ''),
-                'score': round(s, 2),
-                'engine': 'kumo',
-                'category': 'general',
-            })
-        scored.sort(key=lambda x: x['score'], reverse=True)
-        return scored[:3]
 
     # ── Community system: users, votes, domain reports ──
 
@@ -2853,7 +2783,7 @@ class DataManager:
         collections_count = sum(1 for c in self.data.get('collections', []) if c['creator_id'] == user_id)
         blogs_count = sum(1 for c in self.data.get('collections', []) if c['creator_id'] == user_id and c.get('post_type') == 'blog')
         pins_count = sum(len(c.get('websites', [])) for c in self.data.get('collections', []) if c['creator_id'] == user_id)
-        submissions_count = sum(1 for s in self.data.get('submitted_sites', []) if s.get('submitted_by') == user_id and s.get('crawl_status') in ('approved', 'completed'))
+        submissions_count = sum(1 for s in self.data.get('submitted_sites', []) if s.get('submitted_by') == user_id)
         reports_approved = sum(1 for r in self.data.get('domain_reports', []) if user_id in r.get('reported_by', []) and r.get('status') == 'approved')
 
         # User's collections (for card grid)
@@ -2951,42 +2881,6 @@ class KumoCrawler:
         except Exception as e:
             return None, str(e)
 
-    def crawl_page(self, url):
-        try:
-            resp = self.session.get(url, timeout=8)
-            if resp.status_code != 200:
-                return None
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            title = soup.title.get_text(strip=True) if soup.title else ''
-            desc = ''
-            meta = soup.find('meta', attrs={'name': 'description'}) or soup.find('meta', attrs={'property': 'og:description'})
-            if meta:
-                desc = meta.get('content', '')[:300]
-            text = soup.get_text(separator=' ', strip=True)[:5000]
-            return {'title': title, 'description': desc, 'text': text, 'url': url}
-        except Exception:
-            return None
-
-    def crawl_site(self, domain, sitemap_url=None):
-        result = {'domain': domain, 'pages': [], 'sitemap_url': None, 'error': None}
-        if sitemap_url:
-            urls, err = self.fetch_sitemap(sitemap_url)
-            if err:
-                result['error'] = f"Sitemap error: {err}"
-            elif urls:
-                result['sitemap_url'] = sitemap_url
-                for url in urls[:50]:
-                    page = self.crawl_page(url)
-                    if page:
-                        result['pages'].append(page)
-            else:
-                result['error'] = "No URLs found in sitemap"
-        if not result['pages']:
-            homepage = self.crawl_page(f'https://{domain}')
-            if homepage:
-                result['pages'].append(homepage)
-        return result
-
 
 kumo = KumoCrawler()
 
@@ -3030,7 +2924,7 @@ class ImprovedSearch:
         except:
             self.user_agent = type('SimpleUA',(),{'random':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36','__getitem__':lambda s,k:s.random})()
         self.executor = ThreadPoolExecutor(max_workers=8)
-        self.search_urls = ["ddg_html://text", "ddg_reddit://text", "ddg_video://text", "google://text", "brave://text"]
+        self.search_urls = ["ddg_html://text", "ddg_reddit://text", "ddg_video://text", "google://text", "brave://text", "reddit_scrape://text", "invidious://text"]
         if ddgs_available:
             self.ddgs = DDGS()
             self.search_urls.append("ddgs://text")
@@ -3884,7 +3778,7 @@ class ImprovedSearch:
             return 0
         return 0
 
-    def _rank_results(self, query, results, filter_type='general'):
+    def _rank_results(self, query, results):
         intent = SearchIntent(query)
         query_lower = query.lower().strip()
         query_intent_subtype = self._classify_query_intent(query)
@@ -3919,44 +3813,6 @@ class ImprovedSearch:
                     s += bl_penalty
 
             s = max(0, s)
-
-            # Penalize off-category results in general search
-            if filter_type == 'general':
-                if result.category == 'video':
-                    s -= 15
-                if result.category == 'discussion':
-                    s -= 5
-            if filter_type == 'shopping':
-                if any(d in domain for d in ['amazon.', 'bestbuy.', 'walmart.', 'newegg.', 'target.', 'etsy.', 'ebay.', 'shop.', 'store.', 'costco.']):
-                    s += 30
-                if result.category == 'shopping':
-                    s += 20
-            elif filter_type == 'official':
-                if any(d in domain for d in ['.org', '.gov', '.edu']) or any(d in domain for d in ['apple.com', 'microsoft.com', 'google.com', 'github.com']):
-                    s += 30
-                if result.category == 'official':
-                    s += 20
-            elif filter_type == 'tutorials':
-                title_lower = result.title.lower() if result.title else ''
-                if result.category == 'tutorial' or 'tutorial' in title_lower or 'guide' in title_lower or 'how to' in title_lower or 'documentation' in title_lower or 'docs' in title_lower:
-                    s += 25
-                if any(d in title_lower for d in ['learn', 'course', 'example', 'reference']):
-                    s += 15
-            elif filter_type == 'discussions':
-                url_lower = result.url.lower() if result.url else ''
-                title_lower = result.title.lower() if result.title else ''
-                if 'reddit' in url_lower or 'forum' in url_lower or 'stackexchange' in url_lower or 'discuss' in url_lower or result.category == 'discussion' or result.category == 'social':
-                    s += 30
-                if any(d in title_lower for d in ['vs', 'review', 'recommend', 'opinion', 'best', 'thoughts', 'experience']):
-                    s += 15
-            elif filter_type == 'academic':
-                url_lower = result.url.lower() if result.url else ''
-                title_lower = result.title.lower() if result.title else ''
-                snippet_lower = result.snippet.lower() if result.snippet else ''
-                if '.edu' in url_lower or '.ac.' in url_lower or result.category == 'academic':
-                    s += 40
-                if any(d in title_lower + snippet_lower for d in ['research', 'study', 'paper', 'journal', 'scholar', 'arxiv', 'pubmed', 'doi', 'citation', 'peer review']):
-                    s += 30
 
             result.score = round(s, 2)
             # Exact-match amplifier: if the exact query appears in the title, boost it
@@ -4181,6 +4037,87 @@ class ImprovedSearch:
             app.logger.error(f"DDG HTML search error: {e}")
             return []
 
+    def _search_reddit_scrape(self, query):
+        try:
+            resp = self.session.get(
+                'https://old.reddit.com/search',
+                params={'q': query, 'sort': 'relevance', 't': 'all'},
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'},
+                timeout=10
+            )
+            if resp.status_code != 200:
+                return []
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            results = []
+            seen = set()
+            for post in soup.find_all('div', class_='search-result-link'):
+                if len(results) >= 5:
+                    break
+                title_el = post.find('a', class_='search-title')
+                if not title_el:
+                    continue
+                title = title_el.get_text(strip=True)[:150]
+                url = title_el.get('href', '')
+                if not title or not url or url in seen:
+                    continue
+                seen.add(url)
+                body_el = post.find('div', class_='search-result-body')
+                snippet = body_el.get_text(strip=True)[:300] if body_el else ''
+                sub_el = post.find('a', class_='search-subreddit-link')
+                subreddit = sub_el.get_text(strip=True) if sub_el else ''
+                time_el = post.find('time')
+                date_str = time_el.get('datetime', '')[:10] if time_el else ''
+                domain = urlparse(url).netloc.lower()
+                results.append(SearchResult(
+                    title=title, url=url, snippet=snippet or subreddit,
+                    category='discussion', date=date_str, domain=domain or 'reddit.com',
+                    source='reddit'
+                ))
+            return results
+        except Exception as e:
+            app.logger.error(f"Reddit scrape error: {e}")
+            return []
+
+    def _search_invidious(self, query):
+        try:
+            resp = self.session.get(
+                'https://inv.nadeko.net/search',
+                params={'q': query},
+                headers=self._get_headers(),
+                timeout=10
+            )
+            if resp.status_code != 200:
+                return []
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            results = []
+            seen = set()
+            for card in soup.find_all('div', class_='video-card-row'):
+                if len(results) >= 5:
+                    break
+                a = card.find('a', href=lambda h: h and '/watch?v=' in h)
+                if not a:
+                    continue
+                href = a.get('href', '')
+                vid_id = href.split('v=')[-1].split('&')[0] if 'v=' in href else ''
+                if not vid_id or vid_id in seen:
+                    continue
+                seen.add(vid_id)
+                title_p = a.find('p')
+                title = title_p.get_text(strip=True)[:150] if title_p else ''
+                if not title:
+                    continue
+                url = f'https://www.youtube.com/watch?v={vid_id}'
+                thumb = f'https://i.ytimg.com/vi/{vid_id}/hqdefault.jpg'
+                results.append(SearchResult(
+                    title=title, url=url, snippet='',
+                    category='video', domain='youtube.com', source='invidious',
+                    favicon=thumb
+                ))
+            return results
+        except Exception as e:
+            app.logger.error(f"Invidious search error: {e}")
+            return []
+
     def _search_single_engine(self, search_url, query, page, region=None):
         try:
             if search_url == 'ddg_html://text':
@@ -4217,6 +4154,10 @@ class ImprovedSearch:
                 return _search_google(query, max_results=5)
             elif search_url == 'brave://text':
                 return _search_brave(query, max_results=10)
+            elif search_url == 'reddit_scrape://text':
+                return self._search_reddit_scrape(query)
+            elif search_url == 'invidious://text':
+                return self._search_invidious(query)
             elif 'duckduckgo' in search_url:
                 all_results = []
                 offsets = [0]
@@ -4377,24 +4318,9 @@ class ImprovedSearch:
                 results = self._search_fallback(query, region)
 
             if results:
-                ranked_results = self._rank_results(query, results, filter_type)
+                ranked_results = self._rank_results(query, results)
                 all_results = [result.to_dict() for result in ranked_results]
                 self._save_to_cache(cache_key, all_results)
-
-        # Merge locally indexed crawled pages into results (only if not enough web results)
-        if data_manager and len(all_results) < per_page:
-            try:
-                crawled = data_manager.search_crawled_pages(query)
-                existing_urls = {r.get('url', '') for r in all_results}
-                for c in crawled:
-                    if c.get('url', '') in existing_urls:
-                        continue
-                    c['type'] = 'regular'
-                    c['favicon'] = f"https://www.google.com/s2/favicons?domain={c.get('domain', '')}"
-                    c['display_url'] = c['url'][:60] + '...' if len(c['url']) > 60 else c['url']
-                    all_results.append(c)
-            except Exception as e:
-                app.logger.error(f"Crawled pages search error: {e}")
 
         if not all_results:
             return [], 0
@@ -5910,9 +5836,7 @@ def search():
     _search_start = time.time()
     query = request.args.get('q', '').strip()
     page = max(1, int(request.args.get('page', 1)))
-    filter_type = request.args.get('filter', 'general')
-    if filter_type not in ('general', 'shopping', 'official', 'tutorials', 'discussions', 'academic'):
-        filter_type = 'general'
+    filter_type = 'general'
     region = request.args.get('region', session.get('region', ''))
 
     announcement = data_manager.get_announcement()
@@ -5926,7 +5850,7 @@ def search():
             user_stats = profile
             user_weather_location = (profile or {}).get('weather_location', '') or ''
             preferences = data_manager.get_user_preferences(session['user_id'])
-        return render_template('search.html', announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=user_country, country_name=COUNTRY_NAMES.get(user_country), user_stat=user_stats, daily_remaining=UNLIMITED, quota_limit=UNLIMITED, user_weather_location=user_weather_location, board_results=None, result_groups=[], ai_summary_enabled=True, preferences=preferences)
+        return render_template('search.html', announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=user_country, country_name=COUNTRY_NAMES.get(user_country), user_stat=user_stats, daily_remaining=UNLIMITED, quota_limit=UNLIMITED, user_weather_location=user_weather_location, board_results=None, result_groups=[], ai_summary_enabled=True, preferences=preferences, video_results=[], image_results=[])
 
     bang_url = get_bang_redirect(query)
     if bang_url:
@@ -5961,6 +5885,8 @@ def search():
             result_groups=[],
             ai_summary_enabled=True,
             preferences={},
+            video_results=[],
+            image_results=[],
         )
 
     notice = detect_notice(query)
@@ -5984,6 +5910,8 @@ def search():
             user_stat=user_stats,
             board_results=None,
             preferences={},
+            video_results=[],
+            image_results=[],
         )
 
     try:
@@ -5993,12 +5921,13 @@ def search():
 
         # ── Parallelize supplementary fetches alongside result processing ──
         from concurrent.futures import ThreadPoolExecutor as _SupPool, Future
-        _sup_pool = _SupPool(max_workers=4)
+        _sup_pool = _SupPool(max_workers=5)
 
         _f_videos = _sup_pool.submit(search_engine.search_videos, query)
         _f_info_box = _sup_pool.submit(get_info_box, query, results)
         _f_shopping = _sup_pool.submit(get_shopping_panel, query, results)
         _f_collections = _sup_pool.submit(data_manager.search_collections, query)
+        _f_images = _sup_pool.submit(search_engine.search_images, query)
 
         verified_info = data_manager.get_verified_info(query.lower().strip(), user_country)
         if not verified_info and results:
@@ -6041,33 +5970,63 @@ def search():
                 'items': news_candidates[:8]
             }
 
-        result_groups = search_engine._group_results_by_domain(results)
-
         video_results = []
         info_box_data = None
         shopping_products = None
         board_results = None
+        image_results = []
         try:
-            video_results = _f_videos.result(timeout=1.5)
-            if video_results:
-                video_results = video_results[:2]
+            video_results = _f_videos.result(timeout=4.0) or []
         except Exception:
             video_results = []
         try:
-            info_box_data = _f_info_box.result(timeout=1.5)
+            info_box_data = _f_info_box.result(timeout=4.0)
         except Exception:
             info_box_data = None
         try:
-            shopping_products = _f_shopping.result(timeout=1.5)
+            shopping_products = _f_shopping.result(timeout=4.0)
         except Exception:
             shopping_products = None
         try:
-            board_results = _f_collections.result(timeout=1.5)
+            board_results = _f_collections.result(timeout=4.0)
             if board_results:
                 for b in board_results:
                     b['_type'] = 'board'
         except Exception:
             board_results = None
+        try:
+            image_results = _f_images.result(timeout=5.0) or []
+        except Exception:
+            image_results = []
+
+        # Interleave video results into main results (BEFORE grouping so videos appear in domain groups)
+        if video_results:
+            from urllib.parse import urlparse
+            inserted = 0
+            for vi, v in enumerate(video_results):
+                v_domain = urlparse(v.get('url', '')).netloc if v.get('url') else 'youtube.com'
+                v_domain = re.sub(r'^www\.', '', v_domain)
+                vr = {
+                    'title': v.get('title', ''),
+                    'url': v.get('url', ''),
+                    'snippet': v.get('description', '') or '',
+                    'category': 'video',
+                    'domain': v_domain,
+                    'favicon': '',
+                    'date': v.get('published', '') or v.get('duration', ''),
+                    'display_url': v.get('url', ''),
+                    'source': 'video',
+                    'thumbnail': v.get('thumbnail', ''),
+                    'duration': v.get('duration', ''),
+                    'channel': v.get('channel', ''),
+                    'views': v.get('views', ''),
+                    'video_id': v.get('id', ''),
+                }
+                pos = min(3 + inserted * 2, len(results))
+                results.insert(pos, vr)
+                inserted += 1
+
+        result_groups = search_engine._group_results_by_domain(results)
 
         ai_summary_enabled = True
         if user_id:
@@ -6079,7 +6038,6 @@ def search():
         resp = make_response(render_template(
             'search.html',
             query=query,
-            filter=filter_type,
             results=results,
             result_groups=result_groups,
             board_results=board_results,
@@ -6101,6 +6059,7 @@ def search():
             ai_summary_enabled=ai_summary_enabled,
             preferences={},
             video_results=video_results,
+            image_results=image_results,
         ))
         _sup_pool.shutdown(wait=False)
         return resp
@@ -6790,20 +6749,6 @@ def admin_remove_verified():
         data_manager.remove_verified_site(domain)
     return redirect(url_for('admin_dashboard'))
 
-@app.route('/admin/crawl/<domain>', methods=['POST'])
-def admin_crawl_site(domain):
-    if not session.get('admin_logged_in'):
-        return redirect(url_for('admin_login'))
-    site = data_manager.get_submitted_site(domain)
-    if site:
-        data_manager.update_crawl_status(domain, 'crawling')
-        result = kumo.crawl_site(domain, site.get('sitemap_url'))
-        pages = len(result.get('pages', []))
-        data_manager.update_crawl_status(domain, 'completed' if pages > 0 else 'failed', pages)
-        if result.get('pages'):
-            data_manager.store_crawled_pages(domain, result['pages'])
-    return redirect(url_for('admin_dashboard'))
-
 @app.route('/admin/announcement', methods=['POST'])
 def admin_announcement():
     if not session.get('admin_logged_in'):
@@ -6846,12 +6791,7 @@ def submit_site():
             if existing is None:
                 error = f"{domain} has already been submitted."
             else:
-                result = kumo.crawl_site(domain, sitemap_url)
-                pages = len(result.get('pages', []))
-                data_manager.update_crawl_status(domain, 'completed' if pages > 0 else 'failed', pages)
-                if result.get('pages'):
-                    data_manager.store_crawled_pages(domain, result['pages'])
-                success = f"Crawled {domain} — found {pages} page(s)."
+                success = f"{domain} submitted successfully."
     return render_template('submit.html', error=error, success=success, announcement=data_manager.get_announcement())
 
 @app.route('/dashboard')
@@ -7697,36 +7637,8 @@ def api_user_preferences():
 
 # ── Premium ──
 
-def weekly_crawl_job():
-    with app.app_context():
-        sites = data_manager.get_submitted_sites()
-        if not sites:
-            app.logger.info("Weekly crawl: no submitted sites to crawl")
-            return
-        for site in sites:
-            domain = site['domain']
-            try:
-                data_manager.update_crawl_status(domain, 'crawling')
-                result = kumo.crawl_site(domain, site.get('sitemap_url'))
-                pages = len(result.get('pages', []))
-                data_manager.update_crawl_status(domain, 'completed' if pages > 0 else 'failed', pages)
-                if result.get('pages'):
-                    data_manager.store_crawled_pages(domain, result['pages'])
-                app.logger.info(f"Weekly crawl: {domain} — {pages} page(s)")
-            except Exception as e:
-                app.logger.error(f"Weekly crawl error for {domain}: {e}")
-                data_manager.update_crawl_status(domain, 'failed')
-
-
 if scheduler_available:
     scheduler = BackgroundScheduler()
-    scheduler.add_job(
-        weekly_crawl_job,
-        IntervalTrigger(weeks=1),
-        id='weekly_kumo_crawl',
-        name='Crawl all submitted sites weekly',
-        replace_existing=True,
-    )
     scheduler.add_job(
         _create_backup,
         IntervalTrigger(hours=24),
@@ -7735,7 +7647,7 @@ if scheduler_available:
         replace_existing=True,
     )
     scheduler.start()
-    app.logger.info("Scheduler started: weekly crawl + daily backup")
+    app.logger.info("Scheduler started: daily backup")
 
 
 if __name__ == "__main__":

@@ -39,7 +39,7 @@
   </div>
 
   <h1>Submit your website</h1>
-  <p>Give us your sitemap URL and we'll crawl your site with <strong>Kumo Crawler</strong>. Your pages get indexed immediately — no need to wait for Google. We require both a <code>sitemap.xml</code> and a <code>robots.txt</code> to proceed.</p>
+  <p>Submit your website to be considered for our search index. We require both a <code>sitemap.xml</code> and a <code>robots.txt</code> to proceed.</p>
 
   {% if success %}<div class="s-ok">{{ success }}</div>{% endif %}
   {% if error %}<div class="s-err">{{ error }}</div>{% endif %}
@@ -53,7 +53,7 @@
     <div class="s-field">
       <label for="name">Business / Website name</label>
       <input type="text" name="name" id="name" placeholder="Your Business Name">
-      <div class="s-info">Optional — shown in crawl reports</div>
+      <div class="s-info">Optional</div>
     </div>
     <div class="s-field">
       <label for="description">Short description</label>
@@ -84,19 +84,19 @@
     <div class="s-field">
       <label for="sitemap_url">Sitemap URL<span class="s-req">*</span></label>
       <input type="url" name="sitemap_url" id="sitemap_url" placeholder="https://example.com/sitemap.xml" required>
-      <div class="s-info">Your XML sitemap URL so Kumo Crawler knows which pages to index</div>
+      <div class="s-info">Your XML sitemap URL so we know which pages to index</div>
     </div>
     <div class="s-field">
       <label for="robots_txt_url">Robots.txt URL<span class="s-req">*</span></label>
       <input type="url" name="robots_txt_url" id="robots_txt_url" placeholder="https://example.com/robots.txt" required>
-      <div class="s-info">We check robots.txt before crawling to respect your crawl rules</div>
+      <div class="s-info">We use robots.txt to understand your site's access rules</div>
     </div>
     <div class="s-field">
       <label for="email">Your email<span class="s-req">*</span></label>
       <input type="email" name="email" id="email" placeholder="you@example.com" required>
-      <div class="s-info">For crawl status notifications</div>
+      <div class="s-info">For status notifications about your submission</div>
     </div>
-    <button type="submit" class="s-btn">Submit &amp; Crawl</button>
+    <button type="submit" class="s-btn">Submit</button>
   </form>
 </div>
 </body>

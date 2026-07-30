@@ -64,16 +64,14 @@
   </div>
 
   <div class="d-section">
-    <h2>Submitted sites (Kumo Crawler)</h2>
+    <h2>Submitted Sites</h2>
     {% if submitted_sites %}
     <table>
-      <tr><th>Domain</th><th>Name</th><th>Status</th><th>Pages</th><th>Submitted</th></tr>
+      <tr><th>Domain</th><th>Name</th><th>Submitted</th></tr>
       {% for s in submitted_sites %}
       <tr>
         <td>{{ s.domain }}</td>
         <td>{{ s.name if s.name else '—' }}</td>
-        <td><span class="d-badge {{ s.crawl_status }}">{{ s.crawl_status }}</span></td>
-        <td>{{ s.pages_crawled }}</td>
         <td>{{ s.submitted_at[:10] }}</td>
       </tr>
       {% endfor %}

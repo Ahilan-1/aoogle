@@ -63,6 +63,9 @@
         .ao-loading .al-spinner{width:22px;height:22px;border:2.5px solid var(--border);border-top-color:var(--link);border-radius:50%;animation:al-spin .7s linear infinite;margin-bottom:18px}
         .ao-loading .al-logo{font-size:20px;font-weight:600;letter-spacing:-.3px;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',sans-serif;margin-bottom:2px}
         .ao-loading .al-text{font-size:13px;color:var(--text3);font-weight:400;transition:opacity .3s;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
+        .ao-loading .al-sub{font-size:12px;color:var(--text4);font-weight:400;margin-top:4px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif;transition:opacity .3s;height:16px}
+        .ao-loading .al-bar-wrap{width:160px;height:3px;background:var(--border2);border-radius:2px;margin-top:18px;overflow:hidden}
+        .ao-loading .al-bar{height:100%;width:0%;background:linear-gradient(90deg,var(--link),#4fc3f7);border-radius:2px;transition:width .3s ease}
         @keyframes al-pulse{0%,100%{opacity:1}50%{opacity:.4}}
         .iceberg .result-url{color:#4fc3f7}
         .iceberg .result-title{color:#81d4fa}
@@ -130,11 +133,7 @@
         .results-nav a.active{color:var(--nav-active);border-bottom-color:var(--nav-active)}
         .results-nav a:hover{color:var(--nav-active);text-decoration:none}
 
-        .filter-bar{max-width:1100px;margin:0 auto;padding:8px 0 4px;display:flex;align-items:center;gap:8px;font-size:13px}
-        .filter-bar .fl-label{color:var(--text3)}
-        .filter-select{appearance:none;-webkit-appearance:none;background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:6px 28px 6px 12px;font-size:13px;color:var(--text);cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2370757a' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center}
-        .filter-select:hover{border-color:var(--cm)}.filter-select:focus{outline:none;border-color:var(--cm)}
-        .filter-count{font-size:12px;color:var(--text3);margin-left:auto}
+        .filter-bar{max-width:1100px;margin:0 auto;padding:4px 0 4px;display:flex;align-items:center;justify-content:flex-end;font-size:13px}
 
         .results-layout{max-width:1100px;margin:0 auto;padding:12px 16px 60px;display:flex;gap:32px}
         .results-main{flex:1;min-width:0}
@@ -269,10 +268,7 @@
             .results-header .mini-logo{font-size:20px}
             .results-header .rs-input{height:36px;font-size:13px;padding:0 12px;border-radius:20px}
             .results-nav a{padding:8px 10px 6px;font-size:12px}
-            .filter-bar{padding:4px 10px 2px;gap:4px}
-            .filter-select{font-size:12px;padding:4px 22px 4px 8px;max-width:130px}
-            .fl-label{display:none}
-            .filter-count{font-size:11px}
+            .filter-bar{padding:2px 10px 2px}
             .rc-title{font-size:16px}
             .rc-snip{font-size:13px}
             .results-layout{padding:10px 12px 40px}
@@ -295,10 +291,13 @@
             .glogo{font-size:36px}
             .homepage{padding:24px 12px}
             .homepage .search-box{height:44px;font-size:15px}
+            .rc-modern{padding:8px 6px;margin-bottom:12px}
             .rc-bread{font-size:11px}
             .rc-title{font-size:14px}
-            .rc-snip{font-size:12px}
+            .rc-snip{font-size:12px;margin-top:4px}
+            .rc-acts .rc-save{width:24px;height:24px}
             .pagination a{padding:6px 10px;font-size:12px}
+            .domain-group-children{padding-left:8px;margin-left:6px;border-left-width:2px}
         }
         @media(hover:none){
             .rc-modern:active{background:var(--hover-bg);border-color:var(--border2)}
@@ -657,7 +656,7 @@
         @keyframes ais-blink{50%{opacity:0}}
 
         /* ── Search result cards ── */
-        .rc-modern{margin-bottom:26px;padding:12px 14px;border-radius:10px;border:1px solid transparent;transition:background .12s,border-color .12s}
+        .rc-modern{margin-bottom:20px;padding:12px 14px;border-radius:10px;border:1px solid transparent;transition:background .12s,border-color .12s}
         .rc-modern:hover{background:var(--hover-bg);border-color:var(--border2)}
         .rc-row{display:flex;align-items:flex-start;gap:8px}
         .rc-body{flex:1;min-width:0}
@@ -684,17 +683,14 @@
         .rc-report-opt{padding:8px 14px;cursor:pointer;font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px}
         .rc-report-opt:hover{background:var(--hover-bg)}
 
-        /* ── Domain Group (nested results) ── */
-        .domain-group{margin-bottom:26px;padding-bottom:2px}
+        /* ── Domain Group (Reddit-style nested results) ── */
+        .domain-group{margin-bottom:22px;padding-bottom:2px}
         .domain-group .rc-modern{margin-bottom:0}
-        .domain-group .rc-modern + .rc-modern{margin-top:18px;padding-top:18px;border-top:1px solid var(--border2)}
-        .domain-group-children{display:none;padding-left:0;margin-top:0}
-        .domain-group-children.open{display:block}
-        .domain-group-toggle{display:inline-flex;align-items:center;gap:4px;margin-top:10px;padding:5px 12px;border:1px solid var(--border);border-radius:16px;background:var(--bg2);color:var(--text3);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;user-select:none}
-        .domain-group-toggle:hover{background:var(--hover-bg);border-color:var(--text3);color:var(--text)}
-        .domain-group-toggle svg{width:14px;height:14px;fill:currentColor;transition:transform .2s}
-        .domain-group-toggle.open svg{transform:rotate(180deg)}
-        .domain-group-count{background:var(--bg3);color:var(--text3);padding:1px 6px;border-radius:8px;font-size:11px;font-weight:600}
+        .domain-group-children{padding-left:18px;margin:2px 0 0 18px;border-left:2px solid var(--border3)}
+        .domain-group .rc-modern.rc-child{position:relative;margin-bottom:0}
+        .domain-group .rc-modern.rc-child + .rc-modern.rc-child{margin-top:0;border-top:1px solid var(--border2)}
+        .domain-group-toggle{display:none}
+        .domain-group-count{display:none}
 
         /* ── Pin Modal (high-tech) ── */
         .pin-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.65);z-index:2000;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
@@ -772,15 +768,111 @@
         .vid-meta .vid-dot::before{content:'\00B7'}
         @media(max-width:640px){.vid-card{flex:0 0 280px}}
 
+        /* ── Inline Image Grid ── */
+        .img-sec{margin-bottom:28px;padding-bottom:4px}
+        .img-head{display:flex;align-items:center;gap:8px;margin-bottom:14px;color:var(--text2);font-size:14px;font-weight:600;letter-spacing:.2px}
+        .img-head svg{width:16px;height:16px}
+        .img-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding-bottom:4px}
+        .img-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;text-decoration:none;transition:border-color .15s}
+        .img-card:hover{border-color:var(--text4);box-shadow:0 2px 8px var(--shadow2);transform:translateY(-1px)}
+        .img-thumb{width:100%;aspect-ratio:4/3;background:var(--border2);overflow:hidden;display:flex;align-items:center;justify-content:center}
+        .img-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+        .img-ph{display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:var(--text4)}
+        .img-info{padding:8px 10px 10px;display:flex;flex-direction:column;gap:2px}
+        .img-title{font-size:12px;font-weight:500;color:var(--text);line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+        .img-src{font-size:10px;color:var(--text4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        @media(max-width:1100px){.img-row{grid-template-columns:repeat(3,1fr)}}
+        @media(max-width:640px){.img-row{grid-template-columns:repeat(2,1fr);gap:8px}}
+        @media(max-width:400px){.img-row{grid-template-columns:repeat(2,1fr);gap:6px}}
+
         @media(max-width:640px){
+            .rc-modern{padding:10px 8px;margin-bottom:16px}
             .rc-save{opacity:1}
             .rc-title{font-size:16px}
+            .rc-bread{font-size:12px}
+            .rc-snip{font-size:13px;line-height:1.5}
+            .domain-group{margin-bottom:16px}
+            .domain-group-children{padding-left:12px;margin-left:10px}
+            .domain-group .rc-modern.rc-child{padding-left:4px}
             .ais-btn{font-size:11px;padding:3px 10px}
             .ais-btn svg{width:12px;height:12px}
             .ais-title{font-size:18px}
             .ais-sh{font-size:14px}
             .ais-list li{font-size:13px}
             .ais-intro{font-size:14px}
+            .iv-content{flex-direction:column;padding:8px}
+            .iv-image-wrap{max-height:50vh}
+            .iv-info{padding:8px 0}
+            .vv-iframe{height:200px}
+        }
+
+        /* ── Image Lightbox ── */
+        .img-viewer{display:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:5000;background:rgba(0,0,0,0.92);align-items:center;justify-content:center;backdrop-filter:blur(8px);opacity:0;transition:opacity .3s ease}
+        .img-viewer.open{display:flex;opacity:1}
+        .img-viewer .iv-close{position:absolute;top:20px;right:24px;width:44px;height:44px;border:none;background:rgba(255,255,255,.1);border-radius:50%;color:#fff;font-size:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.2s;z-index:10}
+        .img-viewer .iv-close:hover{background:rgba(255,255,255,.2);transform:rotate(90deg)}
+        .img-viewer .iv-content{display:flex;flex-direction:column;align-items:center;max-width:90vw;max-height:90vh;animation:iv-in .35s ease-out}
+        @keyframes iv-in{from{opacity:0;transform:scale(.92) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
+        .img-viewer .iv-image-wrap{display:flex;align-items:center;justify-content:center;max-height:65vh;max-width:90vw}
+        .img-viewer .iv-image-wrap img{max-width:100%;max-height:65vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.5)}
+        .img-viewer .iv-info{width:100%;padding:12px 0 4px;text-align:center}
+        .img-viewer .iv-title{font-size:15px;font-weight:500;color:#fff;margin-bottom:4px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80vw}
+        .img-viewer .iv-meta{font-size:12px;color:rgba(255,255,255,.5);display:flex;align-items:center;justify-content:center;gap:12px}
+        .img-viewer .iv-meta a{color:rgba(255,255,255,.6);text-decoration:none}
+        .img-viewer .iv-meta a:hover{color:#fff;text-decoration:underline}
+        .img-viewer .iv-related{width:100%;margin-top:8px;padding-top:10px;border-top:1px solid rgba(255,255,255,.1)}
+        .img-viewer .iv-related-label{font-size:11px;color:rgba(255,255,255,.4);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+        .img-viewer .iv-rel-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+        .img-viewer .iv-rel-item{flex-shrink:0;width:80px;cursor:pointer;border-radius:6px;overflow:hidden;opacity:.7;transition:opacity .2s,transform .2s;border:2px solid transparent}
+        .img-viewer .iv-rel-item:hover{opacity:1;transform:scale(1.05)}
+        .img-viewer .iv-rel-item.active{border-color:#fff;opacity:1}
+        .img-viewer .iv-rel-item img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+        .iv-nav{position:absolute;top:50%;transform:translateY(-50%);width:48px;height:48px;border:none;background:rgba(255,255,255,.08);border-radius:50%;color:#fff;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.2s;z-index:5}
+        .iv-nav:hover{background:rgba(255,255,255,.18)}
+        .iv-nav-prev{left:16px}
+        .iv-nav-next{right:16px}
+        @media(max-width:640px){
+            .iv-nav{width:36px;height:36px;font-size:16px}
+            .iv-nav-prev{left:6px}
+            .iv-nav-next{right:6px}
+        }
+
+        /* ── Video preview in search results ── */
+        .rc-video-preview{margin:8px 0 6px;border-radius:8px;overflow:hidden;background:var(--bg3);border:1px solid var(--border2);max-width:400px}
+        .rc-video-preview .rc-vp-thumb{position:relative;width:100%;aspect-ratio:16/9;cursor:pointer;overflow:hidden}
+        .rc-video-preview .rc-vp-thumb img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .3s}
+        .rc-video-preview .rc-vp-thumb:hover img{transform:scale(1.03)}
+        .rc-video-preview .rc-vp-thumb::after{content:'▶';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:44px;height:44px;background:rgba(0,0,0,.7);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;transition:.2s;opacity:.9}
+        .rc-video-preview .rc-vp-thumb:hover::after{background:rgba(255,0,0,.8);transform:translate(-50%,-50%) scale(1.05)}
+        .rc-video-preview .rc-vp-dur{position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,.82);color:#fff;padding:1px 7px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:.3px}
+        .rc-video-preview .rc-vp-info{padding:4px 10px 8px;display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text3)}
+        .rc-video-preview .rc-vp-ch{font-weight:500;color:var(--text2)}
+        .rc-video-preview .rc-vp-views{color:var(--text4);margin-left:auto}
+
+        /* ── Video Viewer ── */
+        .vid-viewer{display:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:5000;background:rgba(0,0,0,0.92);align-items:center;justify-content:center;backdrop-filter:blur(8px);opacity:0;transition:opacity .3s ease}
+        .vid-viewer.open{display:flex;opacity:1}
+        .vid-viewer .vv-close{position:absolute;top:20px;right:24px;width:44px;height:44px;border:none;background:rgba(255,255,255,.1);border-radius:50%;color:#fff;font-size:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.2s;z-index:10}
+        .vid-viewer .vv-close:hover{background:rgba(255,255,255,.2);transform:rotate(90deg)}
+        .vid-viewer .vv-content{display:flex;flex-direction:column;max-width:800px;width:90vw;max-height:90vh;animation:iv-in .35s ease-out}
+        .vid-viewer .vv-iframe{width:100%;aspect-ratio:16/9;border-radius:12px;border:none;background:#000;box-shadow:0 8px 40px rgba(0,0,0,.5)}
+        .vid-viewer .vv-info{padding:14px 0 4px}
+        .vid-viewer .vv-title{font-size:17px;font-weight:600;color:#fff;line-height:1.3;margin-bottom:6px}
+        .vid-viewer .vv-meta{font-size:13px;color:rgba(255,255,255,.5);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+        .vid-viewer .vv-meta .vv-channel{color:rgba(255,255,255,.7);font-weight:500}
+        .vid-viewer .vv-meta a{color:rgba(255,255,255,.6)}
+        .vid-viewer .vv-meta a:hover{color:#fff}
+        .vid-viewer .vv-related{width:100%;margin-top:6px;padding-top:10px;border-top:1px solid rgba(255,255,255,.1)}
+        .vid-viewer .vv-related-label{font-size:11px;color:rgba(255,255,255,.4);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+        .vid-viewer .vv-rel-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+        .vid-viewer .vv-rel-item{flex-shrink:0;width:180px;cursor:pointer;border-radius:8px;overflow:hidden;opacity:.7;transition:opacity .2s,transform .2s}
+        .vid-viewer .vv-rel-item:hover{opacity:1;transform:scale(1.03)}
+        .vid-viewer .vv-rel-item .vv-rel-thumb{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:var(--bg3)}
+        .vid-viewer .vv-rel-item .vv-rel-title{font-size:11px;color:rgba(255,255,255,.8);padding:6px 4px 2px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .vid-viewer .vv-rel-item .vv-rel-meta{font-size:10px;color:rgba(255,255,255,.4);padding:0 4px 4px}
+        @media(max-width:640px){
+            .vid-viewer .vv-content{width:98vw}
+            .vid-viewer .vv-rel-item{width:140px}
         }
     </style>
 </head>
@@ -790,6 +882,8 @@
         <div class="al-spinner"></div>
         <div class="al-logo">arlong</div>
         <div class="al-text" id="al-text">Searching the web</div>
+        <div class="al-sub" id="al-sub"></div>
+        <div class="al-bar-wrap"><div class="al-bar" id="al-progress"></div></div>
     </div>
     <div class="al-intro" id="al-intro">
         <div class="al-i-logo">arlong</div>
@@ -802,42 +896,61 @@
 
     <script>
         var LOADING_PHRASES=[
-            "We run basic servers so we are slow, please don't mind",
-            "Yep we found it but wait...",
-            "Loading... (our hamsters are on a coffee break)",
-            "Your search is very important to us (we promise)",
-            "Fetching results from the cloud... it's foggy today",
-            "Counting to three... 1, 2, ...",
-            "Still searching (the web is quite big you know)",
-            "Booting up the mainframe... just kidding, it's a Raspberry Pi",
-            "Patience is a virtue... or so we're told",
-            "Almost there... (no really, this time for real)",
-            "We'd tell you a joke but we're still loading",
-            "Our hamsters are running as fast as they can",
-            "Loading... this is the exciting part",
-            "Searching... (we hope you find what you're looking for)",
-            "Gathering results from the interwebs",
-            "Please wait while we pretend to be busy",
-            "Your results are being packaged with care",
-            "We're on it (literally, we're sitting on the server)"
+            ["We run basic servers so we are slow, please don't mind","...but at least we're honest about it"],
+            ["Searching the web...","the web is quite big, you know"],
+            ["Our hamsters are on a coffee break","...they'll be back in a sec"],
+            ["Your search is very important to us","(we promise, pinky swear)"],
+            ["Fetching results from the cloud","it's a bit foggy up there today"],
+            ["Counting to three...","1, 2, ... we lost count"],
+            ["Booting up the mainframe","just kidding, it's a Raspberry Pi"],
+            ["Patience is a virtue","...or so we're told"],
+            ["Almost there...","no really, this time for real"],
+            ["We'd tell you a joke","but we're still loading"],
+            ["Our hamsters are running","as fast as they can"],
+            ["Gathering results from the interwebs","...with a butterfly net"],
+            ["Results are being packaged with care","fragile: contains knowledge"],
+            ["We're on it","(literally, we're sitting on the server)"],
+            ["Consulting the digital oracle","...the omens are favorable"],
+            ["Rounding up the usual results","...they're a wild bunch"],
+            ["Reticulating splines","(old SimCity reference, sorry)"],
+            ["Polishing the pixels","making things pretty just for you"],
+            ["Waking up the search gnomes","they're not morning people"],
+            ["Searching at the speed of dial-up","(we upgraded from smoke signals)"]
         ];
-        var LOADING_TIMER=null,LOADING_PINDEX=0,LOADING_EL=null,TEXT_EL=null;
+        var LOADING_TIMER=null,LOADING_PINDEX=0,LOADING_EL=null,TEXT_EL=null,SUB_EL=null,PBAR_EL=null;
+        var LOADING_START=0;
         function startLoading(){
             LOADING_EL=document.getElementById('ao-loading');
             TEXT_EL=document.getElementById('al-text');
+            SUB_EL=document.getElementById('al-sub');
+            PBAR_EL=document.getElementById('al-progress');
             if(!LOADING_EL)return;
             LOADING_EL.classList.add('show');
+            LOADING_START=Date.now();
             LOADING_PINDEX=0;
-            if(TEXT_EL)TEXT_EL.textContent=LOADING_PHRASES[0];
+            if(TEXT_EL)TEXT_EL.textContent=LOADING_PHRASES[0][0];
+            if(SUB_EL)SUB_EL.textContent=LOADING_PHRASES[0][1];
+            if(PBAR_EL)PBAR_EL.style.width='0%';
             clearInterval(LOADING_TIMER);
             LOADING_TIMER=setInterval(function(){
                 LOADING_PINDEX=(LOADING_PINDEX+1)%LOADING_PHRASES.length;
-                if(TEXT_EL)TEXT_EL.textContent=LOADING_PHRASES[LOADING_PINDEX];
-            },600);
+                if(TEXT_EL)TEXT_EL.textContent=LOADING_PHRASES[LOADING_PINDEX][0];
+                if(SUB_EL)SUB_EL.textContent=LOADING_PHRASES[LOADING_PINDEX][1];
+                if(PBAR_EL){
+                    var elapsed=Date.now()-LOADING_START;
+                    var pct=Math.min(95,elapsed/30);
+                    PBAR_EL.style.width=pct+'%';
+                }
+            },800);
         }
         function stopLoading(){
             clearInterval(LOADING_TIMER);
             LOADING_TIMER=null;
+            if(PBAR_EL)PBAR_EL.style.width='100%';
+            setTimeout(function(){
+                var lf=document.getElementById('ao-loading');
+                if(lf)lf.classList.remove('show');
+            },300);
         }
         function delayedSubmit(form){
             if(!form||form._submitting)return false;
@@ -882,7 +995,7 @@
             return new TextDecoder().decode(pt);
         }
 
-        function renderResultCard(r){
+        function renderResultCard(r, extraClass){
             var domain=r.domain||'';
             var url=r.url||'#';
             var title=r.title||'';
@@ -890,14 +1003,16 @@
             var favicon=r.favicon||'';
             var date=r.date||'';
             var category=r.category||'general';
+            var source=r.source||'';
             var isVideo=category==='videos'||category==='video';
             var du=r.display_url||url;
             var pathRaw=du.split('://')[1]||du;
             var pathClean=pathRaw.split('/').slice(1).join('/');
             if(pathClean.length>40) pathClean=pathClean.slice(0,40)+'...';
             var domainClean=domain||((url.split('/')[2]||'').replace('www.',''));
+            var extra=extraClass?' '+extraClass:'';
 
-            var html='<div class="rc-modern" data-url="'+url.replace(/"/g,'&quot;')+'" data-title="'+title.replace(/"/g,'&quot;')+'" data-category="'+category+'">'+
+            var html='<div class="rc-modern'+extra+'" data-url="'+url.replace(/"/g,'&quot;')+'" data-title="'+title.replace(/"/g,'&quot;')+'" data-category="'+category+'">'+
                 '<div class="rc-row"><div class="rc-body">'+
                 '<div class="rc-title-line">'+
                 '<a href="'+url+'" class="rc-title" target="_blank">'+title+'</a>'+
@@ -910,7 +1025,6 @@
                 (favicon?'<img src="'+favicon+'" alt="" class="rc-fav" onerror="this.style.display=\'none\'">':'')+
                 '<span class="rc-dom">'+domainClean+'</span>'+
                 (pathClean?'<span class="rc-sep">&#x203A;</span><span class="rc-path">'+pathClean+'</span>':'')+
-                (isVideo?'<span class="rc-badge vid">Video</span>':'')+
                 (date?'<span class="rc-date">'+date+'</span>':'')+
                 '</div>'+
                 '<div class="rc-snip">'+snippet+'</div>'+
@@ -937,7 +1051,7 @@
                 if(hasSiblings){
                     html+='<div class="domain-group-children">';
                     group.results.slice(1).forEach(function(child){
-                        html+=renderResultCard(child);
+                        html+=renderResultCard(child, 'rc-child');
                     });
                     html+='</div></div>';
                 }
@@ -1261,18 +1375,7 @@
             <a href="/videos?q={{ query }}">Videos</a>
             <a href="/docs" style="margin-left:auto">API</a>
         </div>
-        <div class="filter-bar">
-            <span class="fl-label">Filter:</span>
-            <select class="filter-select" id="filter-select" onchange="applyFilter(this.value)">
-                <option value="all">All results</option>
-                <option value="shopping">Shopping</option>
-                <option value="official">Official</option>
-                <option value="tutorials">Tutorials</option>
-                <option value="discussions">Discussions</option>
-                <option value="academic">Academic</option>
-                <option value="news">News</option>
-            </select>
-            <span class="filter-count" id="filter-count"></span>
+        <div class="filter-bar" style="padding:4px 0 4px;display:flex;align-items:center;justify-content:flex-end">
             {% if (ai_summary_enabled is defined and not ai_summary_enabled) %}
             {# AI Summary disabled by user preference — button hidden #}
             {% elif quota_exceeded is defined and quota_exceeded %}
@@ -1411,7 +1514,7 @@
                     </div>
                 </div>
                 {% endif %}
-                {% set ns = namespace(disc=[], rcount=0, ddone=false, vdone=false) %}
+                {% set ns = namespace(disc=[], rcount=0, ddone=false, vdone=false, idone=false) %}
                 {% for result in results %}
                     {% set is_disc = result.category == 'discussions' or result.category == 'discussion' or 'reddit' in result.url or 'forum' in result.url or 'stackexchange' in result.url %}
                     {% if is_disc %}
@@ -1450,24 +1553,28 @@
                                     <span class="rc-sep">&#x203A;</span>
                                     <span class="rc-path">{{ path_clean[:40] }}{% if path_clean|length > 40 %}...{% endif %}</span>
                                     {% endif %}
-                                    {% if is_video %}<span class="rc-badge vid">Video</span>{% endif %}
                                     {% if result.date %}<span class="rc-date">{{ result.date }}</span>{% endif %}
                                 </div>
-                                <div class="rc-snip">{{ result.snippet }}</div>
-                                {% if has_siblings %}
-                                <button class="domain-group-toggle" onclick="toggleDomainGroup(this)">
-                                    <svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
-                                    More from {{ group.domain }}
-                                    <span class="domain-group-count">{{ group.results|length - 1 }}</span>
-                                </button>
+                                {% if is_video and result.thumbnail %}
+                                <div class="rc-video-preview">
+                                    <div class="rc-vp-thumb" onclick="openVidViewerFromResult(this)">
+                                        <img src="{{ result.thumbnail }}" alt="" loading="lazy">
+                                        {% if result.duration %}<span class="rc-vp-dur">{{ result.duration }}</span>{% endif %}
+                                    </div>
+                                    <div class="rc-vp-info">
+                                        {% if result.channel %}<span class="rc-vp-ch">{{ result.channel }}</span>{% endif %}
+                                        {% if result.views %}<span class="rc-vp-views">{{ result.views }}</span>{% endif %}
+                                    </div>
+                                </div>
                                 {% endif %}
+                                <div class="rc-snip">{{ result.snippet }}</div>
                             </div>
                         </div>
                     </div>
                     {% if has_siblings %}
                     <div class="domain-group-children">
                         {% for child in group.results[1:] %}
-                        <div class="rc-modern" data-url="{{ child.url }}" data-title="{{ child.title }}" data-category="{{ child.category or 'general' }}">
+                        <div class="rc-modern rc-child" data-url="{{ child.url }}" data-title="{{ child.title }}" data-category="{{ child.category or 'general' }}">
                             <div class="rc-row">
                                 <div class="rc-body">
                                     <div class="rc-title-line">
@@ -1530,28 +1637,24 @@
                     </div>
                     {% set ns.ddone = true %}
                     {% endif %}
-                    {% if ns.rcount >= 3 and video_results and not ns.vdone %}
-                    <div class="vid-sec" data-category="video">
-                        <div class="vid-head"><svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg> Videos</div>
-                        <div class="vid-row">
-                        {% for v in video_results %}
-                            <a href="{{ v.url }}" class="vid-card" target="_blank" rel="noopener">
-                                <div class="vid-thumb">
-                                    {% if v.thumbnail %}<img src="{{ v.thumbnail }}" alt="" loading="lazy">{% endif %}
-                                    {% if v.duration %}<span class="vid-dur">{{ v.duration }}</span>{% endif %}
+                    {% if ns.rcount >= 3 and image_results and not ns.idone %}
+                    <div class="img-sec" data-category="image">
+                        <div class="img-head"><svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor;opacity:.7"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg> Images</div>
+                        <div class="img-row">
+                        {% for img in image_results[:8] %}
+                            <div class="img-card" onclick="openImgViewer({{ loop.index0 }})">
+                                <div class="img-thumb">
+                            <img src="{{ img.thumbnail }}" alt="{{ img.title }}" loading="lazy" onerror="this.outerHTML='<div class=&quot;img-ph&quot;><svg viewBox=&quot;0 0 24 24&quot; width=&quot;24&quot; height=&quot;24&quot; fill=&quot;currentColor&quot;><path d=&quot;M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z&quot;/></svg></div>'">
                                 </div>
-                                <div class="vid-info">
-                                    <div class="vid-title">{{ v.title }}</div>
-                                    <div class="vid-meta">
-                                        {% if v.channel %}<span class="vid-ch">{{ v.channel }}</span>{% endif %}
-                                        {% if v.duration %}<span class="vid-dot"></span><span>{{ v.duration }}</span>{% endif %}
-                                    </div>
+                                <div class="img-info">
+                                    <div class="img-title">{{ img.title[:60] }}</div>
+                                    <div class="img-src">{{ img.source_domain }}</div>
                                 </div>
-                            </a>
+                            </div>
                         {% endfor %}
                         </div>
                     </div>
-                    {% set ns.vdone = true %}
+                    {% set ns.idone = true %}
                     {% endif %}
                     {% if has_siblings %}
                     </div>
@@ -1587,27 +1690,24 @@
                 {% set ns.ddone = true %}
                 {% endif %}
 
-                {% if video_results and not ns.vdone %}
-                <div class="vid-sec" data-category="video">
-                    <div class="vid-head"><svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg> Videos</div>
-                    <div class="vid-row">
-                    {% for v in video_results %}
-                        <a href="{{ v.url }}" class="vid-card" target="_blank" rel="noopener">
-                            <div class="vid-thumb">
-                                {% if v.thumbnail %}<img src="{{ v.thumbnail }}" alt="" loading="lazy">{% endif %}
-                                {% if v.duration %}<span class="vid-dur">{{ v.duration }}</span>{% endif %}
+                {% if image_results and not ns.idone %}
+                <div class="img-sec" data-category="image">
+                    <div class="img-head"><svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor;opacity:.7"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg> Images</div>
+                    <div class="img-row">
+                    {% for img in image_results[:8] %}
+                        <div class="img-card" onclick="openImgViewer({{ loop.index0 }})">
+                            <div class="img-thumb">
+                                <img src="{{ img.thumbnail }}" alt="{{ img.title }}" loading="lazy" onerror="this.outerHTML='<div class=&quot;img-ph&quot;><svg viewBox=&quot;0 0 24 24&quot; width=&quot;24&quot; height=&quot;24&quot; fill=&quot;currentColor&quot;><path d=&quot;M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z&quot;/></svg></div>'">
                             </div>
-                            <div class="vid-info">
-                                <div class="vid-title">{{ v.title }}</div>
-                                <div class="vid-meta">
-                                    {% if v.channel %}<span class="vid-ch">{{ v.channel }}</span>{% endif %}
-                                    {% if v.duration %}<span class="vid-dot"></span><span>{{ v.duration }}</span>{% endif %}
-                                </div>
+                            <div class="img-info">
+                                <div class="img-title">{{ img.title[:60] }}</div>
+                                <div class="img-src">{{ img.source_domain }}</div>
                             </div>
-                        </a>
+                        </div>
                     {% endfor %}
                     </div>
                 </div>
+                {% set ns.idone = true %}
                 {% endif %}
 
                 <div class="pagination">
@@ -1844,18 +1944,6 @@
             var isOpen=menu.classList.contains('show');
             document.querySelectorAll('.rc-report-menu').forEach(function(m){m.classList.remove('show')});
             if(!isOpen) menu.classList.add('show');
-        }
-        function toggleDomainGroup(btn){
-            var group=btn.closest('.domain-group');
-            if(!group)return;
-            var children=group.querySelector('.domain-group-children');
-            if(!children)return;
-            var isOpen=children.classList.toggle('open');
-            btn.classList.toggle('open',isOpen);
-            var dom=group.querySelector('.rc-dom');
-            var domainName=dom?dom.textContent:'site';
-            var n=children.querySelectorAll('.rc-modern').length;
-            btn.innerHTML='<svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg> '+(isOpen?'Less':'More')+' from '+domainName+(isOpen?'':' <span class="domain-group-count">'+n+'</span>');
         }
         document.addEventListener('click',function(e){
             if(!e.target.classList.contains('rc-dots')){
@@ -2233,38 +2321,7 @@
             });
         }
 
-        function applyFilter(val){
-            var cards = document.querySelectorAll('.rc-modern');
-            var discCards = document.querySelectorAll('.disc-c');
-            var discSec = document.querySelector('.disc-sec');
-            var count = 0;
-            cards.forEach(function(c){
-                var cat = c.getAttribute('data-category') || 'general';
-                if(val === 'all' || cat === val){
-                    c.style.display = '';
-                    count++;
-                } else {
-                    c.style.display = 'none';
-                }
-            });
-            var discCount = 0;
-            discCards.forEach(function(c){
-                var cat = c.getAttribute('data-category') || 'discussion';
-                if(val === 'all' || cat === val || (val === 'discussions' && cat === 'discussion')){
-                    c.style.display = '';
-                    discCount++;
-                } else {
-                    c.style.display = 'none';
-                }
-            });
-            if(discSec){
-                discSec.style.display = discCount > 0 ? '' : 'none';
-            }
-            count += discCount;
-            var el = document.getElementById('filter-count');
-            if(el) el.textContent = count + ' results';
-        }
-        applyFilter('all');
+        var _allCards = function(){var cards=document.querySelectorAll('.rc-modern');cards.forEach(function(c){c.style.display=''});}; _allCards();
 
         /* Hamburger toggle */
         function toggleHmMenu(){
@@ -2766,5 +2823,132 @@
     </script>
     {% endif %}
 
+<script>var _VIDEO_DATA={{ video_results | default([]) | tojson | safe }};_IMG_DATA={{ image_results | default([]) | tojson | safe }};</script>
+
+<div class="img-viewer" id="img-viewer">
+    <button class="iv-close" onclick="closeImgViewer()">&times;</button>
+    <button class="iv-nav iv-nav-prev" onclick="ivNav(-1)">&#x276E;</button>
+    <button class="iv-nav iv-nav-next" onclick="ivNav(1)">&#x276F;</button>
+    <div class="iv-content" id="iv-content">
+        <div class="iv-image-wrap"><img id="iv-full" src="" alt=""></div>
+        <div class="iv-info">
+            <div class="iv-title" id="iv-title"></div>
+            <div class="iv-meta">
+                <span id="iv-domain"></span>
+                <a id="iv-source" href="" target="_blank" rel="noopener">Open original &rarr;</a>
+            </div>
+        </div>
+        <div class="iv-related" id="iv-related">
+            <div class="iv-related-label">Related images</div>
+            <div class="iv-rel-row" id="iv-rel-row"></div>
+        </div>
+    </div>
+</div>
+
+<div class="vid-viewer" id="vid-viewer">
+    <button class="vv-close" onclick="closeVidViewer()">&times;</button>
+    <div class="vv-content" id="vv-content">
+        <iframe class="vv-iframe" id="vv-iframe" src="" allowfullscreen loading="lazy"></iframe>
+        <div class="vv-info">
+            <div class="vv-title" id="vv-title"></div>
+            <div class="vv-meta" id="vv-meta"></div>
+        </div>
+        <div class="vv-related" id="vv-related">
+            <div class="vv-related-label">Related videos</div>
+            <div class="vv-rel-row" id="vv-rel-row"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+var _ivData=[],_ivIdx=0;
+function openImgViewer(idx){
+    if(!_IMG_DATA||!_IMG_DATA.length)return;
+    _ivData=_IMG_DATA;_ivIdx=idx;
+    var v=document.getElementById('img-viewer');
+    var d=_IMG_DATA[idx];
+    document.getElementById('iv-full').src=d.source_url||d.thumbnail;
+    document.getElementById('iv-title').textContent=d.title||'';
+    document.getElementById('iv-domain').textContent=d.source_domain||'';
+    document.getElementById('iv-source').href=d.source_url||'#';
+    var r=document.getElementById('iv-rel-row');r.innerHTML='';
+    _IMG_DATA.forEach(function(img,i){
+        var el=document.createElement('div');
+        el.className='iv-rel-item'+(i===idx?' active':'');
+        el.innerHTML='<img src="'+(img.thumbnail||img.source_url)+'" alt="" loading="lazy">';
+        el.onclick=function(){openImgViewer(i)};
+        r.appendChild(el);
+    });
+    v.classList.add('open');
+    document.body.style.overflow='hidden';
+}
+function closeImgViewer(){
+    document.getElementById('img-viewer').classList.remove('open');
+    document.body.style.overflow='';
+}
+function ivNav(dir){
+    var n=_ivIdx+dir;
+    if(n<0)n=_IMG_DATA.length-1;
+    if(n>=_IMG_DATA.length)n=0;
+    if(_IMG_DATA.length>0)openImgViewer(n);
+}
+document.addEventListener('keydown',function(e){
+    if(document.getElementById('img-viewer').classList.contains('open')){
+        if(e.key==='Escape')closeImgViewer();
+        if(e.key==='ArrowLeft')ivNav(-1);
+        if(e.key==='ArrowRight')ivNav(1);
+    }
+    if(document.getElementById('vid-viewer').classList.contains('open')){
+        if(e.key==='Escape')closeVidViewer();
+    }
+});
+document.getElementById('img-viewer').addEventListener('click',function(e){
+    if(e.target===this)closeImgViewer();
+});
+document.getElementById('vid-viewer').addEventListener('click',function(e){
+    if(e.target===this)closeVidViewer();
+});
+
+var _vvData=[],_vvIdx=0;
+function openVidViewer(idx){
+    if(!_VIDEO_DATA||!_VIDEO_DATA.length)return;
+    _vvData=_VIDEO_DATA;_vvIdx=idx;
+    var v=document.getElementById('vid-viewer');
+    var d=_VIDEO_DATA[idx];
+    var embedUrl=d.id?'https://www.youtube.com/embed/'+d.id+'?autoplay=1':d.url;
+    document.getElementById('vv-iframe').src=embedUrl;
+    document.getElementById('vv-title').textContent=d.title||'';
+    var m=document.getElementById('vv-meta');
+    m.innerHTML='';
+    if(d.channel)m.innerHTML+='<span class="vv-channel">'+d.channel+'</span>';
+    if(d.duration)m.innerHTML+='<span>'+d.duration+'</span>';
+    if(d.views)m.innerHTML+='<span>'+d.views+' views</span>';
+    if(d.url)m.innerHTML+='<a href="'+d.url+'" target="_blank" rel="noopener">Watch on YouTube &rarr;</a>';
+    var r=document.getElementById('vv-rel-row');r.innerHTML='';
+    _VIDEO_DATA.forEach(function(v2,i){
+        var el=document.createElement('div');
+        el.className='vv-rel-item';
+        el.innerHTML='<img class="vv-rel-thumb" src="'+(v2.thumbnail||'')+'" alt="" loading="lazy"><div class="vv-rel-title">'+v2.title+'</div><div class="vv-rel-meta">'+(v2.channel||'')+'</div>';
+        el.onclick=function(){openVidViewer(i)};
+        r.appendChild(el);
+    });
+    v.classList.add('open');
+    document.body.style.overflow='hidden';
+}
+function openVidViewerFromResult(el){
+    var card=el.closest('.rc-modern');
+    if(!card||!_VIDEO_DATA||!_VIDEO_DATA.length)return;
+    var url=card.getAttribute('data-url');
+    for(var i=0;i<_VIDEO_DATA.length;i++){
+        if(_VIDEO_DATA[i].url===url){openVidViewer(i);return;}
+    }
+    openVidViewer(0);
+}
+function closeVidViewer(){
+    document.getElementById('vid-viewer').classList.remove('open');
+    document.getElementById('vv-iframe').src='';
+    document.body.style.overflow='';
+}
+</script>
 </body>
 </html>
