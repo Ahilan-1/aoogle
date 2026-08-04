@@ -57,7 +57,11 @@
         .img-overlay .ov-close:hover{background:rgba(255,255,255,.2)}
         .ov-panel{display:flex;max-width:1200px;margin:0 auto;padding:60px 20px 40px;gap:40px;min-height:100vh}
         .ov-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;min-width:0}
-        .ov-main img{max-width:100%;max-height:75vh;border-radius:8px;object-fit:contain;box-shadow:0 4px 30px rgba(0,0,0,.5)}
+        .ov-img-wrap{position:relative;width:100%;display:flex;justify-content:center;align-items:flex-start;min-height:120px}
+        .ov-loading{position:absolute;top:40%;left:50%;transform:translate(-50%,-50%);width:34px;height:34px;border:3px solid rgba(255,255,255,.15);border-top-color:#fff;border-radius:50%;animation:ov-spin .7s linear infinite}
+        @keyframes ov-spin{to{transform:rotate(360deg)}}
+        .ov-img-wrap img{max-width:100%;max-height:75vh;border-radius:8px;object-fit:contain;box-shadow:0 4px 30px rgba(0,0,0,.5);opacity:0;transition:opacity .25s ease}
+        .ov-img-wrap img.loaded{opacity:1}
         .ov-title{font-size:18px;font-weight:500;color:#fff;margin-top:20px;text-align:center;line-height:1.4}
         .ov-domain{font-size:13px;color:rgba(255,255,255,.5);margin-top:6px}
         .ov-domain a{color:var(--link);text-decoration:none}
@@ -75,7 +79,7 @@
         @media(max-width:800px){
             .ov-panel{flex-direction:column;align-items:center;padding:50px 12px 20px;gap:20px}
             .ov-sidebar{width:100%}
-            .ov-main img{max-height:50vh}
+            .ov-img-wrap img{max-height:50vh}
         }
         @media(max-width:640px){
             .header{padding:8px 12px 0}
@@ -130,7 +134,7 @@
         {% if images %}
             <div class="images-grid" id="images-grid">
                 {% for img in images %}
-                    <div class="image-card" data-idx="{{ loop.index0 }}" data-src="{{ img.source_url }}" data-thumb="{{ img.thumbnail }}" data-title="{{ img.title | e }}" data-domain="{{ img.source_domain }}">
+                    <div class="image-card" data-idx="{{ loop.index0 }}" data-src="{{ img.source_url }}" data-thumb="{{ img.thumbnail }}" data-full="{{ img.full_url or img.thumbnail }}" data-title="{{ img.title | e }}" data-domain="{{ img.source_domain }}">
                         <img src="{{ img.thumbnail }}" alt="{{ img.title }}" loading="lazy">
                         <div class="info">
                             <div class="title">{{ img.title }}</div>
@@ -148,7 +152,10 @@
         <button class="ov-close" id="ov-close">&times;</button>
         <div class="ov-panel">
             <div class="ov-main">
-                <img id="ov-img" src="" alt="">
+                <div class="ov-img-wrap">
+                    <div class="ov-loading" id="ov-loading"></div>
+                    <img id="ov-img" src="" alt="">
+                </div>
                 <div class="ov-title" id="ov-title"></div>
                 <div class="ov-domain" id="ov-domain"></div>
                 <a class="ov-visit" id="ov-visit" href="" target="_blank" rel="noopener">Visit page</a>
@@ -187,16 +194,25 @@
 
         var overlay=document.getElementById('img-overlay');
         var ovImg=document.getElementById('ov-img');
+        var ovLoading=document.getElementById('ov-loading');
         var ovTitle=document.getElementById('ov-title');
         var ovDomain=document.getElementById('ov-domain');
         var ovVisit=document.getElementById('ov-visit');
         var ovSuggestions=document.getElementById('ov-suggestions');
         var allCards=document.querySelectorAll('.image-card');
 
+        function showOvImage(src){
+            ovLoading.style.display='block';
+            ovImg.style.opacity=0;
+            ovImg.onload=function(){ovLoading.style.display='none';ovImg.style.opacity=1};
+            ovImg.onerror=function(){ovImg.onerror=null;ovLoading.style.display='none';ovImg.style.opacity=1};
+            ovImg.src=src;
+        }
+
         function openOverlay(idx){
             var card=allCards[idx];
             if(!card)return;
-            ovImg.src=card.dataset.thumb;
+            showOvImage(card.dataset.full);
             ovImg.alt=card.dataset.title;
             ovTitle.textContent=card.dataset.title;
             var domain=card.dataset.domain||'';

@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, jsonify, abort, session, redirect, url_for, make_response
+from flask import Flask, render_template, request, jsonify, abort, session, redirect, url_for, make_response, send_file
+import io
 import requests
 from bs4 import BeautifulSoup
 from fake_useragent import UserAgent
@@ -252,6 +253,178 @@ if not ADMIN_PASSWORD:
     ADMIN_PASSWORD = secrets.token_hex(16)
     app.logger.warning("No ADMIN_PASSWORD set in environment. Generated random password - check logs to retrieve it.")
 AMAZON_ASSOCIATE_TAG = os.environ.get('AMAZON_ASSOCIATE_TAG', '')
+
+# ── Places (Google Places API, fallback Serper.dev) ──
+SERPER_API_KEY = os.environ.get('SERPER_API_KEY', '')
+SERPER_PLACES_URL = 'https://google.serper.dev/places'
+GOOGLE_PLACES_API_KEY = os.environ.get('GOOGLE_PLACES_API_KEY', '')
+GOOGLE_PLACES_TEXTSEARCH_URL = 'https://maps.googleapis.com/maps/api/place/textsearch/json'
+GOOGLE_PLACES_RADIUS_M = 50000
+PLACES_CACHE_TTL = 7 * 24 * 3600  # 7 days
+PLACES_CACHE_VERSION = 2  # bump to invalidate old cached places (schema changes)
+PLACES_GEO_TTL = 90 * 24 * 3600  # geocode cache: 90 days
+PLACES_RADIUS_KM = 100  # drop places farther than this from the requested location
+PLACES_MAX_RESULTS = 4  # cap shown results (also caps Place Details billing)
+PLACES_GL_DEFAULT = 'in'
+PLACES_PHOTO_URL = 'https://maps.googleapis.com/maps/api/place/photo'
+PLACES_PHOTO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'places_photos')
+PLACES_PHOTO_MAXWIDTH = 900  # largest Google photo size we fetch (billing per unique photo)
+PLACES_PHOTO_MAX = 4  # max photos kept per place
+
+_NEAR_ME_RE = re.compile(r'\b(near\s*me|nearby|around\s*me|closest\s*to\s*me|close\s*to\s*me|nearest\s+to\s+me)\b', re.IGNORECASE)
+_PLACES_LOCATION_RE = re.compile(
+    r'\b(?:near|in|around|inside|close\s+to|closest\s+to|nearest\s+to|nearby)\s+'
+    r'((?:[A-Za-z][A-Za-z\'\-]*[\s\.]?){1,6})',
+    re.IGNORECASE
+)
+_LOCATION_STOPWORDS = frozenset([
+    'me','here','us','them','there','my','our','your','this','that','these','those',
+    'the','a','an','and','or','to','for','from','with','by','at','on','in','of','is',
+    'are','where','can','i','we','you','it','get','find','looking','some','any','all',
+    'one','two','who','what','how','when','which','now','today','tonight','nowhere',
+    'area','areas','town','city','place','places','nearby','around','best','top','good',
+    'great','cheap','affordable','local','near',
+])
+_PLACES_LOCAL_WORDS = (
+    'restaurant','restaurants','cafe','cafes','coffee','coffee shop','hotel','hotels',
+    'hospital','hospitals','pharmacy','pharmacies','gas station','gym','salon','barber',
+    'barbershop','supermarket','grocery','grocery store','bakery','pizza','dental',
+    'dentist','doctor','doctors','clinic','bank','atm','movie theater','cinema','park',
+    'spa','escape room','shopping','store','stores','shop','market','school','university',
+    'library','church','temple','mosque','tourist','attraction','attractions','museum',
+    'zoo','airport','station','mall','pet store','vet','garage','mechanic','plumber',
+    'electrician','hair','nails','yoga','fitness','bar','pub','takeaway','delivery',
+    'dhaba','eateries','breakfast','brunch','lunch','dinner','thali','hostel','clinics',
+    'travel','sightseeing','places to visit','places to eat','eat out','where to eat',
+)
+# Known non-India cities/countries so bare names are NOT qualified with ", India"
+_NON_INDIA_CITIES = frozenset([
+    'new york','london','paris','dubai','singapore','toronto','sydney','melbourne',
+    'boston','chicago','los angeles','san francisco','seattle','miami','houston',
+    'dallas','atlanta','berlin','madrid','rome','amsterdam','tokyo','bangkok',
+    'kuala lumpur','jakarta','manila','hong kong','shanghai','beijing','seoul',
+    'sao paulo','cairo','lagos','nairobi','mexico city','vancouver','las vegas',
+    'austin','denver','phoenix','philadelphia','washington','barcelona','lisbon',
+    'prague','vienna','zurich','istanbul','riyadh','doha','colombo','dhaka',
+    'kathmandu','kabul','perth','auckland','wellington','oslo','stockholm',
+    'helsinki','copenhagen','moscow','warsaw','athens','munich','hamburg',
+    'manchester','edinburgh','dublin','toronto','montreal','brisbane','adelaide',
+])
+_COUNTRY_NAMES_LC = frozenset([
+    'india','usa','us','uk','england','britain','united kingdom','united states',
+    'canada','australia','france','germany','spain','italy','japan','china','brazil',
+    'russia','uae','qatar','saudi arabia','singapore','malaysia','thailand',
+    'vietnam','indonesia','philippines','pakistan','bangladesh','nepal','sri lanka',
+    'netherlands','switzerland','austria','belgium','portugal','ireland','scotland',
+    'wales','mexico','argentina','chile','colombia','peru','south africa','egypt',
+    'nigeria','kenya','new zealand','south korea','taiwan','hong kong','israel',
+    'turkey','greece','poland','sweden','norway','denmark','finland',
+])
+
+def _enrich_places_location(location, gl):
+    """Serper mis-geocodes bare city names (e.g. 'Chennai' -> Orlando, FL). When
+    running in the India region, qualify bare non-global cities with ', India'."""
+    loc = (location or '').strip()
+    if not loc:
+        return loc
+    low = loc.lower().strip()
+    if gl != 'in' or ',' in loc:
+        return loc
+    if low in _COUNTRY_NAMES_LC or low in _NON_INDIA_CITIES:
+        return loc
+    return loc + ', India'
+
+# Major Indian cities (plus _NON_INDIA_CITIES) for typo correction (e.g. "mumabi" -> "mumbai")
+_PLACES_KNOWN_CITIES = [
+    'mumbai','delhi','new delhi','bengaluru','bangalore','hyderabad','chennai','kolkata',
+    'pune','ahmedabad','jaipur','lucknow','surat','kochi','cochin','chandigarh','indore',
+    'nagpur','goa','gurugram','gurgaon','noida','visakhapatnam','vijayawada','bhopal',
+    'patna','thiruvananthapuram','trivandrum','mysuru','mysore','vadodara','coimbatore',
+    'kanpur','ludhiana','agra','varanasi','amritsar','dehradun','raipur','ranchi',
+    'guwahati','bhubaneswar','jodhpur','udaipur','shimla','panaji','pondicherry','puducherry',
+    'madurai','salem','tiruchirappalli','trichy','kollam','kannur','mangalore','belagavi',
+    'hubli','nashik','aurangabad','kolhapur','solapur','sangli','nanded','jabalpur',
+    'gwalior','meerut','faridabad','ghaziabad','gandhinagar','rajkot','bhavnagar','jamnagar',
+    'jammu','srinagar','shillong','aizawl','imphal','itanagar','kohima','agartala','gangtok',
+    'leh','port blair','kavaratti','siliguri','durgapur','asansol','howrah','cuttack','puri',
+    'bikaner','ajmer','alwar','kota','shimoga','ooty','kodaikanal','munnar','alleppey',
+    'kottayam','palakkad','thane','kalyan','dombivli','ulhasnagar','vasai','virar','borivali',
+    'juhu','andheri','bandra','dadar','worli','colaba','powai','navi mumbai','thiruvalla',
+]
+_PLACES_KNOWN_CITIES = tuple(sorted(set(_PLACES_KNOWN_CITIES) | set(_NON_INDIA_CITIES)))
+
+def _levenshtein(a, b):
+    la, lb = len(a), len(b)
+    if la < lb:
+        a, b, la, lb = b, a, lb, la
+    prev = list(range(lb + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[lb]
+
+def _correct_places_location(loc):
+    """Fix common misspellings of known cities so Serper geocodes correctly."""
+    low = (loc or '').strip().lower()
+    if not low or len(low) < 3:
+        return (loc or '').title()
+    if low in _PLACES_KNOWN_CITIES:
+        return ' '.join(w.title() for w in low.split())
+    best, best_d = None, None
+    for city in _PLACES_KNOWN_CITIES:
+        d = _levenshtein(low, city)
+        if best_d is None or d < best_d:
+            best, best_d = city, d
+    if best_d is not None and best_d <= 2:
+        return best.title()
+    return (loc or '').title()
+
+_PLACES_CATEGORY_EMOJI = [
+    (('escape','puzzle','game','arcade','toy'), '\U0001F9E9'),
+    (('restaurant','food','cafe','coffee','bakery','pizza','dhaba','thali','breakfast','brunch','dinner','takeaway','bar','pub','eatery','grill','bbq'), '\U0001F37D\U0000FE0F'),
+    (('hotel','resort','hostel','lodging','inn','stay','motel'), '\U0001F3E8'),
+    (('hospital','clinic','medical','doctor','dental','dentist','pharmacy','drug','health'), '\U0001F3E5'),
+    (('gas','petrol','fuel','charging'), '\u26FD'),
+    (('gym','fitness','yoga','workout','crossfit'), '\U0001F3CB\U0000FE0F'),
+    (('salon','barber','spa','nails','hair','beauty','tattoo'), '\U0001F487'),
+    (('grocery','supermarket','market','store','shop','mall','retail'), '\U0001F6D2'),
+    (('bank','atm','finance','credit union'), '\U0001F3E6'),
+    (('park','zoo','museum','attraction','tourist','cinema','movie','theater','theatre','amusement','adventure'), '\U0001F3A1'),
+    (('school','university','college','library','academy'), '\U0001F393'),
+    (('church','temple','mosque','synagogue','worship'), '\u26EA'),
+    (('airport','flight','aviation'), '\u2708\U0000FE0F'),
+    (('pet','vet','animal','dog'), '\U0001F43E'),
+    (('mechanic','garage','auto','car','tire','repair'), '\U0001F527'),
+    (('travel','tour','sightseeing','agency'), '\U0001F9F3'),
+]
+
+def places_category_emoji(category):
+    cat = (category or '').lower()
+    for keywords, emoji in _PLACES_CATEGORY_EMOJI:
+        if any(k in cat for k in keywords):
+            return emoji
+    return '\U0001F4CD'
+
+_PLACES_AVATAR_GRADIENTS = [
+    'linear-gradient(135deg,#4285f4,#0f63d8)',
+    'linear-gradient(135deg,#34a853,#1e8e3e)',
+    'linear-gradient(135deg,#fbbc04,#e37400)',
+    'linear-gradient(135deg,#ea4335,#c5221f)',
+    'linear-gradient(135deg,#9334e6,#7627bb)',
+    'linear-gradient(135deg,#12b5cb,#0a7d8c)',
+    'linear-gradient(135deg,#f0643b,#d23b0f)',
+    'linear-gradient(135deg,#5c6bc0,#3f51b5)',
+]
+
+def places_avatar_style(category, title):
+    seed = (category or '') + '|' + (title or '')
+    idx = int(hashlib.md5(seed.encode('utf-8')).hexdigest(), 16) % len(_PLACES_AVATAR_GRADIENTS)
+    return _PLACES_AVATAR_GRADIENTS[idx]
+
+app.jinja_env.globals['places_category_emoji'] = places_category_emoji
+app.jinja_env.globals['places_avatar_style'] = places_avatar_style
 
 # ── Resend (Email) ──
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
@@ -1861,6 +2034,54 @@ class DataManager:
             data['cached_at'] = time.time()
             data['country'] = country_code
             self.data['trending_news'][country_code] = data
+            _save_json(self.data)
+
+    def get_places_cache(self, key):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            cached = self.data.get('places_cache', {}).get(key)
+            if cached:
+                now = time.time()
+                if now - cached.get('cached_at', 0) < PLACES_CACHE_TTL:
+                    return cached
+            return None
+
+    def set_places_cache(self, key, places):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('places_cache', {})
+            self.data['places_cache'][key] = {
+                'cached_at': time.time(),
+                'places': places,
+            }
+            _save_json(self.data)
+
+    def get_geo_cache(self, location):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            cached = self.data.get('geo_cache', {}).get(location)
+            if cached:
+                now = time.time()
+                if now - cached.get('cached_at', 0) < PLACES_GEO_TTL:
+                    return cached.get('coords')
+            return None
+
+    def set_geo_cache(self, location, coords):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('geo_cache', {})
+            self.data['geo_cache'][location] = {
+                'cached_at': time.time(),
+                'coords': coords,
+            }
             _save_json(self.data)
 
     def flush(self):
@@ -4373,7 +4594,7 @@ class ImprovedSearch:
                     if query_keywords and not self._is_relevant_image(title, src, query):
                         app.logger.debug(f"Skipping irrelevant image: {title}")
                         continue
-                    images.append({'thumbnail': thumb, 'title': title or dom or query, 'source_url': src, 'source_domain': dom or 'image'})
+                    images.append({'thumbnail': thumb, 'full_url': img_url, 'title': title or dom or query, 'source_url': src, 'source_domain': dom or 'image'})
                     if len(images) >= 50:
                         break
             except Exception as e:
@@ -4402,7 +4623,7 @@ class ImprovedSearch:
                             turl = (d.get('turl', '') or '').split('&pid')[0] or murl
                             if query_keywords and not self._is_relevant_image(title, purl, query):
                                 continue
-                            images.append({'thumbnail': turl, 'title': title[:100] or dom or query, 'source_url': purl or '#', 'source_domain': dom or 'image'})
+                            images.append({'thumbnail': turl, 'full_url': murl, 'title': title[:100] or dom or query, 'source_url': purl or '#', 'source_domain': dom or 'image'})
                             if len(images) >= 50:
                                 break
                         except:
@@ -4436,7 +4657,7 @@ class ImprovedSearch:
                                 dom = urlparse(src).netloc if src != '#' else ''
                                 if query_keywords and not self._is_relevant_image(title, src, query):
                                     continue
-                                images.append({'thumbnail': thumb, 'title': title or dom or query, 'source_url': src, 'source_domain': dom or 'image'})
+                                images.append({'thumbnail': thumb, 'full_url': img_url, 'title': title or dom or query, 'source_url': src, 'source_domain': dom or 'image'})
                                 if len(images) >= 50:
                                     break
                             except:
@@ -5716,6 +5937,425 @@ search_stats = SearchStats()
 # Initialize search engine
 search_engine = ImprovedSearch()
 
+# ── Places helpers (Serper.dev) ──
+
+def _clean_places_query(q):
+    """Strip 'near me'-style phrases and tidy whitespace/punctuation."""
+    if not q:
+        return ''
+    q = _NEAR_ME_RE.sub(' ', q)
+    return re.sub(r'\s+', ' ', q).strip(' ,-')
+
+def _find_city_in_query(query):
+    """Return the longest known city name appearing anywhere in the query
+    (case-insensitive), e.g. 'best malls mumbai' -> 'mumbai'."""
+    low = (query or '').lower()
+    best = None
+    for city in _PLACES_KNOWN_CITIES:
+        if city in low and (best is None or len(city) > len(best)):
+            best = city
+    return best
+
+def extract_places_location(query):
+    """Return (clean_query, location_titlecase) when a query mentions a location,
+    e.g. 'best escape room near chennai', 'restaurants in new york' or
+    'best malls mumbai' (city anywhere)."""
+    if not query:
+        return None, None
+    for m in _PLACES_LOCATION_RE.finditer(query):
+        raw = m.group(1).strip()
+        words = re.split(r'[\s\.]+', raw)
+        while words and words[-1].lower() in _LOCATION_STOPWORDS:
+            words.pop()
+        while words and words[0].lower() in _LOCATION_STOPWORDS:
+            words.pop(0)
+        if not words:
+            continue
+        loc = ' '.join(words).strip()
+        if not loc or loc.lower() in _LOCATION_STOPWORDS or len(loc) < 2:
+            continue
+        clean = query[:m.start()] + query[m.end():]
+        clean = _clean_places_query(clean)
+        return (clean or None), _correct_places_location(loc)
+    city = _find_city_in_query(query)
+    if city:
+        clean = re.sub(r'\b' + re.escape(city) + r'\b', ' ', query, flags=re.IGNORECASE)
+        clean = _clean_places_query(clean)
+        return (clean or None), city.title()
+    return None, None
+
+def has_places_intent(query):
+    """True for local-business queries (escape rooms, restaurants, hotels, ...)."""
+    if not query:
+        return False
+    q = query.lower().strip()
+    if _NEAR_ME_RE.search(q):
+        return True
+    clean, loc = extract_places_location(query)
+    if loc:
+        return any(w in q for w in _PLACES_LOCAL_WORDS)
+    return any(w in q for w in _PLACES_LOCAL_WORDS)
+
+def _haversine_km(lat1, lon1, lat2, lon2):
+    from math import asin, cos, radians, sin, sqrt
+    r = 6371.0
+    dlat, dlon = radians(lat2 - lat1), radians(lon2 - lon1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+    return 2 * r * asin(sqrt(a))
+
+def _geocode_location(location):
+    """Geocode a location once via Nominatim, cached in data.json."""
+    cached = data_manager.get_geo_cache(location)
+    if cached:
+        return cached
+    try:
+        resp = requests.get(
+            'https://nominatim.openstreetmap.org/search',
+            params={'q': location, 'format': 'jsonv2', 'limit': 1, 'accept-language': 'en'},
+            headers={'User-Agent': 'aoogle-search/1.0 (local search engine)'},
+            timeout=8,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        app.logger.warning(f"Places geocode error for {location!r}: {e}")
+        return None
+    if data and 'lat' in data[0] and 'lon' in data[0]:
+        coords = (float(data[0]['lat']), float(data[0]['lon']))
+        data_manager.set_geo_cache(location, coords)
+        return coords
+    return None
+
+def _filter_places_by_distance(places, lat, lng, radius_km=PLACES_RADIUS_KM):
+    """Drop places farther than radius_km from the target. Places without
+    coordinates are kept only when nothing else survives (fail-open)."""
+    kept = []
+    missing = []
+    for p in places:
+        try:
+            pl, pn = float(p.get('latitude')), float(p.get('longitude'))
+        except (TypeError, ValueError):
+            missing.append(p)
+            continue
+        if _haversine_km(lat, lng, pl, pn) <= radius_km:
+            kept.append(p)
+    if kept:
+        return kept
+    return places if missing else []
+
+_GOOGLE_TYPE_LABELS = {
+    'shopping_mall': 'Shopping mall', 'restaurant': 'Restaurant', 'cafe': 'Cafe',
+    'bakery': 'Bakery', 'hotel': 'Hotel', 'hospital': 'Hospital', 'pharmacy': 'Pharmacy',
+    'gas_station': 'Gas station', 'gym': 'Gym', 'spa': 'Spa', 'beauty_salon': 'Beauty salon',
+    'barber_shop': 'Barber shop', 'supermarket': 'Supermarket',
+    'grocery_or_supermarket': 'Supermarket', 'movie_theater': 'Movie theater',
+    'museum': 'Museum', 'park': 'Park', 'zoo': 'Zoo', 'bank': 'Bank', 'atm': 'ATM',
+    'school': 'School', 'university': 'University', 'library': 'Library',
+    'place_of_worship': 'Place of worship', 'airport': 'Airport',
+    'train_station': 'Train station', 'bus_station': 'Bus station',
+    'clothing_store': 'Clothing store', 'electronics_store': 'Electronics store',
+    'department_store': 'Department store', 'furniture_store': 'Furniture store',
+    'home_goods_store': 'Home goods store', 'jewelry_store': 'Jewelry store',
+    'shoe_store': 'Shoe store', 'store': 'Store', 'meal_takeaway': 'Takeaway',
+    'food': 'Food', 'bar': 'Bar', 'night_club': 'Night club', 'dentist': 'Dentist',
+    'doctor': 'Doctor', 'health': 'Health', 'pet_store': 'Pet store',
+    'veterinary_care': 'Veterinary care', 'car_repair': 'Car repair',
+    'car_dealer': 'Car dealer', 'parking': 'Parking', 'amusement_park': 'Amusement park',
+    'bowling_alley': 'Bowling alley', 'casino': 'Casino', 'stadium': 'Stadium',
+    'swimming_pool': 'Swimming pool', 'lodging': 'Lodging',
+    'travel_agency': 'Travel agency', 'tourist_attraction': 'Tourist attraction',
+    'point_of_interest': 'Place of interest', 'establishment': 'Place',
+    'neighborhood': 'Area', 'locality': 'Area', 'political': 'Area',
+    'premise': 'Place', 'subpremise': 'Place', 'route': 'Road',
+    'street_address': 'Address', 'postal_code': 'Postal code',
+    'general_contractor': 'Contractor', 'hardware_store': 'Hardware store',
+    'laundry': 'Laundry', 'car_wash': 'Car wash', 'florist': 'Florist',
+    'book_store': 'Book store', 'convenience_store': 'Convenience store',
+    'liquor_store': 'Liquor store', 'plumber': 'Plumber', 'electrician': 'Electrician',
+    'moving_company': 'Moving company', 'real_estate_agency': 'Real estate agency',
+    'hair_care': 'Hair care', 'lawyer': 'Lawyer', 'accounting': 'Accounting',
+    'local_government_office': 'Government office', 'cemetery': 'Cemetery',
+    'church': 'Church', 'hindu_temple': 'Temple', 'mosque': 'Mosque',
+    'synagogue': 'Synagogue',
+}
+
+_PREFERRED_GOOGLE_TYPES = [
+    'shopping_mall','restaurant','cafe','bakery','bar','night_club','meal_takeaway',
+    'hotel','lodging','hospital','pharmacy','dentist','doctor','gas_station','gym',
+    'spa','beauty_salon','barber_shop','movie_theater','museum','zoo','park',
+    'amusement_park','stadium','supermarket','grocery_or_supermarket','department_store',
+    'clothing_store','electronics_store','furniture_store','home_goods_store',
+    'jewelry_store','shoe_store','convenience_store','liquor_store','book_store',
+    'hardware_store','florist','pet_store','veterinary_care','bank','atm','car_dealer',
+    'car_repair','car_wash','parking','school','university','library','place_of_worship',
+    'church','hindu_temple','mosque','synagogue','airport','train_station','bus_station',
+    'tourist_attraction','travel_agency','laundry','hair_care','plumber','electrician',
+    'lawyer','accounting',
+]
+
+def _google_type_label(types):
+    ts = set(types or [])
+    for t in _PREFERRED_GOOGLE_TYPES:
+        if t in ts:
+            return _GOOGLE_TYPE_LABELS[t]
+    for t in types or []:
+        if t in _GOOGLE_TYPE_LABELS:
+            return _GOOGLE_TYPE_LABELS[t]
+    if types:
+        return types[0].replace('_', ' ').title()
+    return ''
+
+def _fetch_google_place_details(place_id):
+    """One Place Details call (billed) to enrich a place with phone/website/hours/
+    photos/reviews. Returns the raw result dict, or {}."""
+    if not place_id:
+        return {}
+    try:
+        resp = requests.get(
+            'https://maps.googleapis.com/maps/api/place/details/json',
+            params={
+                'place_id': place_id,
+                'fields': 'formatted_phone_number,international_phone_number,website,'
+                          'opening_hours,price_level,url,business_status,photos,reviews',
+                'language': 'en',
+                'key': GOOGLE_PLACES_API_KEY,
+            },
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        app.logger.error(f"Google Place Details error: {e}")
+        return {}
+    if data.get('status') != 'OK':
+        return {}
+    return data.get('result') or {}
+
+def _fetch_google_places(query, lat, lng):
+    """Query Google Places Text Search (billed). Returns up to
+    PLACES_MAX_RESULTS card dicts enriched with Place Details, or None."""
+    if not GOOGLE_PLACES_API_KEY:
+        return None
+    params = {
+        'query': query,
+        'location': f'{lat},{lng}',
+        'radius': GOOGLE_PLACES_RADIUS_M,
+        'language': 'en',
+        'key': GOOGLE_PLACES_API_KEY,
+    }
+    try:
+        resp = requests.get(GOOGLE_PLACES_TEXTSEARCH_URL, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        app.logger.error(f"Google Places error: {e}")
+        return None
+    if data.get('status') != 'OK':
+        return None
+    places = []
+    for i, r in enumerate((data.get('results') or [])[:PLACES_MAX_RESULTS], 1):
+        loc = (r.get('geometry') or {}).get('location') or {}
+        p = {
+            'title': r.get('name'),
+            'address': r.get('formatted_address'),
+            'rating': r.get('rating'),
+            'ratingCount': r.get('user_ratings_total'),
+            'category': _google_type_label(r.get('types') or []),
+            'position': i,
+            'latitude': loc.get('lat'),
+            'longitude': loc.get('lng'),
+            'cid': '',
+            'place_id': r.get('place_id'),
+            'openNow': (r.get('opening_hours') or {}).get('open_now'),
+            'website': None,
+            'phoneNumber': None,
+            'priceLevel': None,
+            'openHours': [],
+            'gmapsUrl': None,
+            'businessStatus': None,
+            'photos': [],
+            'reviews': [],
+        }
+        det = _fetch_google_place_details(r.get('place_id'))
+        if det:
+            oh = det.get('opening_hours') or {}
+            p['phoneNumber'] = det.get('formatted_phone_number') or p.get('phoneNumber')
+            p['website'] = det.get('website') or p.get('website')
+            if oh.get('open_now') is not None:
+                p['openNow'] = oh.get('open_now')
+            p['openHours'] = oh.get('weekday_text') or []
+            p['priceLevel'] = det.get('price_level')
+            p['gmapsUrl'] = det.get('url') or p.get('gmapsUrl')
+            p['businessStatus'] = det.get('business_status')
+            p['photos'] = _google_photo_refs(det.get('photos') or [])
+            p['reviews'] = _google_review_summary(det.get('reviews') or [])
+        places.append(p)
+    return places or None
+
+def _google_photo_refs(raw_photos):
+    """Keep a small list of photo references. Each photo is fetched once via the
+    server-side proxy, so Google Place Photo billing stays bounded."""
+    refs = []
+    seen = set()
+    for ph in raw_photos[:PLACES_PHOTO_MAX]:
+        ref = ph.get('photo_reference') or ''
+        if not ref or ref in seen:
+            continue
+        seen.add(ref)
+        refs.append({
+            'ref': ref,
+            'width': ph.get('width'),
+            'height': ph.get('height'),
+            'attribution': (ph.get('html_attributions') or [''])[0],
+        })
+    return refs
+
+def _google_review_summary(raw_reviews):
+    out = []
+    for rv in raw_reviews[:5]:
+        out.append({
+            'author': rv.get('author_name'),
+            'rating': rv.get('rating'),
+            'time': rv.get('relative_time_description'),
+            'text': (rv.get('text') or '')[:600],
+        })
+    return out
+
+def _fetch_serper_places(query, location, gl):
+    try:
+        resp = requests.post(
+            SERPER_PLACES_URL,
+            json={'q': query, 'location': location, 'gl': gl},
+            headers={'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        parsed = resp.json()
+    except Exception as e:
+        app.logger.error(f"Serper places error: {e}")
+        return None
+    raw = (parsed.get('places') or None)
+    if not raw:
+        return None
+    places = []
+    for i, r in enumerate(raw[:PLACES_MAX_RESULTS], 1):
+        img_url = r.get('imageUrl') or ''
+        thumb_url = r.get('thumbnailUrl') or ''
+        photos = []
+        if img_url:
+            photos = [{'ref': '', 'url': img_url, 'thumb': thumb_url, 'attribution': ''}]
+        places.append({
+            'title': r.get('title'),
+            'address': r.get('address'),
+            'rating': r.get('rating'),
+            'ratingCount': r.get('reviewsCount'),
+            'category': r.get('category') or r.get('eateryType') or r.get('hotelClass') or '',
+            'position': i,
+            'latitude': r.get('latitude'),
+            'longitude': r.get('longitude'),
+            'cid': r.get('cid') or '',
+            'place_id': '',
+            'openNow': None,
+            'website': r.get('website'),
+            'phoneNumber': r.get('phone'),
+            'priceLevel': None,
+            'openHours': [],
+            'gmapsUrl': r.get('link'),
+            'businessStatus': None,
+            'photos': photos,
+            'reviews': [],
+        })
+    return places or None
+
+def fetch_places(query, location, gl=None):
+    """Fetch places: Google Places API first, Serper as fallback. Results are
+    cached in data.json and filtered by distance from the requested location."""
+    gl = gl or PLACES_GL_DEFAULT
+    location = _correct_places_location(location)
+    location = _enrich_places_location(location, gl)
+    key = hashlib.md5(f"{query.lower().strip()}|{location.lower().strip()}|{gl}|v{PLACES_CACHE_VERSION}".encode()).hexdigest()
+    cached = data_manager.get_places_cache(key)
+    if cached and cached.get('places'):
+        places = cached['places']
+        geo = _geocode_location(location)
+        if geo:
+            filtered = _filter_places_by_distance(places, *geo)
+            if filtered:
+                places = filtered
+        return places[:PLACES_MAX_RESULTS], True
+    if not SERPER_API_KEY and not GOOGLE_PLACES_API_KEY:
+        return None, False
+    geo = _geocode_location(location)
+    places = None
+    if geo:
+        places = _fetch_google_places(query, geo[0], geo[1])
+    if not places:
+        places = _fetch_serper_places(query, location, gl)
+    if not places:
+        return None, False
+    data_manager.set_places_cache(key, places)
+    if geo:
+        filtered = _filter_places_by_distance(places, *geo)
+        if filtered:
+            places = filtered
+    return places[:PLACES_MAX_RESULTS], False
+
+@app.route('/api/places')
+def api_places():
+    q = (request.args.get('q') or '').strip()
+    location = (request.args.get('location') or '').strip()
+    if not q or not location:
+        return jsonify({'ok': False, 'error': 'q and location are required'}), 400
+    gl = (request.args.get('gl') or PLACES_GL_DEFAULT).strip()
+    places, cached = fetch_places(q, location, gl)
+    if not places:
+        return jsonify({'ok': False, 'error': 'No places found'}), 404
+    return jsonify({'ok': True, 'places': places, 'location': location, 'cached': cached})
+
+# ── Places photos (server-side proxy so the Google API key never reaches the client) ──
+_PLACE_PHOTO_REF_RE = re.compile(r'^[A-Za-z0-9_\-+=/]+$')
+
+def _fetch_google_place_photo(ref, maxwidth):
+    """Fetch a photo once via Google Place Photo API and cache the bytes on disk.
+    Returns (bytes, content_type) or None."""
+    try:
+        resp = requests.get(
+            PLACES_PHOTO_URL,
+            params={'photo_reference': ref, 'maxwidth': maxwidth, 'key': GOOGLE_PLACES_API_KEY},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        ctype = resp.headers.get('Content-Type', 'image/jpeg')
+        if not ctype.startswith('image/'):
+            ctype = 'image/jpeg'
+        return resp.content, ctype
+    except Exception as e:
+        app.logger.warning(f"Google Place Photo error: {e}")
+        return None
+
+@app.route('/places/photo')
+def places_photo():
+    ref = request.args.get('ref', '')
+    if not ref or not _PLACE_PHOTO_REF_RE.match(ref):
+        return ('', 404)
+    try:
+        os.makedirs(PLACES_PHOTO_DIR, exist_ok=True)
+    except OSError:
+        pass
+    digest = hashlib.md5(ref.encode()).hexdigest()
+    path = os.path.join(PLACES_PHOTO_DIR, f'{digest}.img')
+    if not os.path.isfile(path):
+        fetched = _fetch_google_place_photo(ref, PLACES_PHOTO_MAXWIDTH)
+        if not fetched:
+            return ('', 404)
+        try:
+            with open(path, 'wb') as f:
+                f.write(fetched[0])
+        except OSError as e:
+            app.logger.warning(f"Places photo cache write error: {e}")
+        return send_file(io.BytesIO(fetched[0]), mimetype=fetched[1], max_age=86400 * 30)
+    return send_file(path, max_age=86400 * 30)
+
 # ── Email Helpers ──
 WELCOME_EMAIL_HTML = """<!DOCTYPE html>
 <html>
@@ -5929,6 +6569,23 @@ def search():
         _f_collections = _sup_pool.submit(data_manager.search_collections, query)
         _f_images = _sup_pool.submit(search_engine.search_images, query)
 
+        # ── Places detection (local business queries) ──
+        places_query = None
+        places_location = None
+        places_prompt = None
+        places_results = None
+        places_cached = False
+        _f_places = None
+        if has_places_intent(query):
+            clean_q, loc = extract_places_location(query)
+            if loc:
+                places_query = (clean_q or _clean_places_query(query))[:80]
+                places_location = loc
+                _f_places = _sup_pool.submit(fetch_places, places_query, places_location)
+            else:
+                places_query = (_clean_places_query(query) or query)[:80]
+                places_prompt = places_query
+
         verified_info = data_manager.get_verified_info(query.lower().strip(), user_country)
         if not verified_info and results:
             q_parts = query.lower().strip().split()
@@ -5999,6 +6656,12 @@ def search():
         except Exception:
             image_results = []
 
+        if _f_places is not None:
+            try:
+                places_results, places_cached = _f_places.result(timeout=6.0)
+            except Exception:
+                places_results, places_cached = None, False
+
         # Interleave video results into main results (BEFORE grouping so videos appear in domain groups)
         if video_results:
             from urllib.parse import urlparse
@@ -6060,6 +6723,10 @@ def search():
             preferences={},
             video_results=video_results,
             image_results=image_results,
+            places_results=places_results,
+            places_location=places_location,
+            places_cached=places_cached,
+            places_prompt=places_prompt,
         ))
         _sup_pool.shutdown(wait=False)
         return resp
@@ -6313,6 +6980,19 @@ def api_search_supplement():
         return jsonify({'ok': True, 'results': extra})
     except Exception as e:
         app.logger.error(f"Supplement search error: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/search-images')
+def api_search_images():
+    query = request.args.get('q', '').strip()
+    if not query:
+        return jsonify({'ok': False, 'error': 'Query required'}), 400
+    try:
+        images = search_engine.search_images(query) or []
+        return jsonify({'ok': True, 'query': query, 'images': images})
+    except Exception as e:
+        app.logger.error(f"Search images error: {e}")
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 

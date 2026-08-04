@@ -14,3 +14,4 @@ test_*.py
 tmp.html
 top-1m.csv
 backups/
+places_photos/
