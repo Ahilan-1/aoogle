@@ -36,7 +36,7 @@
     </div>
     <div class="wrap">
         <h1>Privacy Policy for Arlong</h1>
-        <div class="sub">Last Updated: July 15, 2026</div>
+        <div class="sub">Last Updated: August 4, 2026</div>
 
         <h2>Introduction</h2>
         <p>Arlong ("we," "us," or "our") operates Arlong.org (the "Service"). This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our Service. Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, please do not access the Service.</p>
@@ -48,6 +48,15 @@
             <li>Cookies and tracking data</li>
         </ul>
         <p>We collect this information when you voluntarily provide it to us, when you use our Service, or through automated technologies.</p>
+
+        <h2>API Usage Data</h2>
+        <p>Our public search API is designed to be privacy-respecting. To protect the Service from abuse and to operate fairly, we retain the following limited data:</p>
+        <ul>
+            <li><strong>Tokenless requests:</strong> To enforce the 2-requests-per-hour limit, we keep a short-lived in-memory record tied to a hashed form of your IP address. It expires automatically and is never linked to a profile.</li>
+            <li><strong>API key requests:</strong> When you use an API key, we record the request count, the time of each request within the current 30-minute window, your last request time, and your total request count. This lets you see usage statistics in the <a href="/api/dashboard">API dashboard</a>.</li>
+            <li><strong>What we don't log:</strong> We do not log the text of queries made through the API, and we do not build search histories or profiles from API usage.</li>
+            <li><strong>Retention:</strong> Per-request timestamps are pruned automatically as they age out of the sliding window. Aggregate counts are retained until you revoke or regenerate your API key.</li>
+        </ul>
 
         <h2>Encrypted Search</h2>
         <p>All search queries on arlong are encrypted client-side using AES-256-GCM before being sent to our servers. This means:</p>

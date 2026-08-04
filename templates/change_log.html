@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Changelog - arlong</title>
+    <style>
+        :root{--bg:#fff;--bg2:#fafafa;--text:#1f2328;--text2:#59636e;--text3:#8b949e;--border:#d0d7de;--accent:#0969da;--accent2:#b62324;--mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace}
+        *,*::before,*::after{box-sizing:border-box}
+        body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;color:var(--text);background:var(--bg);font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased}
+        a{color:var(--accent);text-decoration:none}
+        a:hover{text-decoration:underline}
+        .top{border-bottom:1px solid var(--border);background:var(--bg)}
+        .top-inner{max-width:760px;margin:0 auto;padding:18px 24px;display:flex;align-items:center;gap:20px}
+        .brand{font-weight:700;font-size:17px;letter-spacing:-.2px;color:var(--text)}
+        .top nav{display:flex;gap:16px}
+        .top nav a{color:var(--text2);font-size:13.5px}
+        .top nav a:hover{color:var(--text);text-decoration:none}
+        .wrap{max-width:760px;margin:0 auto;padding:48px 24px 96px}
+        .page-head{margin-bottom:44px;border-bottom:1px solid var(--border);padding-bottom:28px}
+        .page-head h1{font-size:30px;font-weight:700;letter-spacing:-.4px;margin:0 0 8px}
+        .page-head p{color:var(--text2);font-size:14.5px;margin:0;max-width:560px}
+        .entry{margin-bottom:56px}
+        .entry-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+        .entry-version{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--accent);border:1px solid var(--border);border-radius:6px;padding:3px 10px;background:var(--bg2)}
+        .entry-title{font-size:20px;font-weight:700;letter-spacing:-.2px}
+        .entry-date{font-family:var(--mono);font-size:12.5px;color:var(--text3);margin-left:auto}
+        .entry-section{margin:0 0 18px}
+        .entry-section h3{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);margin:0 0 10px}
+        .entry-section ul{list-style:none;margin:0;padding:0}
+        .entry-section ul li{position:relative;padding:7px 0 7px 22px;border-bottom:1px solid #eef1f4;font-size:14.5px;color:var(--text2)}
+        .entry-section ul li:last-child{border-bottom:none}
+        .entry-section ul li::before{content:'';position:absolute;left:2px;top:15px;width:8px;height:8px;border-radius:2px}
+        .entry-section.type-new ul li::before{background:var(--accent)}
+        .entry-section.type-change ul li::before{background:#e3b341}
+        .entry-section.type-fix ul li::before{background:var(--accent2)}
+        .entry-section ul li strong{color:var(--text);font-weight:600}
+        .tag{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:600;border-radius:4px;padding:1px 7px;margin-right:6px;vertical-align:1px}
+        .tag.new{color:var(--accent);background:#ddf4ff;border:1px solid #b6e3ff}
+        .tag.change{color:#7d4e00;background:#fff8c5;border:1px solid #eed888}
+        .tag.fix{color:var(--accent2);background:#ffebe9;border:1px solid #ffc1c0}
+        .footer{max-width:760px;margin:0 auto;padding:24px;border-top:1px solid var(--border);color:var(--text3);font-size:13px;display:flex;gap:18px;flex-wrap:wrap}
+        .footer a{color:var(--text3)}
+        .footer a:hover{color:var(--text)}
+        @media(max-width:640px){.wrap{padding:32px 18px 64px}.entry-date{margin-left:0;width:100%}}
+    </style>
+</head>
+<body>
+<div class="top">
+    <div class="top-inner">
+        <a href="/" class="brand">arlong</a>
+        <nav>
+            <a href="/">Search</a>
+            <a href="/about">About</a>
+            <a href="/docs">API</a>
+            <a href="/change-log" style="color:var(--text);font-weight:600">Changelog</a>
+        </nav>
+    </div>
+</div>
+
+<div class="wrap">
+    <div class="page-head">
+        <h1>Changelog</h1>
+        <p>Concise, technical notes on what changed with each release of arlong. No fluff, no hype &mdash; just the facts.</p>
+    </div>
+
+    <div class="entry">
+        <div class="entry-head">
+            <span class="entry-version">v2.0.0</span>
+            <span class="entry-title">Full private, API keys, and the new places layer</span>
+            <span class="entry-date">2026-08-04</span>
+        </div>
+
+        <div class="entry-section type-new">
+            <h3>New</h3>
+            <ul>
+                <li><span class="tag new">NEW</span> <strong>Registered API access.</strong> Sign up, accept the Terms of Service, and get an API key granting <strong>80 requests per 30 minutes</strong> per project.</li>
+                <li><span class="tag new">NEW</span> <strong>API dashboard.</strong> Manage, regenerate, and revoke your key, and view live usage stats at <a href="/api/dashboard">/api/dashboard</a>.</li>
+                <li><span class="tag new">NEW</span> <strong>Places results.</strong> "Near me" queries now surface local businesses with ratings, hours, photos, and directions.</li>
+                <li><span class="tag new">NEW</span> <strong>Redesigned result cards.</strong> Cleaner layout, uniform borders, tighter radii, and inline nested video previews.</li>
+                <li><span class="tag new">NEW</span> <strong>Blogging.</strong> Anyone with an account can write and publish blog posts on arlong.</li>
+                <li><span class="tag new">NEW</span> <strong>Onboarding tour.</strong> New accounts get a short feature tour on their first visit.</li>
+            </ul>
+        </div>
+
+        <div class="entry-section type-change">
+            <h3>Changed</h3>
+            <ul>
+                <li><span class="tag change">CHANGE</span> <strong>Licensing: open source &rarr; "All rights reserved."</strong> arlong is now fully private and proprietary &mdash; the source code is no longer publicly accessible. Rationale: protecting the ranking algorithm and preventing infrastructure abuse of the public service.</li>
+                <li><span class="tag change">CHANGE</span> <strong>API rate limits.</strong> Tokenless access is now capped at <strong>2 requests per hour per IP</strong> (previously 125/hr). Full quota requires an API key. Requests beyond the tokenless cap return a <code>429</code> with a "Get a API KEY" response.</li>
+                <li><span class="tag change">CHANGE</span> <strong>Terms of Service &amp; Privacy Policy</strong> updated to cover API keys, usage data retention, the license change, and liability terms.</li>
+                <li><span class="tag change">CHANGE</span> <strong>Signup flow</strong> now requires accepting the Terms of Service and issues an API key automatically.</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="entry">
+        <div class="entry-head">
+            <span class="entry-version">v1.x</span>
+            <span class="entry-title">Earlier releases</span>
+            <span class="entry-date">2025 &mdash; 2026</span>
+        </div>
+        <div class="entry-section type-new">
+            <h3>Highlights</h3>
+            <ul>
+                <li><strong>Initial release</strong> &mdash; meta-search engine with multi-factor scoring, 80+ bangs, image and video search, and zero-logging architecture.</li>
+                <li><strong>Places infrastructure</strong> &mdash; Google Places and Serper-backed local business data pipeline with photo proxy and caching.</li>
+                <li><strong>Image search improvements</strong> &mdash; full-resolution viewer and refresh button.</li>
+                <li><strong>Nested video previews</strong> &mdash; inline YouTube groups with scroll-spy thumbnails, save overlay, and duration badges.</li>
+                <li><strong>Community</strong> &mdash; collections, blogs, verified businesses, and daily encrypted backups.</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="footer">
+    <a href="/">Search</a>
+    <a href="/terms-of-service">Terms of Service</a>
+    <a href="/privacy-policy">Privacy Policy</a>
+    <span style="margin-left:auto">v2.0.0</span>
+</div>
+</body>
+</html>

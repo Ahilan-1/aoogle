@@ -122,9 +122,9 @@
 
 <div class="container">
     <h1>API</h1>
-    <p class="subtitle">Free, tokenless search API for agents, CLI tools, and LLM integrations. No registration, no API key, no tracking.</p>
+    <p class="subtitle">Search API for agents, CLI tools, and LLM integrations. Try it tokenless with a small allowance, or sign up for a free API key with higher limits.</p>
 
-    <p style="font-size:13px;color:var(--text3);margin-bottom:28px">Rate limit: 125 requests per hour per IP address. This is a free shared resource — please cache results and use responsibly.</p>
+    <p style="font-size:13px;color:var(--text3);margin-bottom:28px"><strong>Rate limits:</strong> 2 requests per hour per IP without a key, or 80 requests per 30 minutes with a free API key. Get your key at <a href="/api/dashboard">/api/dashboard</a>. This is a free shared resource — please cache results and use responsibly.</p>
 
     <h2>Base URL</h2>
     <pre><span class="s">https://aoogle-production.up.railway.app</span></pre>
@@ -137,8 +137,17 @@
         <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
         <tr><td><code>q</code></td><td>string</td><td>—</td><td><strong>Required.</strong> Your search query.</td></tr>
         <tr><td><code>page</code></td><td>integer</td><td>1</td><td>Page number for pagination.</td></tr>
+        <tr><td><code>key</code></td><td>string</td><td>—</td><td>Your API key (alternative to the <code>Authorization</code> header).</td></tr>
         <tr><td><code>pretty</code></td><td>boolean</td><td>0</td><td>Set to <code>1</code> for pretty-printed JSON output.</td></tr>
     </table>
+
+    <h2>Authentication</h2>
+    <p>An API key raises your rate limit from <strong>2 requests/hour</strong> to <strong>80 requests/30 minutes</strong>. Create your free key at <a href="/api/dashboard">/api/dashboard</a> (requires an account and accepting the Terms of Service).</p>
+    <p>Pass the key in the <code>Authorization</code> header:</p>
+    <pre>curl <span class="s2">"https://aoogle-production.up.railway.app/api/search?q=python+programming"</span> \
+    <span class="o">-H</span> <span class="s2">"Authorization: Bearer al_xxxx"</span></pre>
+    <p>Or as a query parameter:</p>
+    <pre>curl <span class="s2">"https://aoogle-production.up.railway.app/api/search?q=python+programming&amp;key=al_xxxx"</span></pre>
 
     <h2>Try it</h2>
     <div class="try-section">
@@ -197,7 +206,7 @@
     <h2>Response headers</h2>
     <table>
         <tr><th>Header</th><th>Description</th></tr>
-        <tr><td><code>X-RateLimit-Remaining</code></td><td>Requests remaining in the current hour window.</td></tr>
+        <tr><td><code>X-RateLimit-Remaining</code></td><td>Requests remaining in the current window (1 hour tokenless, 30 minutes with a key).</td></tr>
         <tr><td><code>X-RateLimit-Reset</code></td><td>Seconds until the rate limit resets (present on 429 responses).</td></tr>
     </table>
 
@@ -210,13 +219,24 @@
   <span class="nl">"usage"</span>: <span class="s2">"/api/search?q=your+query"</span>
 }</pre>
 
+    <h3>401 — Invalid API key</h3>
+    <p>Returned when the key provided in the <code>Authorization</code> header or <code>key</code> parameter is invalid or revoked.</p>
+    <pre>{
+  <span class="nl">"error"</span>: <span class="s2">"Invalid API key"</span>,
+  <span class="nl">"message"</span>: <span class="s2">"The API key provided is invalid or has been revoked. Get a new key at /api/dashboard."</span>
+}</pre>
+
     <h3>429 — Rate limit exceeded</h3>
-    <p>Returned when you exceed 125 requests in an hour. The <code>retry_after</code> field tells you when to retry.</p>
+    <p>Tokenless calls are limited to <strong>2 requests per hour</strong>. Exceed that and the API asks you to sign up for a key. The <code>retry_after</code> field tells you when to retry.</p>
     <pre>{
   <span class="nl">"error"</span>: <span class="s2">"Rate limit exceeded"</span>,
-  <span class="nl">"message"</span>: <span class="s2">"Limit: 125 req/hour. Retry after 1234 seconds."</span>,
-  <span class="nl">"retry_after"</span>: <span class="mi">1234</span>
+  <span class="nl">"message"</span>: <span class="s2">"Get a API KEY"</span>,
+  <span class="nl">"code"</span>: <span class="s2">"API_KEY_REQUIRED"</span>,
+  <span class="nl">"retry_after"</span>: <span class="mi">1234</span>,
+  <span class="nl">"signup"</span>: <span class="s2">"/signup"</span>,
+  <span class="nl">"dashboard"</span>: <span class="s2">"/api/dashboard"</span>
 }</pre>
+    <p>With an API key, the limit is <strong>80 requests per 30 minutes</strong>. Exceeding it returns a <code>429</code> with <code>retry_after</code> until your window resets.</p>
 
     <h3>500 — Internal error</h3>
     <p>The search backend encountered an unexpected error. Retry after a short delay.</p>
@@ -237,7 +257,8 @@
 
 <span class="n">r</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="nf">get</span><span class="p">(</span>
     <span class="s2">"https://aoogle-production.up.railway.app/api/search"</span><span class="p">,</span>
-    <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"q"</span><span class="p">:</span> <span class="s2">"python programming"</span><span class="p">}</span>
+    <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"q"</span><span class="p">:</span> <span class="s2">"python programming"</span><span class="p">}</span><span class="s2">,</span>
+    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">"Authorization"</span><span class="p">:</span> <span class="s2">"Bearer al_xxxx"</span><span class="p">}</span>  <span class="c1"># optional: raises limit to 80/30min</span>
 <span class="p">)</span>
 <span class="n">data</span> <span class="o">=</span> <span class="n">r</span><span class="o">.</span><span class="nf">json</span><span class="p">()</span>
 <span class="k">for</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">data</span><span class="p">[</span><span class="s2">"results"</span><span class="p">][:</span><span class="mi">3</span><span class="p">]:</span>
@@ -255,7 +276,7 @@
     <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"function"</span><span class="p">,</span>
     <span class="s2">"function"</span><span class="p">:</span> <span class="p">{</span>
         <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"web_search"</span><span class="p">,</span>
-        <span class="s2">"description"</span><span class="p">:</span> <span class="s2">"Search the web. No API key required."</span><span class="p">,</span>
+        <span class="s2">"description"</span><span class="p">:</span> <span class="s2">"Search the web. Tokenless use is limited; add an API key via the key parameter for higher limits (see /docs)."</span><span class="p">,</span>
         <span class="s2">"parameters"</span><span class="p">:</span> <span class="p">{</span>
             <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"object"</span><span class="p">,</span>
             <span class="s2">"properties"</span><span class="p">:</span> <span class="p">{</span>
@@ -317,9 +338,9 @@
     <h2>Best practices</h2>
     <ul>
         <li><strong>Cache results</strong> — identical queries return the same results for one hour. Cache locally to avoid hitting the rate limit.</li>
-        <li><strong>Respect rate limits</strong> — 125 req/hour per IP. Back off and retry after the <code>retry_after</code> period on 429s.</li>
+        <li><strong>Respect rate limits</strong> — 2 req/hour tokenless, or 80 req/30 minutes with an API key. Back off and retry after the <code>retry_after</code> period on 429s.</li>
         <li><strong>Use <code>pretty=1</code></strong> during development for human-readable JSON output.</li>
-        <li><strong>No headers needed</strong> — no API key, no auth, no user-agent required.</li>
+        <li><strong>Send your key when you have one</strong> — it raises your limit 40x and counts per key instead of per IP.</li>
     </ul>
 
     <div class="hr"></div>
@@ -333,7 +354,7 @@
         <li><strong>No tracking</strong> — no cookies, no analytics, no user profiling, no query logging.</li>
     </ul>
 
-    <p style="font-size:13px;color:var(--text3);margin-top:28px">No API key required. Just send requests. If you need a higher rate limit for a legitimate open-source project, open an issue on the repository.</p>
+    <p style="font-size:13px;color:var(--text3);margin-top:28px">No key needed for a quick test — you get 2 free requests per hour per IP. Need a real allowance? Create a free API key at <a href="/api/dashboard">/api/dashboard</a>.</p>
 
     <div class="footer-links">
         <a href="/">Search</a>

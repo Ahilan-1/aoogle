@@ -259,11 +259,11 @@ SERPER_API_KEY = os.environ.get('SERPER_API_KEY', '')
 SERPER_PLACES_URL = 'https://google.serper.dev/places'
 GOOGLE_PLACES_API_KEY = os.environ.get('GOOGLE_PLACES_API_KEY', '')
 GOOGLE_PLACES_TEXTSEARCH_URL = 'https://maps.googleapis.com/maps/api/place/textsearch/json'
-GOOGLE_PLACES_RADIUS_M = 50000
+GOOGLE_PLACES_RADIUS_M = 25000
 PLACES_CACHE_TTL = 7 * 24 * 3600  # 7 days
-PLACES_CACHE_VERSION = 2  # bump to invalidate old cached places (schema changes)
+PLACES_CACHE_VERSION = 3  # bump to invalidate old cached places (schema changes)
 PLACES_GEO_TTL = 90 * 24 * 3600  # geocode cache: 90 days
-PLACES_RADIUS_KM = 100  # drop places farther than this from the requested location
+PLACES_RADIUS_KM = 40  # drop places farther than this from the requested location
 PLACES_MAX_RESULTS = 4  # cap shown results (also caps Place Details billing)
 PLACES_GL_DEFAULT = 'in'
 PLACES_PHOTO_URL = 'https://maps.googleapis.com/maps/api/place/photo'
@@ -857,6 +857,12 @@ def validate_csrf():
 
 app.jinja_env.globals['csrf_token'] = generate_csrf_token
 app.jinja_env.globals['enc_key'] = _ENCRYPTION_KEY_HEX
+
+@app.context_processor
+def inject_ui_flags():
+    # New-account onboarding is shown exactly once (first page load after signup).
+    return {'onboarding': bool(session.pop('onboarding', None))}
+
 
 @app.after_request
 def add_security_headers(response):
@@ -2290,6 +2296,120 @@ class DataManager:
             self.data['users'] = [u for u in users if u['user_id'] != user_id]
             _save_json(self.data)
             self._invalidate_user_cache()
+
+    # ── API keys (token-based access to /api/search) ──
+
+    def get_api_keys_for_user(self, user_id):
+        loaded = _load_json()
+        if loaded:
+            self.data = loaded
+        return [k for k in self.data.get('api_keys', []) if k.get('user_id') == user_id]
+
+    def get_api_key_by_value(self, key):
+        loaded = _load_json()
+        if loaded:
+            self.data = loaded
+        for k in self.data.get('api_keys', []):
+            if k.get('key') == key:
+                return k
+        return None
+
+    def create_api_key(self, user_id, username):
+        existing = self.get_api_keys_for_user(user_id)
+        if existing:
+            return existing[0], None
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('api_keys', [])
+            rec = {
+                'key': 'al_' + secrets.token_urlsafe(32),
+                'user_id': user_id,
+                'username': username,
+                'label': 'Default',
+                'created_at': datetime.now().isoformat(),
+                'last_used_at': None,
+                'requests_total': 0,
+                'requests_30m': [],
+                'status': 'active',
+            }
+            self.data['api_keys'].append(rec)
+            _save_json(self.data)
+            return rec, None
+
+    def regenerate_api_key(self, user_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for k in self.data.get('api_keys', []):
+                if k.get('user_id') == user_id:
+                    k['key'] = 'al_' + secrets.token_urlsafe(32)
+                    k['created_at'] = datetime.now().isoformat()
+                    k['last_used_at'] = None
+                    k['requests_total'] = 0
+                    k['requests_30m'] = []
+                    _save_json(self.data)
+                    return k
+            return None
+
+    def revoke_api_key(self, user_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            keys = self.data.get('api_keys', [])
+            self.data['api_keys'] = [k for k in keys if k.get('user_id') != user_id]
+            _save_json(self.data)
+            return True
+
+    def accept_tos(self, user_id, version='2026-08-04'):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for u in self.data.get('users', []):
+                if u['user_id'] == user_id:
+                    u['accepted_tos_at'] = datetime.now().isoformat()
+                    u['accepted_tos_version'] = version
+                    _save_json(self.data)
+                    return True
+            return False
+
+    def user_accepted_tos(self, user_id):
+        loaded = _load_json()
+        if loaded:
+            self.data = loaded
+        for u in self.data.get('users', []):
+            if u['user_id'] == user_id:
+                return bool(u.get('accepted_tos_at'))
+        return False
+
+    def record_api_usage(self, key, limit=None, window=None):
+        """Enforce per-key quota (80 requests / 30 minutes) and log usage."""
+        if limit is None:
+            limit = KEY_API_LIMIT
+        if window is None:
+            window = KEY_API_WINDOW
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            now = time.time()
+            for k in self.data.get('api_keys', []):
+                if k.get('key') == key:
+                    times = [t for t in k.get('requests_30m', []) if now - t < window]
+                    if len(times) >= limit:
+                        return {'allowed': False, 'remaining': 0,
+                                'retry_after': int(window - (now - times[0]))}
+                    times.append(now)
+                    k['requests_30m'] = times
+                    k['requests_total'] = k.get('requests_total', 0) + 1
+                    k['last_used_at'] = now
+                    _save_json(self.data)
+                    return {'allowed': True, 'remaining': limit - len(times), 'retry_after': 0}
+            return {'allowed': False, 'remaining': 0, 'retry_after': 0, 'error': 'invalid_key'}
 
     def report_domain(self, user_id, domain, reason):
         with self._lock:
@@ -5887,7 +6007,16 @@ class RateLimiter:
             self._store[ip] = hits
             return {"allowed": True, "remaining": self.limit - len(hits), "retry_after": 0}
 
-api_limiter = RateLimiter(limit=125, window=3600)
+# ── Public API access tiers ──
+# Tokenless access: 2 requests per hour per IP (anti-abuse floor).
+ANON_API_LIMIT = 2
+ANON_API_WINDOW = 3600
+
+# Registered projects: 80 requests per 30 minutes per API key.
+KEY_API_LIMIT = 80
+KEY_API_WINDOW = 1800
+
+anon_api_limiter = RateLimiter(limit=ANON_API_LIMIT, window=ANON_API_WINDOW)
 
 class SearchStats:
     def __init__(self):
@@ -6005,6 +6134,14 @@ def _haversine_km(lat1, lon1, lat2, lon2):
 
 def _geocode_location(location):
     """Geocode a location once via Nominatim, cached in data.json."""
+    if not location:
+        return None
+    m = re.match(r'^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$', location)
+    if m:
+        try:
+            return (float(m.group(1)), float(m.group(2)))
+        except ValueError:
+            pass
     cached = data_manager.get_geo_cache(location)
     if cached:
         return cached
@@ -6042,6 +6179,36 @@ def _filter_places_by_distance(places, lat, lng, radius_km=PLACES_RADIUS_KM):
     if kept:
         return kept
     return places if missing else []
+
+def _rank_places_by_proximity(places, lat, lng):
+    """Sort places nearest-first. Ranking is proximity-first: distance in km,
+    minus a small rating bonus so a genuinely better place a little farther out
+    can still win. Places without coordinates sink to the bottom. Also attaches
+    a distanceKm field and renumbers position for display order."""
+    if not places:
+        return places
+    ranked = []
+    missing = []
+    for p in places:
+        try:
+            pl, pn = float(p.get('latitude')), float(p.get('longitude'))
+        except (TypeError, ValueError):
+            missing.append(p)
+            continue
+        d = _haversine_km(lat, lng, pl, pn)
+        q = p.copy()
+        q['distanceKm'] = round(d, 1)
+        try:
+            rating = float(q.get('rating') or 0)
+        except (TypeError, ValueError):
+            rating = 0.0
+        q['_rankScore'] = d - min(rating, 5.0)
+        ranked.append(q)
+    ranked.sort(key=lambda x: (x['_rankScore'], x.get('position', 0)))
+    for i, p in enumerate(ranked, 1):
+        p['position'] = i
+        p.pop('_rankScore', None)
+    return ranked + missing
 
 _GOOGLE_TYPE_LABELS = {
     'shopping_mall': 'Shopping mall', 'restaurant': 'Restaurant', 'cafe': 'Cafe',
@@ -6132,8 +6299,9 @@ def _fetch_google_place_details(place_id):
     return data.get('result') or {}
 
 def _fetch_google_places(query, lat, lng):
-    """Query Google Places Text Search (billed). Returns up to
-    PLACES_MAX_RESULTS card dicts enriched with Place Details, or None."""
+    """Query Google Places Text Search (billed). Pulls up to 20 raw results,
+    ranks them nearest-first, then enriches only the closest few with Place
+    Details (so billing stays bounded). Returns card dicts or None."""
     if not GOOGLE_PLACES_API_KEY:
         return None
     params = {
@@ -6152,16 +6320,16 @@ def _fetch_google_places(query, lat, lng):
         return None
     if data.get('status') != 'OK':
         return None
-    places = []
-    for i, r in enumerate((data.get('results') or [])[:PLACES_MAX_RESULTS], 1):
+    base = []
+    for r in (data.get('results') or []):
         loc = (r.get('geometry') or {}).get('location') or {}
-        p = {
+        base.append({
             'title': r.get('name'),
             'address': r.get('formatted_address'),
             'rating': r.get('rating'),
             'ratingCount': r.get('user_ratings_total'),
             'category': _google_type_label(r.get('types') or []),
-            'position': i,
+            'position': len(base) + 1,
             'latitude': loc.get('lat'),
             'longitude': loc.get('lng'),
             'cid': '',
@@ -6175,8 +6343,14 @@ def _fetch_google_places(query, lat, lng):
             'businessStatus': None,
             'photos': [],
             'reviews': [],
-        }
-        det = _fetch_google_place_details(r.get('place_id'))
+        })
+    if not base:
+        return None
+    ranked = _rank_places_by_proximity(base, lat, lng)
+    places = []
+    for i, p in enumerate(ranked[:PLACES_MAX_RESULTS], 1):
+        p['position'] = i
+        det = _fetch_google_place_details(p.get('place_id'))
         if det:
             oh = det.get('opening_hours') or {}
             p['phoneNumber'] = det.get('formatted_phone_number') or p.get('phoneNumber')
@@ -6238,7 +6412,7 @@ def _fetch_serper_places(query, location, gl):
     if not raw:
         return None
     places = []
-    for i, r in enumerate(raw[:PLACES_MAX_RESULTS], 1):
+    for i, r in enumerate(raw[:8], 1):
         img_url = r.get('imageUrl') or ''
         thumb_url = r.get('thumbnailUrl') or ''
         photos = []
@@ -6282,6 +6456,7 @@ def fetch_places(query, location, gl=None):
             filtered = _filter_places_by_distance(places, *geo)
             if filtered:
                 places = filtered
+            places = _rank_places_by_proximity(places, *geo)
         return places[:PLACES_MAX_RESULTS], True
     if not SERPER_API_KEY and not GOOGLE_PLACES_API_KEY:
         return None, False
@@ -6293,11 +6468,12 @@ def fetch_places(query, location, gl=None):
         places = _fetch_serper_places(query, location, gl)
     if not places:
         return None, False
-    data_manager.set_places_cache(key, places)
     if geo:
         filtered = _filter_places_by_distance(places, *geo)
         if filtered:
             places = filtered
+        places = _rank_places_by_proximity(places, *geo)
+    data_manager.set_places_cache(key, places)
     return places[:PLACES_MAX_RESULTS], False
 
 @app.route('/api/places')
@@ -7008,13 +7184,51 @@ def api_search():
     ip = request.headers.get('X-Forwarded-For', request.remote_addr)
     ip = ip.split(',')[0].strip()
 
-    rate = api_limiter.check(ip)
+    # Resolve access tier: Bearer token header or key/api_key query param.
+    api_key = None
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.lower().startswith('bearer '):
+        api_key = auth_header[7:].strip()
+    if not api_key:
+        api_key = (request.args.get('key', '') or request.args.get('api_key', '') or request.args.get('apikey', '')).strip()
+
+    tier = 'token'
+    if api_key:
+        key_rec = data_manager.get_api_key_by_value(api_key)
+        if not key_rec or key_rec.get('status') != 'active':
+            resp = jsonify({
+                "error": "Invalid API key",
+                "message": "The API key provided is invalid or has been revoked. Get a new key at /api/dashboard.",
+                "docs": "/docs",
+                "dashboard": "/api/dashboard"
+            })
+            resp.status_code = 401
+            resp.headers['X-RateLimit-Remaining'] = '0'
+            resp.headers['X-RateLimit-Reset'] = '0'
+            return resp
+        tier = 'key'
+        rate = data_manager.record_api_usage(api_key)
+    else:
+        rate = anon_api_limiter.check(ip)
+
     if not rate["allowed"]:
-        resp = jsonify({
-            "error": "Rate limit exceeded",
-            "message": f"You have exceeded the rate limit of 25 requests per hour. Retry after {rate['retry_after']} seconds.",
-            "retry_after": rate["retry_after"]
-        })
+        if tier == 'token':
+            resp = jsonify({
+                "error": "Rate limit exceeded",
+                "message": "Get a API KEY",
+                "code": "API_KEY_REQUIRED",
+                "explanation": "Tokenless access allows 2 requests per hour per IP. Sign up and accept the Terms of Service to get an API key with 80 requests per 30 minutes.",
+                "signup": "/signup",
+                "dashboard": "/api/dashboard",
+                "docs": "/docs",
+                "retry_after": rate["retry_after"]
+            })
+        else:
+            resp = jsonify({
+                "error": "Rate limit exceeded",
+                "message": f"You have exceeded the rate limit of {KEY_API_LIMIT} requests per 30 minutes. Retry after {rate['retry_after']} seconds.",
+                "retry_after": rate["retry_after"]
+            })
         resp.status_code = 429
         resp.headers['X-RateLimit-Remaining'] = '0'
         resp.headers['X-RateLimit-Reset'] = str(rate['retry_after'])
@@ -7183,6 +7397,68 @@ def about():
 @app.route('/docs')
 def docs():
     return render_template('docs.html')
+
+@app.route('/api/dashboard', methods=['GET', 'POST'])
+def api_dashboard():
+    if not session.get('user_id'):
+        return redirect(url_for('signup', mode='login'))
+    user_id = session['user_id']
+    user = data_manager.get_user_by_id(user_id)
+    if not user:
+        session.clear()
+        return redirect(url_for('signup', mode='login'))
+
+    error = success = None
+    if request.method == 'POST':
+        if not validate_csrf():
+            error = 'Invalid form submission. Please try again.'
+        else:
+            action = request.form.get('action', '')
+            if action == 'accept_tos':
+                data_manager.accept_tos(user_id)
+                data_manager.create_api_key(user_id, session.get('username', user.get('username', '')))
+                success = 'Terms of Service accepted. Your API key is ready below.'
+            elif action == 'regenerate':
+                data_manager.regenerate_api_key(user_id)
+                success = 'A new API key was generated. The old key no longer works.'
+            elif action == 'revoke':
+                data_manager.revoke_api_key(user_id)
+                success = 'Your API key was revoked. Generate a new one to keep using the API.'
+
+    keys = data_manager.get_api_keys_for_user(user_id)
+    accepted = data_manager.user_accepted_tos(user_id)
+
+    usage = None
+    if keys and accepted:
+        now = time.time()
+        k = keys[0]
+        window_ts = [t for t in k.get('requests_30m', []) if now - t < KEY_API_WINDOW]
+        last_used = k.get('last_used_at')
+        usage = {
+            'remaining': max(0, KEY_API_LIMIT - len(window_ts)),
+            'used_30m': len(window_ts),
+            'limit_30m': KEY_API_LIMIT,
+            'window_min': KEY_API_WINDOW // 60,
+            'requests_total': k.get('requests_total', 0),
+            'last_used_at': datetime.fromtimestamp(last_used).strftime('%b %d, %Y %I:%M %p') if last_used else None,
+            'created_at': k.get('created_at', ''),
+        }
+
+    return render_template('api_dashboard.html',
+        user=user,
+        keys=keys,
+        accepted_tos=accepted,
+        usage=usage,
+        key_limit=KEY_API_LIMIT,
+        key_window=KEY_API_WINDOW,
+        anon_limit=ANON_API_LIMIT,
+        error=error,
+        success=success,
+    )
+
+@app.route('/change-log')
+def change_log():
+    return render_template('change_log.html')
 
 @app.route('/stats')
 def stats():
@@ -7510,6 +7786,9 @@ def signup():
         if email and '@' not in email:
             return render_template('signup.html', error='Invalid email address', email=email)
         ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
+        accept_terms = request.form.get('accept_terms', '')
+        if accept_terms != '1':
+            return render_template('signup.html', error='You must accept the Terms of Service to create an account.', email=email)
         user, err = data_manager.create_user(username, password, sq, sa, ip, email, weather_loc)
         if err:
             return render_template('signup.html', error=err, email=email)
@@ -7517,9 +7796,12 @@ def signup():
         session.permanent = True
         session['user_id'] = user['user_id']
         session['username'] = user['username']
+        data_manager.accept_tos(user['user_id'])
+        data_manager.create_api_key(user['user_id'], username)
+        session['onboarding'] = True
         if email:
             send_welcome_email(email, username)
-        return redirect(url_for('user_profile', username=username))
+        return redirect(url_for('home'))
     return render_template('signup.html')
 
 @app.route('/login', methods=['GET', 'POST'])

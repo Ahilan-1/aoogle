@@ -115,6 +115,13 @@
         .review-box .rv-divider{border:none;border-top:1px solid var(--input-border);margin:6px 0}
         .success-icon{width:56px;height:56px;margin:0 auto 12px;display:block}
         .success-icon .ck-bg{fill:var(--green)}.success-icon .ck-check{fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+        .tos-consent{display:flex;align-items:flex-start;gap:10px;background:var(--input-bg);border:1px solid var(--input-border);border-radius:10px;padding:12px 14px;margin-top:20px;cursor:pointer;transition:border-color .25s var(--ease)}
+        .tos-consent:hover{border-color:var(--link)}
+        .tos-consent.error{border-color:var(--red);box-shadow:0 0 0 3px rgba(255,69,58,.15)}
+        .tos-consent input[type="checkbox"]{width:16px;height:16px;margin:2px 0 0 0;accent-color:var(--link);cursor:pointer;flex-shrink:0}
+        .tos-consent .tos-text{font-size:12px;line-height:1.6;color:var(--text2)}
+        .tos-consent .tos-text a{color:var(--link);text-decoration:none}
+        .tos-consent .tos-text a:hover{text-decoration:underline}
         .chat-bubble{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--card-bg);-webkit-backdrop-filter:blur(40px) saturate(1.4);backdrop-filter:blur(40px) saturate(1.4);border:1px solid var(--card-border);border-radius:14px;padding:12px 20px;box-shadow:0 4px 20px var(--shadow);z-index:200;font-size:13px;color:var(--text2);display:none;align-items:center;gap:8px;transition:all .4s var(--spring)}
         .chat-bubble.show{display:flex}
         .chat-bubble .cb-spinner{width:16px;height:16px;border:2px solid var(--input-border);border-top-color:var(--link);border-radius:50%;animation:spin .7s linear infinite}
@@ -239,6 +246,10 @@
                             <hr class="rv-divider">
                             <div class="rv-row"><span class="rv-label">Security</span><span class="rv-value" id="review-sq" style="font-size:12px"></span></div>
                         </div>
+                        <label class="tos-consent" id="tos-consent">
+                            <input type="checkbox" name="accept_terms" id="accept-terms" value="1" {% if request.form.get('accept_terms') %}checked{% endif %}>
+                            <span class="tos-text">I agree to the <a href="/terms-of-service" target="_blank">Terms of Service</a> and <a href="/privacy-policy" target="_blank">Privacy Policy</a> of arlong. I understand an API key will be created for my account and that free usage is limited to 80 requests per 30 minutes.</span>
+                        </label>
                         <div class="btn-row">
                             <button type="button" class="btn btn-secondary" onclick="prevStep(3)">Back</button>
                             <button type="submit" class="btn btn-primary" id="submit-btn"><span class="btn-text">Create account</span><span class="btn-spinner"></span></button>
@@ -247,7 +258,7 @@
                 </div>
             </form>
             <div class="switch">Already have an account? <a href="/login">Sign in</a></div>
-            <div class="info">Your IP is hashed and stored securely. Password is salted and hashed. <a href="/privacy">Privacy policy</a></div>
+            <div class="info">Your IP is hashed and stored securely. Password is salted and hashed. <a href="/privacy-policy">Privacy policy</a></div>
         </div>
     </div>
 
@@ -488,7 +499,16 @@
                 });
             }
 
-            document.getElementById('signup-form').addEventListener('submit', function(){
+            document.getElementById('signup-form').addEventListener('submit', function(e){
+                var cb = document.getElementById('accept-terms');
+                var consent = document.getElementById('tos-consent');
+                if(cb && !cb.checked){
+                    e.preventDefault();
+                    consent.classList.add('error');
+                    showBubble('You must agree to the Terms of Service and Privacy Policy','error');
+                    return;
+                }
+                if(consent && consent.classList.contains('error')) consent.classList.remove('error');
                 var btn = document.getElementById('submit-btn');
                 btn.classList.add('loading');
             });

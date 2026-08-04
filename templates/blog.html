@@ -222,7 +222,7 @@
         <p class="lede">A deep dive into the new privacy-first, ad-free search engine that's rethinking how search should work. No AI summaries. No tracking. No sponsors. Just results, ranked by signals you can actually see.</p>
 
         <h2>What is arlong?</h2>
-        <p><strong>arlong</strong> is an open-source meta search engine that scrapes public web indexes and re-ranks results using a transparent, multi-factor heuristic algorithm. Every result has a visible score. Every signal is explained. No black box, no vectors, no ML trickery. Built by a solo developer as an alternative to mainstream search, it's live at <a href="https://arlong-production.up.railway.app">arlong-production.up.railway.app</a>.</p>
+        <p><strong>arlong</strong> is a meta search engine that scrapes public web indexes and re-ranks results using a transparent, multi-factor heuristic algorithm. Every result has a visible score. Every signal is explained. No black box, no vectors, no ML trickery. Built by a solo developer as an alternative to mainstream search, it's live at <a href="https://arlong-production.up.railway.app">arlong-production.up.railway.app</a>. The project is now fully private and proprietary.</p>
 
         <div class="img-placeholder">
             <img src="/static/arlongm.png" alt="arlong search homepage" onerror="this.outerHTML='<span>arlong screenshot</span>'">
@@ -239,8 +239,8 @@
                     <tr><td>Ads</td><td>Yes</td><td>Minimal</td><td>Yes</td><td class="yes">None</td></tr>
                     <tr><td>Tracking</td><td class="no">Extensive</td><td class="yes">None</td><td class="no">Extensive</td><td class="yes">None</td></tr>
                     <tr><td>AI Overviews</td><td class="no">Yes (forced)</td><td class="no">Yes</td><td class="no">Yes</td><td class="yes">No</td></tr>
-                    <tr><td>Open Source</td><td class="no">No</td><td class="partial">Partial</td><td class="no">No</td><td class="yes">Yes (Apache 2.0)</td></tr>
-                    <tr><td>Free API</td><td class="no">Paid</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes, no key needed</td></tr>
+                    <tr><td>Open Source</td><td class="no">No</td><td class="partial">Partial</td><td class="no">No</td><td class="no">No (private)</td></tr>
+                    <tr><td>Free API</td><td class="no">Paid</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes, 80 req/30min free</td></tr>
                     <tr><td>Transparent Ranking</td><td class="no">Black box</td><td class="no">Black box</td><td class="no">Black box</td><td class="yes">8 signals, fully explained</td></tr>
                     <tr><td>Content Farm Penalties</td><td class="no">Weak</td><td class="partial">Moderate</td><td class="no">Weak</td><td class="yes">Aggressive</td></tr>
                     <tr><td>Crisis & Safety Tools</td><td class="partial">Basic</td><td class="partial">Basic</td><td class="partial">Basic</td><td class="yes">Built-in</td></tr>
@@ -394,10 +394,10 @@
         <h3>Built-in Crisis and Safety Support</h3>
         <p>arlong includes comprehensive safety features: suicide prevention with region-specific helplines (US: 988, UK: 116 123, India: 022-2552-1111), disaster safety guides for tornadoes, earthquakes, floods, hurricanes, wildfires, and tsunamis, body-positive redirects for body-negative queries, and medical emergency banners for symptoms like chest pain.</p>
 
-        <h3>Free, Tokenless API</h3>
-        <p>No signup. No API key. No OAuth. 125 requests per hour per IP. Designed for agents, CLI tools, and LLM integrations. Returns JSON with title, url, snippet, category, score, favicon, date, and info box.</p>
+        <h3>Free Search API with API Keys</h3>
+        <p>Tokenless access is capped at 2 requests per hour per IP — just enough to try it. Create a free account, accept the Terms of Service, and grab an API key at <a href="/api/dashboard">/api/dashboard</a> for 80 requests per 30 minutes. Designed for agents, CLI tools, and LLM integrations. Returns JSON with title, url, snippet, category, score, favicon, date, and info box.</p>
 
-        <pre><code>curl "https://arlong-production.up.railway.app/api/search?q=python+tutorial"</code></pre>
+        <pre><code>curl "https://arlong-production.up.railway.app/api/search?q=python+tutorial" -H "Authorization: Bearer al_xxxx"</code></pre>
 
         <h3>Browser Sidebar Extension</h3>
         <p>Available for Chrome and Firefox. Shows arlong results alongside results from Google, Bing, DuckDuckGo, Yahoo, Yandex, Baidu, Brave, Ecosia, Qwant, and Searx. It complements rather than replaces your existing search engine.</p>
@@ -419,7 +419,7 @@
         <h2>The Verdict</h2>
         <p>arlong is not trying to replace Google. It is an alternative for people who want privacy without compromise, transparency in how results are ranked, no AI noise cluttering the page, and a free API for tinkerers, agents, and builders. For discussion queries and technical searches, it holds its own against DuckDuckGo and beats it decisively on spam blocking. For general web search, it is a solid daily driver.</p>
 
-        <blockquote>Try it at <a href="https://arlong-production.up.railway.app">arlong-production.up.railway.app</a> &mdash; open source on <a href="https://github.com/Ahilan-1/aoogle">GitHub</a> under Apache 2.0.</blockquote>
+        <blockquote>Try it at <a href="https://arlong-production.up.railway.app">arlong-production.up.railway.app</a> &mdash; fully private and proprietary.</blockquote>
 
         <div class="img-placeholder">
             <img src="/static/arlongz.png" alt="arlong logo" onerror="this.outerHTML='<span>arlong</span>'">
@@ -432,7 +432,7 @@
         <a href="/images">Images</a>
         <a href="/about">About</a>
         <a href="/docs">API</a>
-        <span style="margin-left:auto">Apache 2.0</span>
+        <span style="margin-left:auto">All rights reserved</span>
     </div>
 
     <script>document.body.classList.add('dark-mode');</script>

@@ -36,7 +36,7 @@
     </div>
     <div class="wrap">
         <h1>Terms of Service for Arlong</h1>
-        <div class="sub">Last Updated: July 15, 2026</div>
+        <div class="sub">Last Updated: August 4, 2026</div>
 
         <h2>Business Information</h2>
         <p>Arlong is operated by <strong>Padmalakshmi V</strong>, a sole proprietor. The Service is provided from India. For any inquiries, please contact us using the details at the bottom of this page.</p>
@@ -54,37 +54,63 @@
             <li>Use any automated system to access the Service in a manner that sends more requests than a human can reasonably produce</li>
         </ul>
 
-        <h2>Subscriptions and Payments</h2>
-        <p>Premium subscriptions (Pass, Golden Pass) are billed at the prices displayed on the <a href="/premium">premium pricing page</a> — $4/month or $40/year for Pass, $10/month or $90/year for Golden Pass. All payments are processed securely by Paddle. Prices are exclusive of applicable taxes, which will be calculated and shown at checkout.</p>
+        <h2>Intellectual Property &amp; Ownership</h2>
+        <p>All code, ranking algorithms, search indexes, user interface designs, trade secrets, and trademarks used by the Service belong exclusively to Arlong and its owner. The codebase is proprietary and private &mdash; it is not published or licensed for use by third parties.</p>
         <ul>
-            <li><strong>Auto-renewal:</strong> Subscriptions automatically renew at the end of each billing period (monthly or yearly) at the same price unless cancelled before the renewal date.</li>
-            <li><strong>Trials:</strong> The Golden Pass plan includes a 3-day free trial. If not cancelled before the trial ends, the full subscription price ($10/month or $90/year) will be charged automatically.</li>
-            <li><strong>Cancellation:</strong> You may cancel at any time via Settings → Manage Subscription or through the Paddle customer portal. Cancellation stops future billing; premium features remain active until the end of the current billing period.</li>
-            <li><strong>No refunds:</strong> All payments are non-refundable except as required by applicable law. See our <a href="/refund-policy">Refund & Cancellation Policy</a> for full details.</li>
-            <li><strong>Price changes:</strong> We may change subscription prices with 30 days' notice. Continued use after the price change takes effect constitutes acceptance of the new price.</li>
+            <li><strong>No reverse engineering:</strong> Please do not decompile, disassemble, or attempt to extract the source code, ranking models, or raw data structures behind the Service.</li>
+            <li><strong>No derivative engines:</strong> You may not build a competing search engine or derivative search tool by copying, cloning, or scraping Arlong's codebase or search output.</li>
+            <li>We ask for this because building and maintaining the Service takes real effort, and an open copy of it can be re-hosted and abused at our expense.</li>
         </ul>
 
-        <h2>Intellectual Property</h2>
-        <p>The Service and its original content, features, and functionality are and will remain the exclusive property of Arlong. The Service is protected by copyright, trademark, and other laws. Our trademarks may not be used in connection with any product or service without our prior written consent.</p>
+        <h2>API Access &amp; Rate Limits</h2>
+        <p>The public search API at <code>/api/search</code> is provided with two access tiers:</p>
+        <ul>
+            <li><strong>Tokenless access:</strong> 2 requests per hour per IP address. Intended for occasional, exploratory use.</li>
+            <li><strong>Registered projects:</strong> After creating an account and accepting these Terms, you receive an API key granting 80 requests per 30 minutes per project.</li>
+        </ul>
+        <p>We reserve the right to change rate limits, add per-minute throttling, or suspend any key that exceeds fair usage. We publish rate-limit changes in the changelog before applying them wherever practical.</p>
+
+        <h2>API Key Security</h2>
+        <p>You are responsible for keeping your API key confidential and for all activity performed under it. If a key is shared, leaked, or used in a way that exceeds fair usage, we may rotate or revoke it. Keys can be regenerated or revoked at any time from the <a href="/api/dashboard">API dashboard</a>.</p>
+
+        <h2>Caching &amp; Data Storage</h2>
+        <p>You may cache API responses temporarily to avoid unnecessary requests, but please do not store search results long-term. As a general guideline, keep cached results for no longer than 30 days and do not rebuild or resell a search database from API output. We're happy to work with you if you have a genuine need for longer retention &mdash; just ask.</p>
+
+        <h2>Acceptable Use</h2>
+        <p>Please use the Service responsibly:</p>
+        <ul>
+            <li><strong>No scraping the UI:</strong> Automated scraping or bulk harvesting from the website interface should be done through the API instead.</li>
+            <li><strong>No malicious use:</strong> Do not use the Service for DDoS attacks, malware distribution, fraud, illegal activity, or attempts to bypass safety features such as crisis detection and content moderation.</li>
+            <li><strong>AI training:</strong> If you'd like to use search results or API data to train a third-party AI, LLM, or machine-learning model, please get our written consent first. It's a simple conversation &mdash; we rarely say no, but we'd like to know.</li>
+        </ul>
+
+        <h2>Donations</h2>
+        <p>arlong is free to use and we do not sell subscriptions, premium plans, or paid features. If you'd like to support the project, you can make a voluntary donation through our <a href="https://ko-fi.com/arlong" target="_blank" rel="noopener">Ko-fi page</a>. Donations are processed securely by Ko-fi, which may apply its own fees or taxes at checkout.</p>
+        <ul>
+            <li><strong>Voluntary:</strong> Donations are optional gifts of support. They do not unlock features, priority, or any other benefit &mdash; every user gets the same service, free.</li>
+            <li><strong>One-time:</strong> Donations are one-time contributions. We do not offer subscriptions, auto-renewal, or recurring billing of any kind.</li>
+            <li><strong>Non-refundable:</strong> Donations are non-refundable except as required by applicable law or where Ko-fi's own policies apply. Contact <a href="mailto:ahilan290@gmail.com">ahilan290@gmail.com</a> if you believe an error was made.</li>
+        </ul>
 
         <h2>User Content</h2>
         <p>You retain ownership of any content you submit to or through the Service. By submitting content, you grant Arlong a non-exclusive, worldwide, royalty-free license to use, reproduce, and display such content in connection with operating the Service.</p>
 
         <h2>Termination</h2>
         <p>We may terminate or suspend your access to the Service immediately, without prior notice or liability, for any reason, including without limitation if you breach the Terms.</p>
+        <p>In particular, we reserve the right to block IP addresses, revoke API keys, or close accounts when those measures are needed to protect the Service or other users. We try to give a clear reason whenever we take such action.</p>
         <p>Upon termination, your right to use the Service will cease immediately.</p>
 
         <h2>Limitation of Liability</h2>
-        <p>In no event shall Arlong, nor its directors, employees, partners, agents, suppliers, or affiliates, be liable for any indirect, incidental, special, consequential, or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses, resulting from:</p>
+        <p>Arlong is a small project built by an individual, and to the maximum extent permitted by law:</p>
         <ul>
-            <li>Your access to or use of (or inability to access or use) the Service</li>
-            <li>Any conduct or content of any third party on the Service</li>
-            <li>Any content obtained from the Service</li>
-            <li>Unauthorized access, use, or alteration of your transmissions or content</li>
+            <li><strong>As-is, as-available:</strong> Search results are indexed automatically from the open web. We do not guarantee the accuracy, safety, or legality of third-party websites that appear in results, and we are not responsible for their content.</li>
+            <li><strong>No uptime guarantee:</strong> The Service is provided on an "as available" basis. We are not liable for service outages, interruptions, or loss of data.</li>
+            <li><strong>Cap on damages:</strong> Our total liability for any claim arising from your use of the Service is limited to the greater of the amount you paid us in the 12 months before the claim, or $50 USD.</li>
+            <li>Nothing in these Terms limits liability that cannot be limited under applicable law, including your statutory rights as a consumer.</li>
         </ul>
 
         <h2>Disclaimer</h2>
-        <p>The Service is provided on an "AS IS" and "AS AVAILABLE" basis. The Service is provided without warranties of any kind, whether express or implied, including, but not limited to, implied warranties of merchantability, fitness for a particular purpose, non-infringement, or course of performance.</p>
+        <p>The Service is provided on an "AS IS" and "AS AVAILABLE" basis, without warranties of any kind, whether express or implied, including, but not limited to, implied warranties of merchantability, fitness for a particular purpose, non-infringement, or course of performance. Search results come from third-party sites over which Arlong has no control.</p>
 
         <h2>Governing Law (EU Users)</h2>
         <p>For users in the European Union, these Terms shall be governed by and construed in accordance with applicable EU laws. Nothing in these Terms shall affect your statutory rights as a consumer under applicable EU consumer protection legislation.</p>
@@ -93,7 +119,7 @@
         <p>These Terms shall be governed and construed in accordance with the laws of the jurisdiction in which Arlong operates, without regard to its conflict of law provisions.</p>
 
         <h2>Changes to Terms</h2>
-        <p>We reserve the right to modify or replace these Terms at any time. If a revision is material, we will try to provide at least 30 days' notice prior to any new terms taking effect.</p>
+        <p>We reserve the right to modify or replace these Terms at any time. Updates are published on this page and announced in the <a href="/change-log">changelog</a>. If a revision is material, we will try to provide at least 30 days' notice prior to any new terms taking effect.</p>
         <p>By continuing to access or use our Service after those revisions become effective, you agree to be bound by the revised terms.</p>
 
         <h2>Contact Us</h2>

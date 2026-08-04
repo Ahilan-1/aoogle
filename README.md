@@ -27,13 +27,19 @@ A meta search engine that scrapes public web indexes and re-ranks results using 
 
 ## API
 
-Free, tokenless search API for agents, CLI tools, and LLMs. No registration or API key needed.
+Public search API for agents, CLI tools, and LLM integrations.
 
 ```
 GET /api/search?q=your+query
 ```
 
-- 25 requests per hour per IP address
+Two access tiers:
+
+- **Tokenless** — 2 requests per hour per IP address. For occasional, exploratory use.
+- **Registered** — create a free account, accept the [Terms of Service](https://aoogle-production.up.railway.app/terms-of-service), and get an API key granting **80 requests per 30 minutes** per project. Keys and live usage stats live at [`/api/dashboard`](https://aoogle-production.up.railway.app/api/dashboard).
+
+Pass your key via the `Authorization` header (`Authorization: Bearer al_...`) or the `key` query parameter.
+
 - Returns clean JSON with title, url, snippet, category, score, and more
 - Supports pagination (`&page=N`) and pretty-print (`&pretty=1`)
 - Respects crisis detection and content moderation
@@ -72,4 +78,7 @@ The app is Flask-based and ready for any WSGI server. A `vercel.json` is include
 
 ## License
 
-Apache 2.0
+**All rights reserved.** Arlong is proprietary and closed source. The source
+code is private and not distributed. You may not copy, modify, redistribute,
+or run a derivative service from it without prior written consent from Arlong.
+See the [Terms of Service](https://aoogle-production.up.railway.app/terms-of-service).
