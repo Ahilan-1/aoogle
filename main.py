@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, abort, session, redirect, url_for, make_response, send_file
+from flask import Flask, render_template, request, jsonify, abort, session, redirect, url_for, make_response, send_file, Response, stream_with_context
 import io
 import requests
 from bs4 import BeautifulSoup
@@ -263,6 +263,17 @@ GOOGLE_PLACES_RADIUS_M = 25000
 PLACES_CACHE_TTL = 7 * 24 * 3600  # 7 days
 PLACES_CACHE_VERSION = 3  # bump to invalidate old cached places (schema changes)
 PLACES_GEO_TTL = 90 * 24 * 3600  # geocode cache: 90 days
+
+# ── Arlong AI mode (arlong.org/ai) ──
+# Separate Groq key used ONLY by the /ai feature (search-result summaries use GROQ_API_KEY).
+AI_MODE_GROQ_API_KEY = os.environ.get('GROQ_AI_MODE_API_KEY', '')
+AI_MODE_GROQ_MODEL = os.environ.get('GROQ_AI_MODE_MODEL', 'llama-3.1-8b-instant')
+# Per-user rolling limits: message count resets 12h after the user's first message in
+# the window; context token budget resets 6h after the first chat in the window.
+AI_MESSAGE_LIMIT = int(os.environ.get('AI_MESSAGE_LIMIT', 40))
+AI_MESSAGE_WINDOW_HOURS = int(os.environ.get('AI_MESSAGE_WINDOW_HOURS', 12))
+AI_CTX_LIMIT_TOKENS = int(os.environ.get('AI_CTX_LIMIT_TOKENS', 10000))
+AI_CTX_WINDOW_HOURS = int(os.environ.get('AI_CTX_WINDOW_HOURS', 6))
 PLACES_RADIUS_KM = 40  # drop places farther than this from the requested location
 PLACES_MAX_RESULTS = 4  # cap shown results (also caps Place Details billing)
 PLACES_GL_DEFAULT = 'in'
@@ -297,6 +308,46 @@ _PLACES_LOCAL_WORDS = (
     'dhaba','eateries','breakfast','brunch','lunch','dinner','thali','hostel','clinics',
     'travel','sightseeing','places to visit','places to eat','eat out','where to eat',
 )
+# Game/wiki/software context words that mean the query is NOT about a local
+# business, even when a place word appears ("minecraft bank", "pokemon park",
+# "how to spawn diamonds"). Matched as whole words via word boundaries.
+_PLACES_HARD_NEGATIVE_WORDS = (
+    'minecraft','fortnite','roblox','pokemon','gta','grand theft auto','zelda',
+    'skyrim','elden ring','fallout','valorant','call of duty','pubg','league of legends',
+    'dota','overwatch','apex legends','genshin','stardew','terraria','ark survival',
+    'world of warcraft','monster hunter','god of war','red dead','assassins creed',
+    'cyberpunk','resident evil','far cry','witcher','diablo','halo','battlefield',
+    'counter strike','csgo','game','games','gameplay','gaming','wiki','wikia',
+    'fandom','mod','mods','modded','modpack','cheat','cheats','glitch','crafting',
+    'recipe','recipes','item','items','boss','bosses','dungeon','dungeons','quest',
+    'quests','achievement','achievements','trophy','trophies','mob','mobs','npc',
+    'level','xp','clan','guild','dupe','grinding','spawn','biome','biomes','ore',
+    'ores','diamond','diamonds','nether','ender','overworld','creeper','zombie',
+    'skeleton','pickaxe','sword','armor','furnace','village','villager','respawn',
+    'youtube','walkthrough','speedrun','tutorial','shaders','texture pack','modpack',
+    'download','downloads','install','apk','apk download','free download','crack',
+    'keygen','software','exe','definition','meaning','lyrics','algorithm','program',
+    'programming','code','coding',
+)
+# Softer procedural phrases: they suppress places only when the query has neither
+# a location nor a multi-word place phrase ("how to find a bank" is ambiguous,
+# but "how to find a restaurant in chennai" still shows the map).
+_PLACES_SOFT_NEGATIVE_WORDS = (
+    'how to','how do i','how can i','what is','what are','what does',
+    'best way to','ways to','tips for','guide to',
+)
+
+def _match_phrase(q, phrase):
+    """Word-boundary-aware phrase match so 'spa' doesn't match 'spawn' and
+    'park' doesn't match 'parkour'. Multi-word phrases join tokens with \\s+."""
+    pattern = r'(?<![a-z0-9])' + re.escape(phrase).replace(r'\ ', r'\s+') + r'(?![a-z0-9])'
+    return re.search(pattern, q) is not None
+
+def _has_negative_word(q, words):
+    for w in words:
+        if _match_phrase(q, w):
+            return True
+    return False
 # Known non-India cities/countries so bare names are NOT qualified with ", India"
 _NON_INDIA_CITIES = frozenset([
     'new york','london','paris','dubai','singapore','toronto','sydney','melbourne',
@@ -861,7 +912,7 @@ app.jinja_env.globals['enc_key'] = _ENCRYPTION_KEY_HEX
 @app.context_processor
 def inject_ui_flags():
     # New-account onboarding is shown exactly once (first page load after signup).
-    return {'onboarding': bool(session.pop('onboarding', None))}
+    return {'onboarding': bool(session.pop('onboarding', None)), 'site_warnings_json': '[]'}
 
 
 @app.after_request
@@ -1087,10 +1138,60 @@ DOMAIN_AUTHORITY = {
     'deadline.com': 72, 'thewrap.com': 70, 'empireonline.com': 72,
     'collider.com': 68, 'screenrant.com': 60, 'cbr.com': 60,
     'animenewsnetwork.com': 78, 'myanimelist.net': 75,
+    'store.steampowered.com': 94, 'steampowered.com': 92, 'steamcommunity.com': 82,
+    'epicgames.com': 88, 'gog.com': 85, 'origin.com': 82, 'ubisoft.com': 82,
+    'battle.net': 85, 'xbox.com': 82, 'playstation.com': 84, 'nintendo.com': 82,
+    'itch.io': 72, 'humblebundle.com': 80, 'rockstargames.com': 84,
+    # Official software vendors & docs — top-tier, always preferred for downloads
+    'learn.microsoft.com': 88, 'sysinternals.com': 90, 'support.microsoft.com': 82,
+    'techcommunity.microsoft.com': 78, 'azure.com': 82, 'dot.net': 82,
+    'developer.apple.com': 88, 'support.apple.com': 85, 'mozilla.org': 85,
+    'kernel.org': 82, 'nodejs.org': 82, 'go.dev': 80, 'golang.org': 82,
+    'ruby-lang.org': 80, 'php.net': 80, 'openjdk.org': 80, 'openoffice.org': 70,
+    'libreoffice.org': 78, 'w3.org': 85, 'ietf.org': 82, 'rfc-editor.org': 80,
+    'videolan.org': 78, '7-zip.org': 75, 'gnu.org': 82, 'audacityteam.org': 75,
+    'getbootstrap.com': 70, 'laravel.com': 78, 'djangoproject.com': 78,
+    'flask.palletsprojects.com': 75, 'react.dev': 80, 'vuejs.org': 78,
+    # Security & antivirus vendors
+    'virustotal.com': 85, 'kaspersky.com': 80, 'malwarebytes.com': 80,
+    'norton.com': 75, 'eset.com': 75, 'mcafee.com': 75, 'avast.com': 75,
+    'cisa.gov': 90, 'thehackernews.com': 72, 'bleepingcomputer.com': 75,
+    # Reputable tech how-to / news (kept above long-tail but below official)
+    'howtogeek.com': 72, 'makeuseof.com': 70, 'lifewire.com': 70,
+    'tomshardware.com': 70, 'techradar.com': 68, 'pcworld.com': 68,
+    'ghacks.net': 68, 'pcgamer.com': 70, 'neowin.net': 68, 'zdnet.com': 70,
+    'extremetech.com': 68, 'betanews.com': 65,
+    'majorgeeks.com': 40, 'portableapps.com': 55,
 }
 
 DISCUSSION_DOMAINS = {'reddit.com', 'quora.com', 'stackexchange.com', 'news.ycombinator.com',
                       'stackoverflow.com', 'medium.com', 'dev.to', 'hu.elnino'}
+
+# Content aggregators / encyclopedias / news / social platforms. They are NOT the
+# official vendor page for a product, so they don't receive the download-query
+# "official vendor" boost (wikipedia, youtube, reddit, news, tech blogs, mirrors).
+NON_VENDOR_DOMAINS = {
+    'wikipedia.org', 'youtube.com', 'reddit.com', 'quora.com', 'stackexchange.com',
+    'twitter.com', 'x.com', 'facebook.com', 'instagram.com', 'linkedin.com',
+    'pinterest.com', 'tiktok.com', 'imdb.com', 'medium.com', 'dev.to',
+    'cnn.com', 'bbc.com', 'bbc.co.uk', 'nytimes.com', 'washingtonpost.com',
+    'reuters.com', 'theguardian.com', 'guardian.co.uk', 'bloomberg.com',
+    'forbes.com', 'wsj.com', 'cnbc.com', 'theverge.com', 'techcrunch.com',
+    'wired.com', 'arstechnica.com', 'engadget.com', 'gizmodo.com', 'zdnet.com',
+    'thehackernews.com', 'bleepingcomputer.com', 'howtogeek.com', 'makeuseof.com',
+    'lifewire.com', 'tomshardware.com', 'techradar.com', 'pcworld.com',
+    'softpedia.com', 'majorgeeks.com', 'filehippo.com', 'uptodown.com',
+    'download.cnet.com', 'guru99.com', 'tutorialspoint.com', 'geeksforgeeks.org',
+    'w3schools.com', 'stackoverflow.com',
+}
+
+def _is_vendor_domain(domain):
+    """True when a domain can be a product's official site (not an aggregator,
+    encyclopedia, news or social platform)."""
+    for d in NON_VENDOR_DOMAINS:
+        if domain == d or domain.endswith('.' + d):
+            return False
+    return True
 
 PLATFORM_DOMAINS = {
     'netflix': 'netflix.com',
@@ -1116,6 +1217,98 @@ PLATFORM_DOMAINS = {
     'spotify': 'spotify.com',
     'imdb': 'imdb.com',
     'rottentomatoes': 'rottentomatoes.com',
+}
+
+# Sites known to bundle adware/malware. We don't delist them, but we warn users
+# and demote them hard in ranking.
+DANGER_DOMAINS = {
+    # Major software portals with wrapper/bundling histories
+    'softonic.com', 'download.cnet.com', 'brothersoft.com', 'soft32.com',
+    'software.informer.com', 'softpedia.com', 'tucows.com', 'download.zdnet.com',
+    'filehippo.com', 'freewarefiles.com', 'installsoft.com',
+    # Warez / cracked-software hubs
+    'getintopc.com', 'igetintopc.com', 'getintopc.cc', 'crackshash.com',
+    'piratepc.to', 'piratepc.com', 'karanpc.com', 'crackingcity.com',
+    'filecr.com', 'oceanofgames.com', 'oceantogames.com', 'allkeyshop.com',
+    'pcgameunpacked.com', 'sadeempc.com', '4download.net',
+    # Driver-update & PC "optimizer" portals (PUP/scareware)
+    'driverguide.com', 'drp.su', 'drivereasy.com', 'iobit.com', 'dll-files.com',
+    'fixya.com', 'solvusoft.com', 'mycleanpc.com', 'reimageplus.com',
+    'regcurepro.com', 'windriverupdate.com',
+    # Unverified APK / mobile mirror sites
+    'aptoide.com', 'uptodown.com', 'en.uptodown.com', 'apkpure.com',
+    'apkmonk.com', 'apkhere.com', 'apk4fun.com', '9apps.com', 'mob.org',
+    'apkmody.io', 'apkdone.com',
+    # File-hosting lockers abused by PPI networks
+    'uploaded.net', 'rapidgator.net', 'turbobit.net', 'depositfiles.com',
+    'nitroflare.com', 'katfile.com', 'filerice.com', 'rosefile.com',
+    'mixdrop.co', 'filefactory.com',
+    # Others
+    'thepiratecity.cc', 'crohasit.com',
+    'filehorse.com', 'softoxi.com', 'downloadastro.com',
+    'filepuma.com', 'downloadsource.net', 'downloadatoz.com', 'softlay.com',
+    'filecroco.com', 'filecluster.com',
+    'fitgirl-repacks.cc', 'fitgirl-repacks.co', 'fitgirl-repacks.com',
+    'fitgirl-repacks.net', 'fitgirlrepacks.co', 'fitgirlrepacks.net',
+    'fitgirl-repack.me',
+    'fitgirl-repack.cc', 'fitgirl-repack.co', 'fitgirl-repack.com',
+    'fitgirl-repack.net', 'www.fitgirl-repack.com', 'fitgirlrepack.co',
+    'fitgirlrepack.com', 'fitgirlrepack.net', 'fitgirlrepacks.org',
+    'fitgirlrepacks.to', 'fitgirlrepacks.info',
+}
+
+# Legit-but-questionable sites (real project, still be careful).
+CAUTION_DOMAINS = {
+    'fitgirl-repacks.site', 'dodi-repacks.site', 'steamrip.com', 'ovagames.com',
+}
+
+def _matches_fake_software_pattern(domain):
+    """Detect dynamically generated fake-software domains like
+    vlc-download.com, get-vlc.net, download-vlc-free.org, vlc-fullversion.com,
+    freesoftwarehub-in.com, pc-app-store-xyz.com."""
+    parts = domain.split('.')
+    if len(parts) < 2:
+        return False
+    base = parts[-2]
+    tld = parts[-1]
+    if re.search(r'full\s*version|crack|keygen|activation|serial', base):
+        return True
+    name = re.sub(r'[^a-z0-9]+', ' ', base).strip()
+    tokens = name.split()
+    if tokens and tokens[-1] in ('download', 'downloads', 'free', 'freeware', 'fullversion'):
+        return True
+    if tokens and tokens[0] == 'get' and tld in ('net', 'org', 'info'):
+        return True
+    if re.search(r'(free\s*download|download\s*free|app\s*store|pc\s*app|software\s*hub|driver\s*fix|pc\s*optimizer)', name):
+        return True
+    return False
+
+def _domain_risk_level(domain):
+    """Return 'danger', 'caution', or None for a bare domain (no 'www.').
+
+    Mirrors the site-warning logic in the search route so ranking demotes the
+    same domains that carry the malware badge.
+    """
+    domain = (domain or '').lower().replace('www.', '').strip()
+    if not domain:
+        return None
+    for d in DANGER_DOMAINS:
+        if domain == d or domain.endswith('.' + d):
+            return 'danger'
+    for d in CAUTION_DOMAINS:
+        if domain == d or domain.endswith('.' + d):
+            return 'caution'
+    if 'fitgirl' in domain or 'oceanofgame' in domain:
+        return 'danger'
+    if _matches_fake_software_pattern(domain):
+        return 'danger'
+    return None
+
+# Official game storefronts — boosted so users land on a legit download link.
+GAME_STORE_DOMAINS = {
+    'steampowered.com', 'steamcommunity.com', 'epicgames.com', 'gog.com',
+    'origin.com', 'ubisoft.com', 'battle.net', 'xbox.com', 'playstation.com',
+    'nintendo.com', 'itch.io', 'humblebundle.com', 'rockstargames.com',
 }
 
 ACADEMIC_PRIMARY_DOMAINS = {
@@ -3105,6 +3298,116 @@ class DataManager:
                     return True
             return False
 
+    def get_ai_chats(self, user_id):
+        """Return all AI chat sessions for a user, newest first."""
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+        chats = self.data.setdefault('ai_chats', {}).get(str(user_id), [])
+        chats = [c for c in chats if isinstance(c, dict)]
+        chats.sort(key=lambda c: c.get('updated_at', '') or '', reverse=True)
+        return chats
+
+    def get_ai_chat(self, user_id, chat_id):
+        if not chat_id:
+            return None
+        for c in self.get_ai_chats(user_id):
+            if c.get('chat_id') == chat_id:
+                return c
+        return None
+
+    def save_ai_chat(self, user_id, chat):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            user_chats = self.data.setdefault('ai_chats', {}).setdefault(str(user_id), [])
+            for i, c in enumerate(user_chats):
+                if isinstance(c, dict) and c.get('chat_id') == chat.get('chat_id'):
+                    user_chats[i] = chat
+                    break
+            else:
+                user_chats.append(chat)
+            _save_json(self.data)
+
+    def delete_ai_chat(self, user_id, chat_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            key = str(user_id)
+            user_chats = self.data.setdefault('ai_chats', {}).get(key, [])
+            self.data['ai_chats'][key] = [c for c in user_chats if not (isinstance(c, dict) and c.get('chat_id') == chat_id)]
+            _save_json(self.data)
+
+    def get_ai_usage(self, user_id):
+        """Return rolling-window usage for a user (msg 12h window, ctx 6h window).
+
+        Expired windows are reported as reset (a fresh window starts on the next
+        message). Returns a dict with msg_window_start/msg_count and
+        ctx_window_start/ctx_tokens.
+        """
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+        rec = _ai_normalize_usage(self.data.setdefault('ai_usage', {}).get(str(user_id)))
+        now = datetime.utcnow()
+        if _ai_ts_age(rec.get('msg_window_start')) >= timedelta(hours=AI_MESSAGE_WINDOW_HOURS):
+            rec['msg_window_start'] = None
+            rec['msg_count'] = 0
+        if _ai_ts_age(rec.get('ctx_window_start')) >= timedelta(hours=AI_CTX_WINDOW_HOURS):
+            rec['ctx_window_start'] = None
+            rec['ctx_tokens'] = 0
+        return rec
+
+    def increment_ai_usage(self, user_id):
+        """Increment the rolling 12h message count. Returns (allowed, remaining, used)."""
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            key = str(user_id)
+            rec = _ai_normalize_usage(self.data.setdefault('ai_usage', {}).get(key))
+            now = datetime.utcnow()
+            if _ai_ts_age(rec.get('msg_window_start')) >= timedelta(hours=AI_MESSAGE_WINDOW_HOURS):
+                rec['msg_window_start'] = None
+                rec['msg_count'] = 0
+            if not rec['msg_window_start']:
+                rec['msg_window_start'] = now.isoformat()
+            rec['msg_count'] = int(rec.get('msg_count', 0)) + 1
+            self.data['ai_usage'][key] = rec
+            _save_json(self.data)
+            allowed = rec['msg_count'] <= AI_MESSAGE_LIMIT
+            return allowed, max(0, AI_MESSAGE_LIMIT - rec['msg_count']), rec['msg_count']
+
+    def add_ai_context_tokens(self, user_id, tokens):
+        """Add estimated input tokens to the rolling 6h context budget.
+
+        Only adds when the new total stays within the limit. Returns
+        (allowed, used, remaining).
+        """
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            key = str(user_id)
+            rec = _ai_normalize_usage(self.data.setdefault('ai_usage', {}).get(key))
+            now = datetime.utcnow()
+            if _ai_ts_age(rec.get('ctx_window_start')) >= timedelta(hours=AI_CTX_WINDOW_HOURS):
+                rec['ctx_window_start'] = None
+                rec['ctx_tokens'] = 0
+            used = int(rec.get('ctx_tokens', 0))
+            if used + int(tokens) > AI_CTX_LIMIT_TOKENS:
+                return False, used, max(0, AI_CTX_LIMIT_TOKENS - used)
+            if not rec['ctx_window_start']:
+                rec['ctx_window_start'] = now.isoformat()
+            rec['ctx_tokens'] = used + int(tokens)
+            self.data['ai_usage'][key] = rec
+            _save_json(self.data)
+            return True, rec['ctx_tokens'], max(0, AI_CTX_LIMIT_TOKENS - rec['ctx_tokens'])
+
     def get_user_profile(self, username):
         with self._lock:
             loaded = _load_json()
@@ -3253,10 +3556,60 @@ def _extract_page_text(url, timeout=5):
         return None
 
 
+def _search_serper(query, region=None, max_results=10):
+    """Google search via Serper.dev — used as a last-resort fallback when the
+    DuckDuckGo-based engines all fail. Maps organic[] results to SearchResults;
+    returns [] when no API key is configured or the call fails."""
+    if not SERPER_API_KEY:
+        return []
+    try:
+        payload = {'q': query}
+        if region and re.fullmatch(r'[a-zA-Z]{2}', region):
+            payload['gl'] = region.lower()
+        resp = requests.post(
+            'https://google.serper.dev/search',
+            headers={'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'},
+            json=payload,
+            timeout=8,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        app.logger.error(f"Serper search error: {e}")
+        return []
+    results = []
+    seen = set()
+    for item in data.get('organic') or []:
+        href = item.get('link', '')
+        title = (item.get('title') or '').strip()
+        if not href or not title or href in seen:
+            continue
+        seen.add(href)
+        snippet = (item.get('snippet') or '')[:300]
+        parsed = urlparse(href)
+        results.append(SearchResult(
+            title=title, url=href, snippet=snippet,
+            category='general', domain=parsed.netloc, source='serper'
+        ))
+        if len(results) >= max_results:
+            break
+    # When organic is empty, surface the knowledge graph as a single answer
+    if not results:
+        kg = data.get('knowledgeGraph') or {}
+        href = kg.get('link', '')
+        title = kg.get('title', '')
+        if href and title:
+            results.append(SearchResult(
+                title=title, url=href,
+                snippet=(kg.get('description') or '')[:300],
+                category='general', domain=urlparse(href).netloc, source='serper'
+            ))
+    return results
+
+
 class ImprovedSearch:
     def __init__(self):
         self.session = requests.Session()
-        # Connection pool with keep-alive for faster repeats
         adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=20, max_retries=0)
         self.session.mount('https://', adapter)
         self.session.mount('http://', adapter)
@@ -3276,6 +3629,7 @@ class ImprovedSearch:
                 pass
         else:
             self.ddgs = None
+        self._serper_fallback_used = False
         self.in_memory_cache = {}
         self.cache_lock = threading.Lock()
 
@@ -3807,6 +4161,53 @@ class ImprovedSearch:
                 return 50
         return 0
 
+    def _score_official_domain_boost(self, query, result):
+        """If the query exactly matches the result's domain/URL, put it first.
+        Generic rule — no hardcoded site list needed."""
+        query_lower = query.lower().strip()
+        domain = urlparse(result.url).netloc.lower()
+        domain = re.sub(r'^www\.', '', domain)
+
+        if not query_lower or not domain:
+            return 0
+        if domain in query_lower:
+            return 150
+
+        def norm(s):
+            return re.sub(r'[^a-z0-9]', '', s)
+
+        if norm(query_lower) == norm(domain):
+            return 160
+
+        parts = domain.split('.')
+        if len(parts) < 2:
+            return 0
+        base = parts[0] if len(parts) == 2 else parts[1]
+        base_tokens = set(re.sub(r'[-_]', ' ', base).split())
+        if not base_tokens:
+            return 0
+        terms = set(w for w in re.sub(r'\.', ' ', query_lower).split() if len(w) > 2)
+        for stop in ('ai', 'official', 'website', 'site', 'app', 'the', 'login', 'online'):
+            terms.discard(stop)
+        if not terms:
+            return 0
+        matches = sum(1 for t in terms if any(bt.startswith(t) for bt in base_tokens))
+        ratio = matches / len(terms)
+        if ratio >= 1.0:
+            return 110
+        if ratio >= 0.5:
+            return 55
+        return 0
+
+    def _score_game_store_boost(self, query, result):
+        """Prefer official game storefronts so users land on a legit download link."""
+        domain = urlparse(result.url).netloc.lower()
+        domain = re.sub(r'^www\.', '', domain)
+        for gs in GAME_STORE_DOMAINS:
+            if domain == gs or domain.endswith('.' + gs):
+                return 30
+        return 0
+
     def _score_navigational_domain_boost(self, query, result):
         query_lower = query.lower().strip()
         query_terms = set(query_lower.split())
@@ -4131,8 +4532,11 @@ class ImprovedSearch:
 
             s += self._score_title_match(query, intent, result) * 0.18
             s += self._score_snippet_relevance(query, intent, result) * 0.14
-            s += self._score_domain_authority(result.url) * 0.08
+            authority = self._score_domain_authority(result.url)
+            s += authority * 0.12
             s += self._score_exact_domain_match(query, result) * 0.10
+            s += self._score_official_domain_boost(query, result)
+            s += self._score_game_store_boost(query, result)
             s += self._score_url_quality(query, result.url) * 0.06
             s += self._score_freshness(result, query_intent_subtype) * 0.08
             s += self._score_category_relevance(query, intent, result) * 0.06
@@ -4152,6 +4556,31 @@ class ImprovedSearch:
             for bl_domain, bl_penalty in blacklist.items():
                 if bl_domain in domain:
                     s += bl_penalty
+
+            # ── Safety & authority multiplier ──
+            # Dangerous/adware sites sink hard even if Tranco ranks them popular;
+            # official, high-authority domains get a heavy lift. Applied after all
+            # additive scores so a risky site's relevance can't keep it on top.
+            risk = _domain_risk_level(domain)
+            if risk == 'danger':
+                s *= 0.15
+            elif risk == 'caution':
+                s *= 0.50
+            else:
+                if authority >= 90:
+                    s *= 1.35
+                elif authority >= 80:
+                    s *= 1.20
+                elif authority >= 70:
+                    s *= 1.10
+                elif authority >= 50:
+                    s *= 1.03
+
+            # Download/install queries: nudge top-tier official domains hard so the
+            # real vendor page wins over aggregator mirrors (e.g. "process explorer
+            # download" -> learn.microsoft.com over uptodown/softonic).
+            if re.search(r'\b(download|downloads|install|official)\b', query_lower) and authority >= 80 and risk is None and _is_vendor_domain(domain):
+                s += authority * 0.30
 
             s = max(0, s)
 
@@ -4330,6 +4759,25 @@ class ImprovedSearch:
                     continue
                 if len(results) >= 5:
                     break
+            if not results and self.ddgs:
+                try:
+                    raw = self.ddgs.text(query + ' ' + site_filter, max_results=10, backend='auto', safesearch='off')
+                    for r in raw:
+                        href = r.get('href', '')
+                        title = r.get('title', '')
+                        if not href or not title or href in seen:
+                            continue
+                        seen.add(href)
+                        parsed = urlparse(href)
+                        category = 'discussion' if 'site:reddit.com' in site_filter else 'video'
+                        results.append(SearchResult(
+                            title=title, url=href, snippet=(r.get('body', '') or '')[:300],
+                            category=category, date=None, domain=parsed.netloc
+                        ))
+                        if len(results) >= 5:
+                            break
+                except Exception as e:
+                    app.logger.error(f"DDGS site fallback ({site_filter[:20]}) error: {e}")
             return results
         except Exception as e:
             app.logger.error(f"DDG site search ({site_filter[:20]}) error: {e}")
@@ -4373,6 +4821,26 @@ class ImprovedSearch:
                     continue
                 if len(results) >= 15:
                     break
+            if not results and self.ddgs:
+                try:
+                    raw = self.ddgs.text(query=query, max_results=15, backend='auto', safesearch='off')
+                    for r in raw:
+                        title = r.get('title', '')
+                        href = r.get('href', '')
+                        if not title or not href or href in seen:
+                            continue
+                        seen.add(href)
+                        parsed = urlparse(href)
+                        snippet = (r.get('body', '') or '')[:300]
+                        results.append(SearchResult(
+                            title=title, url=href, snippet=snippet,
+                            category=self._categorize_result(href, title, snippet),
+                            date=self._extract_date(snippet), domain=parsed.netloc
+                        ))
+                        if len(results) >= 15:
+                            break
+                except Exception as e:
+                    app.logger.error(f"DDGS HTML fallback error: {e}")
             return results
         except Exception as e:
             app.logger.error(f"DDG HTML search error: {e}")
@@ -4635,9 +5103,9 @@ class ImprovedSearch:
                                     results.append(r)
                     except Exception as e:
                         errors.append(str(e))
-                # Stage 2: always wait for remaining engines (Brave needs 2-4s)
+                # Stage 2: always wait for remaining engines (ddgs needs 3-5s)
                 if not_done:
-                    remaining, _ = wait(not_done, timeout=2.5, return_when=ALL_COMPLETED)
+                    remaining, _ = wait(not_done, timeout=5.0, return_when=ALL_COMPLETED)
                     for future in remaining:
                         try:
                             current_results = future.result()
@@ -4657,6 +5125,13 @@ class ImprovedSearch:
             if not results:
                 app.logger.warning("Primary search returned no results, trying fallback")
                 results = self._search_fallback(query, region)
+
+            if not results:
+                app.logger.warning("All primary engines failed, trying Serper fallback")
+                serper_results = _search_serper(query, region)
+                if serper_results:
+                    results = serper_results
+                    self._serper_fallback_used = True
 
             if results:
                 ranked_results = self._rank_results(query, results)
@@ -6114,16 +6589,28 @@ def extract_places_location(query):
     return None, None
 
 def has_places_intent(query):
-    """True for local-business queries (escape rooms, restaurants, hotels, ...)."""
+    """True for local-business queries (escape rooms, restaurants, hotels, ...).
+
+    Game/wiki/software queries are explicitly excluded so "minecraft bank" or
+    "where to find diamonds" never trigger the map/places widget. Place words are
+    matched with word boundaries so "spa" doesn't fire on "spawn" and "park"
+    doesn't fire on "parkour".
+    """
     if not query:
         return False
     q = query.lower().strip()
     if _NEAR_ME_RE.search(q):
         return True
-    clean, loc = extract_places_location(query)
-    if loc:
-        return any(w in q for w in _PLACES_LOCAL_WORDS)
-    return any(w in q for w in _PLACES_LOCAL_WORDS)
+    if _has_negative_word(q, _PLACES_HARD_NEGATIVE_WORDS):
+        return False
+    local_hits = [w for w in _PLACES_LOCAL_WORDS if _match_phrase(q, w)]
+    if not local_hits:
+        return False
+    if _has_negative_word(q, _PLACES_SOFT_NEGATIVE_WORDS):
+        _, loc = extract_places_location(query)
+        if not loc and all(' ' not in w for w in local_hits):
+            return False
+    return True
 
 def _haversine_km(lat1, lon1, lat2, lon2):
     from math import asin, cos, radians, sin, sqrt
@@ -6734,6 +7221,7 @@ def search():
         if region:
             session['region'] = region
         results, total_results = search_engine.search(query, page, filter_type, region or None)
+        serper_fallback = getattr(search_engine, '_serper_fallback_used', False)
 
         # ── Parallelize supplementary fetches alongside result processing ──
         from concurrent.futures import ThreadPoolExecutor as _SupPool, Future
@@ -6783,6 +7271,19 @@ def search():
             other_results = [r for r in results if not r.get('verified')]
             results = verified_results + other_results
             results = polish_result_snippets(results, query)
+
+        # ── Site safety warnings (malware/adware flags, results are NOT delisted) ──
+        site_warnings = []
+        _seen_warn = set()
+        for _r in results:
+            _dom = (_r.get('domain') or urlparse(_r.get('url', '')).netloc).lower().replace('www.', '')
+            if not _dom:
+                continue
+            _level = _domain_risk_level(_dom)
+            if _level and _dom not in _seen_warn:
+                _seen_warn.add(_dom)
+                site_warnings.append({'domain': _dom, 'level': _level})
+        site_warnings_json = json.dumps(site_warnings)
 
         _sup_pool.submit(search_stats.record)
         _sup_pool.submit(data_manager._increment_searches_deferred)
@@ -6903,6 +7404,8 @@ def search():
             places_location=places_location,
             places_cached=places_cached,
             places_prompt=places_prompt,
+            site_warnings_json=site_warnings_json,
+            serper_fallback=serper_fallback,
         ))
         _sup_pool.shutdown(wait=False)
         return resp
@@ -7388,7 +7891,7 @@ def videos():
 
 @app.route('/blog')
 def blog():
-    return redirect(url_for('land'))
+    return render_template('blog.html')
 
 @app.route('/about')
 def about():
@@ -7825,6 +8328,9 @@ def login():
                 send_login_notification(user_email, username, ip)
             except:
                 pass
+        next_url = request.args.get('next', '')
+        if next_url and next_url.startswith('/') and not next_url.startswith('//'):
+            return redirect(next_url)
         return redirect(url_for('home'))
     return redirect(url_for('signup', mode='login'))
 
@@ -8597,6 +9103,475 @@ def api_user_preferences():
     return jsonify({'ok': ok})
 
 
+# ═══════════════════════════════════════════════════════════════
+# ── Arlong AI mode (arlong.org/ai) ──
+# Standalone feature. Uses GROQ_AI_MODE_API_KEY ONLY.
+# (Standard search-result summaries keep using GROQ_API_KEY.)
+# ═══════════════════════════════════════════════════════════════
+
+def _ai_groq():
+    from groq import Groq
+    return Groq(api_key=AI_MODE_GROQ_API_KEY)
+
+
+def _ai_est_tokens(text):
+    return max(1, int(len(text or '') / 4))
+
+
+def _ai_parse_ts(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value))
+    except Exception:
+        return None
+
+
+def _ai_ts_age(value):
+    """Age of a stored UTC ISO timestamp; missing/unknown counts as long expired."""
+    dt = _ai_parse_ts(value)
+    if dt is None:
+        return timedelta.max
+    return datetime.utcnow() - dt
+
+
+def _ai_normalize_usage(rec):
+    """Coerce a stored ai_usage record into the rolling-window shape."""
+    if not isinstance(rec, dict):
+        rec = {}
+    out = {
+        'msg_window_start': rec.get('msg_window_start') if isinstance(rec.get('msg_window_start'), str) else None,
+        'msg_count': int(rec.get('msg_count', 0)),
+        'ctx_window_start': rec.get('ctx_window_start') if isinstance(rec.get('ctx_window_start'), str) else None,
+        'ctx_tokens': int(rec.get('ctx_tokens', 0)),
+    }
+    return out
+
+
+def _ai_compress_history(history, budget_tokens=None):
+    """Summarize older exchanges when a chat nears the context-window limit.
+
+    Returns (messages, compressed) where compressed is True when the history
+    was summarized/truncated so the query context is never lost.
+    """
+    if budget_tokens is None:
+        budget_tokens = max(2000, AI_CTX_LIMIT_TOKENS // 2)
+    if not history:
+        return [], False
+    total = sum(_ai_est_tokens(m.get('content', '')) for m in history)
+    if total <= budget_tokens:
+        return history, False
+    keep_budget = budget_tokens // 2
+    recent = []
+    used = 0
+    for m in reversed(history):
+        t = _ai_est_tokens(m.get('content', ''))
+        if recent and used + t > keep_budget:
+            break
+        recent.append(m)
+        used += t
+    recent.reverse()
+    old = history[:len(history) - len(recent)]
+    joined = '\n'.join(f"{m.get('role', 'user')}: {m.get('content', '')}" for m in old)
+    summary = ''
+    if AI_MODE_GROQ_API_KEY:
+        try:
+            comp = _ai_groq().chat.completions.create(
+                model=AI_MODE_GROQ_MODEL,
+                messages=[
+                    {'role': 'system', 'content': 'You are a conversation summarizer. Condense the conversation below into a compact factual summary, preserving key questions, answers, names, decisions and cited sources. Output only the summary.'},
+                    {'role': 'user', 'content': joined[:20000]},
+                ],
+                max_tokens=700,
+                temperature=0.2,
+            )
+            summary = (comp.choices[0].message.content or '').strip()
+        except Exception as e:
+            app.logger.warning(f"AI history compression failed: {e}")
+    if summary:
+        return [{'role': 'system', 'content': 'Prior conversation summary:\n' + summary}] + recent, True
+    return history[-10:], True
+
+
+def _ai_top_results(query, limit=5):
+    """Top web results pulled from the internal Arlong search engine, falling
+    back to Serper when the primary engines return nothing."""
+    try:
+        results, _total = search_engine.search(query, 1)
+        if not results:
+            app.logger.warning("AI search primary empty, using Serper fallback")
+            results = _search_serper(query, None)
+    except Exception as e:
+        app.logger.error(f"AI search error: {e}")
+        results = _search_serper(query, None)
+    top = []
+    for r in results:
+        d = r.to_dict() if hasattr(r, 'to_dict') else r
+        url = d.get('url', '')
+        if not url:
+            continue
+        top.append({
+            'title': (d.get('title') or '')[:180],
+            'url': url,
+            'favicon': d.get('favicon') or f"https://www.google.com/s2/favicons?domain={url}",
+            'domain': (d.get('domain') or urlparse(url).netloc).replace('www.', ''),
+            'snippet': (d.get('snippet') or '')[:280],
+        })
+        if len(top) >= limit:
+            break
+    return top
+
+
+def _ai_link_evaluations(query, results):
+    """One Groq call producing short per-link relevance evaluations."""
+    if not AI_MODE_GROQ_API_KEY or not results:
+        return {}
+    try:
+        links = '\n'.join(
+            f"{i+1}. {r['title']} | {r['url']} | {(r.get('snippet') or '')[:160]}"
+            for i, r in enumerate(results[:5])
+        )
+        comp = _ai_groq().chat.completions.create(
+            model=AI_MODE_GROQ_MODEL,
+            response_format={'type': 'json_object'},
+            messages=[
+                {'role': 'system', 'content': 'You evaluate web search results for relevance. Reply with STRICT JSON only, shaped as {"evaluations":[{"idx":1,"eval":"one sentence"}]}.'},
+                {'role': 'user', 'content': f"Query: {query}\n\nSources:\n{links}\n\nFor each source write ONE concise sentence (under 200 chars) on why it is relevant to the query and whether it is a good source."},
+            ],
+            max_tokens=900,
+            temperature=0.2,
+        )
+        raw = comp.choices[0].message.content or '{}'
+        parsed = {}
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            m = re.search(r'\{.*\}', raw, re.S)
+            if m:
+                try:
+                    parsed = json.loads(m.group(0))
+                except Exception:
+                    parsed = {}
+        evals = {}
+        for e in (parsed.get('evaluations') or []):
+            try:
+                evals[int(e.get('idx'))] = (e.get('eval') or '').strip()[:220]
+            except Exception:
+                continue
+        return evals
+    except Exception as e:
+        app.logger.error(f"AI link evaluations error: {e}")
+        return {}
+
+
+def _ai_build_messages(history, results):
+    system = (
+        "You are Arlong AI, a precise, well-read research assistant. "
+        "Answer the user's query using the web search results provided. "
+        "Start with a direct, synthesized answer, then add concise bullet points for key details where useful. "
+        "Cite sources inline as [1], [2] matching the numbered links. "
+        "Use valid Markdown (sparing headings, lists, bold, fenced code blocks with language tags, tables when helpful). "
+        "Never invent sources that are not listed. If the results do not answer the query, say so honestly."
+    )
+    messages = [{'role': 'system', 'content': system}]
+    messages.extend(history)
+    if results:
+        sources = '\n'.join(
+            f"[{i+1}] {r['title']} - {r['url']}\n    {(r.get('snippet') or '')[:200]}"
+            for i, r in enumerate(results[:5])
+        )
+        messages.append({
+            'role': 'user',
+            'content': f"Web search results for the current query:\n{sources}\n\nSynthesize your answer using these results and cite them inline as [1]-[{len(results[:5])}]. Do not invent sources."
+        })
+    else:
+        messages.append({'role': 'user', 'content': 'No web results were retrieved for this query. Answer from your own knowledge.'})
+    return messages
+
+
+@app.route('/ai')
+def ai_page():
+    if not session.get('user_id'):
+        return redirect(url_for('login') + '?next=/ai')
+    user = data_manager.get_user_by_id(session['user_id'])
+    username = (user or {}).get('username', session.get('username', ''))
+    first_name = username.split(' ')[0].capitalize() if username else 'there'
+    hour = datetime.now().hour
+    if hour < 12:
+        greeting = 'Good morning'
+    elif hour < 17:
+        greeting = 'Good afternoon'
+    else:
+        greeting = 'Good evening'
+    chats = data_manager.get_ai_chats(session['user_id'])
+    usage = data_manager.get_ai_usage(session['user_id'])
+    msg_used = int(usage.get('msg_count', 0))
+    msg_remaining = max(0, AI_MESSAGE_LIMIT - msg_used)
+    ctx_used = int(usage.get('ctx_tokens', 0))
+    ctx_pct = round(min(100.0, ctx_used * 100.0 / AI_CTX_LIMIT_TOKENS)) if AI_CTX_LIMIT_TOKENS else 0
+    weather_city = ''
+    if user:
+        weather_city = (user.get('weather_location') or '').strip() or (user.get('preferences') or {}).get('weather_city', '')
+    load_chat = None
+    chat_id = request.args.get('chat', '')
+    if chat_id:
+        load_chat = data_manager.get_ai_chat(session['user_id'], chat_id)
+    return render_template(
+        'ai.html',
+        username=username,
+        first_name=first_name,
+        greeting=greeting,
+        chats=chats,
+        load_chat=load_chat,
+        msg_used=msg_used,
+        msg_remaining=msg_remaining,
+        msg_limit=AI_MESSAGE_LIMIT,
+        msg_reset_hours=AI_MESSAGE_WINDOW_HOURS,
+        ctx_used=ctx_used,
+        ctx_limit=AI_CTX_LIMIT_TOKENS,
+        ctx_pct=ctx_pct,
+        ctx_reset_hours=AI_CTX_WINDOW_HOURS,
+        weather_city=weather_city,
+        ai_key_set=bool(AI_MODE_GROQ_API_KEY),
+    )
+
+
+@app.route('/api/ai/chats')
+def api_ai_chats():
+    if not session.get('user_id'):
+        return jsonify({'ok': False, 'error': 'Login required'}), 401
+    return jsonify({'ok': True, 'chats': data_manager.get_ai_chats(session['user_id'])})
+
+
+@app.route('/api/ai/chat', methods=['GET'])
+def api_ai_get_chat():
+    if not session.get('user_id'):
+        return jsonify({'ok': False, 'error': 'Login required'}), 401
+    chat = data_manager.get_ai_chat(session['user_id'], request.args.get('id', ''))
+    if not chat:
+        return jsonify({'ok': False, 'error': 'Chat not found'}), 404
+    return jsonify({'ok': True, 'chat': chat})
+
+
+@app.route('/api/ai/chat/delete', methods=['POST'])
+def api_ai_delete_chat():
+    if not session.get('user_id'):
+        return jsonify({'ok': False, 'error': 'Login required'}), 401
+    data = request.get_json(silent=True) or {}
+    data_manager.delete_ai_chat(session['user_id'], data.get('chat_id', ''))
+    return jsonify({'ok': True})
+
+
+@app.route('/api/ai/chat/rename', methods=['POST'])
+def api_ai_rename_chat():
+    if not session.get('user_id'):
+        return jsonify({'ok': False, 'error': 'Login required'}), 401
+    data = request.get_json(silent=True) or {}
+    chat = data_manager.get_ai_chat(session['user_id'], data.get('chat_id', ''))
+    title = (data.get('title') or '').strip()[:120]
+    if chat and title:
+        chat['title'] = title
+        data_manager.save_ai_chat(session['user_id'], chat)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/ai/regenerate', methods=['POST'])
+def api_ai_regenerate():
+    if not session.get('user_id'):
+        return jsonify({'ok': False, 'error': 'Login required'}), 401
+    data = request.get_json(silent=True) or {}
+    chat = data_manager.get_ai_chat(session['user_id'], data.get('chat_id', ''))
+    if not chat:
+        return jsonify({'ok': False, 'error': 'Chat not found'}), 404
+    msgs = chat.get('messages', [])
+    if msgs and msgs[-1].get('role') == 'assistant':
+        chat['messages'] = msgs[:-1]
+        chat.get('feedback', {}).pop(str(len([m for m in msgs[:-1] if m.get('role') == 'assistant'])), None)
+        data_manager.save_ai_chat(session['user_id'], chat)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/ai/feedback', methods=['POST'])
+def api_ai_feedback():
+    if not session.get('user_id'):
+        return jsonify({'ok': False, 'error': 'Login required'}), 401
+    data = request.get_json(silent=True) or {}
+    chat = data_manager.get_ai_chat(session['user_id'], data.get('chat_id', ''))
+    if not chat:
+        return jsonify({'ok': False, 'error': 'Chat not found'}), 404
+    idx = int(data.get('message_idx', -1))
+    value = data.get('value')
+    if idx < 0 or value not in ('up', 'down'):
+        return jsonify({'ok': False, 'error': 'Bad request'}), 400
+    chat.setdefault('feedback', {})[str(idx)] = value
+    data_manager.save_ai_chat(session['user_id'], chat)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/ai/search', methods=['POST'])
+def api_ai_search():
+    if not session.get('user_id'):
+        return jsonify({'ok': False, 'error': 'Login required'}), 401
+    data = request.get_json(silent=True) or {}
+    query = (data.get('query') or '').strip()
+    if not query:
+        return jsonify({'ok': False, 'error': 'Query required'}), 400
+    user_id = session['user_id']
+    usage = data_manager.get_ai_usage(user_id)
+    msg_used = int(usage.get('msg_count', 0))
+    ctx_used = int(usage.get('ctx_tokens', 0))
+    if msg_used >= AI_MESSAGE_LIMIT:
+        return jsonify({
+            'ok': False, 'error': 'limit', 'limit_type': 'messages',
+            'msg_used': msg_used, 'msg_remaining': 0, 'msg_limit': AI_MESSAGE_LIMIT,
+            'ctx_used': ctx_used, 'ctx_remaining': max(0, AI_CTX_LIMIT_TOKENS - ctx_used), 'ctx_limit': AI_CTX_LIMIT_TOKENS,
+        }), 429
+    allowed, remaining, used = data_manager.increment_ai_usage(user_id)
+    if not allowed:
+        return jsonify({
+            'ok': False, 'error': 'limit', 'limit_type': 'messages',
+            'msg_used': AI_MESSAGE_LIMIT, 'msg_remaining': 0, 'msg_limit': AI_MESSAGE_LIMIT,
+            'ctx_used': ctx_used, 'ctx_remaining': max(0, AI_CTX_LIMIT_TOKENS - ctx_used), 'ctx_limit': AI_CTX_LIMIT_TOKENS,
+        }), 429
+    results = _ai_top_results(query, 5)
+    chat_id = data.get('chat_id') or ''
+    chat = data_manager.get_ai_chat(user_id, chat_id) if chat_id else None
+    now = datetime.utcnow().isoformat()
+    if not chat:
+        chat = {
+            'chat_id': uuid.uuid4().hex[:12],
+            'title': query[:60],
+            'created_at': now,
+            'updated_at': now,
+            'messages': [],
+            'feedback': {},
+        }
+    chat.setdefault('messages', []).append({'role': 'user', 'content': query, 'ts': now})
+    chat['updated_at'] = now
+    data_manager.save_ai_chat(user_id, chat)
+    return jsonify({
+        'ok': True,
+        'chat_id': chat['chat_id'],
+        'title': chat['title'],
+        'results': results,
+        'remaining': remaining,
+        'msg_used': min(AI_MESSAGE_LIMIT, used),
+        'msg_remaining': remaining,
+        'msg_limit': AI_MESSAGE_LIMIT,
+        'ctx_used': ctx_used,
+        'ctx_remaining': max(0, AI_CTX_LIMIT_TOKENS - ctx_used),
+        'ctx_limit': AI_CTX_LIMIT_TOKENS,
+    })
+
+
+@app.route('/api/ai/links', methods=['POST'])
+def api_ai_links():
+    if not session.get('user_id'):
+        return jsonify({'ok': False, 'error': 'Login required'}), 401
+    data = request.get_json(silent=True) or {}
+    query = (data.get('query') or '').strip()
+    results = data.get('results') or []
+    if not query or not results:
+        return jsonify({'ok': False, 'error': 'Missing query or results'}), 400
+    evals = _ai_link_evaluations(query, results)
+    return jsonify({'ok': True, 'evaluations': evals})
+
+
+@app.route('/api/ai/stream', methods=['POST'])
+def api_ai_stream():
+    if not session.get('user_id'):
+        return jsonify({'ok': False, 'error': 'Login required'}), 401
+    if not AI_MODE_GROQ_API_KEY:
+        def _no_key():
+            yield 'Arlong AI is not configured yet (missing GROQ_AI_MODE_API_KEY).'
+        return Response(_no_key(), mimetype='text/plain')
+    data = request.get_json(silent=True) or {}
+    query = (data.get('query') or '').strip()
+    chat_id = data.get('chat_id') or ''
+    results = data.get('results') or []
+    replace_last = bool(data.get('replace_last'))
+    if not query:
+        return jsonify({'ok': False, 'error': 'Query required'}), 400
+    user_id = session['user_id']
+    chat = data_manager.get_ai_chat(user_id, chat_id) if chat_id else None
+    if chat and replace_last:
+        msgs = chat.get('messages', [])
+        if msgs and msgs[-1].get('role') == 'assistant':
+            msgs.pop()
+    history = []
+    if chat:
+        for m in chat.get('messages', []):
+            if m.get('role') in ('user', 'assistant'):
+                history.append({'role': m.get('role'), 'content': m.get('content', '')})
+    messages, compressed = _ai_compress_history(_ai_build_messages(history, results))
+    request_tokens = _ai_est_tokens('\n'.join(m.get('content', '') for m in messages))
+    ctx_allowed, ctx_used, ctx_remaining = data_manager.add_ai_context_tokens(user_id, request_tokens)
+    if not ctx_allowed:
+        msg_usage = data_manager.get_ai_usage(user_id)
+        return jsonify({
+            'ok': False, 'error': 'limit', 'limit_type': 'context',
+            'msg_used': int(msg_usage.get('msg_count', 0)),
+            'msg_remaining': max(0, AI_MESSAGE_LIMIT - int(msg_usage.get('msg_count', 0))),
+            'msg_limit': AI_MESSAGE_LIMIT,
+            'ctx_used': ctx_used, 'ctx_remaining': ctx_remaining, 'ctx_limit': AI_CTX_LIMIT_TOKENS,
+            'ctx_reset_hours': AI_CTX_WINDOW_HOURS,
+        }), 429
+    if compressed:
+        app.logger.info(f"AI context compressed for chat {chat_id}")
+
+    def generate():
+        full = ''
+        try:
+            stream = _ai_groq().chat.completions.create(
+                model=AI_MODE_GROQ_MODEL,
+                messages=messages,
+                max_tokens=1600,
+                temperature=0.4,
+                stream=True,
+            )
+            for chunk in stream:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    full += delta
+                    yield delta
+        except Exception as e:
+            app.logger.error(f"AI stream error: {e}")
+            yield f"\n\n_[Generation error: {e}]_"
+        finally:
+            if chat_id and full.strip():
+                try:
+                    chat = data_manager.get_ai_chat(user_id, chat_id)
+                    if chat:
+                        chat.setdefault('messages', []).append({
+                            'role': 'assistant',
+                            'content': full,
+                            'query': query,
+                            'sources': results,
+                            'evaluations': _ai_link_evaluations(query, results),
+                            'ts': datetime.utcnow().isoformat(),
+                        })
+                        chat['updated_at'] = datetime.utcnow().isoformat()
+                        data_manager.save_ai_chat(user_id, chat)
+                except Exception as e:
+                    app.logger.error(f"AI stream save error: {e}")
+
+    msg_usage = data_manager.get_ai_usage(user_id)
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/plain',
+        headers={
+            'X-AI-Msg-Used': str(int(msg_usage.get('msg_count', 0))),
+            'X-AI-Msg-Limit': str(AI_MESSAGE_LIMIT),
+            'X-AI-Ctx-Used': str(ctx_used),
+            'X-AI-Ctx-Limit': str(AI_CTX_LIMIT_TOKENS),
+            'X-AI-Ctx-Remaining': str(max(0, AI_CTX_LIMIT_TOKENS - ctx_used)),
+            'X-AI-Ctx-Reset-Hours': str(AI_CTX_WINDOW_HOURS),
+        },
+    )
+
+
 # ── Premium ──
 
 if scheduler_available:
@@ -8614,4 +9589,4 @@ if scheduler_available:
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(debug=False, host='0.0.0.0', port=port)
+    app.run(debug=False, host='0.0.0.0', port=port, threaded=True)

@@ -208,6 +208,9 @@
         .ao-loading .al-sub{font-size:12px;color:var(--text4);font-weight:400;margin-top:4px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif;transition:opacity .3s;height:16px}
         .ao-loading .al-bar-wrap{width:160px;height:3px;background:var(--border2);border-radius:2px;margin-top:18px;overflow:hidden}
         .ao-loading .al-bar{height:100%;width:0%;background:linear-gradient(90deg,var(--link),#4fc3f7);border-radius:2px;transition:width .3s ease}
+        .ao-loading .al-game{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);width:min(440px,88vw);height:140px;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+        .ao-loading .al-game canvas{display:block;margin:0 auto;cursor:pointer}
+        .ao-loading .al-game-hint{font-size:11px;color:var(--text4);font-weight:400;margin-top:4px;height:14px;text-align:center;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif;transition:opacity .3s}
         @keyframes al-pulse{0%,100%{opacity:1}50%{opacity:.4}}
         .iceberg .result-url{color:#4fc3f7}
         .iceberg .result-title{color:#81d4fa}
@@ -649,6 +652,18 @@
         /* Sidebar cards */
         .sidebar-card{border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--card-bg);box-shadow:0 1px 3px var(--shadow2)}
         .sidebar-card .sc-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;letter-spacing:.2px}
+        /* Support card (monochrome, matches the page palette) */
+        .portal-support-card{display:block;text-decoration:none;color:inherit;transition:border-color .2s,box-shadow .2s,transform .2s}
+        .portal-support-card:hover{border-color:var(--text3);box-shadow:0 2px 10px var(--shadow2);transform:translateY(-1px)}
+        .support-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+        .support-icon{width:32px;height:32px;border-radius:8px;background:var(--bg3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;color:var(--text2);flex-shrink:0}
+        .support-title{font-size:13px;font-weight:600;color:var(--text);line-height:1.3}
+        .support-sub{font-size:11px;color:var(--text3);line-height:1.3}
+        .support-body{font-size:12px;color:var(--text3);line-height:1.5;margin:0 0 12px}
+        .support-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;font-weight:600;color:var(--text);background:var(--hover-bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;transition:background .15s,border-color .15s;text-decoration:none}
+        .portal-support-card:hover .support-btn{background:var(--bg3);border-color:var(--text3)}
+        .support-btn .sb-arr{color:var(--text3);transition:transform .2s}
+        .portal-support-card:hover .support-btn .sb-arr{transform:translateX(3px);color:var(--text)}
         .trending-card .sc-title{display:flex;align-items:center;gap:6px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border2)}
         .trending-card .sc-title .tr-icon{font-size:15px}
         .trending-card .sc-title .tr-label{font-size:13px;font-weight:600;color:var(--text)}
@@ -1002,20 +1017,20 @@
         .rc-video-preview .rc-vp-ch{font-weight:500;color:var(--text2)}
         .rc-video-preview .rc-vp-views{color:var(--text4);margin-left:auto}
         /* ── Nested YouTube dynamic thumbnails ── */
-        .rc-modern.rc-child .yt-thumb{width:100%;max-width:280px;aspect-ratio:16/9;border-radius:6px;overflow:hidden;background:var(--bg3);border:1px solid var(--border2);cursor:pointer;position:relative;margin:2px 0 10px}
-        .rc-modern.rc-child .yt-thumb img{width:100%;height:100%;object-fit:cover;display:block;visibility:hidden;opacity:0;transform:scale(.92);transition:opacity .2s ease,visibility 0s .2s,transform .2s ease}
-        .rc-modern.rc-child .yt-thumb.yt-active img{visibility:visible;opacity:1;transform:scale(1);transition:none;animation:yt-pop .3s cubic-bezier(.2,.8,.25,1.15)}
+        .rc-modern .yt-thumb{width:100%;max-width:280px;aspect-ratio:16/9;border-radius:6px;overflow:hidden;background:var(--bg3);border:1px solid var(--border2);cursor:pointer;position:relative;margin:2px 0 10px}
+        .rc-modern .yt-thumb img{width:100%;height:100%;object-fit:cover;display:block;visibility:hidden;opacity:0;transform:scale(.92);transition:opacity .2s ease,visibility 0s .2s,transform .2s ease}
+        .rc-modern .yt-thumb.yt-active img{visibility:visible;opacity:1;transform:scale(1);transition:none;animation:yt-pop .3s cubic-bezier(.2,.8,.25,1.15)}
         @keyframes yt-pop{0%{opacity:0;transform:scale(.86)}100%{opacity:1;transform:scale(1)}}
-        .rc-modern.rc-child .yt-thumb::after{content:'▶';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:36px;height:36px;background:rgba(0,0,0,.6);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;opacity:0;transition:opacity .2s,background .2s}
-        .rc-modern.rc-child .yt-thumb.yt-active::after{opacity:1}
-        .rc-modern.rc-child .yt-thumb:hover::after{background:rgba(255,0,0,.85);opacity:1}
+        .rc-modern .yt-thumb::after{content:'▶';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:36px;height:36px;background:rgba(0,0,0,.6);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;opacity:0;transition:opacity .2s,background .2s}
+        .rc-modern .yt-thumb.yt-active::after{opacity:1}
+        .rc-modern .yt-thumb:hover::after{background:rgba(255,0,0,.85);opacity:1}
         .yt-thumb .yt-save,.rc-vp-thumb .yt-save{position:absolute;top:6px;right:6px;z-index:3;width:26px;height:26px;background:rgba(0,0,0,.72);border:1px solid rgba(255,255,255,.16);border-radius:6px;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;opacity:0;transition:opacity .15s,background .15s,color .15s}
         .yt-thumb:hover .yt-save,.yt-thumb.yt-active .yt-save,.rc-vp-thumb:hover .yt-save{opacity:1}
         .yt-thumb .yt-save:hover,.rc-vp-thumb .yt-save:hover{background:rgba(0,0,0,.92);color:var(--nav-active)}
-        .rc-modern.rc-child .yt-thumb .yt-dur{position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,.82);color:#fff;padding:1px 7px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:.3px;display:none}
-        .rc-modern.rc-child .yt-thumb.yt-dur-on .yt-dur{display:block}
+        .rc-modern .yt-thumb .yt-dur{position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,.82);color:#fff;padding:1px 7px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:.3px;display:none}
+        .rc-modern .yt-thumb.yt-dur-on .yt-dur{display:block}
         .rc-modern.rc-child.yt-active-card{border-color:var(--border3);background:rgba(138,180,248,.05)}
-        .rc-modern.rc-child .yt-thumb.yt-thumb-bad{opacity:.35}
+        .rc-modern .yt-thumb.yt-thumb-bad{opacity:.35}
         .yt-hide{display:none!important}
         .yt-more-btn{margin:10px 0 6px;padding:6px 14px;font-size:12px;font-weight:600;color:var(--nav-active);background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:6px;cursor:pointer;transition:background .15s}
         .yt-more-btn:hover{background:var(--blue-border)}
@@ -1050,11 +1065,14 @@
 <body data-loggedin="{% if session.user_id %}true{% else %}false{% endif %}" class="dark-mode portal-mode">
     <canvas id="fireworks-canvas"></canvas>
     <div class="ao-loading" id="ao-loading">
-        <div class="al-spinner"></div>
         <div class="al-logo">arlong</div>
         <div class="al-text" id="al-text">Searching the web</div>
         <div class="al-sub" id="al-sub"></div>
         <div class="al-bar-wrap"><div class="al-bar" id="al-progress"></div></div>
+        <div class="al-game" id="al-game">
+            <canvas id="al-game-canvas" aria-label="Dragon star collecting game"></canvas>
+            <div class="al-game-hint" id="al-game-hint">Press Space or tap to flap, collect the stars</div>
+        </div>
     </div>
     <div class="al-intro" id="al-intro">
         <div class="al-i-logo">arlong</div>
@@ -1097,6 +1115,7 @@
             PBAR_EL=document.getElementById('al-progress');
             if(!LOADING_EL)return;
             LOADING_EL.classList.add('show');
+            try{window.alGameInit&&alGameInit();window.alGame&&alGame.start();}catch(e){}
             LOADING_START=Date.now();
             LOADING_PINDEX=0;
             if(TEXT_EL)TEXT_EL.textContent=LOADING_PHRASES[0][0];
@@ -1117,6 +1136,7 @@
         function stopLoading(){
             clearInterval(LOADING_TIMER);
             LOADING_TIMER=null;
+            try{window.alGame&&alGame.stop();}catch(e){}
             if(PBAR_EL)PBAR_EL.style.width='100%';
             setTimeout(function(){
                 var lf=document.getElementById('ao-loading');
@@ -1136,6 +1156,85 @@
                 aol.classList.remove('show');
             }
         })();
+    </script>
+
+    <script>
+    (function(){
+        /* Simple loading game: tap / Space to flap the dragon and collect stars.
+           No obstacles, no dying, no score pressure. Just a little fun while we search. */
+        var cv=document.getElementById('al-game-canvas');
+        if(!cv)return;
+        var ctx=cv.getContext('2d');
+        var wrap=document.getElementById('al-game');
+        var W=300,H=140,GROUND=118;
+        var bird={y:0,vy:0};
+        var stars=[],score=0,run=false,raf=0,last=0;
+        var colors={dragon:'#1a73e8',star:'#ffd54f',ground:'#dadce0',text:'#5f6368'};
+        function cssVar(n,fb){var v=getComputedStyle(document.documentElement).getPropertyValue(n);return (v&&v.trim())?v.trim():fb;}
+        function resize(){
+            var w=Math.min(wrap?wrap.clientWidth:0,440)||300;
+            if(w<140)w=300;
+            W=w;
+            cv.width=w*2;cv.height=280;
+            cv.style.width=w+'px';cv.style.height='140px';
+            ctx.setTransform(2,0,0,2,0,0);
+            colors.dragon=cssVar('--link','#1a73e8');
+            colors.ground=cssVar('--border','#dadce0');
+            colors.text=cssVar('--text3','#5f6368');
+        }
+        function flap(){if(run)bird.vy=-6.2;}
+        function start(){
+            resize();
+            run=true;score=0;stars=[];bird={y:GROUND-30,vy:0};
+            last=performance.now();
+            cancelAnimationFrame(raf);
+            raf=requestAnimationFrame(loop);
+        }
+        function stop(){run=false;cancelAnimationFrame(raf);}
+        function loop(now){
+            if(!run)return;
+            var el=document.getElementById('ao-loading');
+            if(!el||!el.classList.contains('show')){stop();return;}
+            var dt=Math.min(50,now-last);last=now;
+            bird.vy+=0.42*(dt/16.67);bird.y+=bird.vy*(dt/16.67);
+            if(bird.y<10)bird.y=10;
+            if(bird.y>GROUND-6){bird.y=GROUND-6;bird.vy=0;}
+            if(Math.random()<dt*0.009)stars.push({x:W+18,y:30+Math.random()*(GROUND-70),r:5});
+            for(var i=stars.length-1;i>=0;i--){stars[i].x-=3*(dt/16.67);if(stars[i].x<-20)stars.splice(i,1);}
+            for(var j=stars.length-1;j>=0;j--){var s=stars[j];var dx=s.x-(18+12),dy=s.y-bird.y;if(dx*dx+dy*dy<22*22){stars.splice(j,1);score++;}}
+            draw();
+            raf=requestAnimationFrame(loop);
+        }
+        function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+        function draw(){
+            ctx.clearRect(0,0,W,H);
+            ctx.strokeStyle=colors.ground;ctx.lineWidth=2;
+            ctx.beginPath();ctx.moveTo(0,GROUND+0.5);ctx.lineTo(W,GROUND+0.5);ctx.stroke();
+            ctx.fillStyle=colors.star;
+            for(var i=0;i<stars.length;i++){var s=stars[i];ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill();}
+            var x=18,y=bird.y;
+            ctx.fillStyle=colors.dragon;
+            ctx.fillRect(x+4,y-6,5,6);
+            ctx.fillRect(x+15,y-6,5,6);
+            rr(x,y,24,20,7);ctx.fill();
+            rr(x+16,y-8,14,12,4);ctx.fill();
+            ctx.fillStyle=colors.ground;
+            ctx.beginPath();ctx.moveTo(x+29,y-2);ctx.lineTo(x+38,y+1);ctx.lineTo(x+29,y+3);ctx.closePath();ctx.fill();
+            ctx.fillStyle='#fff';ctx.fillRect(x+24,y-5,3,3);
+            ctx.fillStyle=colors.dragon;ctx.fillRect(x+25,y-5,2,2);
+            ctx.fillStyle=colors.text;ctx.font='bold 11px -apple-system,Segoe UI,sans-serif';ctx.textAlign='right';
+            ctx.fillText(String(score).padStart(2,'0'),W-4,14);
+        }
+        resize();
+        window.addEventListener('resize',resize);
+        document.addEventListener('keydown',function(e){
+            if(e.code==='Space'||e.code==='ArrowUp'||e.code==='KeyW'){e.preventDefault();flap();}
+        });
+        cv.addEventListener('mousedown',function(e){e.preventDefault();flap();});
+        cv.addEventListener('touchstart',function(e){e.preventDefault();flap();},{passive:false});
+        window.alGame={start:start,stop:stop};
+        window.alGameInit=function(){};
+    })();
     </script>
 
     <script>
@@ -1400,6 +1499,10 @@
             <a href="/changelogs">Changelogs</a><span class="sep">|</span>
             <a href="https://ko-fi.com/arlong" target="_blank" rel="noopener">&#x2615; Donate</a>
         </div>
+        <div class="about-link" style="margin-top:12px">
+            <a href="#" onclick="openAiIntro();return false;" style="color:#ccff66;font-weight:600">&#10022; We are introducing Arlong AI</a> <span class="sep">|</span>
+            <a href="/blog#arlong-ai" style="color:#ccff66">Read the blog</a>
+        </div>
         {% if blocked_count %}
         <div class="about-link" style="margin-top:12px;font-size:12px">&#x1F6AB; <strong>{{ "{:,}".format(blocked_count) }}</strong> gambling, ad, crypto, drug &amp; fraud domains delisted</div>
         {% endif %}
@@ -1424,6 +1527,7 @@
                         <a href="/docs">API</a>
                         <a href="https://ko-fi.com/arlong" target="_blank" rel="noopener">&#x2615; Donate</a>
                         <a href="/changelogs">Changelogs</a>
+                        <a href="#" onclick="openAiIntro();return false;" style="color:#ccff66;font-weight:600">&#10022; Introducing Arlong AI</a>
                     </div>
                 </div>
             </div>
@@ -1507,20 +1611,19 @@
                     </div>
                 </div>
                 {% endif %}
-                {% if session.user_id %}
-                <a href="/explore" class="sidebar-card" style="text-decoration:none;display:block;cursor:pointer;background:linear-gradient(135deg,#0a1a2e,#0d1f3a);border:1px solid #1a3050;border-radius:14px;padding:18px 20px;transition:border-color .2s,box-shadow .2s" onmouseover="this.style.borderColor='#8ab4f8';this.style.boxShadow='0 2px 12px rgba(138,180,248,.15)'" onmouseout="this.style.borderColor='#1a3050';this.style.boxShadow='none'">
-                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-                        <div style="width:32px;height:32px;border-radius:8px;background:#1a3050;display:flex;align-items:center;justify-content:center;color:#8ab4f8;flex-shrink:0">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:18px;height:18px"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                <a href="https://ko-fi.com/arlong" target="_blank" rel="noopener" class="sidebar-card portal-support-card" aria-label="Support arlong">
+                    <div class="support-head">
+                        <div class="support-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                         </div>
                         <div>
-                            <div style="font-size:13px;font-weight:600;color:#8ab4f8">Write a Blog</div>
-                            <div style="font-size:11px;color:var(--text3)">Share your thoughts with arlong</div>
+                            <div class="support-title">Support arlong</div>
+                            <div class="support-sub">Keep search independent</div>
                         </div>
                     </div>
-                    <div style="font-size:12px;color:var(--text3);line-height:1.4">Publish articles, guides, reviews &mdash; appear in Newsstand</div>
+                    <p class="support-body">arlong is free &mdash; no ads, no tracking, no paywalls. Servers still cost money, so a small one-time donation keeps it running for everyone.</p>
+                    <span class="support-btn">Donate on Ko-fi <span class="sb-arr">&rarr;</span></span>
                 </a>
-                {% endif %}
                 <div class="sidebar-card" id="weather-card">
                     <div class="sc-title" style="display:flex;align-items:center;justify-content:space-between">Weather <span id="weather-edit-btn" onclick="changeWeatherCity()" style="font-size:9px;color:var(--text3);cursor:pointer;padding:2px 6px;border-radius:4px;transition:all .15s" onmouseover="this.style.color='var(--text)';this.style.background='var(--hover-bg)'" onmouseout="this.style.color='var(--text3)';this.style.background=''">&#x270E; change</span></div>
                     <div class="weather-mini" id="weather-mini">
@@ -1632,6 +1735,12 @@
                     {% if notice.icon %}<span class="notice-icon">{{ notice.icon|safe }}</span>{% endif %}
                     {{ notice.message|safe }}
                 </div>
+            {% endif %}
+
+            {% if serper_fallback %}
+            <div class="notice-banner warning" id="serper-notice">
+                <strong>Server trouble detected.</strong> Our primary search servers didn't respond, so we switched this query to a backup server to fetch your results. They're coming through &mdash; please hold on.
+            </div>
             {% endif %}
 
             {% if places_prompt %}
@@ -3041,33 +3150,6 @@
         })();
     </script>
 
-    {% if is_home %}
-    <div id="kofi-popup" style="position:fixed;bottom:24px;right:24px;z-index:9999;background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:20px 24px;max-width:340px;box-shadow:0 8px 32px var(--shadow);display:none;flex-direction:column;gap:10px">
-        <style>@keyframes kofiIn{from{opacity:0;transform:translateY(20px) scale(.95)}to{opacity:1;transform:translateY(0) scale(1)}}</style>
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
-            <div style="font-size:14px;line-height:1.5;color:var(--text)">
-                <strong style="font-size:15px">&#x26A0;&#xFE0F; Save us!</strong><br>
-                <span style="color:var(--text2);font-size:13px">arlong is free but servers aren't. Help us keep the ship sailing.</span>
-            </div>
-            <button onclick="dismissKofi()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;padding:2px;line-height:1" aria-label="Close">&times;</button>
-        </div>
-        <a href="https://ko-fi.com/arlong" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 16px;background:#c5221f;color:#fff;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;transition:opacity .2s" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M21.4 5.8c-1-1.3-2.7-2.1-4.5-2.1-1.4 0-2.7.5-3.8 1.3L12 5.9l-1.1-.9c-1.1-.8-2.4-1.3-3.8-1.3-1.8 0-3.5.8-4.5 2.1C1.3 7.7 1 10 2.8 13.3c1.5 2.8 4.4 5.8 7.5 8.4.5.4 1.1.4 1.6 0 3.1-2.6 6-5.6 7.5-8.4 1.8-3.3 1.5-5.6.5-7.5z"/></svg>
-            Donate on Ko-fi
-        </a>
-    </div>
-    <script>
-    setTimeout(function(){
-        var p = document.getElementById('kofi-popup');
-        if(p) p.style.display = 'flex';
-    }, 2000);
-    function dismissKofi(){
-        var p = document.getElementById('kofi-popup');
-        if(p){p.style.transition='opacity .3s,transform .3s';p.style.opacity='0';p.style.transform='translateY(10px)';setTimeout(function(){p.remove()},300)}
-    }
-    </script>
-    {% endif %}
-
 <script>var _VIDEO_DATA={{ video_results | default([]) | tojson | safe }};_IMG_DATA={{ image_results | default([]) | tojson | safe }};</script>
 
 <div class="img-viewer" id="img-viewer">
@@ -3306,7 +3388,7 @@ function closeVidViewer(){
         strip.onclick=function(){openNestedVid(this)};
         var img=document.createElement('img');
         img.src='https://i.ytimg.com/vi/'+tid+'/hqdefault.jpg';
-        img.alt='';img.loading='lazy';
+        img.alt='';img.decoding='async';
         img.onerror=function(){strip.classList.add('yt-thumb-bad');};
         strip.appendChild(img);
         _addYtSave(strip);
@@ -3766,6 +3848,33 @@ if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded'
         .wn-body{padding:16px 18px 8px}
         .wn-list li{font-size:13px}
     }
+
+    /* ── Arlong AI introduction popup ── */
+    .aii-overlay{position:fixed;inset:0;z-index:9400;background:rgba(9,9,11,.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);display:none;align-items:center;justify-content:center;padding:16px}
+    .aii-overlay.open{display:flex}
+    .aii-modal{width:calc(100% - 32px);max-width:440px;margin:auto;background:#09090b;color:#e2e8f0;border:1px solid rgba(255,255,255,.08);border-radius:12px;box-shadow:0 24px 70px -20px rgba(0,0,0,.6);animation:wn-pop .28s cubic-bezier(.16,1,.3,1);overflow:hidden}
+    .aii-head{display:flex;align-items:center;justify-content:flex-end;padding:16px 16px 0}
+    .aii-x{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:none;background:transparent;border-radius:6px;color:#64748b;cursor:pointer;transition:color .2s,background .2s}
+    .aii-x:hover{color:#f8fafc;background:rgba(255,255,255,.06)}
+    .aii-x svg{width:15px;height:15px;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+    .aii-body{padding:8px 22px 0}
+    .aii-body h2{margin:0;font-size:1.25rem;font-weight:600;color:#f8fafc;letter-spacing:-.01em}
+    .aii-sub{margin:4px 0 0;font-size:.9rem;line-height:1.5;color:#94a3b8}
+    .aii-feats{list-style:none;margin:20px 0 0;padding:0;display:flex;flex-direction:column;gap:14px}
+    .aii-feats li{display:flex;gap:10px;align-items:flex-start;font-size:.9rem;line-height:1.55;color:#cbd5e1}
+    .aii-feats li svg{width:16px;height:16px;stroke:#3b82f6;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;fill:none;flex-shrink:0;margin-top:2px}
+    .aii-feats li strong{color:#f1f5f9;font-weight:600}
+    .aii-foot{display:flex;align-items:center;gap:10px;padding:22px 22px 20px}
+    .aii-btn{display:inline-flex;align-items:center;justify-content:center;font-size:.875rem;font-weight:500;border-radius:6px;padding:10px 18px;text-decoration:none;cursor:pointer;transition:all .2s ease;box-sizing:border-box;text-align:center}
+    .aii-btn.go{flex:1;background:#2563eb;color:#fff;border:1px solid #2563eb}
+    .aii-btn.go:hover{background:#1d4ed8;border-color:#1d4ed8}
+    .aii-btn.blog{background:transparent;border:1px solid rgba(255,255,255,.12);color:#e2e8f0}
+    .aii-btn.blog:hover{background:rgba(255,255,255,.06);color:#f8fafc}
+    @media(max-width:480px){
+        .aii-overlay{padding:12px}
+        .aii-foot{flex-direction:column;width:100%;gap:8px}
+        .aii-btn{width:100%;flex:none}
+    }
 </style>
 
 <div class="wn-overlay" id="wn-overlay" role="dialog" aria-modal="true" aria-label="What's new in arlong">
@@ -3823,6 +3932,7 @@ if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded'
                 <div class="wn-sec red">
                     <div class="wn-sec-head"><span class="wn-t">New features</span><span class="wn-bar"></span></div>
                     <ul class="wn-list">
+                        <li><strong>Arlong AI.</strong> <a href="/ai" style="color:#7cb8ff">Try the new AI chat</a> &mdash; a private, cited assistant with sources on every answer, context-aware follow-ups, and instant resume of recent chats.</li>
                         <li><strong>Places.</strong> Local business results for &ldquo;near me&rdquo; queries &mdash; ratings, hours, photos, and directions.</li>
                         <li><strong>New UI for search results.</strong> Cleaner cards, refined header, and inline nested video previews.</li>
                         <li><strong>Blogging.</strong> Anyone with an account can now write and publish posts right on arlong.</li>
@@ -3836,6 +3946,30 @@ if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded'
             <a href="/change-log" class="wn-link" id="wn-changelog" style="margin-right:auto">Changelog</a>
             <a href="/change-log" class="wn-link" id="wn-skip" style="display:none;margin-right:auto">Skip tour</a>
             <button class="wn-got" id="wn-got">Got it</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Arlong AI introduction popup ── -->
+<div class="aii-overlay" id="aii-overlay" role="dialog" aria-modal="true" aria-label="Introducing Arlong AI">
+    <div class="aii-modal">
+        <div class="aii-head">
+            <button class="aii-x" id="aii-close" aria-label="Close">
+                <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+        </div>
+        <div class="aii-body">
+            <h2>Introducing Arlong AI</h2>
+            <p class="aii-sub">A search engine with a built-in private AI assistant.</p>
+            <ul class="aii-feats">
+                <li><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg><span><strong>Live Citation Engine:</strong> Every claim links directly to verifiable source pages.</span></li>
+                <li><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg><span><strong>Smart Relevance Scoring:</strong> Evaluates link quality before presenting sources.</span></li>
+                <li><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg><span><strong>100% Private &amp; Free:</strong> Zero tracking, zero ad profiling, and no model training on your chats.</span></li>
+            </ul>
+        </div>
+        <div class="aii-foot">
+            <a class="aii-btn blog" href="/blog#arlong-ai">Read blog</a>
+            <a class="aii-btn go" href="/ai">Go to AI Arlong</a>
         </div>
     </div>
 </div>
@@ -3905,6 +4039,7 @@ window._wnOnboarding = {{ 'true' if onboarding else 'false' }};
         overlay.setAttribute('aria-hidden','true');
         document.body.style.overflow='';
         try{localStorage.setItem('arlong_wn_v2','1');}catch(e){}
+        if(window.maybeOpenAiIntro)setTimeout(window.maybeOpenAiIntro,320);
     }
     if(closeBtn)closeBtn.addEventListener('click',close);
     overlay.addEventListener('click',function(e){if(e.target===overlay)close();});
@@ -3920,6 +4055,237 @@ window._wnOnboarding = {{ 'true' if onboarding else 'false' }};
     var shouldOpen=isOnboarding;
     if(!shouldOpen){try{shouldOpen=localStorage.getItem('arlong_wn_v2')!=='1';}catch(e){shouldOpen=true;}}
     if(shouldOpen)setTimeout(open,350);
+})();
+</script>
+
+<script>
+/* ── Arlong AI introduction popup ── */
+(function(){
+    var ov=document.getElementById('aii-overlay');
+    if(!ov)return;
+    var closeBtn=document.getElementById('aii-close');
+    function seen(){try{return localStorage.getItem('arlong_ai_intro_v2')==='1';}catch(e){return false;}}
+    function markSeen(){try{localStorage.setItem('arlong_ai_intro_v2','1');}catch(e){}}
+    function openAii(){
+        var wn=document.getElementById('wn-overlay');
+        if(wn&&wn.classList.contains('open'))return;
+        ov.classList.add('open');
+        ov.setAttribute('aria-hidden','false');
+        document.body.style.overflow='hidden';
+    }
+    function closeAii(){
+        ov.classList.remove('open');
+        ov.setAttribute('aria-hidden','true');
+        document.body.style.overflow='';
+        markSeen();
+    }
+    function maybeOpen(){
+        if(seen())return;
+        var wn=document.getElementById('wn-overlay');
+        if(wn&&wn.classList.contains('open'))return;
+        openAii();
+    }
+    window.openAiIntro=maybeOpen;
+    window.maybeOpenAiIntro=maybeOpen;
+    if(closeBtn)closeBtn.addEventListener('click',closeAii);
+    ov.addEventListener('click',function(e){if(e.target===ov)closeAii();});
+    document.addEventListener('keydown',function(e){if(e.key==='Escape'&&ov.classList.contains('open'))closeAii();});
+    var fired=false;
+    function tryAfterWn(){
+        var wn=document.getElementById('wn-overlay');
+        if(wn&&wn.classList.contains('open')){setTimeout(tryAfterWn,400);return;}
+        if(!fired){fired=true;maybeOpen();}
+    }
+    setTimeout(function(){
+        var wn=document.getElementById('wn-overlay');
+        if(wn&&wn.classList.contains('open')){setTimeout(tryAfterWn,500);}
+        else maybeOpen();
+    },1900);
+})();
+</script>
+
+<!-- ── Site safety warning modal (malware / adware / caution sites) ── -->
+<style>
+    .sw-overlay{position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.74);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:20px}
+    .sw-overlay.open{display:flex}
+    .sw-modal{width:min(560px,94vw);border:1px solid #1e293b;box-shadow:0 25px 70px -12px rgba(0,0,0,.7),0 0 80px -15px rgba(190,18,60,.22)}
+    .sw-modal.sw-caution{border-color:#1e293b;box-shadow:0 25px 70px -12px rgba(0,0,0,.7),0 0 80px -15px rgba(180,83,9,.22)}
+    .sw-body{padding:24px 26px 14px}
+    .sw-badge{width:44px;height:44px;border-radius:12px;margin:0 auto 16px;display:flex;align-items:center;justify-content:center}
+    .sw-badge svg{width:24px;height:24px}
+    .sw-danger .sw-badge{background:rgba(244,63,94,.10);color:#fb7185;border:1px solid rgba(244,63,94,.22);box-shadow:inset 0 0 0 1px rgba(244,63,94,.12)}
+    .sw-caution .sw-badge{background:rgba(245,158,11,.10);color:#fbbf24;border:1px solid rgba(245,158,11,.22);box-shadow:inset 0 0 0 1px rgba(245,158,11,.12)}
+    .sw-msg{font-size:14px;line-height:1.7;color:#c9cdd3;text-align:center;max-width:470px;margin:0 auto 16px}
+    .sw-msg strong{color:#fff}
+    .sw-list{list-style:none;margin:0 auto 18px;padding:0;max-width:470px;display:flex;flex-direction:column;gap:8px}
+    .sw-list li{display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(15,23,42,.6);border:1px solid #1e293b;border-radius:6px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;color:#cbd5e1;overflow-wrap:anywhere}
+    .sw-list li svg{width:14px;height:14px;color:#64748b;flex-shrink:0}
+    .sw-dom{color:#e2e8f0;font-size:13px;overflow-wrap:anywhere}
+    .sw-go{display:inline-flex;align-items:center;justify-content:center;margin-left:auto;border-radius:8px;padding:10px 22px;font-size:13px;font-weight:600;cursor:pointer;font-family:arial,sans-serif;border:1px solid transparent;transition:background .18s ease,color .18s ease,border-color .18s ease,box-shadow .18s ease}
+    .sw-danger .sw-go{background:rgba(244,63,94,.14);color:#fda4af;border-color:rgba(244,63,94,.28)}
+    .sw-danger .sw-go:hover{background:rgba(244,63,94,.24);box-shadow:0 0 0 3px rgba(244,63,94,.12)}
+    .sw-caution .sw-go{background:rgba(245,158,11,.14);color:#fcd34d;border-color:rgba(245,158,11,.28)}
+    .sw-caution .sw-go:hover{background:rgba(245,158,11,.24);box-shadow:0 0 0 3px rgba(245,158,11,.12)}
+    .sw-back{display:inline-flex;align-items:center;justify-content:center;background:rgba(30,41,59,.5);border:1px solid rgba(51,65,85,.5);border-radius:8px;padding:9px 16px;font-size:12.5px;color:#cbd5e1;cursor:pointer;font-family:arial,sans-serif;transition:background .18s ease,border-color .18s ease,color .18s ease}
+    .sw-back:hover{background:#1e293b;color:#fff}
+    .sw-chip{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;letter-spacing:.3px;border-radius:20px;padding:3px 9px;white-space:nowrap;flex-shrink:0}
+    .sw-chip-danger{color:#fff;background:rgba(239,68,68,.85)}
+    .sw-chip-caution{color:#1a1206;background:rgba(251,191,36,.9)}
+    @media(max-width:640px){.sw-body{padding:18px 18px 8px}}
+</style>
+
+<div class="sw-overlay" id="sw-overlay" role="dialog" aria-modal="true" aria-label="Website safety warning">
+    <div class="wn-modal sw-modal" id="sw-modal">
+        <div class="wn-header">
+            <button class="wn-close" id="sw-close" aria-label="Close">&times;</button>
+            <div class="wn-title-wrap"><div class="wn-title" id="sw-title"></div></div>
+            <div class="wn-spacer"></div>
+        </div>
+        <div class="sw-body" id="sw-body"></div>
+        <div class="wn-footer">
+            <button class="sw-back" id="sw-cancel">Back to results</button>
+            <button class="sw-go" id="sw-go">Got it</button>
+        </div>
+    </div>
+</div>
+
+<script>
+window._siteWarnings = {{ site_warnings_json | safe }};
+(function(){
+    var warnings = [];
+    try{ warnings = window._siteWarnings || []; }catch(e){}
+    var map = {};
+    warnings.forEach(function(w){ if(w&&w.domain) map[String(w.domain).toLowerCase()] = w.level; });
+    var overlay = document.getElementById('sw-overlay');
+    if(!overlay) return;
+    var modal = document.getElementById('sw-modal');
+    var pendingUrl = null;
+    var pendingClick = false;
+
+    function domainOf(url){
+        return String(url||'').replace(/^[a-z]+:\/\//i,'').replace(/^www\./,'').split('/')[0].toLowerCase();
+    }
+    function levelForUrl(url){
+        var d = domainOf(url);
+        if(map[d]) return map[d];
+        var parts = d.split('.');
+        for(var i=1;i<parts.length-1;i++){
+            var parent = parts.slice(i).join('.');
+            if(map[parent]) return map[parent];
+        }
+        return null;
+    }
+    function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    var ICON_SHIELD='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>';
+    var ICON_TRIANGLE='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
+    var ICON_GLOBE='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>';
+    function dangerHtml(doms, single){
+        var items = doms.map(function(d){ return '<li>'+ICON_GLOBE+'<span class="sw-dom">'+esc(d)+'</span></li>'; }).join('');
+        var msg = single
+            ? '<p class="sw-msg"><strong>'+esc(doms[0])+'</strong> is known to bundle <strong>adware or malware</strong>. Downloading anything from it can infect your device. We left the result in place, but strongly recommend not visiting it.</p>'
+            : '<p class="sw-msg">One or more results on this page come from sites known to distribute <strong>adware or malware</strong>. We did not delist them, but strongly recommend not downloading anything from them or clicking their fake &ldquo;Download&rdquo; buttons.</p>';
+        return '<div class="sw-badge">'+ICON_SHIELD+'</div>' + msg + '<ul class="sw-list">'+items+'</ul>';
+    }
+    function cautionHtml(doms, single){
+        var items = doms.map(function(d){ return '<li>'+ICON_GLOBE+'<span class="sw-dom">'+esc(d)+'</span></li>'; }).join('');
+        var msg = single
+            ? '<p class="sw-msg"><strong>'+esc(doms[0])+'</strong> is a real website (for example, the official FitGirl repacks site), but it lives in a legally gray area and can carry risky download buttons. If you visit, use an adblocker and only click links on the official page itself.</p>'
+            : '<p class="sw-msg">These are <strong>real</strong> websites (for example, the official FitGirl repacks site), but they operate in a legally gray area and can carry risky download buttons. If you visit, use an adblocker and only click links on the official page itself.</p>';
+        return '<div class="sw-badge">'+ICON_TRIANGLE+'</div>' + msg + '<ul class="sw-list">'+items+'</ul>';
+    }
+    function openSw(level, doms, title, bodyHtml, goText, opensUrl){
+        modal.classList.toggle('sw-danger', level==='danger');
+        modal.classList.toggle('sw-caution', level==='caution');
+        document.getElementById('sw-title').textContent = title;
+        document.getElementById('sw-body').innerHTML = bodyHtml;
+        var go = document.getElementById('sw-go');
+        go.textContent = goText;
+        pendingClick = !!opensUrl;
+        overlay.classList.add('open');
+        overlay.setAttribute('aria-hidden','false');
+        document.body.style.overflow='hidden';
+    }
+    function closeSw(){
+        overlay.classList.remove('open');
+        overlay.setAttribute('aria-hidden','true');
+        document.body.style.overflow='';
+        pendingUrl = null;
+    }
+
+    document.getElementById('sw-close').addEventListener('click', closeSw);
+    document.getElementById('sw-cancel').addEventListener('click', closeSw);
+    document.getElementById('sw-go').addEventListener('click', function(){
+        if(pendingClick && pendingUrl){ window.open(pendingUrl, '_blank'); }
+        closeSw();
+        setTimeout(maybeAutoOpen, 50);
+    });
+    overlay.addEventListener('click', function(e){ if(e.target===overlay) closeSw(); });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape' && overlay.classList.contains('open')) closeSw(); });
+
+    function applyChips(){
+        var cards = document.querySelectorAll('.rc-modern, .disc-c');
+        for(var i=0;i<cards.length;i++){
+            var c = cards[i];
+            var url = c.getAttribute('data-url');
+            var lvl = url ? levelForUrl(url) : null;
+            if(lvl){
+                c.setAttribute('data-warn', lvl);
+                var line = c.querySelector('.rc-title-line');
+                if(line && !line.querySelector('.sw-chip')){
+                    var chip = document.createElement('span');
+                    chip.className = 'sw-chip ' + (lvl==='danger' ? 'sw-chip-danger' : 'sw-chip-caution');
+                    chip.textContent = lvl==='danger' ? '\u26A0 Malware risk' : '\u26A0 Caution';
+                    var acts = line.querySelector('.rc-acts');
+                    if(acts) line.insertBefore(chip, acts); else line.appendChild(chip);
+                }
+            }
+        }
+    }
+
+    var pageDanger = [], pageCaution = [];
+    warnings.forEach(function(w){
+        if(w.level==='danger') pageDanger.push(w.domain);
+        else if(w.level==='caution') pageCaution.push(w.domain);
+    });
+    var shownDanger = false, shownCaution = false;
+    function maybeAutoOpen(){
+        if(pageDanger.length && !shownDanger){
+            shownDanger = true;
+            openSw('danger', pageDanger, 'Unsafe websites detected', dangerHtml(pageDanger, false), 'Got it', false);
+            return;
+        }
+        if(pageCaution.length && !shownCaution){
+            shownCaution = true;
+            openSw('caution', pageCaution, 'Known sites \u2014 be careful', cautionHtml(pageCaution, false), 'Got it', false);
+        }
+    }
+
+    document.addEventListener('click', function(e){
+        if(overlay.classList.contains('open')) return;
+        var card = e.target.closest ? e.target.closest('[data-url]') : null;
+        if(!card) return;
+        var url = card.getAttribute('data-url');
+        if(!url) return;
+        var lvl = levelForUrl(url);
+        if(!lvl) return;
+        var a = e.target.closest ? e.target.closest('a') : null;
+        if(!a) return;
+        e.preventDefault();
+        e.stopPropagation();
+        pendingUrl = url;
+        if(lvl==='danger'){
+            openSw('danger', [domainOf(url)], 'Unsafe website', dangerHtml([domainOf(url)], true), 'Visit anyway', true);
+        }else{
+            openSw('caution', [domainOf(url)], 'Be careful', cautionHtml([domainOf(url)], true), 'Continue to site', true);
+        }
+    }, true);
+
+    applyChips();
+    if(typeof MutationObserver!=='undefined'){
+        var obs = new MutationObserver(function(){ applyChips(); });
+        obs.observe(document.body, {childList:true, subtree:true});
+    }
+    setTimeout(maybeAutoOpen, 500);
 })();
 </script>
 </body>

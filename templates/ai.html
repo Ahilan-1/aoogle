@@ -1,0 +1,936 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arlong AI</title>
+<link href="data:image/x-icon;base64,AAABAAEAEBAAAAAAAABoBQAAFgAAACgAAAAQAAAAIAAAAAEACAAAAAAAAAEAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAOX/AAAA/wAA0+sAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEBAwMDAQEBAAAAAAAAAQMDAQEBAQEBAwEBAAAAAQMBAQICAgICAgEDAQEAAAEBAQICAgICAgICAQMBAAABAQICAQEDAwEBAgIBAQAAAAECAQEDAQEBAQMCAQAAAAAAAAMBAQEBAQEDAAAAAAAAAAABAwEBAQEDAQAAAAAAAAAAAAEDAQEBAQAAAAAAAAAAAAAAAQEBAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP//AAD//wAA8A8AAMADAACAAQAAAAAAAAAAAAAAAAAAgAEAAMADAADgBwAA8A8AAPgfAAD8PwAA//8AAP//AAA=" rel="icon" type="image/x-icon">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+    :root{
+        --bg-dark:#0A0A0A;
+        --bg-base:#0A0A0A;
+        --bg-sidebar:#111111;
+        --bg-surface:#161618;
+        --bg-inner:#202023;
+        --bg-surface-hover:#202023;
+        --text-main:#FFFFFF;
+        --text-muted:#8E8E93;
+        --border-color:#2C2C30;
+        --border-soft:rgba(255,255,255,.1);
+        --radius:12px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+        margin:0;background:var(--bg-base);color:var(--text-main);
+        font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+        height:100vh;overflow:hidden;font-size:15px;line-height:1.6;
+        -webkit-font-smoothing:antialiased;
+    }
+    ::selection{background:rgba(255,255,255,.3)}
+    ::-webkit-scrollbar{width:8px;height:8px}
+    ::-webkit-scrollbar-thumb{background:var(--border-color);border-radius:4px}
+    ::-webkit-scrollbar-track{background:transparent}
+    button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+    a{color:#FFFFFF;text-decoration:none}
+    a:hover{text-decoration:underline}
+
+    /* ── Mobile top header ── */
+    .ai-mobile-top{
+        display:none;position:fixed;top:0;left:0;right:0;height:56px;z-index:80;
+        background:rgba(15,16,21,.92);backdrop-filter:blur(12px);
+        border-bottom:1px solid var(--border-soft);align-items:center;gap:10px;padding:0 14px;
+    }
+    .ai-menu-btn{min-height:44px;min-width:44px;display:flex;align-items:center;justify-content:center;border-radius:10px;color:var(--text-main);transition:background .2s}
+    .ai-menu-btn:hover{background:var(--bg-surface-hover)}
+    .ai-mobile-brand{font-weight:700;font-size:16px;display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+    .ai-mobile-brand img{width:22px;height:22px;border-radius:6px}
+    .ai-mobile-new{background:#FFFFFF;color:#000000;font-size:13px;font-weight:600;padding:9px 14px;border-radius:10px;transition:background .2s,transform .2s}
+    .ai-mobile-new:hover{background:#E5E5E5;transform:translateY(-1px)}
+    .ai-mobile-new:active{opacity:.8}
+
+    /* ── Sidebar ── */
+    .ai-sidebar{
+        position:fixed;left:0;top:0;width:260px;height:100vh;z-index:90;
+        background:var(--bg-sidebar);border-right:1px solid var(--border-soft);
+        display:flex;flex-direction:column;
+    }
+    .ai-sb-head{padding:18px 16px 10px}
+    .ai-brand{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:700}
+    .ai-brand img{width:26px;height:26px;border-radius:7px}
+    .ai-newchat{
+        width:100%;margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:8px;
+        background:#FFFFFF;color:#000000;font-size:13.5px;font-weight:600;padding:11px 14px;border-radius:10px;
+        transition:background .2s,transform .2s;
+    }
+    .ai-newchat:hover{background:#E5E5E5;transform:translateY(-1px)}
+    .ai-newchat:active{transform:scale(.98)}
+    .ai-kbd{font-size:10.5px;font-weight:500;background:#2C2C30;border:1px solid #3A3A3F;padding:2px 7px;border-radius:6px;letter-spacing:.3px;display:flex;align-items:center;gap:3px;color:#FFFFFF}
+
+    .ai-nav{padding:12px 10px 4px;display:flex;flex-direction:column;gap:2px}
+    .ai-nav-item{
+        display:flex;align-items:center;gap:10px;min-height:40px;padding:8px 12px;
+        border-radius:9px;color:var(--text-muted);font-size:14px;font-weight:500;
+        transition:background .15s,color .15s;text-decoration:none;text-align:left;width:100%;
+    }
+    .ai-nav-item:hover{background:var(--bg-surface);color:var(--text-main);text-decoration:none}
+    .ai-nav-item.active{background:var(--bg-surface);color:var(--text-main)}
+    .ai-nav-item svg{width:17px;height:17px;flex-shrink:0}
+
+    .ai-sb-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--text-muted);opacity:.7;padding:14px 16px 6px}
+    .ai-history{flex:1;overflow-y:auto;padding:0 10px 10px}
+    .ai-hgroup-label{font-size:11px;color:var(--text-muted);opacity:.75;padding:10px 8px 4px;font-weight:600}
+    .ai-hitem{
+        display:flex;align-items:center;gap:6px;width:100%;min-height:38px;
+        padding:7px 8px;border-radius:8px;color:var(--text-muted);font-size:13.5px;text-align:left;
+        transition:background .15s;text-decoration:none;
+    }
+    .ai-hitem:hover{background:var(--bg-surface);color:var(--text-main);text-decoration:none}
+    .ai-hitem .ai-h-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .ai-h-del{opacity:0;min-height:26px;min-width:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);transition:background .15s,color .15s,opacity .15s}
+    .ai-hitem:hover .ai-h-del{opacity:1}
+    .ai-h-del:hover{background:rgba(229,115,115,.15);color:#E57373}
+    .ai-h-del svg{width:13px;height:13px}
+    .ai-h-empty{color:var(--text-muted);font-size:12.5px;padding:8px;opacity:.7}
+
+    /* ── Bottom account / usage ── */
+    .ai-sb-foot{border-top:1px solid var(--border-soft);padding:14px 16px;background:var(--bg-sidebar)}
+    .ai-account{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+    .ai-avatar{width:34px;height:34px;border-radius:50%;background:#FFFFFF;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;color:#000000;flex-shrink:0}
+    .ai-account-name{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .ai-account-sub{font-size:11.5px;color:var(--text-muted)}
+    .ai-limit-title{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;color:var(--text-muted);margin-bottom:6px}
+    .ai-limit-num{font-weight:600;color:var(--text-main)}
+    .ai-usage-track{height:6px;background:var(--bg-surface);border-radius:3px;overflow:hidden}
+    .ai-usage-fill{height:100%;background:#FFFFFF;border-radius:3px;transition:width .35s ease}
+    .ai-usage-fill.warn{background:#9E9EA6}
+    .ai-usage-fill.full{background:#E5E5E5}
+
+    /* ── Drawer overlay ── */
+    .ai-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:85;opacity:0;pointer-events:none;transition:opacity .25s}
+    .ai-overlay.show{opacity:1;pointer-events:auto}
+
+    /* ── Main ── */
+    .ai-main{margin-left:260px;height:100vh;display:flex;flex-direction:column;position:relative}
+    .ai-workspace{flex:1;overflow-y:auto;scroll-behavior:smooth;display:flex;flex-direction:column;overflow-x:hidden}
+    .ai-workspace > .ai-inner{flex:1;max-width:900px;margin:0 auto;padding:28px 32px 120px;width:100%;min-width:0;max-width:100%}
+
+    /* ── Landing ── */
+    .ai-landing{min-height:100%;display:flex;flex-direction:column;justify-content:center;max-width:760px;margin:0 auto;padding:40px 16px 60px}
+    .ai-greet{font-size:28px;font-weight:600;margin:0 0 6px}
+    .ai-greet-sub{color:var(--text-muted);font-size:16px;margin:0 0 28px}
+    .ai-searchbar{
+        display:flex;align-items:center;gap:12px;
+        background:var(--bg-surface);backdrop-filter:blur(20px);
+        border:1px solid var(--border-color);border-radius:24px;padding:12px 12px 12px 20px;
+        box-shadow:0 8px 32px rgba(0,0,0,.55);
+        transition:border-color .2s,box-shadow .2s;
+    }
+    .ai-searchbar:focus-within{border-color:#FFFFFF;box-shadow:0 0 15px rgba(255,255,255,.15)}
+    .ai-searchbar input{flex:1;background:none;border:none;outline:none;color:var(--text-main);font-size:15px;font-family:inherit;min-height:28px;min-width:0}
+    .ai-searchbar input::placeholder{color:var(--text-muted)}
+    .ai-search-go{min-height:44px;min-width:44px;border-radius:50%;background:#FFFFFF;color:#000000;display:flex;align-items:center;justify-content:center;transition:background .2s,transform .2s;flex-shrink:0}
+    .ai-search-go:hover{background:#E5E5E5}
+    .ai-search-go svg{width:18px;height:18px}
+    .ai-search-go:disabled{opacity:.4;cursor:not-allowed}
+
+    .ai-widgets{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px}
+    .ai-widget{background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius);padding:14px 16px}
+    .ai-widget-title{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);display:flex;align-items:center;gap:7px;margin-bottom:8px;font-weight:600}
+    .ai-widget-title svg{width:14px;height:14px}
+    .ai-weather-line{display:flex;align-items:center;gap:12px}
+    .ai-weather-temp{font-size:26px;font-weight:700}
+    .ai-weather-meta{font-size:12.5px;color:var(--text-muted);line-height:1.4}
+    .ai-weather-emoji{font-size:28px}
+    .ai-context-text{font-size:12.5px;color:var(--text-muted);line-height:1.55}
+
+    .ai-recent{margin-top:28px}
+    .ai-recent-label{font-size:12px;color:var(--text-muted);font-weight:600;margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px}
+    .ai-recent-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+    .ai-rcard{
+        background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius);
+        padding:13px 14px;cursor:pointer;min-height:44px;text-align:left;color:var(--text-main);
+        transition:background .15s,border-color .15s;min-width:0;
+    }
+    .ai-rcard:hover{background:var(--bg-surface-hover);border-color:#3a3f55}
+    .ai-rcard-title{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px}
+    .ai-rcard-time{font-size:11.5px;color:var(--text-muted)}
+    .ai-rcard-note{font-size:12px;color:var(--text-muted);opacity:.7;margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+
+    /* ── Active view / chat ── */
+    .ai-thread{display:flex;flex-direction:column;gap:22px;padding-top:12px;width:100%;max-width:100%;min-width:0}
+    .ai-turn-user{display:flex;justify-content:flex-end;min-width:0}
+    .ai-user-bubble{
+        background:var(--bg-surface);border:1px solid var(--border-color);
+        border-radius:16px 16px 4px 16px;padding:11px 16px;max-width:78%;
+        font-size:14.5px;line-height:1.5;color:var(--text-main);
+        min-width:0;overflow-wrap:break-word;word-break:break-word;
+    }
+    .ai-assistant{display:flex;flex-direction:column;gap:14px;min-width:0}
+    .ai-sources{display:flex;flex-direction:column;gap:12px;width:100%;min-width:0}
+    .ai-link-card{background:var(--bg-surface);border:1px solid var(--border-color);border-radius:12px;padding:16px;transition:border-color .2s;width:100%;min-width:0}
+    .ai-link-card.flash{border-color:#FFFFFF;box-shadow:0 0 0 3px rgba(255,255,255,.15)}
+    .ai-link-head{display:flex;align-items:center;gap:8px;margin-bottom:7px;min-width:0}
+    .ai-link-fav{width:16px;height:16px;border-radius:4px;flex-shrink:0;background:var(--bg-surface-hover)}
+    .ai-link-fav-ph{width:16px;height:16px;border-radius:4px;background:#2C2C30;color:#FFFFFF;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .ai-link-domain{font-size:12px;color:var(--text-muted);flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:45%}
+    .ai-link-title{display:block;font-size:15px;font-weight:600;color:#FFFFFF;line-height:1.4;margin-bottom:7px;overflow-wrap:break-word;word-break:break-word}
+    .ai-link-title:hover{text-decoration:underline}
+    .ai-link-snip{font-size:12.5px;color:var(--text-muted);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:break-word;word-break:break-word}
+    .ai-eval{
+        margin-top:10px;background:var(--bg-inner);border-left:3px solid #FFFFFF;
+        border-radius:0 8px 8px 0;padding:9px 12px;font-size:13px;color:#D1D1D6;line-height:1.5;
+    }
+    .ai-eval-label{display:block;color:#FFFFFF;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+    .ai-eval-loading{color:var(--text-muted);font-size:12px;display:flex;align-items:center;gap:8px}
+    .ai-dot{width:5px;height:5px;border-radius:50%;background:#FFFFFF;animation:aiBlink 1s infinite}
+    .ai-dot:nth-child(2){animation-delay:.15s}
+    .ai-dot:nth-child(3){animation-delay:.3s}
+    @keyframes aiBlink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+
+    .ai-overview{background:var(--bg-surface);border:1px solid var(--border-color);border-radius:12px;padding:20px 24px}
+    .ai-overview .ai-ov-label{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#FFFFFF;font-weight:600;display:inline-flex;align-items:center;gap:7px;background:var(--bg-inner);padding:6px 12px;border-radius:8px;margin-bottom:14px}
+    .ai-overview .ai-ov-label svg{width:14px;height:14px;color:#FFFFFF}
+    .ai-md{font-size:15px;color:var(--text-main);word-wrap:break-word}
+    .ai-md h1,.ai-md h2,.ai-md h3,.ai-md h4{margin:18px 0 8px;line-height:1.3;font-weight:700}
+    .ai-md h1{font-size:22px}.ai-md h2{font-size:19px}.ai-md h3{font-size:16.5px}
+    .ai-md p{margin:10px 0}
+    .ai-md ul,.ai-md ol{margin:10px 0;padding-left:22px}
+    .ai-md li{margin:4px 0}
+    .ai-md a{color:#FFFFFF}
+    .ai-md blockquote{border-left:3px solid #FFFFFF;margin:12px 0;padding:4px 14px;color:var(--text-muted);background:rgba(255,255,255,.03);border-radius:0 8px 8px 0}
+    .ai-md code{background:var(--bg-base);border:1px solid var(--border-soft);border-radius:5px;padding:1px 6px;font-size:13px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace}
+    .ai-md pre{background:#12131a;border:1px solid var(--border-color);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:12px 0;line-height:1.5}
+    .ai-md pre code{background:none;border:none;padding:0;font-size:13px}
+    .ai-md table{border-collapse:collapse;margin:12px 0;width:100%;font-size:13.5px}
+    .ai-md th,.ai-md td{border:1px solid var(--border-color);padding:7px 11px;text-align:left}
+    .ai-md th{background:var(--bg-surface-hover);font-weight:600}
+    .ai-md tr:nth-child(even) td{background:rgba(255,255,255,.015)}
+    .ai-md hr{border:none;border-top:1px solid var(--border-soft);margin:16px 0}
+    .ai-md img{max-width:100%;border-radius:8px}
+    .ai-cite{
+        display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;
+        padding:0 4px;margin:0 2px;border-radius:5px;background:#2C2C30;
+        border:1px solid #3A3A3F;color:#FFFFFF;font-size:10.5px;font-weight:700;
+        cursor:pointer;vertical-align:middle;transition:background .15s,color .15s;
+    }
+    .ai-cite:hover{background:#FFFFFF;color:#000000}
+    .ai-cursor{display:inline-block;width:8px;height:15px;background:#FFFFFF;vertical-align:middle;animation:aiCursor 1s steps(2) infinite;border-radius:2px}
+    @keyframes aiCursor{0%,49%{opacity:1}50%,100%{opacity:0}}
+
+    .ai-actions{display:flex;align-items:center;gap:4px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border-soft)}
+    .ai-icon-btn{min-height:36px;min-width:36px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;color:var(--text-muted);transition:background .15s,color .15s}
+    .ai-icon-btn:hover{background:var(--bg-surface-hover);color:var(--text-main)}
+    .ai-icon-btn svg{width:15px;height:15px}
+    .ai-icon-btn.on{color:#FFFFFF;background:rgba(255,255,255,.12)}
+    .ai-feedback{display:inline-flex;align-items:center;gap:2px;margin-left:auto}
+
+    /* ── Input bar (active) ── */
+    .ai-inputbar{
+        position:sticky;bottom:16px;padding:0 32px 18px;z-index:40;
+    }
+    .ai-inputbar .ai-inner{max-width:900px;margin:0 auto;padding:0}
+    .ai-hint{text-align:center;font-size:11px;color:var(--text-muted);opacity:.65;margin-top:8px}
+    .ai-banner{
+        display:none;align-items:center;gap:10px;background:var(--bg-inner);border:1px solid var(--border-color);
+        color:#D1D1D6;border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:10px;
+    }
+    .ai-banner.show{display:flex}
+
+    .ai-spinner{width:14px;height:14px;border:2px solid var(--border-color);border-top-color:#FFFFFF;border-radius:50%;animation:aiSpin .7s linear infinite}
+    @keyframes aiSpin{to{transform:rotate(360deg)}}
+
+    /* ── Responsive ── */
+    @media(max-width:1023px){
+        .ai-sidebar{transform:translateX(-100%);transition:transform .25s ease;box-shadow:none}
+        .ai-sidebar.open{transform:translateX(0);box-shadow:0 0 50px rgba(0,0,0,.6)}
+        .ai-mobile-top{display:flex}
+        .ai-main{margin-left:0}
+        .ai-inputbar{padding:0 16px 14px}
+        .ai-workspace > .ai-inner{padding:18px 16px 110px}
+        .ai-greet{font-size:22px}
+        .ai-recent-grid{grid-template-columns:minmax(0,1fr)}
+        .ai-widgets{grid-template-columns:1fr}
+        .ai-user-bubble{max-width:92%}
+    }
+</style>
+</head>
+<body>
+<header class="ai-mobile-top">
+    <button class="ai-menu-btn" id="ai-menu-btn" aria-label="Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:22px;height:22px"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <div class="ai-mobile-brand"><img src="data:image/x-icon;base64,AAABAAEAEBAAAAAAAABoBQAAFgAAACgAAAAQAAAAIAAAAAEACAAAAAAAAAEAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAOX/AAAA/wAA0+sAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEBAwMDAQEBAAAAAAAAAQMDAQEBAQEBAwEBAAAAAQMBAQICAgICAgEDAQEAAAEBAQICAgICAgICAQMBAAABAQICAQEDAwEBAgIBAQAAAAECAQEDAQEBAQMCAQAAAAAAAAMBAQEBAQEDAAAAAAAAAAABAwEBAQEDAQAAAAAAAAAAAAEDAQEBAQAAAAAAAAAAAAAAAQEBAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP//AAD//wAA8A8AAMADAACAAQAAAAAAAAAAAAAAAAAAgAEAAMADAADgBwAA8A8AAPgfAAD8PwAA//8AAP//AAA=" alt="">Arlong AI</div>
+    <button class="ai-mobile-new" onclick="newChat()">+ New Chat</button>
+</header>
+
+<div class="ai-overlay" id="ai-overlay"></div>
+
+<aside class="ai-sidebar" id="ai-sidebar">
+    <div class="ai-sb-head">
+        <div class="ai-brand"><img src="data:image/x-icon;base64,AAABAAEAEBAAAAAAAABoBQAAFgAAACgAAAAQAAAAIAAAAAEACAAAAAAAAAEAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAOX/AAAA/wAA0+sAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEBAwMDAQEBAAAAAAAAAQMDAQEBAQEBAwEBAAAAAQMBAQICAgICAgEDAQEAAAEBAQICAgICAgICAQMBAAABAQICAQEDAwEBAgIBAQAAAAECAQEDAQEBAQMCAQAAAAAAAAMBAQEBAQEDAAAAAAAAAAABAwEBAQEDAQAAAAAAAAAAAAEDAQEBAQAAAAAAAAAAAAAAAQEBAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP//AAD//wAA8A8AAMADAACAAQAAAAAAAAAAAAAAAAAAgAEAAMADAADgBwAA8A8AAPgfAAD8PwAA//8AAP//AAA=" alt="">Arlong AI</div>
+        <button class="ai-newchat" onclick="newChat()">
+            <span style="display:inline-flex;align-items:center;gap:8px">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="width:15px;height:15px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                New chat
+            </span>
+            <span class="ai-kbd">Ctrl K</span>
+        </button>
+    </div>
+    <nav class="ai-nav">
+        <a class="ai-nav-item" href="/ai" onclick="return navHome(event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>
+            Home
+        </a>
+        <a class="ai-nav-item" href="#" onclick="return navHistory(event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            History
+        </a>
+    </nav>
+    <div class="ai-sb-label">Chat History</div>
+    <div class="ai-history" id="ai-history"><div class="ai-h-empty">No conversations yet</div></div>
+    <div class="ai-sb-foot">
+        <div class="ai-account">
+            <div class="ai-avatar">{{ first_name[0] if first_name else 'A' }}</div>
+            <div style="min-width:0">
+                <div class="ai-account-name">{{ username }}</div>
+                <div class="ai-account-sub">Arlong account</div>
+            </div>
+        </div>
+        <div class="ai-limit-title"><span>Daily Limit</span><span class="ai-limit-num" id="ai-usage-text">{{ msg_remaining }} / {{ msg_limit }} remaining</span></div>
+        <div class="ai-usage-track"><div class="ai-usage-fill" id="ai-usage-fill" style="width:{{ ((msg_limit - msg_remaining) * 100 / msg_limit) | round }}%"></div></div>
+        <div class="ai-limit-title"><span>Context ({{ ctx_reset_hours }}h)</span><span class="ai-limit-num" id="ai-ctx-text">{{ ctx_used }} / {{ ctx_limit }} tokens</span></div>
+        <div class="ai-usage-track"><div class="ai-usage-fill" id="ai-ctx-fill" style="width:{{ ctx_pct }}%"></div></div>
+    </div>
+</aside>
+
+<main class="ai-main">
+    <div class="ai-workspace" id="ai-workspace">
+        <div class="ai-inner">
+            <div id="ai-landing" class="ai-landing">
+                <div>
+                    <p class="ai-greet">{{ greeting }}, {{ first_name }}.</p>
+                    <p class="ai-greet-sub">How can I assist you today?</p>
+                    <div class="ai-searchbar">
+                        <input id="ai-landing-input" type="text" placeholder="Initiate a query or ask Arlong AI..." autocomplete="off" autofocus>
+                        <button class="ai-search-go" id="ai-landing-go" aria-label="Search">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+                        </button>
+                    </div>
+                    <div class="ai-widgets" id="ai-widgets">
+                        <div class="ai-widget" id="ai-weather-widget" style="display:none">
+                            <div class="ai-widget-title">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+                                Local Weather
+                            </div>
+                            <div class="ai-weather-line" id="ai-weather-body">
+                                <span class="ai-spinner"></span>
+                                <span class="ai-context-text">Loading weather...</span>
+                            </div>
+                        </div>
+                        <div class="ai-widget">
+                            <div class="ai-widget-title">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a4 4 0 0 1 4 4c0 .7-.2 1.3-.5 1.9L12 14l-3.5-6.1A4 4 0 0 1 12 2z"/><path d="M12 14v8"/><path d="M8 22h8"/></svg>
+                                Context-Aware Search
+                            </div>
+                            <div class="ai-context-text">Each query pulls live web results first, then Arlong AI synthesizes a cited answer from them. Follow-up questions keep full conversation context.</div>
+                        </div>
+                    </div>
+                    <div class="ai-recent" id="ai-recent">
+                        <div class="ai-recent-label">Recent Chats</div>
+                        <div class="ai-recent-grid" id="ai-recent-grid"></div>
+                    </div>
+                </div>
+            </div>
+            <div id="ai-active" class="ai-thread" style="display:none"></div>
+            </div>
+
+            <div class="ai-inputbar" id="ai-inputbar" style="display:none">
+                <div class="ai-inner">
+                    <div class="ai-banner" id="ai-banner"></div>
+                    <div class="ai-searchbar">
+                        <input id="ai-active-input" type="text" placeholder="Ask a follow-up..." autocomplete="off">
+                        <button class="ai-search-go" id="ai-active-go" aria-label="Send">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+                        </button>
+                    </div>
+                    <div class="ai-hint">Arlong AI can make mistakes. Verify important facts.</div>
+                </div>
+            </div>
+        </div>
+</main>
+
+{% if not ai_key_set %}
+<div id="ai-config-note" style="display:none">{{ 'missing' }}</div>
+{% endif %}
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.7/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<script>
+(function(){
+    var LIMIT = {{ msg_limit }};
+    var CTX_LIMIT = {{ ctx_limit }};
+    var used = {{ msg_used }};
+    var ctxUsed = {{ ctx_used }};
+    var remaining = {{ msg_remaining }};
+    var MSG_RESET_HOURS = {{ msg_reset_hours }};
+    var CTX_RESET_HOURS = {{ ctx_reset_hours }};
+    var chatId = null;
+    var currentChat = null;
+    var busy = false;
+    var weatherCity = {{ weather_city | tojson }};
+    var KEY_SET = {{ 'true' if ai_key_set else 'false' }};
+    var APP = {
+        state: { chatId: null, used: used, remaining: remaining, ctxUsed: ctxUsed }
+    };
+
+    /* ── helpers ── */
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+    function timeAgo(iso){
+        if(!iso) return '';
+        var t = new Date(iso).getTime(); if(isNaN(t)) return '';
+        var s = Math.floor((Date.now()-t)/1000);
+        if(s < 60) return s < 5 ? 'just now' : Math.floor(s)+' seconds ago';
+        var m = Math.floor(s/60); if(m < 60) return m+' minute'+(m===1?'':'s')+' ago';
+        var h = Math.floor(m/60); if(h < 24) return h+' hour'+(h===1?'':'s')+' ago';
+        var d = Math.floor(h/24); if(d === 1) return 'yesterday';
+        if(d < 7) return d+' days ago';
+        var dt = new Date(t); return dt.toLocaleDateString(undefined,{month:'short',day:'numeric'});
+    }
+    function groupBucket(iso){
+        if(!iso) return 'older';
+        var t = new Date(iso); if(isNaN(t.getTime())) return 'older';
+        var now = new Date(); var today = new Date(now.getFullYear(),now.getMonth(),now.getDate());
+        var d = new Date(t.getFullYear(),t.getMonth(),t.getDate());
+        var diff = Math.round((today - d) / 86400000);
+        if(diff <= 0) return 'today';
+        if(diff === 1) return 'yesterday';
+        if(diff <= 7) return 'week';
+        return 'older';
+    }
+    function setUsage(u, lim){
+        used = u; remaining = Math.max(0, lim - u); LIMIT = lim;
+        var el = document.getElementById('ai-usage-text');
+        if(el) el.textContent = remaining + ' / ' + lim + ' remaining';
+        var fill = document.getElementById('ai-usage-fill');
+        if(fill){
+            var pct = Math.min(100, Math.round(u*100/lim));
+            fill.style.width = pct + '%';
+            fill.classList.toggle('warn', u >= lim*0.8 && u < lim);
+            fill.classList.toggle('full', u >= lim);
+        }
+        refreshDisableState();
+    }
+    function setCtxUsage(c, lim){
+        ctxUsed = c; if(lim) CTX_LIMIT = lim;
+        var el = document.getElementById('ai-ctx-text');
+        if(el) el.textContent = fmtTokens(ctxUsed) + ' / ' + fmtTokens(CTX_LIMIT) + ' tokens';
+        var fill = document.getElementById('ai-ctx-fill');
+        if(fill){
+            var pct = Math.min(100, Math.round(ctxUsed*100/CTX_LIMIT));
+            fill.style.width = pct + '%';
+            fill.classList.toggle('warn', ctxUsed >= CTX_LIMIT*0.8 && ctxUsed < CTX_LIMIT);
+            fill.classList.toggle('full', ctxUsed >= CTX_LIMIT);
+        }
+        refreshDisableState();
+    }
+    function fmtTokens(n){ n = n || 0; return n >= 1000 ? (Math.round(n/100)/10).toFixed(n>=10000?0:1).replace(/\.0$/,'') + 'k' : String(n); }
+    function limitBlocked(){ return used >= LIMIT || ctxUsed >= CTX_LIMIT; }
+    function refreshDisableState(){
+        var blocked = limitBlocked();
+        setInputsDisabled(blocked);
+        return blocked;
+    }
+    function setInputsDisabled(dis){
+        ['ai-landing-input','ai-landing-go','ai-active-input','ai-active-go'].forEach(function(id){
+            var el = document.getElementById(id); if(el) el.disabled = dis;
+        });
+        var banner = document.getElementById('ai-banner');
+        if(banner){
+            if(dis){
+                var msg = ctxUsed >= CTX_LIMIT
+                    ? 'Context limit reached (' + fmtTokens(CTX_LIMIT) + ' tokens). Resets ' + CTX_RESET_HOURS + 'h after your first chat in the window.'
+                    : 'Daily message limit reached (' + LIMIT + '/' + LIMIT + '). Resets ' + MSG_RESET_HOURS + 'h after your first message in the window.';
+                banner.innerHTML = msg; banner.classList.add('show');
+            }
+            else banner.classList.remove('show');
+        }
+    }
+
+    /* ── sidebar / drawer ── */
+    var sidebar = document.getElementById('ai-sidebar');
+    var overlay = document.getElementById('ai-overlay');
+    document.getElementById('ai-menu-btn').addEventListener('click', function(){ sidebar.classList.add('open'); overlay.classList.add('show'); });
+    overlay.addEventListener('click', closeDrawer);
+    function closeDrawer(){ sidebar.classList.remove('open'); overlay.classList.remove('show'); }
+    document.addEventListener('click', function(e){ if(e.target.closest('.ai-history') || e.target.closest('.ai-hitem')){ if(window.innerWidth < 1024) closeDrawer(); } });
+
+    /* ── new chat / nav ── */
+    window.newChat = function(){
+        chatId = null; currentChat = null;
+        document.getElementById('ai-active').innerHTML = '';
+        document.getElementById('ai-active').style.display = 'none';
+        document.getElementById('ai-landing').style.display = '';
+        document.getElementById('ai-inputbar').style.display = 'none';
+        showLandingSearch();
+        document.getElementById('ai-landing-input').focus();
+        closeDrawer();
+        markNav('home');
+    };
+    window.navHome = function(ev){ if(ev){ev.preventDefault();} newChat(); return false; };
+    window.navHistory = function(ev){ if(ev){ev.preventDefault();} newChat(); return false; };
+    function markNav(name){
+        document.querySelectorAll('.ai-nav-item').forEach(function(a){
+            a.classList.toggle('active', a.textContent.trim().toLowerCase() === name);
+        });
+    }
+    function showLandingSearch(){ setTimeout(function(){ var el=document.getElementById('ai-landing-input'); if(el&&window.getComputedStyle(el).visibility!=='hidden') el.focus(); },80); }
+
+    /* ── history rendering ── */
+    function renderHistory(chats){
+        var box = document.getElementById('ai-history');
+        if(!box) return;
+        if(!chats || !chats.length){ box.innerHTML = '<div class="ai-h-empty">No conversations yet</div>'; return; }
+        var buckets = { today: [], yesterday: [], week: [], older: [] };
+        chats.forEach(function(c){ var b = groupBucket(c.updated_at || c.created_at); (buckets[b]||buckets.older).push(c); });
+        var labels = { today: 'Today', yesterday: 'Yesterday', week: 'Previous 7 Days', older: 'Older' };
+        var html = '';
+        ['today','yesterday','week','older'].forEach(function(b){
+            if(!buckets[b].length) return;
+            html += '<div class="ai-hgroup-label">'+labels[b]+'</div>';
+            buckets[b].forEach(function(c){
+                html += '<a class="ai-hitem" href="/ai?chat='+encodeURIComponent(c.chat_id)+'" onclick="return openChat(\''+c.chat_id+'\')">'
+                    + '<span class="ai-h-title" title="'+esc(c.title)+'">'+esc(c.title)+'</span>'
+                    + '<button class="ai-h-del" onclick="event.preventDefault();event.stopPropagation();deleteChat(\''+c.chat_id+'\')" aria-label="Delete">'
+                    + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg></button></a>';
+            });
+        });
+        box.innerHTML = html;
+    }
+    window.deleteChat = function(id){
+        fetch('/api/ai/chat/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({chat_id:id})})
+        .then(function(r){ return r.json(); })
+        .then(function(){ refreshChats(); if(chatId === id){ newChat(); } });
+    };
+    window.openChat = function(id){
+        fetch('/api/ai/chat?id='+encodeURIComponent(id)).then(function(r){return r.json()}).then(function(d){
+            if(!d.ok) return false;
+            currentChat = d.chat; chatId = d.chat.chat_id;
+            renderChat(d.chat);
+            document.getElementById('ai-landing').style.display = 'none';
+            document.getElementById('ai-active').style.display = '';
+            document.getElementById('ai-inputbar').style.display = '';
+            closeDrawer(); markNav('history');
+            var ws = document.getElementById('ai-workspace'); ws.scrollTop = 0;
+        });
+        return false;
+    };
+    function refreshChats(){
+        fetch('/api/ai/chats').then(function(r){return r.json()}).then(function(d){
+            if(d.ok) renderHistory(d.chats);
+            renderRecent(d.chats);
+        });
+    }
+
+    /* ── recent grid ── */
+    function renderRecent(chats){
+        var grid = document.getElementById('ai-recent-grid');
+        if(!grid) return;
+        if(!chats || !chats.length){ grid.innerHTML = '<div style="grid-column:1/-1;color:var(--text-muted);font-size:13px;opacity:.7">Start a conversation to see it here.</div>'; return; }
+        var html = '';
+        chats.slice(0,4).forEach(function(c){
+            var last = null;
+            if(c.messages && c.messages.length){ last = c.messages[c.messages.length-1].content || ''; }
+            var snippet = last ? (last.length>70 ? last.slice(0,70)+'...' : last) : '';
+            html += '<button class="ai-rcard" onclick="openChat(\''+c.chat_id+'\')">'
+                + '<div class="ai-rcard-title">'+esc(c.title)+'</div>'
+                + '<div class="ai-rcard-time">'+timeAgo(c.updated_at || c.created_at)+'</div>'
+                + (snippet ? '<div class="ai-rcard-note">'+esc(snippet)+'</div>' : '')
+                + '</button>';
+        });
+        grid.innerHTML = html;
+    }
+
+    /* ── weather ── */
+    function loadWeather(){
+        if(!weatherCity) return;
+        var w = document.getElementById('ai-weather-widget'); if(!w) return;
+        w.style.display = '';
+        fetch('/api/weather?city='+encodeURIComponent(weatherCity)).then(function(r){return r.json()}).then(function(d){
+            var body = document.getElementById('ai-weather-body'); if(!body) return;
+            if(!d.ok){ body.innerHTML = '<span class="ai-context-text">Weather unavailable</span>'; return; }
+            var icon = d.icon ? '<img src="'+esc(String(d.icon).replace(/^http:\/\//,'https://'))+'" alt="" style="width:40px;height:40px">' : '<span class="ai-weather-emoji">&#9925;</span>';
+            body.innerHTML = icon + '<div style="min-width:0"><div class="ai-weather-temp">'+esc(d.temp)+'&deg;C</div>'
+                + '<div class="ai-weather-meta">'+esc(d.desc)+' &middot; Feels '+esc(d.feels)+'&deg;C &middot; '+esc(d.city)+'</div></div>';
+        }).catch(function(){});
+    }
+
+    /* ── query submission ── */
+    function doSubmit(inputEl){
+        var q = (inputEl.value||'').trim();
+        if(!q || busy) return;
+        submitQuery(q);
+    }
+    function bindSearch(id){
+        var input = document.getElementById(id);
+        var go = document.getElementById(id.replace('-input','-go'));
+        if(!input) return;
+        function fire(){ doSubmit(input); }
+        input.addEventListener('keydown', function(e){ if(e.key==='Enter'){ fire(); } });
+        if(go) go.addEventListener('click', fire);
+    }
+    bindSearch('ai-landing-input'); bindSearch('ai-active-input');
+
+    window.submitQuery = function(q){
+        if(busy) return;
+        if(refreshDisableState()) return;
+        busy = true;
+        var pendingChatId = chatId;
+        var landingVisible = document.getElementById('ai-landing').style.display !== 'none';
+        if(landingVisible){
+            document.getElementById('ai-active').innerHTML = '';
+            document.getElementById('ai-landing').style.display = 'none';
+            document.getElementById('ai-active').style.display = '';
+            document.getElementById('ai-inputbar').style.display = '';
+        }
+        document.getElementById('ai-active-input').value = '';
+        showTurnUser(q);
+        var ov = showAssistantFrame();
+        setBusy(true);
+        fetch('/api/ai/search', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q, chat_id: pendingChatId || undefined})})
+        .then(function(r){ return r.json().then(function(d){ d._status = r.status; return d; }); })
+        .then(function(d){
+            if(!d.ok){
+                setBusy(false); busy = false;
+                if(d.error === 'limit' || d._status === 429){
+                    if(d.msg_used != null) setUsage(d.msg_used, d.msg_limit || LIMIT);
+                    if(d.ctx_used != null) setCtxUsage(d.ctx_used, d.ctx_limit || CTX_LIMIT);
+                    refreshDisableState();
+                    return;
+                }
+                failTurn(ov, d.error || 'Search failed. Please try again.');
+                return;
+            }
+            chatId = d.chat_id;
+            if(d.msg_used != null) setUsage(d.msg_used, d.msg_limit || LIMIT);
+            if(d.ctx_used != null) setCtxUsage(d.ctx_used, d.ctx_limit || CTX_LIMIT);
+            if(d.chat_id && !pendingChatId){
+                refreshChats();
+            }
+            if(d.results && d.results.length){
+                renderSources(ov, d.results);
+                fireLinkEvals(q, d.results, ov);
+            } else {
+                var srcBox = ov.querySelector('.ai-src-zone');
+                if(srcBox) srcBox.innerHTML = '<div class="ai-link-card"><div class="ai-link-snip">No web results were found for this query.</div></div>';
+            }
+            streamAnswer(q, d.chat_id, d.results||[], ov);
+        })
+        .catch(function(e){
+            setBusy(false); busy = false;
+            failTurn(ov, 'Network error. Please try again.');
+        });
+    };
+
+    function showTurnUser(q){
+        var thread = document.getElementById('ai-active');
+        var d = document.createElement('div');
+        d.className = 'ai-turn-user';
+        d.innerHTML = '<div class="ai-user-bubble">'+esc(q)+'</div>';
+        thread.appendChild(d);
+        scrollBottom();
+    }
+    function showAssistantFrame(){
+        var thread = document.getElementById('ai-active');
+        var d = document.createElement('div');
+        d.className = 'ai-assistant';
+        d.innerHTML = '<div class="ai-sources ai-src-zone" style="display:none"></div>'
+            + '<div class="ai-overview"><div class="ai-ov-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M4.5 7.5l15 9"/><path d="M19.5 7.5l-15 9"/></svg> Arlong AI Overview</div>'
+            + '<div class="ai-md"><span class="ai-cursor"></span></div>'
+            + '<div class="ai-actions"><button class="ai-icon-btn" title="Copy" onclick="copyAnswer(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>'
+            + '<button class="ai-icon-btn" title="Regenerate" onclick="regenerate(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg></button>'
+            + '<span class="ai-feedback"><button class="ai-icon-btn" title="Good answer" onclick="feedback(this,\'up\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg></button>'
+            + '<button class="ai-icon-btn" title="Bad answer" onclick="feedback(this,\'down\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg></button></span>'
+            + '</div></div>';
+        thread.appendChild(d);
+        scrollBottom();
+        return d;
+    }
+    function failTurn(ov, msg){
+        if(!ov) return;
+        var md = ov.querySelector('.ai-md');
+        if(md) md.innerHTML = '<p style="color:#D1D1D6">'+esc(msg)+'</p>';
+        scrollBottom();
+    }
+    function renderSources(ov, results){
+        var zone = ov.querySelector('.ai-src-zone');
+        if(!zone) return;
+        zone.style.display = '';
+        var html = '';
+        results.forEach(function(r, i){
+            var fav = r.favicon ? '<img class="ai-link-fav" src="'+esc(r.favicon)+'" alt="" loading="lazy" onerror="this.outerHTML=\'<span class=&quot;ai-link-fav-ph&quot;>'+esc((r.domain||'?')[0].toUpperCase())+'</span>\'">'
+                        : '<span class="ai-link-fav-ph">'+esc((r.domain||'?')[0].toUpperCase())+'</span>';
+            html += '<div class="ai-link-card" id="ai-src-'+(i+1)+'">'
+                + '<div class="ai-link-head">'+fav+'<span class="ai-link-domain">'+esc(r.domain||'')+'</span></div>'
+                + '<a class="ai-link-title" href="'+esc(r.url)+'" target="_blank" rel="noopener">'+(i+1)+'. '+esc(r.title||'')+'</a>'
+                + '<div class="ai-link-snip">'+esc(r.snippet||'')+'</div>'
+                + '<div class="ai-eval" id="ai-eval-'+(i+1)+'"><span class="ai-eval-label">AI Evaluation</span>'
+                + '<span class="ai-eval-loading"><span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span> analyzing relevance...</span></div>'
+                + '</div>';
+        });
+        zone.innerHTML = html;
+    }
+    function fireLinkEvals(q, results, ov){
+        fetch('/api/ai/links', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q, results:results})})
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+            if(!d.ok || !d.evaluations) return;
+            Object.keys(d.evaluations).forEach(function(k){
+                var box = ov.querySelector('#ai-eval-'+k);
+                if(box) box.innerHTML = '<span class="ai-eval-label">AI Evaluation</span><span>'+esc(d.evaluations[k])+'</span>';
+            });
+        }).catch(function(){});
+    }
+
+    /* ── streaming ── */
+    function streamAnswer(q, cid, results, ov, replaceLast){
+        if(!ov){ ov = document.querySelector('.ai-assistant .ai-overview'); }
+        if(!ov){ setBusy(false); busy=false; return; }
+        var md = ov.querySelector('.ai-md');
+        var full = '';
+        function finish(){
+            bindCites(ov);
+            refreshChats();
+        }
+        fetch('/api/ai/stream', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q, chat_id:cid, results:results, replace_last: replaceLast?true:false})})
+        .then(function(res){
+            if(!res.ok){ return res.text().then(function(t){
+                var parsed = null; try{ parsed = JSON.parse(t); }catch(e){}
+                if(parsed && parsed.error === 'limit'){
+                    if(parsed.msg_used != null) setUsage(parsed.msg_used, parsed.msg_limit || LIMIT);
+                    if(parsed.ctx_used != null) setCtxUsage(parsed.ctx_used, parsed.ctx_limit || CTX_LIMIT);
+                    refreshDisableState();
+                    failTurn(ov, parsed.limit_type === 'context'
+                        ? 'Context budget for the current ' + CTX_RESET_HOURS + 'h window is used up. Start a new chat or wait for the window to reset.'
+                        : 'Daily message limit reached. Try again after the window resets.');
+                    return null;
+                }
+                throw new Error(t||'Stream failed');
+            }); }
+            if(res.headers && res.headers.get){
+                var cu = res.headers.get('X-AI-Ctx-Used');
+                var cl = res.headers.get('X-AI-Ctx-Limit');
+                if(cu != null) setCtxUsage(parseInt(cu,10)||0, cl ? (parseInt(cl,10)||CTX_LIMIT) : CTX_LIMIT);
+            }
+            var reader = res.body.getReader();
+            var dec = new TextDecoder();
+            function pump(){
+                return reader.read().then(function(r){
+                    if(r.done){ finish(); return; }
+                    full += dec.decode(r.value, {stream:true});
+                    renderMd(md, full);
+                    scrollBottomSoft();
+                    return pump();
+                });
+            }
+            return pump();
+        })
+        .catch(function(e){ if(!/limit/i.test(String(e && e.message))) failTurn(ov, 'Generation error. Please try again.'); })
+        .finally(function(){ setBusy(false); busy = false; });
+    }
+    function renderMd(md, text){
+        if(md.dataset.raw === text) return;
+        md.dataset.raw = text;
+        var html = '';
+        try{
+            if(window.marked && marked.parse){ html = marked.parse(text || ''); }
+            else { html = esc(text).replace(/\n/g,'<br>'); }
+        }catch(e){ html = esc(text).replace(/\n/g,'<br>'); }
+        if(window.DOMPurify){ html = DOMPurify.sanitize(html, {ADD_ATTR:['target','rel']}); }
+        md.innerHTML = html;
+        if(window.hljs){ md.querySelectorAll('pre code').forEach(function(b){ try{ hljs.highlightElement(b); }catch(e){} }); }
+    }
+    function bindCites(ov){
+        ov.querySelectorAll('.ai-cite').forEach(function(c){
+            c.addEventListener('click', function(){
+                var n = c.getAttribute('data-n');
+                var card = ov.parentNode.querySelector('#ai-src-'+n);
+                if(card){
+                    card.scrollIntoView({behavior:'smooth', block:'center'});
+                    card.classList.add('flash');
+                    setTimeout(function(){ card.classList.remove('flash'); }, 1600);
+                }
+            });
+        });
+    }
+
+    /* ── markdown citation preprocessing ── */
+    if(window.marked && marked.parse){
+        var _p = marked.parse.bind(marked);
+        marked.parse = function(src, opts){
+            var s = String(src||'');
+            s = s.replace(/\[(\d)\](?!\()/g, '<sup class="ai-cite" data-n="$1">[$1]</sup>');
+            return _p(s, opts);
+        };
+    }
+
+    /* ── actions ── */
+    function currentOv(btn){
+        var ov = btn.closest('.ai-overview'); return ov;
+    }
+    window.copyAnswer = function(btn){
+        var md = btn.closest('.ai-overview').querySelector('.ai-md');
+        var text = md ? (md.textContent || '') : '';
+        if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text); }
+        else { var ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+        var svg = btn.innerHTML; btn.innerHTML = 'Copied'; btn.style.color='#FFFFFF';
+        setTimeout(function(){ btn.innerHTML = svg; btn.style.color=''; }, 1400);
+    };
+    window.regenerate = function(btn){
+        if(busy) return;
+        var ov = currentOv(btn);
+        var thread = ov.parentNode;
+        var userMsg = thread.previousElementSibling;
+        var q = '';
+        if(userMsg && userMsg.querySelector('.ai-user-bubble')){
+            q = userMsg.querySelector('.ai-user-bubble').textContent.trim();
+        }
+        if(!q) q = window._lastQuery || '';
+        if(!q) return;
+        /* remove previous assistant frame, then re-stream with existing chat context */
+        var sources = [];
+        ov.querySelectorAll('.ai-link-card').forEach(function(c, i){
+            var a = c.querySelector('.ai-link-title');
+            var d = c.querySelector('.ai-link-domain');
+            if(a){ sources.push({title: a.textContent.replace(/^\d+\.\s*/,''), url: a.href, domain: d?d.textContent:'', favicon:'https://www.google.com/s2/favicons?domain='+encodeURIComponent(a.hostname), snippet:''}); }
+        });
+        thread.remove();
+        busy = true;
+        var nf = showAssistantFrame();
+        setBusy(true);
+        if(sources.length) renderSources(nf, sources);
+        streamAnswer(q, chatId, sources, nf.querySelector('.ai-overview'), true);
+        window._lastQuery = q;
+    };
+    window.feedback = function(btn, val){
+        if(!chatId) return;
+        var ov = currentOv(btn);
+        var idx = 0;
+        Array.prototype.slice.call(document.querySelectorAll('.ai-assistant')).forEach(function(a, i){
+            if(a.contains(ov)) idx = i;
+        });
+        var fb = ov.querySelector('.ai-feedback');
+        if(fb){ fb.querySelectorAll('button').forEach(function(b){ b.classList.remove('on'); }); btn.classList.add('on'); }
+        fetch('/api/ai/feedback', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({chat_id:chatId, message_idx:idx, value:val})});
+    };
+
+    /* ── chat render (load saved) ── */
+    function renderChat(chat){
+        var thread = document.getElementById('ai-active');
+        thread.innerHTML = '';
+        var msgs = chat.messages || [];
+        var feedback = chat.feedback || {};
+        var aiIdx = 0;
+        msgs.forEach(function(m){
+            if(m.role === 'user'){
+                var u = document.createElement('div'); u.className='ai-turn-user';
+                u.innerHTML = '<div class="ai-user-bubble">'+esc(m.content)+'</div>';
+                thread.appendChild(u);
+            } else if(m.role === 'assistant'){
+                var a = document.createElement('div'); a.className='ai-assistant';
+                var srcs = m.sources || [];
+                var evals = m.evaluations || {};
+                var srcHtml = '';
+                if(srcs.length){
+                    srcs.forEach(function(r, i){
+                        var fav = r.favicon ? '<img class="ai-link-fav" src="'+esc(r.favicon)+'" alt="" loading="lazy" onerror="this.outerHTML=\'<span class=&quot;ai-link-fav-ph&quot;>'+esc((r.domain||'?')[0].toUpperCase())+'</span>\'">' : '<span class="ai-link-fav-ph">'+esc((r.domain||'?')[0].toUpperCase())+'</span>';
+                        var evalBody = evals[i+1] ? '<span>'+esc(evals[i+1])+'</span>' : '<span class="ai-eval-loading">No evaluation recorded.</span>';
+                        srcHtml += '<div class="ai-link-card" id="ai-src-'+(i+1)+'">'
+                            + '<div class="ai-link-head">'+fav+'<span class="ai-link-domain">'+esc(r.domain||'')+'</span></div>'
+                            + '<a class="ai-link-title" href="'+esc(r.url)+'" target="_blank" rel="noopener">'+(i+1)+'. '+esc(r.title||'')+'</a>'
+                            + '<div class="ai-link-snip">'+esc(r.snippet||'')+'</div>'
+                            + '<div class="ai-eval" id="ai-eval-'+(i+1)+'"><span class="ai-eval-label">AI Evaluation</span>'+evalBody+'</div></div>';
+                    });
+                }
+                if(srcs.length && m.query && !Object.keys(evals).length){
+                    setTimeout(function(){ fireLinkEvals(m.query, srcs, a.querySelector('.ai-overview')); }, 0);
+                }
+                var val = feedback[''+aiIdx];
+                var up = val==='up'?' on':''; var down = val==='down'?' on':'';
+                var act = '<button class="ai-icon-btn" title="Copy" onclick="copyAnswer(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>'
+                    + '<button class="ai-icon-btn" title="Regenerate" onclick="regenerate(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg></button>'
+                    + '<span class="ai-feedback">'
+                    + '<button class="ai-icon-btn'+up+'" title="Good answer" onclick="feedback(this,\'up\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg></button>'
+                    + '<button class="ai-icon-btn'+down+'" title="Bad answer" onclick="feedback(this,\'down\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg></button></span>';
+                a.innerHTML = '<div class="ai-sources">'+srcHtml+'</div>'
+                    + '<div class="ai-overview"><div class="ai-ov-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M4.5 7.5l15 9"/><path d="M19.5 7.5l-15 9"/></svg> Arlong AI Overview</div>'
+                    + '<div class="ai-md"></div><div class="ai-actions">'+act+'</div></div>';
+                thread.appendChild(a);
+                var mdEl = a.querySelector('.ai-md');
+                renderMd(mdEl, m.content || '');
+                bindCites(a.querySelector('.ai-overview'));
+                aiIdx++;
+            }
+        });
+        scrollBottom(true);
+    }
+    function setBusy(b){
+        var dis = b || limitBlocked();
+        ['ai-landing-go','ai-active-go'].forEach(function(id){ var el=document.getElementById(id); if(el){ el.disabled=dis; el.style.opacity=dis?'0.4':''; } });
+    }
+    function scrollBottom(instant){
+        var ws = document.getElementById('ai-workspace');
+        if(ws){ ws.scrollTo({top: ws.scrollHeight, behavior: instant?'auto':'smooth'}); }
+    }
+    function scrollBottomSoft(){
+        var ws = document.getElementById('ai-workspace');
+        var bottom = ws.scrollHeight - ws.scrollTop - ws.clientHeight;
+        if(bottom < 260) scrollBottom(true);
+    }
+
+    /* ── keyboard shortcut ── */
+    document.addEventListener('keydown', function(e){
+        if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k'){
+            e.preventDefault();
+            if(document.getElementById('ai-active').style.display !== 'none'){
+                document.getElementById('ai-active-input').focus();
+            } else {
+                document.getElementById('ai-landing-input').focus();
+            }
+        }
+    });
+
+    /* ── init ── */
+    function init(){
+        var chats = {{ chats | tojson }};
+        renderHistory(chats);
+        renderRecent(chats);
+        loadWeather();
+        setUsage(used, LIMIT);
+        setCtxUsage(ctxUsed, CTX_LIMIT);
+        if(!KEY_SET){
+            var banner = document.getElementById('ai-banner');
+            if(banner){ banner.innerHTML = 'Arlong AI is not configured yet (missing GROQ_AI_MODE_API_KEY).'; banner.classList.add('show'); }
+        }
+        var lc = {{ (load_chat | tojson) if load_chat else 'null' }};
+        if(lc){
+            currentChat = lc; chatId = lc.chat_id;
+            renderChat(lc);
+            document.getElementById('ai-landing').style.display = 'none';
+            document.getElementById('ai-active').style.display = '';
+            document.getElementById('ai-inputbar').style.display = '';
+            markNav('history');
+        } else {
+            document.getElementById('ai-landing').style.display = '';
+            showLandingSearch();
+            markNav('home');
+        }
+        document.getElementById('ai-workspace').scrollTop = 0;
+    }
+    init();
+})();
+</script>
+</body>
+</html>
