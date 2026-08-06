@@ -1227,8 +1227,13 @@
         }
         resize();
         window.addEventListener('resize',resize);
+        function isEditable(el){var n=el&&el.target;if(!n)return false;return n.tagName==='INPUT'||n.tagName==='TEXTAREA'||n.tagName==='SELECT'||n.isContentEditable;}
         document.addEventListener('keydown',function(e){
-            if(e.code==='Space'||e.code==='ArrowUp'||e.code==='KeyW'){e.preventDefault();flap();}
+            if(e.code!=='Space'&&e.code!=='ArrowUp'&&e.code!=='KeyW')return;
+            var ov=document.getElementById('ao-loading');
+            if(!run||!ov||!ov.classList.contains('show'))return;
+            if(isEditable(e))return;
+            e.preventDefault();flap();
         });
         cv.addEventListener('mousedown',function(e){e.preventDefault();flap();});
         cv.addEventListener('touchstart',function(e){e.preventDefault();flap();},{passive:false});
