@@ -9,6 +9,7 @@ import time
 import random
 import json
 from urllib.parse import urlparse, quote_plus, parse_qs, unquote
+import math
 try:
     import redis
     redis_available = True
@@ -21,7 +22,7 @@ try:
     s3_available = True
 except ImportError:
     s3_available = False
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import markdown
 import hashlib
 import base64 as _b64mod
@@ -32,6 +33,7 @@ import re
 import string
 import threading
 import os
+import shutil
 import ssl
 import httpx
 
@@ -120,7 +122,7 @@ def _search_google(query, max_results=5):
     if _is_engine_banned('google'):
         return []
     try:
-        with httpx.Client(verify=_shuffle_tls_context(), http2=True, timeout=3.0, follow_redirects=False) as client:
+        with httpx.Client(verify=_shuffle_tls_context(), http2=False, timeout=3.0, follow_redirects=False) as client:
             resp = client.get(
                 'https://www.google.com/search',
                 params={'q': query, 'hl': 'en', 'num': str(min(max_results, 10)), 'filter': '0'},
@@ -171,7 +173,7 @@ def _search_brave(query, max_results=5):
     if _is_engine_banned('brave'):
         return []
     try:
-        with httpx.Client(verify=_shuffle_tls_context(), http2=True, timeout=5.0, follow_redirects=True) as client:
+        with httpx.Client(verify=_shuffle_tls_context(), http2=False, timeout=5.0, follow_redirects=True) as client:
             resp = client.get(
                 'https://search.brave.com/search',
                 params={'q': query, 'source': 'web'},
@@ -268,12 +270,26 @@ PLACES_GEO_TTL = 90 * 24 * 3600  # geocode cache: 90 days
 # Separate Groq key used ONLY by the /ai feature (search-result summaries use GROQ_API_KEY).
 AI_MODE_GROQ_API_KEY = os.environ.get('GROQ_AI_MODE_API_KEY', '')
 AI_MODE_GROQ_MODEL = os.environ.get('GROQ_AI_MODE_MODEL', 'llama-3.1-8b-instant')
-# Per-user rolling limits: message count resets 12h after the user's first message in
-# the window; context token budget resets 6h after the first chat in the window.
+# If the primary model hits its rate limit or is unavailable, fall back through
+# these in order. If every model fails the AI answers with a system-down notice.
+AI_MODE_FALLBACK_MODELS = tuple(
+    m for m in (
+        os.environ.get('GROQ_AI_MODE_FALLBACK_MODELS', 'qwen/qwen3.6-27b,openai/gpt-oss-20b,allam-2-7b').split(',')
+    ) if m.strip()
+)
+# Per-user limits: message count resets 12h after the user's first message in
+# the window; the token budget is 15k per user and refreshes every 6 hours on a
+# fixed clock cycle.
 AI_MESSAGE_LIMIT = int(os.environ.get('AI_MESSAGE_LIMIT', 40))
 AI_MESSAGE_WINDOW_HOURS = int(os.environ.get('AI_MESSAGE_WINDOW_HOURS', 12))
-AI_CTX_LIMIT_TOKENS = int(os.environ.get('AI_CTX_LIMIT_TOKENS', 10000))
+AI_CTX_LIMIT_TOKENS = int(os.environ.get('AI_CTX_LIMIT_TOKENS', 15000))
 AI_CTX_WINDOW_HOURS = int(os.environ.get('AI_CTX_WINDOW_HOURS', 6))
+# Clarification gate: how many clarifying question rounds may be asked before
+# the assistant answers with what it has. Each round counts toward the user's
+# message and token budgets. Within a round, the AI decides how many questions
+# to ask (capped by AI_CLARIFY_MAX_QUESTIONS) and which ones.
+AI_CLARIFY_MAX_ROUNDS = int(os.environ.get('AI_CLARIFY_MAX_ROUNDS', 2))
+AI_CLARIFY_MAX_QUESTIONS = int(os.environ.get('AI_CLARIFY_MAX_QUESTIONS', 4))
 PLACES_RADIUS_KM = 40  # drop places farther than this from the requested location
 PLACES_MAX_RESULTS = 4  # cap shown results (also caps Place Details billing)
 PLACES_GL_DEFAULT = 'in'
@@ -328,6 +344,9 @@ _PLACES_HARD_NEGATIVE_WORDS = (
     'download','downloads','install','apk','apk download','free download','crack',
     'keygen','software','exe','definition','meaning','lyrics','algorithm','program',
     'programming','code','coding',
+    # Non-local uses of the generic place word 'market' ("black market", "stock
+    # market", "market cap") should never trigger the local-business widget.
+    'black market','stock market','market cap','dark web market','dark market',
 )
 # Softer procedural phrases: they suppress places only when the query has neither
 # a location nor a multi-word place phrase ("how to find a bank" is ambiguous,
@@ -1304,6 +1323,73 @@ def _domain_risk_level(domain):
         return 'danger'
     return None
 
+# ── Meaning / lyrics / interpretation query intent ──
+# Used to lift analysis hubs (Songfacts, Genius, SongMeanings, ...) to the top
+# and to push YouTube/video clutter down for queries like "brooklyn baby song meaning".
+MEANING_INTENT_MARKERS = (
+    'meaning', 'meanings', 'meaning of', 'lyrics', 'lyric meaning', 'song meaning',
+    'interpretation', 'interpreted', 'symbolism', 'significance', 'analysis',
+    'analyzed', 'analysed', 'explanation', 'behind the song', 'about this song',
+    'lyric analysis', 'translation of',
+)
+VIDEO_INTENT_MARKERS = (
+    'video', 'watch', 'trailer', 'tutorial', 'walkthrough', 'official audio',
+    'official video', 'music video', 'live', 'performance', 'clip', 'episode',
+    'season', 'documentary', 'full movie', 'reaction', 'stream', 'lyric video',
+    'how to',
+)
+MEANING_HUB_DOMAINS = frozenset({
+    'songmeanings.com', 'songfacts.com', 'genius.com', 'genius', 'lyrics.com',
+    'lyricsfreak.com', 'lyricsmint.com', 'azlyrics.com', 'musixmatch.com',
+    'songtell.com', 'songsense.io', 'songsense', 'lyricsmeanings.com',
+    'songlyrics.com', 'metrolyrics.com', 'letras.com', 'songtexte.com',
+    'lyricinterpretations.com', 'songexplain.com', 'behindthelyrics.com',
+    'songmints.com', 'kapanlagi.com', 'songmeanings', 'thesongofthesong',
+    'songstats', 'musixmatch', 'lyrics', 'songtext', 'songexplain', 'songfacts',
+    'oldtimemusic', 'rocknation', 'lyricsify', 'lyricswikia', 'songtell',
+    'soundsifter.com', 'lyricsify.com', 'songlyrics', 'ranklyrics.com',
+    'lyricsart.com', 'songtell.net', 'songexplain.com',
+})
+
+
+def _query_is_meaning_intent(q):
+    """True for queries seeking song/text meaning, lyrics, interpretation, or analysis."""
+    ql = q.lower().strip()
+    if not ql:
+        return False
+    for m in MEANING_INTENT_MARKERS:
+        if m in ql:
+            return True
+    if re.search(r'\bmean\b', ql) and len(ql.split()) >= 4:
+        return True
+    return False
+
+
+def _query_wants_video(q):
+    """True when the query explicitly asks for video/audiovisual content."""
+    ql = q.lower().strip()
+    for m in VIDEO_INTENT_MARKERS:
+        if m in ql:
+            return True
+    return False
+
+
+def _is_video_result(result):
+    """True if a result is a video page (category or youtube/vimeo/tiktok domain)."""
+    domain = ''
+    if isinstance(result, dict):
+        url = result.get('url') or ''
+        category = result.get('category') or ''
+    else:
+        url = getattr(result, 'url', '') or ''
+        category = getattr(result, 'category', '') or ''
+    if url:
+        domain = urlparse(url).netloc.lower().replace('www.', '')
+    if category == 'video':
+        return True
+    return any(v in domain for v in ('youtube.com', 'youtu.be', 'vimeo.com', 'dailymotion.com', 'tiktok.com'))
+
+
 # Official game storefronts — boosted so users land on a legit download link.
 GAME_STORE_DOMAINS = {
     'steampowered.com', 'steamcommunity.com', 'epicgames.com', 'gog.com',
@@ -1922,14 +2008,20 @@ def _load_json():
     else:
         if os.path.exists(DATA_FILE):
             try:
-                with open(DATA_FILE, 'r') as f:
+                with open(DATA_FILE, 'r', encoding='utf-8-sig') as f:
                     result = json.load(f)
-            except:
-                pass
+            except Exception as e:
+                app.logger.error(f"data.json parse failed: {e}")
     if result is not None:
         _json_cache['data'] = result
         _json_cache['ts'] = now
-    return result
+        return result
+    # A re-read failed: keep serving the last known good dataset instead of
+    # returning None (which would let an empty skeleton overwrite real data).
+    if _json_cache['data'] is not None:
+        app.logger.error("data.json re-read failed; continuing with last known good in-memory data")
+        return _json_cache['data']
+    return None
 
 def _invalidate_json_cache():
     _json_cache['data'] = None
@@ -1937,19 +2029,65 @@ def _invalidate_json_cache():
 
 def _save_json(data):
     _invalidate_json_cache()
-    if S3_ENABLED and s3_client:
+    if not isinstance(data, dict) or not data:
+        app.logger.error("Refusing to save: data payload is empty or invalid")
+        return False
+    if not S3_ENABLED or not s3_client:
+        # Data-wipe protection: never clobber a real dataset with an empty
+        # skeleton (missing users/ai_chats) over a file that actually has them.
+        if os.path.exists(DATA_FILE):
+            try:
+                with open(DATA_FILE, 'r', encoding='utf-8-sig') as f:
+                    existing = json.load(f)
+                if isinstance(existing, dict):
+                    for k in ('users', 'ai_chats'):
+                        if k in existing and k not in data:
+                            app.logger.error(
+                                f"Refusing to save data.json: existing file has '{k}' but new "
+                                f"payload is missing it (data-wipe protection)"
+                            )
+                            return False
+            except Exception as e:
+                app.logger.error(f"data.json pre-save check failed: {e}")
         try:
-            s3_client.put_object(
-                Bucket=S3_BUCKET,
-                Key=S3_DATA_KEY,
-                Body=json.dumps(data, indent=2).encode('utf-8'),
-                ContentType='application/json'
-            )
+            os.makedirs(BACKUP_DIR, exist_ok=True)
+            if os.path.exists(DATA_FILE):
+                shutil.copy2(DATA_FILE, os.path.join(BACKUP_DIR, 'data.json.bak'))
+            tmp_path = DATA_FILE + '.tmp'
+            with open(tmp_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
+            os.replace(tmp_path, DATA_FILE)
+            return True
         except Exception as e:
-            app.logger.error(f"S3 save error: {e}")
-    else:
-        with open(DATA_FILE, 'w') as f:
-            json.dump(data, f, indent=2)
+            app.logger.error(f"data.json save error: {e}")
+            return False
+    try:
+        if 'users' not in data and 'ai_chats' not in data:
+            try:
+                existing = json.loads(s3_client.get_object(Bucket=S3_BUCKET, Key=S3_DATA_KEY)['Body'].read().decode('utf-8'))
+                if isinstance(existing, dict):
+                    for k in ('users', 'ai_chats'):
+                        if k in existing and k not in data:
+                            app.logger.error(
+                                f"Refusing to save to S3: existing data has '{k}' but new "
+                                f"payload is missing it (data-wipe protection)"
+                            )
+                            return False
+            except ClientError as e:
+                if e.response['Error']['Code'] != 'NoSuchKey':
+                    app.logger.error(f"S3 pre-save check error: {e}")
+            except Exception as e:
+                app.logger.error(f"S3 pre-save check error: {e}")
+        s3_client.put_object(
+            Bucket=S3_BUCKET,
+            Key=S3_DATA_KEY,
+            Body=json.dumps(data, indent=2).encode('utf-8'),
+            ContentType='application/json'
+        )
+        return True
+    except Exception as e:
+        app.logger.error(f"S3 save error: {e}")
+        return False
 
 def _create_backup():
     try:
@@ -2016,6 +2154,11 @@ class DataManager:
         loaded = _load_json()
         if loaded:
             self.data = loaded
+        elif os.path.exists(DATA_FILE):
+            # File exists but could not be parsed. Keep an in-memory skeleton
+            # WITHOUT saving it, so a bad read can never overwrite real data.
+            app.logger.error("data.json exists but failed to load; refusing to overwrite it with an empty dataset")
+            self.data = {"reports": [], "blacklist": {}, "total_searches": 0, "celebration": "", "announcement": ""}
         else:
             self.data = {"reports": [], "blacklist": {}, "total_searches": 0, "celebration": "", "announcement": ""}
             _save_json(self.data)
@@ -2184,7 +2327,7 @@ class DataManager:
             self.data.setdefault('daily_searches', {})
             uid = str(user_id)
             user_data = self.data['daily_searches'].get(uid, {})
-            today = datetime.utcnow().strftime('%Y-%m-%d')
+            today = datetime.now(timezone.utc).replace(tzinfo=None).strftime('%Y-%m-%d')
             if user_data.get('date') != today:
                 user_data = {'date': today, 'count': 0}
                 self.data['daily_searches'][uid] = user_data
@@ -2198,7 +2341,7 @@ class DataManager:
                 self.data = loaded
             self.data.setdefault('daily_searches', {})
             uid = str(user_id)
-            today = datetime.utcnow().strftime('%Y-%m-%d')
+            today = datetime.now(timezone.utc).replace(tzinfo=None).strftime('%Y-%m-%d')
             user_data = self.data['daily_searches'].get(uid, {})
             if user_data.get('date') != today:
                 user_data = {'date': today, 'count': 0}
@@ -3341,25 +3484,55 @@ class DataManager:
             self.data['ai_chats'][key] = [c for c in user_chats if not (isinstance(c, dict) and c.get('chat_id') == chat_id)]
             _save_json(self.data)
 
-    def get_ai_usage(self, user_id):
-        """Return rolling-window usage for a user (msg 12h window, ctx 6h window).
+    def get_service_status(self):
+        """Service status flags: kill_switch and maintenance, both persisted in data.json."""
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+        rec = self.data.setdefault('service_status', {})
+        return {
+            'kill_switch': bool(rec.get('kill_switch', False)),
+            'maintenance': bool(rec.get('maintenance', False)),
+            'updated_at': rec.get('updated_at', ''),
+        }
 
-        Expired windows are reported as reset (a fresh window starts on the next
-        message). Returns a dict with msg_window_start/msg_count and
-        ctx_window_start/ctx_tokens.
+    def set_service_status(self, kill_switch=None, maintenance=None):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            rec = self.data.setdefault('service_status', {})
+            if kill_switch is not None:
+                rec['kill_switch'] = bool(kill_switch)
+            if maintenance is not None:
+                rec['maintenance'] = bool(maintenance)
+            rec['updated_at'] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+            self.data['service_status'] = rec
+            _save_json(self.data)
+        return self.get_service_status()
+
+    def get_ai_usage(self, user_id):
+        """Return window usage for a user (msg 12h rolling, ctx fixed 6h budget).
+
+        The context/token budget uses a fixed 6-hour clock cycle: it resets on
+        schedule even if the user was idle. Returns a dict with
+        msg_window_start/msg_count and ctx_window_start/ctx_tokens/ctx_bucket.
         """
         with self._lock:
             loaded = _load_json()
             if loaded:
                 self.data = loaded
         rec = _ai_normalize_usage(self.data.setdefault('ai_usage', {}).get(str(user_id)))
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         if _ai_ts_age(rec.get('msg_window_start')) >= timedelta(hours=AI_MESSAGE_WINDOW_HOURS):
             rec['msg_window_start'] = None
             rec['msg_count'] = 0
-        if _ai_ts_age(rec.get('ctx_window_start')) >= timedelta(hours=AI_CTX_WINDOW_HOURS):
-            rec['ctx_window_start'] = None
+        bucket = _ai_ctx_bucket(now)
+        if rec.get('ctx_bucket') != bucket:
+            rec['ctx_bucket'] = bucket
             rec['ctx_tokens'] = 0
+            rec['ctx_window_start'] = _ai_ctx_bucket_start(bucket)
         return rec
 
     def increment_ai_usage(self, user_id):
@@ -3370,7 +3543,7 @@ class DataManager:
                 self.data = loaded
             key = str(user_id)
             rec = _ai_normalize_usage(self.data.setdefault('ai_usage', {}).get(key))
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
             if _ai_ts_age(rec.get('msg_window_start')) >= timedelta(hours=AI_MESSAGE_WINDOW_HOURS):
                 rec['msg_window_start'] = None
                 rec['msg_count'] = 0
@@ -3383,10 +3556,10 @@ class DataManager:
             return allowed, max(0, AI_MESSAGE_LIMIT - rec['msg_count']), rec['msg_count']
 
     def add_ai_context_tokens(self, user_id, tokens):
-        """Add estimated input tokens to the rolling 6h context budget.
+        """Add estimated input tokens to the fixed 6h token budget.
 
-        Only adds when the new total stays within the limit. Returns
-        (allowed, used, remaining).
+        The budget resets on a fixed 6-hour clock cycle. Only adds when the new
+        total stays within the limit. Returns (allowed, used, remaining).
         """
         with self._lock:
             loaded = _load_json()
@@ -3394,15 +3567,15 @@ class DataManager:
                 self.data = loaded
             key = str(user_id)
             rec = _ai_normalize_usage(self.data.setdefault('ai_usage', {}).get(key))
-            now = datetime.utcnow()
-            if _ai_ts_age(rec.get('ctx_window_start')) >= timedelta(hours=AI_CTX_WINDOW_HOURS):
-                rec['ctx_window_start'] = None
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            bucket = _ai_ctx_bucket(now)
+            if rec.get('ctx_bucket') != bucket:
+                rec['ctx_bucket'] = bucket
                 rec['ctx_tokens'] = 0
+                rec['ctx_window_start'] = _ai_ctx_bucket_start(bucket)
             used = int(rec.get('ctx_tokens', 0))
             if used + int(tokens) > AI_CTX_LIMIT_TOKENS:
                 return False, used, max(0, AI_CTX_LIMIT_TOKENS - used)
-            if not rec['ctx_window_start']:
-                rec['ctx_window_start'] = now.isoformat()
             rec['ctx_tokens'] = used + int(tokens)
             self.data['ai_usage'][key] = rec
             _save_json(self.data)
@@ -4444,6 +4617,8 @@ class ImprovedSearch:
 
     def _classify_query_intent(self, query):
         q = query.lower().strip()
+        if _query_is_meaning_intent(q):
+            return 'meaning'
         if re.search(r'^how do(?:es)?\s+\S+\s+work', q):
             return 'explanation'
         if q.startswith('how do i') or q.startswith('how can i') or q.startswith('how to'):
@@ -4467,6 +4642,16 @@ class ImprovedSearch:
         sl = (snippet or '').lower()
         combined = tl + ' ' + sl
         query_lower = query.lower()
+        if query_intent == 'meaning':
+            if re.search(r'\b(meaning|meanings|lyrics|interpretation|symbolism|significance|analysis)\b', combined):
+                return 30
+            if re.search(r'\b(meaning|lyrics|interpretation|analysis)\b', tl[:50]):
+                return 25
+            if 'behind the song' in combined or 'song meaning' in combined or 'meaning of' in combined:
+                return 20
+            if '(official' in tl or '(lyrics)' in tl or '(audio)' in tl or ' - youtube' in tl:
+                return -18
+            return 0
         if query_intent == 'explanation':
             if tl.startswith('how does') or tl.startswith('how do'):
                 return 30
@@ -4520,36 +4705,130 @@ class ImprovedSearch:
             return 0
         return 0
 
+    def _score_meaning_boost(self, query, result):
+        """Lift meaning/lyrics/analysis hubs and sink video clutter for meaning-intent queries."""
+        if not _query_is_meaning_intent(query):
+            return 0
+        tl = (result.title or '').lower()
+        sl = (result.snippet or '').lower()
+        combined = tl + ' ' + sl
+        domain = ''
+        if result.url:
+            domain = urlparse(result.url).netloc.lower().replace('www.', '')
+        score = 0
+        if any(h in domain for h in MEANING_HUB_DOMAINS):
+            score += 18
+        if re.search(r'\b(meaning|meanings|lyrics|interpretation|symbolism|significance|analysis)\b', tl):
+            score += 12
+        elif re.search(r'\b(meaning|meanings|lyrics|interpretation|symbolism|significance|analysis)\b', combined):
+            score += 6
+        if _is_video_result(result):
+            score -= 22
+        if '(official' in tl or '(lyrics)' in tl or '(audio)' in tl:
+            score -= 10
+        return score
+
+    def _bm25_corpus_stats(self, results, query_terms):
+        """Collection statistics over the pooled result set so IDF reflects term
+        specificity within this query's own results. Terms that appear in nearly
+        every snippet (song, meaning, lyrics, ...) collapse toward zero IDF while
+        rare distinctive terms (brooklyn, baby, ...) dominate the score. This is
+        the standard BM25 term-specificity correction for a per-query corpus."""
+        N = max(len(results), 1)
+        doc_lengths = []
+        df = {}
+        for r in results:
+            title = (r.title or '').lower()
+            snippet = (r.snippet or '').lower()
+            dl = len(re.findall(r'\w+', title)) * 2 + len(re.findall(r'\w+', snippet))
+            doc_lengths.append(dl)
+            seen = set()
+            for t in query_terms:
+                if len(t) < 2:
+                    continue
+                if re.search(r'\b' + re.escape(t) + r'\b', title + ' ' + snippet):
+                    seen.add(t)
+            for t in seen:
+                df[t] = df.get(t, 0) + 1
+        avgdl = (sum(doc_lengths) / len(doc_lengths)) if doc_lengths else 0.0
+        return {'N': N, 'df': df, 'avgdl': avgdl}
+
+    def _bm25_score(self, query_terms, stats, title, snippet, k1=1.2, b=0.55):
+        """Okapi BM25 score for a single result against the query, using corpus
+        stats from _bm25_corpus_stats. Title terms count double (title matches
+        are much stronger signals than snippet matches)."""
+        N = stats['N']
+        avgdl = stats['avgdl']
+        df = stats['df']
+        title_tokens = re.findall(r'\w+', (title or '').lower())
+        snippet_tokens = re.findall(r'\w+', (snippet or '').lower())
+        dl = len(title_tokens) * 2 + len(snippet_tokens)
+        if dl <= 0:
+            return 0.0
+        score = 0.0
+        for t in query_terms:
+            if len(t) < 2:
+                continue
+            n = df.get(t, 0)
+            idf = math.log(1.0 + (N - n + 0.5) / (n + 0.5))
+            if idf <= 0.01:
+                continue
+            tf_title = len([w for w in title_tokens if w == t])
+            tf_snippet = len([w for w in snippet_tokens if w == t])
+            tf = tf_title * 2.0 + tf_snippet
+            denom = tf + k1 * (1.0 - b + b * (dl / avgdl)) if avgdl > 0 else tf + k1
+            score += idf * (tf * (k1 + 1.0)) / denom
+        return score
+
     def _rank_results(self, query, results):
         intent = SearchIntent(query)
         query_lower = query.lower().strip()
         query_intent_subtype = self._classify_query_intent(query)
         blacklist = data_manager.get_blacklist()
 
-        scored = []
-        for result in results:
-            s = 0
+        # BM25 lexical core: computed once over the pooled corpus, then used as
+        # the dominant ranking signal so on-topic results always beat off-topic
+        # high-authority pages.
+        _bm25_stats = self._bm25_corpus_stats(results, intent.terms)
+        _bm25_raw = [self._bm25_score(intent.terms, _bm25_stats, r.title, r.snippet) for r in results]
+        _bm25_max = max(_bm25_raw) if _bm25_raw else 0.0
+        _bm25_norm = [r / _bm25_max if _bm25_max > 0 else 0.0 for r in _bm25_raw]
 
-            s += self._score_title_match(query, intent, result) * 0.18
-            s += self._score_snippet_relevance(query, intent, result) * 0.14
+        scored = []
+        for idx, result in enumerate(results):
+            s = 0
+            bm25_norm = _bm25_norm[idx]
+
+            s += self._score_title_match(query, intent, result) * 0.10
+            s += self._score_snippet_relevance(query, intent, result) * 0.08
             authority = self._score_domain_authority(result.url)
-            s += authority * 0.12
+            s += bm25_norm * 55
+            s += authority * 0.05
             s += self._score_exact_domain_match(query, result) * 0.10
             s += self._score_official_domain_boost(query, result)
             s += self._score_game_store_boost(query, result)
-            s += self._score_url_quality(query, result.url) * 0.06
-            s += self._score_freshness(result, query_intent_subtype) * 0.08
-            s += self._score_category_relevance(query, intent, result) * 0.06
-            s += self._score_content_quality(result) * 0.10
-            s += self._score_reddit_boost(query, intent, result) * 0.07
-            s += self._score_navigational_domain_boost(query, result) * 0.10
-            s += self._score_answer_quality(query, result.snippet) * 0.08
-            s += self._score_snippet_substance(result.snippet) * 0.07
+            s += self._score_url_quality(query, result.url) * 0.05
+            s += self._score_freshness(result, query_intent_subtype) * 0.06
+            s += self._score_category_relevance(query, intent, result) * 0.05
+            s += self._score_content_quality(result) * 0.08
+            s += self._score_reddit_boost(query, intent, result) * 0.12
+            s += self._score_navigational_domain_boost(query, result) * 0.08
+            s += self._score_answer_quality(query, result.snippet) * 0.06
+            s += self._score_snippet_substance(result.snippet) * 0.05
             s += self._score_clickbait_penalty(result.title)
             s += self._score_title_naturalness(result.title)
             s += self._score_url_depth_penalty(result.url)
             s += self._score_academic_boost(query, intent, result)
-            s += self._score_intent_match(query_intent_subtype, result.title, result.snippet, query) * 0.20
+            s += self._score_intent_match(query_intent_subtype, result.title, result.snippet, query) * 0.15
+            s += self._score_meaning_boost(query, result)
+
+            # General video demotion: unless the query explicitly asks for video,
+            # a video page must not beat text results for the same topic — the
+            # dedicated video panel already shows videos separately.
+            video_demoted = False
+            if not _query_wants_video(query) and _is_video_result(result):
+                s -= 35
+                video_demoted = True
 
             domain = urlparse(result.url).netloc.lower()
             domain = re.sub(r'^www\.', '', domain)
@@ -4567,14 +4846,20 @@ class ImprovedSearch:
             elif risk == 'caution':
                 s *= 0.50
             else:
-                if authority >= 90:
-                    s *= 1.35
-                elif authority >= 80:
-                    s *= 1.20
-                elif authority >= 70:
-                    s *= 1.10
-                elif authority >= 50:
-                    s *= 1.03
+                # Relevance-gated authority: only pages that are actually on-topic
+                # (decent BM25) get the multiplicative lift. An authoritative but
+                # irrelevant page must not leapfrog relevant results. Demoted
+                # videos also lose the authority multiplier.
+                gate_norm = min(bm25_norm, 0.17) if video_demoted else bm25_norm
+                if gate_norm >= 0.18:
+                    if authority >= 90:
+                        s *= 1.25
+                    elif authority >= 80:
+                        s *= 1.12
+                    elif authority >= 70:
+                        s *= 1.06
+                    elif authority >= 50:
+                        s *= 1.02
 
             # Download/install queries: nudge top-tier official domains hard so the
             # real vendor page wins over aggregator mirrors (e.g. "process explorer
@@ -7134,6 +7419,37 @@ def home():
         preferences = data_manager.get_user_preferences(session['user_id'])
     return render_template('search.html', announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=session.get('user_country', ''), country_name=COUNTRY_NAMES.get(session.get('user_country', '')), user_stat=user_stats, daily_remaining=UNLIMITED, quota_limit=UNLIMITED, user_weather_location=user_weather_location, board_results=None, result_groups=[], ai_summary_enabled=True, preferences=preferences)
 
+@app.route('/s')
+def s_loading():
+    q = request.args.get('q', '').strip()
+    if not q:
+        return redirect(url_for('home'))
+    announcement = data_manager.get_announcement()
+    user_stats = None
+    daily_remaining = None
+    quota_limit = None
+    user_weather_location = ''
+    preferences = {}
+    if session.get('user_id'):
+        profile = data_manager.get_user_profile(session.get('username'))
+        user_stats = profile
+        user_weather_location = (profile or {}).get('weather_location', '') or ''
+        preferences = data_manager.get_user_preferences(session['user_id'])
+    return render_template('search.html', announcement=announcement, blocked_count=BLOCKLIST_COUNT, user_country=session.get('user_country', ''), country_name=COUNTRY_NAMES.get(session.get('user_country', '')), user_stat=user_stats, daily_remaining=UNLIMITED, quota_limit=UNLIMITED, user_weather_location=user_weather_location, board_results=None, result_groups=[], ai_summary_enabled=True, preferences=preferences, auto_search=q)
+
+@app.route('/opensearch.xml')
+def opensearch_xml():
+    base = request.url_root.rstrip('/')
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+           '<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">\n'
+           '  <ShortName>arlong</ShortName>\n'
+           '  <Description>Search arlong</Description>\n'
+           '  <InputEncoding>UTF-8</InputEncoding>\n'
+           f'  <Url type="text/html" method="get" template="{base}/s?q={{searchTerms}}"/>\n'
+           '  <Query role="example" searchTerms="hello world"/>\n'
+           '</OpenSearchDescription>\n')
+    return Response(xml, mimetype='application/opensearchdescription+xml')
+
 @app.route('/search')
 def search():
     _search_start = time.time()
@@ -7141,6 +7457,14 @@ def search():
     page = max(1, int(request.args.get('page', 1)))
     filter_type = 'general'
     region = request.args.get('region', session.get('region', ''))
+
+    # Any search without the sr flag goes through the /s interstitial first so
+    # the loading screen (Tetris overlay) covers the slow fetch, even when the
+    # /search URL is typed straight into the address bar. /s re-adds sr=1 before
+    # the real request, which also breaks the redirect chain.
+    if query and not request.args.get('sr'):
+        fwd = {k: v for k, v in request.args.items()}
+        return redirect(url_for('s_loading', **fwd))
 
     announcement = data_manager.get_announcement()
     preferences = {}
@@ -7216,6 +7540,10 @@ def search():
             video_results=[],
             image_results=[],
         )
+
+    _svc = _service_blocked()
+    if _svc:
+        return render_template('service_down.html', mode=_svc, query=query)
 
     try:
         if region:
@@ -7339,11 +7667,24 @@ def search():
             except Exception:
                 places_results, places_cached = None, False
 
-        # Interleave video results into main results (BEFORE grouping so videos appear in domain groups)
+        # Interleave video results into main results (BEFORE grouping so videos appear in domain groups).
+        # Videos are placed by relevance to the query: demoted for meaning/lyrics/analysis queries
+        # (text is what matters there) and promoted for explicit video-intent queries.
         if video_results:
             from urllib.parse import urlparse
+            ql = query.lower().strip()
+            video_demote = _query_is_meaning_intent(ql) and not _query_wants_video(ql)
+            video_promote = _query_wants_video(ql) and not video_demote
             inserted = 0
             for vi, v in enumerate(video_results):
+                # Unless the user explicitly wants video, only inject videos that
+                # actually share a distinctive query term; otherwise the dedicated
+                # video panel shows them without crowding the text results.
+                if not video_promote:
+                    vt = ((v.get('title', '') or '') + ' ' + ((v.get('description', '') or '') or '')).lower()
+                    distinct = [t for t in ql.split() if len(t) >= 3 and not t.isdigit()]
+                    if not any(t in vt for t in distinct):
+                        continue
                 v_domain = urlparse(v.get('url', '')).netloc if v.get('url') else 'youtube.com'
                 v_domain = re.sub(r'^www\.', '', v_domain)
                 vr = {
@@ -7362,7 +7703,12 @@ def search():
                     'views': v.get('views', ''),
                     'video_id': v.get('id', ''),
                 }
-                pos = min(3 + inserted * 2, len(results))
+                if video_promote:
+                    pos = min(3 + inserted * 2, len(results))
+                elif video_demote:
+                    pos = min(9 + inserted * 4, len(results))
+                else:
+                    pos = min(5 + inserted * 2, len(results))
                 results.insert(pos, vr)
                 inserted += 1
 
@@ -8146,7 +8492,22 @@ def admin_dashboard():
     verified_sites = data_manager.get_verified_sites()
     submitted_sites = data_manager.get_submitted_sites()
     domain_reports = data_manager.get_pending_domain_reports()
-    return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches, celebration=celebration, announcement=announcement, verified_sites=verified_sites, submitted_sites=submitted_sites, domain_reports=domain_reports)
+    service_status = data_manager.get_service_status()
+    error_series, error_total, error_latest, error_peak = _read_error_log(24)
+    return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches, celebration=celebration, announcement=announcement, verified_sites=verified_sites, submitted_sites=submitted_sites, domain_reports=domain_reports, service_status=service_status, error_series=error_series, error_total=error_total, error_latest=error_latest, error_peak=error_peak)
+
+@app.route('/admin/service', methods=['POST'])
+def admin_service():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    form = request.form
+    if not validate_csrf():
+        return redirect(url_for('admin_dashboard'))
+    kill_switch = form.get('kill_switch') == 'on'
+    maintenance = form.get('maintenance') == 'on'
+    data_manager.set_service_status(kill_switch=kill_switch, maintenance=maintenance)
+    app.logger.warning(f"Admin updated service status: kill_switch={kill_switch}, maintenance={maintenance}")
+    return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/reports/<int:report_id>/approve', methods=['POST'])
 def admin_approve_report(report_id):
@@ -8267,11 +8628,36 @@ def claim_site():
 
 # ── Community: signup, login, vote, comment, domain reports ──
 
+def _safe_redirect_target(value):
+    """Return value only if it is a safe same-site relative path, else None.
+    Rejects open-redirect vectors: external hosts, schemes (javascript:),
+    leading double slash, backslashes, and encoded variants of those."""
+    if not value:
+        return None
+    v = unquote(value).strip()
+    if not v or '\\' in v or not v.startswith('/') or v.startswith('//'):
+        return None
+    parts = urlparse(v)
+    if parts.scheme or parts.netloc:
+        return None
+    return v
+
+def _get_redirect_param():
+    """Read the validated post-auth redirect target. The canonical param is
+    'redirect'; legacy 'next' is accepted too. The value may arrive in the
+    query string (GET) or in the form body (POST) and is always re-validated,
+    so a tampered hidden field cannot smuggle an external URL."""
+    raw = (request.args.get('redirect') or request.form.get('redirect')
+           or request.args.get('next') or request.form.get('next'))
+    return _safe_redirect_target(raw)
+
+
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
+    redirect_target = _get_redirect_param()
     if request.method == 'POST':
         if not validate_csrf():
-            return render_template('signup.html', error='Invalid form submission. Please try again.')
+            return render_template('signup.html', error='Invalid form submission. Please try again.', redirect=redirect_target)
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
         email = request.form.get('email', '').strip()
@@ -8279,22 +8665,22 @@ def signup():
         sa = request.form.get('security_answer', '').strip()
         weather_loc = request.form.get('weather_location', '').strip()
         if not username or not password or not sq or not sa:
-            return render_template('signup.html', error='All fields required')
+            return render_template('signup.html', error='All fields required', redirect=redirect_target)
         if len(username) < 3 or len(username) > 24:
-            return render_template('signup.html', error='Username 3-24 characters')
+            return render_template('signup.html', error='Username 3-24 characters', redirect=redirect_target)
         if len(password) < 8:
-            return render_template('signup.html', error='Password must be at least 8 characters')
+            return render_template('signup.html', error='Password must be at least 8 characters', redirect=redirect_target)
         if not re.search(r'[A-Za-z]', password) or not re.search(r'[0-9]', password):
-            return render_template('signup.html', error='Password must contain both letters and numbers')
+            return render_template('signup.html', error='Password must contain both letters and numbers', redirect=redirect_target)
         if email and '@' not in email:
-            return render_template('signup.html', error='Invalid email address', email=email)
+            return render_template('signup.html', error='Invalid email address', email=email, redirect=redirect_target)
         ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
         accept_terms = request.form.get('accept_terms', '')
         if accept_terms != '1':
-            return render_template('signup.html', error='You must accept the Terms of Service to create an account.', email=email)
+            return render_template('signup.html', error='You must accept the Terms of Service to create an account.', email=email, redirect=redirect_target)
         user, err = data_manager.create_user(username, password, sq, sa, ip, email, weather_loc)
         if err:
-            return render_template('signup.html', error=err, email=email)
+            return render_template('signup.html', error=err, email=email, redirect=redirect_target)
         session.clear()
         session.permanent = True
         session['user_id'] = user['user_id']
@@ -8304,19 +8690,22 @@ def signup():
         session['onboarding'] = True
         if email:
             send_welcome_email(email, username)
+        if redirect_target:
+            return redirect(redirect_target)
         return redirect(url_for('home'))
-    return render_template('signup.html')
+    return render_template('signup.html', redirect=redirect_target)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    redirect_target = _get_redirect_param()
     if request.method == 'POST':
         if not validate_csrf():
-            return render_template('signup.html', login_error='Invalid form submission. Please try again.')
+            return render_template('signup.html', login_error='Invalid form submission. Please try again.', redirect=redirect_target)
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
         user = data_manager.authenticate_user(username, password)
         if not user:
-            return render_template('signup.html', login_error='Invalid credentials')
+            return render_template('signup.html', login_error='Invalid credentials', redirect=redirect_target)
         session.clear()
         session.permanent = True
         session['user_id'] = user['user_id']
@@ -8328,10 +8717,11 @@ def login():
                 send_login_notification(user_email, username, ip)
             except:
                 pass
-        next_url = request.args.get('next', '')
-        if next_url and next_url.startswith('/') and not next_url.startswith('//'):
-            return redirect(next_url)
+        if redirect_target:
+            return redirect(redirect_target)
         return redirect(url_for('home'))
+    if redirect_target:
+        return redirect(url_for('signup', mode='login', redirect=redirect_target))
     return redirect(url_for('signup', mode='login'))
 
 @app.route('/logout')
@@ -9104,18 +9494,172 @@ def api_user_preferences():
 
 
 # ═══════════════════════════════════════════════════════════════
-# ── Arlong AI mode (arlong.org/ai) ──
+# Arlong AI mode (arlong.org/ai)
 # Standalone feature. Uses GROQ_AI_MODE_API_KEY ONLY.
 # (Standard search-result summaries keep using GROQ_API_KEY.)
 # ═══════════════════════════════════════════════════════════════
+
+def _service_blocked():
+    """Return 'kill' or 'maintenance' when search/AI requests must be refused,
+    else None. Homepage and safety pages stay reachable."""
+    rec = data_manager.get_service_status()
+    if rec.get('kill_switch'):
+        return 'kill'
+    if rec.get('maintenance'):
+        return 'maintenance'
+    return None
+
+
+def _read_error_log(hours=24):
+    """Collect ERROR-level lines from the rotating log for the admin error graph.
+
+    Returns (series, total, latest) where series is a chronological list of
+    {'label': 'HH:00', 'count': n} buckets and latest holds the most recent
+    error lines (truncated) for quick inspection.
+    """
+    log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'search_engine.log')
+    buckets = {}
+    total = 0
+    latest = []
+    now = datetime.now()
+    if os.path.exists(log_path):
+        try:
+            with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                for line in f:
+                    if ' ERROR ' not in line:
+                        continue
+                    m = re.match(r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]', line)
+                    if not m:
+                        continue
+                    try:
+                        ts = datetime.strptime(m.group(1), '%Y-%m-%d %H:%M:%S')
+                    except Exception:
+                        continue
+                    if (now - ts).total_seconds() > hours * 3600:
+                        continue
+                    key = ts.strftime('%Y-%m-%d %H:00')
+                    buckets[key] = buckets.get(key, 0) + 1
+                    total += 1
+                    latest.append(line.strip()[:320])
+        except Exception as e:
+            app.logger.error(f"Error reading log for admin graph: {e}")
+    series = []
+    for h in range(hours - 1, -1, -1):
+        t = now - timedelta(hours=h)
+        key = t.strftime('%Y-%m-%d %H:00')
+        series.append({'label': t.strftime('%H:00'), 'count': buckets.get(key, 0)})
+    peak = max((s['count'] for s in series), default=0)
+    return series, total, latest[-10:], peak
+
 
 def _ai_groq():
     from groq import Groq
     return Groq(api_key=AI_MODE_GROQ_API_KEY)
 
 
+class AIAllModelsFailedError(Exception):
+    """Raised when every configured model fails. `overloaded` is True when the
+    failures look like rate limits or capacity pressure (429/5xx/busy)."""
+
+    def __init__(self, errors, overloaded=False):
+        self.errors = list(errors)
+        self.overloaded = overloaded
+        super().__init__('; '.join(self.errors))
+
+
+def _ai_model_list():
+    models = [AI_MODE_GROQ_MODEL]
+    for m in AI_MODE_FALLBACK_MODELS:
+        m = m.strip()
+        if m and m not in models:
+            models.append(m)
+    return models
+
+
+def _ai_error_is_overload(exc):
+    code = getattr(exc, 'status_code', None) or getattr(exc, 'status', None)
+    if code in (429, 500, 502, 503, 504):
+        return True
+    msg = str(exc).lower()
+    return any(k in msg for k in (
+        'rate limit', 'rate_limit', 'overloaded', 'overloaded_error',
+        'temporarily unavailable', 'capacity', 'too many requests',
+        'busy', '429', '503',
+    ))
+
+
+def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=None, timeout=90):
+    """Run a chat completion, trying every configured model in order.
+
+    Returns the completion object of the first model that answers. Raises
+    AIAllModelsFailedError when every model fails.
+    """
+    if not AI_MODE_GROQ_API_KEY:
+        raise AIAllModelsFailedError(['Arlong AI is not configured (missing GROQ_AI_MODE_API_KEY)'])
+    client = _ai_groq()
+    errors = []
+    overloaded = False
+    for model in _ai_model_list():
+        try:
+            kwargs = {
+                'model': model,
+                'messages': messages,
+                'max_tokens': max_tokens,
+                'temperature': temperature,
+                'timeout': timeout,
+            }
+            if response_format:
+                kwargs['response_format'] = response_format
+            return client.chat.completions.create(**kwargs)
+        except Exception as e:
+            err = str(e) or e.__class__.__name__
+            errors.append(f'{model}: {err}')
+            app.logger.error(f"AI model {model} failed: {err}")
+            if _ai_error_is_overload(e):
+                overloaded = True
+    raise AIAllModelsFailedError(errors, overloaded=overloaded)
+
+
+def _ai_open_stream(messages, max_tokens=1600, temperature=0.4, timeout=120):
+    """Open a streaming chat completion, falling back across models.
+
+    Returns (model, stream). Raises AIAllModelsFailedError if every model fails
+    to open a stream.
+    """
+    client = _ai_groq()
+    errors = []
+    overloaded = False
+    for model in _ai_model_list():
+        try:
+            stream = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                timeout=timeout,
+                stream=True,
+            )
+            return model, stream
+        except Exception as e:
+            err = str(e) or e.__class__.__name__
+            errors.append(f'{model}: {err}')
+            app.logger.error(f"AI stream model {model} failed: {err}")
+            if _ai_error_is_overload(e):
+                overloaded = True
+    raise AIAllModelsFailedError(errors, overloaded=overloaded)
+
+
 def _ai_est_tokens(text):
-    return max(1, int(len(text or '') / 4))
+    """Estimate token count. Uses tiktoken (cl100k_base) if available,
+    falls back to rough 4 chars/token heuristic."""
+    if not text:
+        return 0
+    try:
+        import tiktoken
+        enc = tiktoken.get_encoding('cl100k_base')
+        return len(enc.encode(text))
+    except Exception:
+        return max(1, int(len(text) / 4))
 
 
 def _ai_parse_ts(value):
@@ -9132,7 +9676,22 @@ def _ai_ts_age(value):
     dt = _ai_parse_ts(value)
     if dt is None:
         return timedelta.max
-    return datetime.utcnow() - dt
+    return datetime.now(timezone.utc).replace(tzinfo=None) - dt
+
+
+def _ai_ctx_bucket(now=None):
+    """Fixed UTC bucket index for the token budget.
+
+    The budget refreshes exactly every AI_CTX_WINDOW_HOURS hours on a fixed
+    clock (aligned to the epoch), not from first use.
+    """
+    base = now if now is not None else datetime.now(timezone.utc).replace(tzinfo=None)
+    return int(base.timestamp()) // (AI_CTX_WINDOW_HOURS * 3600)
+
+
+def _ai_ctx_bucket_start(bucket):
+    """Start (UTC ISO) of a fixed token-budget bucket."""
+    return datetime.utcfromtimestamp(bucket * AI_CTX_WINDOW_HOURS * 3600).isoformat()
 
 
 def _ai_normalize_usage(rec):
@@ -9144,6 +9703,7 @@ def _ai_normalize_usage(rec):
         'msg_count': int(rec.get('msg_count', 0)),
         'ctx_window_start': rec.get('ctx_window_start') if isinstance(rec.get('ctx_window_start'), str) else None,
         'ctx_tokens': int(rec.get('ctx_tokens', 0)),
+        'ctx_bucket': rec.get('ctx_bucket') if isinstance(rec.get('ctx_bucket'), int) else None,
     }
     return out
 
@@ -9176,8 +9736,7 @@ def _ai_compress_history(history, budget_tokens=None):
     summary = ''
     if AI_MODE_GROQ_API_KEY:
         try:
-            comp = _ai_groq().chat.completions.create(
-                model=AI_MODE_GROQ_MODEL,
+            comp = _ai_completion(
                 messages=[
                     {'role': 'system', 'content': 'You are a conversation summarizer. Condense the conversation below into a compact factual summary, preserving key questions, answers, names, decisions and cited sources. Output only the summary.'},
                     {'role': 'user', 'content': joined[:20000]},
@@ -9186,24 +9745,152 @@ def _ai_compress_history(history, budget_tokens=None):
                 temperature=0.2,
             )
             summary = (comp.choices[0].message.content or '').strip()
-        except Exception as e:
-            app.logger.warning(f"AI history compression failed: {e}")
+        except AIAllModelsFailedError as e:
+            app.logger.warning(f"AI history compression failed (all models): {e}")
     if summary:
         return [{'role': 'system', 'content': 'Prior conversation summary:\n' + summary}] + recent, True
     return history[-10:], True
 
 
+def _ai_fetch_all_results(query, max_fetch=40):
+    """Deep retrieval: pull as many ranked results as Arlong has for the query.
+
+    Arlong's search caches the full ranked result set per query, so walking the
+    pages is cheap after the first one. Falls back to Serper when the primary
+    engines return nothing or error out.
+    """
+    collected = []
+    total = 0
+    try:
+        page = 1
+        while page <= 3 and len(collected) < max_fetch:
+            results, total = search_engine.search(query, page)
+            if not results:
+                break
+            collected.extend(results)
+            if len(collected) >= total or len(results) < 20:
+                break
+            page += 1
+    except Exception as e:
+        app.logger.error(f"AI deep retrieval error: {e}")
+    if not collected:
+        try:
+            app.logger.warning("AI search primary empty, using Serper fallback")
+            collected = _search_serper(query, None)
+            total = len(collected)
+        except Exception as e:
+            app.logger.error(f"AI search Serper fallback error: {e}")
+    return collected, total
+
+
+_AI_STATUS_TITLE_RE = re.compile(r'\b(404|page not found|not found|just a moment|attention required|access denied|server error|error)\b', re.I)
+
+
+def _ai_query_overlap(query, c):
+    """True when the source shares at least one meaningful word with the query.
+
+    Used to drop totally unrelated results before they waste LLM tokens.
+    """
+    words = set(re.findall(r'[a-z0-9]{3,}', (query or '').lower()))
+    if not words:
+        return True
+    blob = (((c.get('title') or '') + ' ' + (c.get('snippet') or '')).lower())
+    return any(w in blob for w in words)
+
+
+def _ai_clean_sources(query, candidates):
+    """Drop sources that should never be surfaced to the AI: blocklisted
+    domains, ads, error/redirect pages, and results with zero query overlap.
+
+    Guarantees at least one candidate survives so an answer is never empty.
+    """
+    cleaned = []
+    for c in candidates or []:
+        url = c.get('url') or ''
+        title = (c.get('title') or '').strip()
+        snippet = c.get('snippet') or ''
+        if not url or not title:
+            continue
+        try:
+            if SearchBlocker.is_blocklisted(url) or SearchBlocker.is_ad(url, title, snippet):
+                continue
+        except Exception:
+            pass
+        if len(title) < 4:
+            continue
+        if len(title) < 40 and _AI_STATUS_TITLE_RE.search(title):
+            continue
+        if not _ai_query_overlap(query, c):
+            continue
+        cleaned.append(c)
+    if not cleaned and candidates:
+        return [candidates[0]]
+    return cleaned
+
+
+def _ai_pick_sources(query, candidates, k=5):
+    """Choose the most relevant/authoritative sources with one LLM call.
+
+    Junk is removed first by _ai_clean_sources (blocklist, ads, error pages,
+    unrelated hits). A small LLM pass then re-ranks a wider window and may
+    return FEWER than k sources when some are weak — it never back-fills junk.
+    Falls back to the top k cleaned candidates whenever the LLM is unavailable.
+    """
+    if not candidates:
+        return []
+    candidates = _ai_clean_sources(query, candidates)
+    candidates = candidates[:max(k * 4, 16)]
+    if not AI_MODE_GROQ_API_KEY or len(candidates) <= k:
+        return candidates[:k]
+    try:
+        listing = '\n'.join(
+            f"{i+1}. {c['title']} | {c['url']} | {(c.get('snippet') or '')[:160]}"
+            for i, c in enumerate(candidates)
+        )
+        comp = _ai_completion(
+            messages=[
+                {'role': 'system', 'content': f'You pick the most useful web sources to answer a query. Reply with STRICT JSON only, shaped as {{"chosen":[1,4,2]}}: indices of the best sources, at most {k}, in priority order. NEVER include a source that is irrelevant, low-quality, spammy, or untrustworthy. It is better to return fewer than {k} sources than to include a weak one. If none are good, return {{"chosen":[]}}.'},
+                {'role': 'user', 'content': f"Query: {query}\n\nSources:\n{listing}\n\nPick up to {k} relevant, trustworthy sources ordered best first. Exclude irrelevant or unreliable ones, even if that means fewer than {k}."},
+            ],
+            max_tokens=120,
+            temperature=0.1,
+            response_format={'type': 'json_object'},
+        )
+        raw = comp.choices[0].message.content or '{}'
+        chosen = []
+        parsed_ok = False
+        try:
+            chosen = json.loads(raw).get('chosen') or []
+            parsed_ok = True
+        except Exception:
+            m = re.search(r'\[.*?\]', raw)
+            if m:
+                try:
+                    chosen = json.loads(m.group(0))
+                    parsed_ok = True
+                except Exception:
+                    chosen = []
+        order = []
+        for idx in chosen:
+            try:
+                i = int(idx)
+            except Exception:
+                continue
+            if 1 <= i <= len(candidates) and i not in order:
+                order.append(i)
+        order = order[:k]
+        if not order and parsed_ok:
+            return candidates[:1]
+        return [candidates[i - 1] for i in order[:k]]
+    except Exception as e:
+        app.logger.error(f"AI source pick failed: {e}")
+        return candidates[:k]
+
+
 def _ai_top_results(query, limit=5):
     """Top web results pulled from the internal Arlong search engine, falling
     back to Serper when the primary engines return nothing."""
-    try:
-        results, _total = search_engine.search(query, 1)
-        if not results:
-            app.logger.warning("AI search primary empty, using Serper fallback")
-            results = _search_serper(query, None)
-    except Exception as e:
-        app.logger.error(f"AI search error: {e}")
-        results = _search_serper(query, None)
+    results, _total = _ai_fetch_all_results(query)
     top = []
     for r in results:
         d = r.to_dict() if hasattr(r, 'to_dict') else r
@@ -9217,29 +9904,219 @@ def _ai_top_results(query, limit=5):
             'domain': (d.get('domain') or urlparse(url).netloc).replace('www.', ''),
             'snippet': (d.get('snippet') or '')[:280],
         })
-        if len(top) >= limit:
+    top = _ai_clean_sources(query, top)
+    return _ai_pick_sources(query, top, limit)
+
+
+_AI_GATE_SYSTEM_PROMPT = (
+    'You are a research assistant that decides whether a user request has enough '
+    'detail to answer well, and which clarifying questions to ask. Reply with '
+    'STRICT JSON only, shaped as {"needs_context":true,"questions":["..."]}. '
+    'You decide ALL of the following yourself:\n'
+    '1) Is context missing that would materially change the answer? Consider: no '
+    'location/city for things-to-do, restaurants, events or trips; no group size or '
+    'vibe (adventure/chill/food/culture/nightlife) for recommendations; no budget for '
+    'shopping, trips or events; no date/timeframe for events or plans.\n'
+    '2) HOW MANY questions to ask — ask as many as you truly need (up to '
+    + str(AI_CLARIFY_MAX_QUESTIONS) + '), but never more than necessary. One or two '
+    'is usually plenty; ask more only when several genuinely independent details are missing.\n'
+    '3) WHICH questions to ask — read the conversation carefully. Never repeat a '
+    'question the user already answered. Each question must be short, specific, '
+    'and answerable in a few words.\n'
+    'STRICT RULES:\n'
+    '- Ask ONLY about details the USER must provide that you cannot find by '
+    'searching. Never ask the user to confirm facts, sources, definitions, dates, '
+    'or anything you could look up yourself.\n'
+    '- A factual question (e.g. "when does X release?", "what is Y?", "latest news '
+    'about Z") is fully answerable by searching — return {"needs_context":false}. '
+    'Do not ask "which source" or "do you mean the official one" unless the query '
+    'is genuinely ambiguous between two very different topics.\n'
+    '- Questions about recommendations, planning, or "what should I..." DO benefit '
+    'from a little context — but only when missing details would change the search.\n'
+    '- If the request is already specific enough, return {"needs_context":false} '
+    'with no questions. Do not ask unnecessary questions; asking nothing is fine.'
+)
+
+def _ai_context_gate(history, current_query):
+    """LLM-driven context gate: the AI decides whether context is missing, how
+    many questions to ask, and which ones. Returns (needs_context, questions,
+    tokens_used) where tokens_used is the estimated cost of this LLM call.
+    """
+    q = (current_query or '').strip()
+    if not q:
+        return True, ['Can you tell me what you are looking for?'], 0
+    if not AI_MODE_GROQ_API_KEY:
+        return False, [], 0
+    prior = [m for m in (history or []) if m.get('role') in ('user', 'assistant')]
+    convo = '\n'.join(f"{m.get('role', 'user')}: {m.get('content', '')}" for m in prior[-8:])
+    user_prompt = (
+        (f"Conversation so far:\n{convo}\n\n" if convo else '') +
+        f"User request: {q}\n\nDecide whether you need more context and which questions to ask."
+    )
+    tokens_used = _ai_est_tokens(_AI_GATE_SYSTEM_PROMPT + ' ' + user_prompt) + 30
+    try:
+        comp = _ai_completion(
+            messages=[
+                {'role': 'system', 'content': _AI_GATE_SYSTEM_PROMPT},
+                {'role': 'user', 'content': user_prompt},
+            ],
+            max_tokens=200,
+            temperature=0.1,
+            response_format={'type': 'json_object'},
+        )
+        raw = comp.choices[0].message.content or '{}'
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            m = re.search(r'\{.*\}', raw, re.S)
+            parsed = json.loads(m.group(0)) if m else {}
+        if isinstance(parsed, dict) and parsed.get('needs_context'):
+            questions = [str(x).strip()[:140] for x in (parsed.get('questions') or []) if str(x).strip()][:AI_CLARIFY_MAX_QUESTIONS]
+            if questions:
+                return True, questions, tokens_used + _ai_est_tokens(' '.join(questions))
+        return False, [], tokens_used
+    except Exception as e:
+        app.logger.warning(f"AI context gate LLM failed: {e}")
+        return False, [], tokens_used
+
+
+def _ai_append_message(chat, role, content, **extra):
+    """Append a chat message, deduplicating an identical user message sent
+    twice within a few seconds (double-submit / network retry guard)."""
+    msgs = chat.setdefault('messages', [])
+    msg = {'role': role, 'content': content, 'ts': datetime.now(timezone.utc).replace(tzinfo=None).isoformat()}
+    msg.update(extra)
+    if role == 'user' and msgs:
+        last = msgs[-1]
+        if last.get('role') == 'user' and last.get('content') == content:
+            if _ai_ts_age(last.get('ts')) <= timedelta(seconds=10):
+                return False
+    msgs.append(msg)
+    return True
+
+
+def _ai_history(chat):
+    """Plain user/assistant transcript of a chat, for LLM calls."""
+    return [{'role': m.get('role'), 'content': m.get('content', '')}
+            for m in chat.get('messages', []) if m.get('role') in ('user', 'assistant')]
+
+
+def _ai_prior_question(chat):
+    """Original user question that led to the last pending clarification."""
+    msgs = chat.get('messages', [])
+    for i in range(len(msgs) - 1, -1, -1):
+        if msgs[i].get('role') == 'assistant' and msgs[i].get('clarify'):
+            for j in range(i - 1, -1, -1):
+                if msgs[j].get('role') == 'user':
+                    return msgs[j].get('content', '')
             break
-    return top
+    return ''
 
 
-def _ai_link_evaluations(query, results):
+def _ai_collected_answers(chat):
+    """All structured answers accumulated across every clarify round, in order.
+
+    Pairs each assistant 'clarify' message's questions with the user answer(s)
+    that followed it. Falls back to the raw answer text when no structured
+    question/answer split exists.
+    """
+    out = []
+    msgs = chat.get('messages', [])
+    for i, m in enumerate(msgs):
+        if m.get('role') != 'assistant' or not m.get('clarify'):
+            continue
+        qs = m.get('questions') or []
+        for j in range(i + 1, len(msgs)):
+            if msgs[j].get('role') == 'user':
+                text = (msgs[j].get('content') or '').strip()
+                if '; ' in text:
+                    parts = [p.strip() for p in text.split(';') if p.strip()]
+                    for k, part in enumerate(parts):
+                        out.append({'q': (qs[k] if k < len(qs) else ''), 'a': part})
+                elif text:
+                    out.append({'q': (qs[0] if qs else ''), 'a': text})
+                break
+    return out
+
+
+def _ai_plan_search(original_query, answers):
+    """Decide what to actually search for, optionally splitting a complex
+    request into focused multi-task queries. Returns
+    {'mode': 'single', 'query': ...} or
+    {'mode': 'multi', 'tasks': [{'label': ..., 'query': ...}, ...]}.
+    """
+    context = ' '.join(str(a).strip() for _q, a in (answers or []) if str(a).strip())
+    fallback_q = (f"{original_query} {context}".strip() if context else (original_query or '')).strip() or 'general search'
+    if not AI_MODE_GROQ_API_KEY:
+        return {'mode': 'single', 'query': fallback_q}
+    try:
+        answer_lines = '\n'.join(
+            f"- {str(q).strip() or 'Reply'}: {str(a).strip()}" for q, a in (answers or []) if str(a).strip()
+        ) if answers else f"- (raw reply): {original_query}"
+        comp = _ai_completion(
+            messages=[
+                {'role': 'system', 'content': (
+                    'You turn a request plus the user\'s clarifying answers into concrete web-search queries. '
+                    'Reply with STRICT JSON only. '
+                    'DEFAULT to single search: {"mode":"single","query":"<search query>"}. '
+                    'Use multi-task ONLY when the request has genuinely DISTINCT facets that need '
+                    'separate searches and cannot be answered well with one query '
+                    '(e.g. "venues AND catering AND budget" for a wedding — three separate domains). '
+                    'If multi-task, return {"mode":"multi","tasks":[{"label":"short heading","query":"<search query>"}, ...]} '
+                    'with at most 3 tasks. Queries must be concise, specific and web-search ready. '
+                    'CRITICAL: always respect the user\'s answers. If the user specified a '
+                    'preference, constraint or location, EVERY query must reflect it. Never '
+                    'search the opposite of what the user asked for (e.g. if they said '
+                    '"indoor", do not search outdoor activities). Fold group size, city, '
+                    'budget and preferences into the query text. Do NOT split a single topic '
+                    'into overlapping queries.'
+                )},
+                {'role': 'user', 'content': f"Original request: {original_query}\n\nUser's answers:\n{answer_lines}\n\nPlan the search(es)."},
+            ],
+            max_tokens=300,
+            temperature=0.1,
+            response_format={'type': 'json_object'},
+        )
+        raw = comp.choices[0].message.content or '{}'
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            m = re.search(r'\{.*\}', raw, re.S)
+            parsed = json.loads(m.group(0)) if m else {}
+        if isinstance(parsed, dict):
+            if parsed.get('mode') == 'multi' and isinstance(parsed.get('tasks'), list):
+                tasks = []
+                for t in parsed['tasks'][:3]:
+                    if isinstance(t, dict) and str(t.get('query') or '').strip():
+                        q = str(t['query']).strip()[:200]
+                        tasks.append({'label': (str(t.get('label') or '').strip() or q[:60])[:80], 'query': q})
+                if tasks:
+                    return {'mode': 'multi', 'tasks': tasks}
+            q = str(parsed.get('query') or '').strip() or fallback_q
+            return {'mode': 'single', 'query': q[:200]}
+        return {'mode': 'single', 'query': fallback_q}
+    except Exception as e:
+        app.logger.warning(f"AI search planning failed: {e}")
+        return {'mode': 'single', 'query': fallback_q}
+
+
+def _ai_link_evaluations(query, results, max_links=5):
     """One Groq call producing short per-link relevance evaluations."""
     if not AI_MODE_GROQ_API_KEY or not results:
         return {}
     try:
         links = '\n'.join(
             f"{i+1}. {r['title']} | {r['url']} | {(r.get('snippet') or '')[:160]}"
-            for i, r in enumerate(results[:5])
+            for i, r in enumerate(results[:max_links])
         )
-        comp = _ai_groq().chat.completions.create(
-            model=AI_MODE_GROQ_MODEL,
-            response_format={'type': 'json_object'},
+        comp = _ai_completion(
             messages=[
                 {'role': 'system', 'content': 'You evaluate web search results for relevance. Reply with STRICT JSON only, shaped as {"evaluations":[{"idx":1,"eval":"one sentence"}]}.'},
                 {'role': 'user', 'content': f"Query: {query}\n\nSources:\n{links}\n\nFor each source write ONE concise sentence (under 200 chars) on why it is relevant to the query and whether it is a good source."},
             ],
-            max_tokens=900,
+            max_tokens=max(900, 130 * max_links),
             temperature=0.2,
+            response_format={'type': 'json_object'},
         )
         raw = comp.choices[0].message.content or '{}'
         parsed = {}
@@ -9276,13 +10153,14 @@ def _ai_build_messages(history, results):
     messages = [{'role': 'system', 'content': system}]
     messages.extend(history)
     if results:
+        shown = results[:15]
         sources = '\n'.join(
-            f"[{i+1}] {r['title']} - {r['url']}\n    {(r.get('snippet') or '')[:200]}"
-            for i, r in enumerate(results[:5])
+            f"[{i+1}] {('(' + r.get('group', '') + ') ') if r.get('group') else ''}{r['title']} - {r['url']}\n    {(r.get('snippet') or '')[:200]}"
+            for i, r in enumerate(shown)
         )
         messages.append({
             'role': 'user',
-            'content': f"Web search results for the current query:\n{sources}\n\nSynthesize your answer using these results and cite them inline as [1]-[{len(results[:5])}]. Do not invent sources."
+            'content': f"Web search results for the current query:\n{sources}\n\nSynthesize your answer using these results and cite them inline as [1]-[{len(shown)}]. Do not invent sources."
         })
     else:
         messages.append({'role': 'user', 'content': 'No web results were retrieved for this query. Answer from your own knowledge.'})
@@ -9292,7 +10170,7 @@ def _ai_build_messages(history, results):
 @app.route('/ai')
 def ai_page():
     if not session.get('user_id'):
-        return redirect(url_for('login') + '?next=/ai')
+        return redirect(url_for('login') + '?redirect=/ai')
     user = data_manager.get_user_by_id(session['user_id'])
     username = (user or {}).get('username', session.get('username', ''))
     first_name = username.split(' ')[0].capitalize() if username else 'there'
@@ -9412,10 +10290,15 @@ def api_ai_feedback():
 def api_ai_search():
     if not session.get('user_id'):
         return jsonify({'ok': False, 'error': 'Login required'}), 401
+    _svc = _service_blocked()
+    if _svc:
+        return jsonify({'ok': False, 'error': 'blocked', 'mode': _svc}), 503
     data = request.get_json(silent=True) or {}
     query = (data.get('query') or '').strip()
     if not query:
         return jsonify({'ok': False, 'error': 'Query required'}), 400
+    deep = bool(data.get('deep'))
+    skip = bool(data.get('skip'))
     user_id = session['user_id']
     usage = data_manager.get_ai_usage(user_id)
     msg_used = int(usage.get('msg_count', 0))
@@ -9433,10 +10316,9 @@ def api_ai_search():
             'msg_used': AI_MESSAGE_LIMIT, 'msg_remaining': 0, 'msg_limit': AI_MESSAGE_LIMIT,
             'ctx_used': ctx_used, 'ctx_remaining': max(0, AI_CTX_LIMIT_TOKENS - ctx_used), 'ctx_limit': AI_CTX_LIMIT_TOKENS,
         }), 429
-    results = _ai_top_results(query, 5)
     chat_id = data.get('chat_id') or ''
     chat = data_manager.get_ai_chat(user_id, chat_id) if chat_id else None
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     if not chat:
         chat = {
             'chat_id': uuid.uuid4().hex[:12],
@@ -9446,14 +10328,99 @@ def api_ai_search():
             'messages': [],
             'feedback': {},
         }
-    chat.setdefault('messages', []).append({'role': 'user', 'content': query, 'ts': now})
-    chat['updated_at'] = now
+    chat.setdefault('messages', [])
+    clarify = chat.setdefault('clarify', {'rounds': 0, 'pending': False})
+
+    # ── answers arrive via the popup (structured) or a raw typed reply ──
+    answers = data.get('answers') or []
+    if not isinstance(answers, list):
+        answers = []
+    answers = [{'q': str(x.get('q', '')), 'a': str(x.get('a', ''))} for x in answers if isinstance(x, dict)]
+    answered_text = '; '.join(x['a'].strip() for x in answers if x['a'].strip()) or query
+
+    is_answer = bool(clarify.get('pending'))
+    if is_answer:
+        clarify['pending'] = False
+    else:
+        clarify['rounds'] = 0
+
+    _ai_append_message(chat, 'user', answered_text if is_answer else query)
+
+    # ── context gate: only in deep mode (unless skipped) — the AI decides
+    #    whether/how many questions to ask. Normal mode skips straight to
+    #    searching. ──
+    need_ask = False
+    questions = []
+    gate_tokens = 0
+    if deep and not skip:
+        if is_answer:
+            if int(clarify.get('rounds', 0)) < AI_CLARIFY_MAX_ROUNDS:
+                need_ask, questions, gate_tokens = _ai_context_gate(_ai_history(chat), answered_text)
+        else:
+            need_ask, questions, gate_tokens = _ai_context_gate(_ai_history(chat), query)
+
+    if need_ask and questions:
+        clarify['rounds'] = int(clarify.get('rounds', 0)) + 1
+        clarify['pending'] = True
+        clarify_tokens = gate_tokens + _ai_est_tokens(answered_text + ' ' + ' '.join(questions)) + 40
+        ctx_ok, ctx_used, ctx_remaining = data_manager.add_ai_context_tokens(user_id, clarify_tokens)
+        if not ctx_ok:
+            return jsonify({
+                'ok': False, 'error': 'limit', 'limit_type': 'context',
+                'msg_used': min(AI_MESSAGE_LIMIT, used),
+                'msg_remaining': remaining, 'msg_limit': AI_MESSAGE_LIMIT,
+                'ctx_used': ctx_used, 'ctx_remaining': ctx_remaining, 'ctx_limit': AI_CTX_LIMIT_TOKENS,
+                'ctx_reset_hours': AI_CTX_WINDOW_HOURS,
+            }), 429
+        _ai_append_message(chat, 'assistant',
+                           'To find the best answers, I just need a little more detail:\n\n'
+                           + '\n'.join(f'{i}. {x}' for i, x in enumerate(questions, 1)),
+                           query=query, clarify=True, questions=list(questions))
+        chat['updated_at'] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+        data_manager.save_ai_chat(user_id, chat)
+        return jsonify({
+            'ok': True,
+            'chat_id': chat['chat_id'],
+            'title': chat['title'],
+            'results': [],
+            'clarify': {'questions': questions, 'round': clarify['rounds'], 'max_rounds': AI_CLARIFY_MAX_ROUNDS},
+            'remaining': remaining,
+            'msg_used': min(AI_MESSAGE_LIMIT, used),
+            'msg_remaining': remaining,
+            'msg_limit': AI_MESSAGE_LIMIT,
+            'ctx_used': ctx_used,
+            'ctx_remaining': ctx_remaining,
+            'ctx_limit': AI_CTX_LIMIT_TOKENS,
+        })
+
+    # ── let the AI plan the search(es), then run them (single or multi-task).
+    #    Multi-task planning only runs in deep mode. ──
+    if is_answer:
+        base_q = query if answers else _ai_prior_question(chat)
+        plan_answers = _ai_collected_answers(chat) or answers
+    else:
+        base_q = query
+        plan_answers = answers
+    if deep:
+        plan = _ai_plan_search(base_q, plan_answers)
+    else:
+        plan = {'mode': 'single', 'query': base_q}
+    groups = []
+    flat = []
+    if plan.get('mode') == 'multi' and plan.get('tasks'):
+        for t in plan['tasks']:
+            res = _ai_top_results(t['query'], 5)
+            groups.append({'label': t['label'], 'query': t['query'], 'results': res})
+            flat.extend([dict(r, group=t['label']) for r in res])
+    else:
+        flat = _ai_top_results(plan.get('query') or query, 5)
+    chat['updated_at'] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     data_manager.save_ai_chat(user_id, chat)
-    return jsonify({
+    resp = {
         'ok': True,
         'chat_id': chat['chat_id'],
         'title': chat['title'],
-        'results': results,
+        'results': flat,
         'remaining': remaining,
         'msg_used': min(AI_MESSAGE_LIMIT, used),
         'msg_remaining': remaining,
@@ -9461,19 +10428,30 @@ def api_ai_search():
         'ctx_used': ctx_used,
         'ctx_remaining': max(0, AI_CTX_LIMIT_TOKENS - ctx_used),
         'ctx_limit': AI_CTX_LIMIT_TOKENS,
-    })
+    }
+    if groups:
+        resp['groups'] = groups
+        resp['multitask'] = True
+    return jsonify(resp)
 
 
 @app.route('/api/ai/links', methods=['POST'])
 def api_ai_links():
     if not session.get('user_id'):
         return jsonify({'ok': False, 'error': 'Login required'}), 401
+    _svc = _service_blocked()
+    if _svc:
+        return jsonify({'ok': False, 'error': 'blocked', 'mode': _svc}), 503
     data = request.get_json(silent=True) or {}
     query = (data.get('query') or '').strip()
     results = data.get('results') or []
     if not query or not results:
         return jsonify({'ok': False, 'error': 'Missing query or results'}), 400
-    evals = _ai_link_evaluations(query, results)
+    try:
+        offset = int(data.get('offset') or 0)
+    except Exception:
+        offset = 0
+    evals = {int(k) + offset: v for k, v in _ai_link_evaluations(query, results).items()}
     return jsonify({'ok': True, 'evaluations': evals})
 
 
@@ -9481,6 +10459,9 @@ def api_ai_links():
 def api_ai_stream():
     if not session.get('user_id'):
         return jsonify({'ok': False, 'error': 'Login required'}), 401
+    _svc = _service_blocked()
+    if _svc:
+        return jsonify({'ok': False, 'error': 'blocked', 'mode': _svc}), 503
     if not AI_MODE_GROQ_API_KEY:
         def _no_key():
             yield 'Arlong AI is not configured yet (missing GROQ_AI_MODE_API_KEY).'
@@ -9490,6 +10471,7 @@ def api_ai_stream():
     chat_id = data.get('chat_id') or ''
     results = data.get('results') or []
     replace_last = bool(data.get('replace_last'))
+    multitask = bool(data.get('multitask'))
     if not query:
         return jsonify({'ok': False, 'error': 'Query required'}), 400
     user_id = session['user_id']
@@ -9522,13 +10504,7 @@ def api_ai_stream():
     def generate():
         full = ''
         try:
-            stream = _ai_groq().chat.completions.create(
-                model=AI_MODE_GROQ_MODEL,
-                messages=messages,
-                max_tokens=1600,
-                temperature=0.4,
-                stream=True,
-            )
+            _model, stream = _ai_open_stream(messages, max_tokens=1600, temperature=0.4)
             for chunk in stream:
                 if not chunk.choices:
                     continue
@@ -9536,9 +10512,22 @@ def api_ai_stream():
                 if delta:
                     full += delta
                     yield delta
+        except AIAllModelsFailedError as e:
+            app.logger.error(f"AI stream unavailable (all models failed): {e}")
+            if e.overloaded:
+                yield ("\n\nArlong AI is swamped with requests right now. Your question has been "
+                       "queued and will be answered the moment capacity frees up. "
+                       "Please check back in a few minutes and ask again.")
+            else:
+                yield ("\n\nArlong AI is currently unavailable. The answer engine did not respond "
+                       "as expected. Please try again in a little while.")
         except Exception as e:
             app.logger.error(f"AI stream error: {e}")
-            yield f"\n\n_[Generation error: {e}]_"
+            if _ai_error_is_overload(e):
+                yield ("\n\nArlong AI is busy at the moment. Your question has been queued and will "
+                       "be answered once traffic eases. Please come back in a few minutes.")
+            else:
+                yield "\n\n_[Generation error. Please try again in a little while.]_"
         finally:
             if chat_id and full.strip():
                 try:
@@ -9549,10 +10538,10 @@ def api_ai_stream():
                             'content': full,
                             'query': query,
                             'sources': results,
-                            'evaluations': _ai_link_evaluations(query, results),
-                            'ts': datetime.utcnow().isoformat(),
+                            'evaluations': _ai_link_evaluations(query, results, max_links=(15 if multitask else 5)),
+                            'ts': datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                         })
-                        chat['updated_at'] = datetime.utcnow().isoformat()
+                        chat['updated_at'] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
                         data_manager.save_ai_chat(user_id, chat)
                 except Exception as e:
                     app.logger.error(f"AI stream save error: {e}")

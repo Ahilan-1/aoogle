@@ -134,6 +134,11 @@
     .ai-search-go:hover{background:#E5E5E5}
     .ai-search-go svg{width:18px;height:18px}
     .ai-search-go:disabled{opacity:.4;cursor:not-allowed}
+    .ai-deep-btn{display:flex;align-items:center;gap:6px;flex-shrink:0;height:32px;padding:0 12px;border-radius:16px;border:1px solid var(--border-color);background:var(--bg-surface);color:var(--text-muted);font-size:12px;font-weight:600;letter-spacing:.3px;cursor:pointer;transition:all .2s}
+    .ai-deep-btn svg{width:14px;height:14px}
+    .ai-deep-btn:hover{border-color:#FFFFFF33}
+    .ai-deep-btn.on{background:#FFFFFF;color:#000000;border-color:#FFFFFF;box-shadow:0 0 12px rgba(255,255,255,.25)}
+    .ai-deep-btn.on:hover{background:#E5E5E5}
 
     .ai-widgets{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px}
     .ai-widget{background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius);padding:14px 16px}
@@ -238,6 +243,44 @@
     }
     .ai-banner.show{display:flex}
 
+    .ai-clarify-box{background:var(--bg-inner);border:1px solid var(--border-color);border-radius:10px;padding:14px 16px;margin:12px 0}
+    .ai-clarify-title{font-size:13.5px;color:#FFFFFF;font-weight:600;margin-bottom:10px}
+    .ai-clarify-chips{display:flex;flex-wrap:wrap;gap:8px}
+    .ai-clarify-chip{
+        padding:8px 14px;border-radius:20px;background:var(--bg-surface);border:1px solid #3A3A3F;
+        color:#FFFFFF;font-size:13px;cursor:pointer;text-align:left;
+        transition:background .15s,border-color .15s,transform .1s;
+    }
+    .ai-clarify-chip:hover{background:rgba(255,255,255,.12);border-color:#FFFFFF}
+    .ai-clarify-chip:active{transform:scale(.97)}
+
+    .ai-clarify-open{margin-top:4px;background:#FFFFFF;color:#000;border:none;border-radius:8px;padding:9px 16px;font-size:13.5px;font-weight:600;cursor:pointer}
+    .ai-clarify-open:hover{opacity:.9}
+
+    .ai-group-head{
+        display:inline-block;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+        color:#FFFFFF;background:var(--bg-inner);border:1px solid var(--border-color);border-radius:8px;
+        padding:6px 12px;margin:14px 0 10px;
+    }
+    .ai-sources > .ai-group-head:first-child{margin-top:0}
+
+    .ai-modal-wrap{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);z-index:200;padding:20px}
+    .ai-modal{background:var(--bg-surface);border:1px solid var(--border-color);border-radius:14px;width:100%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+    .ai-modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border-soft)}
+    .ai-modal-title{font-size:15px;font-weight:700;color:#FFFFFF}
+    .ai-modal-x{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;color:var(--text-muted)}
+    .ai-modal-x:hover{background:var(--bg-surface-hover);color:var(--text-main)}
+    .ai-modal-body{padding:16px 20px;display:flex;flex-direction:column;gap:14px}
+    .ai-modal-row{display:flex;flex-direction:column;gap:6px}
+    .ai-modal-q{font-size:13px;color:#D1D1D6;font-weight:600}
+    .ai-modal-in{background:var(--bg-base);border:1px solid var(--border-color);border-radius:8px;padding:10px 12px;color:#FFFFFF;font-size:14px;outline:none}
+    .ai-modal-in:focus{border-color:#FFFFFF}
+    .ai-modal-foot{display:flex;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid var(--border-soft)}
+    .ai-btn-ghost{background:var(--bg-inner);border:1px solid var(--border-color);color:#D1D1D6;border-radius:8px;padding:9px 14px;font-size:13.5px;cursor:pointer}
+    .ai-btn-ghost:hover{border-color:#FFFFFF}
+    .ai-btn-main{background:#FFFFFF;color:#000;border:none;border-radius:8px;padding:9px 16px;font-size:13.5px;font-weight:600;cursor:pointer}
+    .ai-btn-main:hover{opacity:.9}
+
     .ai-spinner{width:14px;height:14px;border:2px solid var(--border-color);border-top-color:#FFFFFF;border-radius:50%;animation:aiSpin .7s linear infinite}
     @keyframes aiSpin{to{transform:rotate(360deg)}}
 
@@ -247,6 +290,7 @@
         .ai-sidebar.open{transform:translateX(0);box-shadow:0 0 50px rgba(0,0,0,.6)}
         .ai-mobile-top{display:flex}
         .ai-main{margin-left:0}
+        .ai-workspace{padding-top:56px}
         .ai-inputbar{padding:0 16px 14px}
         .ai-workspace > .ai-inner{padding:18px 16px 110px}
         .ai-greet{font-size:22px}
@@ -300,7 +344,7 @@
         </div>
         <div class="ai-limit-title"><span>Daily Limit</span><span class="ai-limit-num" id="ai-usage-text">{{ msg_remaining }} / {{ msg_limit }} remaining</span></div>
         <div class="ai-usage-track"><div class="ai-usage-fill" id="ai-usage-fill" style="width:{{ ((msg_limit - msg_remaining) * 100 / msg_limit) | round }}%"></div></div>
-        <div class="ai-limit-title"><span>Context ({{ ctx_reset_hours }}h)</span><span class="ai-limit-num" id="ai-ctx-text">{{ ctx_used }} / {{ ctx_limit }} tokens</span></div>
+        <div class="ai-limit-title"><span>Token Budget ({{ ctx_reset_hours }}h)</span><span class="ai-limit-num" id="ai-ctx-text">{{ ctx_used }} / {{ ctx_limit }} tokens</span></div>
         <div class="ai-usage-track"><div class="ai-usage-fill" id="ai-ctx-fill" style="width:{{ ctx_pct }}%"></div></div>
     </div>
 </aside>
@@ -314,6 +358,10 @@
                     <p class="ai-greet-sub">How can I assist you today?</p>
                     <div class="ai-searchbar">
                         <input id="ai-landing-input" type="text" placeholder="Initiate a query or ask Arlong AI..." autocomplete="off" autofocus>
+                        <button type="button" class="ai-deep-btn" id="ai-landing-deep" onclick="toggleDeep(this)" title="Deep Search: asks clarifying questions and splits complex requests into multiple focused searches">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6"/><path d="M8 11h6"/></svg>
+                            Deep Search
+                        </button>
                         <button class="ai-search-go" id="ai-landing-go" aria-label="Search">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
                         </button>
@@ -351,6 +399,10 @@
                     <div class="ai-banner" id="ai-banner"></div>
                     <div class="ai-searchbar">
                         <input id="ai-active-input" type="text" placeholder="Ask a follow-up..." autocomplete="off">
+                        <button type="button" class="ai-deep-btn" id="ai-active-deep" onclick="toggleDeep(this)" title="Deep Search: asks clarifying questions and splits complex requests into multiple focused searches">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6"/><path d="M8 11h6"/></svg>
+                            Deep Search
+                        </button>
                         <button class="ai-search-go" id="ai-active-go" aria-label="Send">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
                         </button>
@@ -380,6 +432,7 @@
     var chatId = null;
     var currentChat = null;
     var busy = false;
+    var deepMode = false;
     var weatherCity = {{ weather_city | tojson }};
     var KEY_SET = {{ 'true' if ai_key_set else 'false' }};
     var APP = {
@@ -451,8 +504,8 @@
         if(banner){
             if(dis){
                 var msg = ctxUsed >= CTX_LIMIT
-                    ? 'Context limit reached (' + fmtTokens(CTX_LIMIT) + ' tokens). Resets ' + CTX_RESET_HOURS + 'h after your first chat in the window.'
-                    : 'Daily message limit reached (' + LIMIT + '/' + LIMIT + '). Resets ' + MSG_RESET_HOURS + 'h after your first message in the window.';
+                    ? 'Token budget used up (' + fmtTokens(CTX_LIMIT) + ' tokens). Refreshes every ' + CTX_RESET_HOURS + 'h.'
+                    : 'Daily message limit reached (' + LIMIT + '/' + LIMIT + '). Refreshes every ' + MSG_RESET_HOURS + 'h.';
                 banner.innerHTML = msg; banner.classList.add('show');
             }
             else banner.classList.remove('show');
@@ -568,6 +621,19 @@
     }
 
     /* ── query submission ── */
+    window.toggleDeep = function(btn){
+        deepMode = !deepMode;
+        syncDeepBtns();
+        if(btn){ btn.blur(); }
+    };
+    function syncDeepBtns(){
+        var on = deepMode ? ' on' : '';
+        var a = document.getElementById('ai-landing-deep');
+        var b = document.getElementById('ai-active-deep');
+        if(a){ a.className = 'ai-deep-btn' + on; }
+        if(b){ b.className = 'ai-deep-btn' + on; }
+    }
+
     function doSubmit(inputEl){
         var q = (inputEl.value||'').trim();
         if(!q || busy) return;
@@ -583,11 +649,16 @@
     }
     bindSearch('ai-landing-input'); bindSearch('ai-active-input');
 
-    window.submitQuery = function(q){
+    window.submitQuery = function(q, answers, cid, skip){
         if(busy) return;
         if(refreshDisableState()) return;
         busy = true;
-        var pendingChatId = chatId;
+        var pendingChatId = (cid !== undefined) ? cid : chatId;
+        var displayQ = q;
+        if(answers && answers.length){
+            var joined = answers.map(function(x){ return String(x.a||'').trim(); }).filter(function(x){ return x; }).join(', ');
+            if(joined) displayQ = joined;
+        }
         var landingVisible = document.getElementById('ai-landing').style.display !== 'none';
         if(landingVisible){
             document.getElementById('ai-active').innerHTML = '';
@@ -596,10 +667,13 @@
             document.getElementById('ai-inputbar').style.display = '';
         }
         document.getElementById('ai-active-input').value = '';
-        showTurnUser(q);
+        showTurnUser(displayQ);
         var ov = showAssistantFrame();
         setBusy(true);
-        fetch('/api/ai/search', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q, chat_id: pendingChatId || undefined})})
+        var body = {query:q, chat_id: pendingChatId || undefined, deep: deepMode ? true : false};
+        if(answers && answers.length) body.answers = answers;
+        if(skip) body.skip = true;
+        fetch('/api/ai/search', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})
         .then(function(r){ return r.json().then(function(d){ d._status = r.status; return d; }); })
         .then(function(d){
             if(!d.ok){
@@ -610,7 +684,23 @@
                     refreshDisableState();
                     return;
                 }
+                if(d.error === 'blocked'){
+                    failTurn(ov, (d.mode === 'maintenance'
+                        ? 'Arlong is getting a tune-up right now. '
+                        : 'Arlong is temporarily offline. ')
+                        + 'AI answers will be back shortly — please try again in a little while.');
+                    return;
+                }
                 failTurn(ov, d.error || 'Search failed. Please try again.');
+                return;
+            }
+            if(d.clarify && d.clarify.questions && d.clarify.questions.length){
+                setBusy(false); busy = false;
+                if(d.chat_id) chatId = d.chat_id;
+                if(d.chat_id && !pendingChatId){
+                    refreshChats();
+                }
+                renderClarify(ov, d.clarify.questions, q, d.chat_id);
                 return;
             }
             chatId = d.chat_id;
@@ -619,14 +709,21 @@
             if(d.chat_id && !pendingChatId){
                 refreshChats();
             }
-            if(d.results && d.results.length){
+            if(d.groups && d.groups.length){
+                renderGroups(ov, d.groups);
+                var startIdx = 0;
+                d.groups.forEach(function(g){
+                    fireLinkEvals(g.query, g.results, ov, startIdx);
+                    startIdx += (g.results||[]).length;
+                });
+            } else if(d.results && d.results.length){
                 renderSources(ov, d.results);
                 fireLinkEvals(q, d.results, ov);
             } else {
                 var srcBox = ov.querySelector('.ai-src-zone');
                 if(srcBox) srcBox.innerHTML = '<div class="ai-link-card"><div class="ai-link-snip">No web results were found for this query.</div></div>';
             }
-            streamAnswer(q, d.chat_id, d.results||[], ov);
+            streamAnswer(displayQ, d.chat_id, d.results||[], ov, false, !!d.multitask);
         })
         .catch(function(e){
             setBusy(false); busy = false;
@@ -664,26 +761,120 @@
         if(md) md.innerHTML = '<p style="color:#D1D1D6">'+esc(msg)+'</p>';
         scrollBottom();
     }
+    function renderClarify(ov, questions, q, cid){
+        if(!ov) return;
+        var md = ov.querySelector('.ai-md');
+        if(md){
+            var box = document.createElement('div');
+            box.className = 'ai-clarify-box';
+            box.innerHTML = '<div class="ai-clarify-title">I just need a few details before I search for the best answers.</div>';
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'ai-clarify-open';
+            btn.textContent = 'Answer the questions';
+            btn.addEventListener('click', function(){ openClarifyModal(questions, q, cid); });
+            box.appendChild(btn);
+            md.appendChild(box);
+        }
+        scrollBottom();
+    }
+
+    var clarifyModal = null;
+    function openClarifyModal(questions, q, cid){
+        if(!clarifyModal){
+            clarifyModal = document.createElement('div');
+            clarifyModal.className = 'ai-modal-wrap';
+            clarifyModal.innerHTML = ''
+                + '<div class="ai-modal">'
+                + '<div class="ai-modal-head"><div class="ai-modal-title">A few quick details</div>'
+                + '<button type="button" class="ai-modal-x" aria-label="Close" onclick="closeClarifyModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></div>'
+                + '<div class="ai-modal-body"></div>'
+                + '<div class="ai-modal-foot">'
+                + '<button type="button" class="ai-btn-ghost" onclick="skipClarify()">Answer anyway</button>'
+                + '<button type="button" class="ai-btn-main" onclick="submitClarify()">Search</button>'
+                + '</div></div>';
+            document.body.appendChild(clarifyModal);
+        }
+        var body = clarifyModal.querySelector('.ai-modal-body');
+        body.innerHTML = '';
+        (questions||[]).forEach(function(qtext, i){
+            var row = document.createElement('div');
+            row.className = 'ai-modal-row';
+            row.innerHTML = '<label class="ai-modal-q">'+(i+1)+'. '+esc(qtext)+'</label>'
+                + '<input class="ai-modal-in" type="text" data-i="'+i+'" placeholder="Your answer..." autocomplete="off">';
+            body.appendChild(row);
+        });
+        clarifyModal._q = q || '';
+        clarifyModal._cid = cid;
+        clarifyModal.style.display = 'flex';
+        var first = clarifyModal.querySelector('.ai-modal-in');
+        if(first){ setTimeout(function(){ first.focus(); }, 60); }
+    }
+    function closeClarifyModal(){
+        if(clarifyModal) clarifyModal.style.display = 'none';
+    }
+    function collectClarifyAnswers(){
+        if(!clarifyModal) return [];
+        var out = [];
+        var qs = [];
+        clarifyModal.querySelectorAll('.ai-modal-q').forEach(function(l){ qs.push((l.textContent||'').replace(/^\d+\.\s*/,'')); });
+        clarifyModal.querySelectorAll('.ai-modal-in').forEach(function(inp, i){
+            var a = (inp.value||'').trim();
+            if(a){ out.push({q: qs[i] || '', a: a}); }
+        });
+        return out;
+    }
+    window.submitClarify = function(){
+        var answers = collectClarifyAnswers();
+        if(!answers.length){
+            var first = clarifyModal ? clarifyModal.querySelector('.ai-modal-in') : null;
+            if(first){ first.style.borderColor = '#ff6b6b'; first.focus(); }
+            return;
+        }
+        var q = clarifyModal ? clarifyModal._q : '';
+        var cid = clarifyModal ? clarifyModal._cid : undefined;
+        closeClarifyModal();
+        submitQuery(q, answers, cid);
+    };
+    window.skipClarify = function(){
+        var q = clarifyModal ? clarifyModal._q : '';
+        var cid = clarifyModal ? clarifyModal._cid : undefined;
+        closeClarifyModal();
+        submitQuery(q, [], cid, true);
+    };
+    function linkCard(idx, r){
+        var fav = r.favicon ? '<img class="ai-link-fav" src="'+esc(r.favicon)+'" alt="" loading="lazy" onerror="this.outerHTML=\'<span class=&quot;ai-link-fav-ph&quot;>'+esc((r.domain||'?')[0].toUpperCase())+'</span>\'">'
+                    : '<span class="ai-link-fav-ph">'+esc((r.domain||'?')[0].toUpperCase())+'</span>';
+        return '<div class="ai-link-card" id="ai-src-'+idx+'">'
+            + '<div class="ai-link-head">'+fav+'<span class="ai-link-domain">'+esc(r.domain||'')+'</span></div>'
+            + '<a class="ai-link-title" href="'+esc(r.url)+'" target="_blank" rel="noopener">'+idx+'. '+esc(r.title||'')+'</a>'
+            + '<div class="ai-link-snip">'+esc(r.snippet||'')+'</div>'
+            + '<div class="ai-eval" id="ai-eval-'+idx+'"><span class="ai-eval-label">AI Evaluation</span>'
+            + '<span class="ai-eval-loading"><span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span> analyzing relevance...</span></div>'
+            + '</div>';
+    }
     function renderSources(ov, results){
         var zone = ov.querySelector('.ai-src-zone');
         if(!zone) return;
         zone.style.display = '';
         var html = '';
-        results.forEach(function(r, i){
-            var fav = r.favicon ? '<img class="ai-link-fav" src="'+esc(r.favicon)+'" alt="" loading="lazy" onerror="this.outerHTML=\'<span class=&quot;ai-link-fav-ph&quot;>'+esc((r.domain||'?')[0].toUpperCase())+'</span>\'">'
-                        : '<span class="ai-link-fav-ph">'+esc((r.domain||'?')[0].toUpperCase())+'</span>';
-            html += '<div class="ai-link-card" id="ai-src-'+(i+1)+'">'
-                + '<div class="ai-link-head">'+fav+'<span class="ai-link-domain">'+esc(r.domain||'')+'</span></div>'
-                + '<a class="ai-link-title" href="'+esc(r.url)+'" target="_blank" rel="noopener">'+(i+1)+'. '+esc(r.title||'')+'</a>'
-                + '<div class="ai-link-snip">'+esc(r.snippet||'')+'</div>'
-                + '<div class="ai-eval" id="ai-eval-'+(i+1)+'"><span class="ai-eval-label">AI Evaluation</span>'
-                + '<span class="ai-eval-loading"><span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span> analyzing relevance...</span></div>'
-                + '</div>';
+        results.forEach(function(r, i){ html += linkCard(i+1, r); });
+        zone.innerHTML = html;
+    }
+    function renderGroups(ov, groups){
+        var zone = ov.querySelector('.ai-src-zone');
+        if(!zone) return;
+        zone.style.display = '';
+        var html = ''; var idx = 0;
+        groups.forEach(function(g){
+            html += '<div class="ai-group-head">'+esc(g.label||'')+'</div>';
+            (g.results||[]).forEach(function(r){ idx++; html += linkCard(idx, r); });
         });
         zone.innerHTML = html;
     }
-    function fireLinkEvals(q, results, ov){
-        fetch('/api/ai/links', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q, results:results})})
+    function fireLinkEvals(q, results, ov, offset){
+        offset = offset || 0;
+        fetch('/api/ai/links', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q, results:results, offset:offset})})
         .then(function(r){ return r.json(); })
         .then(function(d){
             if(!d.ok || !d.evaluations) return;
@@ -695,7 +886,7 @@
     }
 
     /* ── streaming ── */
-    function streamAnswer(q, cid, results, ov, replaceLast){
+    function streamAnswer(q, cid, results, ov, replaceLast, multitask){
         if(!ov){ ov = document.querySelector('.ai-assistant .ai-overview'); }
         if(!ov){ setBusy(false); busy=false; return; }
         var md = ov.querySelector('.ai-md');
@@ -704,17 +895,24 @@
             bindCites(ov);
             refreshChats();
         }
-        fetch('/api/ai/stream', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q, chat_id:cid, results:results, replace_last: replaceLast?true:false})})
+        fetch('/api/ai/stream', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q, chat_id:cid, results:results, replace_last: replaceLast?true:false, multitask: multitask?true:false})})
         .then(function(res){
             if(!res.ok){ return res.text().then(function(t){
                 var parsed = null; try{ parsed = JSON.parse(t); }catch(e){}
+                if(parsed && parsed.error === 'blocked'){
+                    failTurn(ov, (parsed.mode === 'maintenance'
+                        ? 'Arlong is getting a tune-up right now. '
+                        : 'Arlong is temporarily offline. ')
+                        + 'AI answers will be back shortly — please try again in a little while.');
+                    return null;
+                }
                 if(parsed && parsed.error === 'limit'){
                     if(parsed.msg_used != null) setUsage(parsed.msg_used, parsed.msg_limit || LIMIT);
                     if(parsed.ctx_used != null) setCtxUsage(parsed.ctx_used, parsed.ctx_limit || CTX_LIMIT);
                     refreshDisableState();
                     failTurn(ov, parsed.limit_type === 'context'
-                        ? 'Context budget for the current ' + CTX_RESET_HOURS + 'h window is used up. Start a new chat or wait for the window to reset.'
-                        : 'Daily message limit reached. Try again after the window resets.');
+                        ? 'Token budget for the current ' + CTX_RESET_HOURS + 'h window is used up. It refreshes automatically — start a new chat or check back later.'
+                        : 'Daily message limit reached. Try again after the window refreshes.');
                     return null;
                 }
                 throw new Error(t||'Stream failed');
@@ -753,10 +951,11 @@
         if(window.hljs){ md.querySelectorAll('pre code').forEach(function(b){ try{ hljs.highlightElement(b); }catch(e){} }); }
     }
     function bindCites(ov){
-        ov.querySelectorAll('.ai-cite').forEach(function(c){
+        var scope = (ov.classList && ov.classList.contains('ai-assistant')) ? ov : (ov.parentNode || ov);
+        scope.querySelectorAll('.ai-cite').forEach(function(c){
             c.addEventListener('click', function(){
                 var n = c.getAttribute('data-n');
-                var card = ov.parentNode.querySelector('#ai-src-'+n);
+                var card = scope.querySelector('#ai-src-'+n);
                 if(card){
                     card.scrollIntoView({behavior:'smooth', block:'center'});
                     card.classList.add('flash');
@@ -771,7 +970,7 @@
         var _p = marked.parse.bind(marked);
         marked.parse = function(src, opts){
             var s = String(src||'');
-            s = s.replace(/\[(\d)\](?!\()/g, '<sup class="ai-cite" data-n="$1">[$1]</sup>');
+            s = s.replace(/\[(\d+)\](?!\()/g, '<sup class="ai-cite" data-n="$1">[$1]</sup>');
             return _p(s, opts);
         };
     }
@@ -801,7 +1000,8 @@
         if(!q) return;
         /* remove previous assistant frame, then re-stream with existing chat context */
         var sources = [];
-        ov.querySelectorAll('.ai-link-card').forEach(function(c, i){
+        var frame = (ov.classList && ov.classList.contains('ai-assistant')) ? ov : (ov.parentNode || ov);
+        frame.querySelectorAll('.ai-link-card').forEach(function(c, i){
             var a = c.querySelector('.ai-link-title');
             var d = c.querySelector('.ai-link-domain');
             if(a){ sources.push({title: a.textContent.replace(/^\d+\.\s*/,''), url: a.href, domain: d?d.textContent:'', favicon:'https://www.google.com/s2/favicons?domain='+encodeURIComponent(a.hostname), snippet:''}); }
@@ -844,7 +1044,13 @@
                 var evals = m.evaluations || {};
                 var srcHtml = '';
                 if(srcs.length){
+                    var lastGroup = null;
                     srcs.forEach(function(r, i){
+                        var g = r.group || '';
+                        if(g && g !== lastGroup){
+                            srcHtml += '<div class="ai-group-head">'+esc(g)+'</div>';
+                            lastGroup = g;
+                        }
                         var fav = r.favicon ? '<img class="ai-link-fav" src="'+esc(r.favicon)+'" alt="" loading="lazy" onerror="this.outerHTML=\'<span class=&quot;ai-link-fav-ph&quot;>'+esc((r.domain||'?')[0].toUpperCase())+'</span>\'">' : '<span class="ai-link-fav-ph">'+esc((r.domain||'?')[0].toUpperCase())+'</span>';
                         var evalBody = evals[i+1] ? '<span>'+esc(evals[i+1])+'</span>' : '<span class="ai-eval-loading">No evaluation recorded.</span>';
                         srcHtml += '<div class="ai-link-card" id="ai-src-'+(i+1)+'">'

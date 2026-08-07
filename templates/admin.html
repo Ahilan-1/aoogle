@@ -54,6 +54,32 @@
         .bl-word{display:inline-flex;align-items:center;gap:8px;background:#f1f3f4;padding:4px 10px;border-radius:16px;font-size:13px;margin:3px}
         .bl-word .bl-penalty{color:#c5221f;font-weight:600;font-size:11px}
         .bl-word form{display:inline}
+        .switch{position:relative;display:inline-block;width:46px;height:25px;flex-shrink:0}
+        .switch input{opacity:0;width:0;height:0}
+        .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#dadce0;border-radius:25px;transition:.2s}
+        .slider:before{position:absolute;content:"";height:19px;width:19px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+        .switch input:checked+.slider{background:#c5221f}
+        .switch input:checked+.slider.maint{background:#e37400}
+        .switch input:checked+.slider:before{transform:translateX(21px)}
+        .svc-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px;border-bottom:1px solid #f1f3f4}
+        .svc-row:last-child{border-bottom:none}
+        .svc-row .txt{font-size:13px;color:#3c4043}
+        .svc-row .sub{font-size:12px;color:#5f6368;margin-top:2px}
+        .svc-active{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;margin-left:8px}
+        .svc-active.kill{background:#fce8e6;color:#c5221f}
+        .svc-active.maint{background:#fef7e0;color:#e37400}
+        .svc-active.ok{background:#e6f4ea;color:#137333}
+        .err-graph{display:flex;align-items:flex-end;gap:3px;height:110px;padding:18px 20px 0}
+        .err-bar{flex:1;background:#c5221f;border-radius:3px 3px 0 0;min-height:2px;opacity:.75}
+        .err-bar.peak{background:#a50e0e;opacity:1}
+        .err-labels{display:flex;gap:3px;padding:6px 20px 0;font-size:9px;color:#5f6368}
+        .err-labels span{flex:1;text-align:center;overflow:hidden;white-space:nowrap}
+        .err-stat{display:inline-block;padding:3px 10px;border-radius:8px;font-size:12px;font-weight:600}
+        .err-stat.bad{background:#fce8e6;color:#c5221f}
+        .err-stat.mid{background:#fef7e0;color:#e37400}
+        .err-stat.ok{background:#e6f4ea;color:#137333}
+        .err-line{font-family:monospace;font-size:11px;color:#5f6368;padding:5px 20px;border-bottom:1px solid #f1f3f4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .err-line:last-child{border-bottom:none}
     </style>
 </head>
 <body>
@@ -172,6 +198,76 @@
                 </form>
                 {% if announcement %}<p style="font-size:13px;color:#c5221f;margin:8px 0 0">Currently showing as red banner: <strong>{{ announcement }}</strong></p>{% endif %}
             </div>
+        </div>
+
+        <div class="card" style="border-left:4px solid {{ '#c5221f' if (service_status.kill_switch or service_status.maintenance) else '#1a73e8' }}">
+            <div class="card-title">
+                Service Status
+                {% if service_status.kill_switch %}<span class="svc-active kill">Engine offline</span>
+                {% elif service_status.maintenance %}<span class="svc-active maint">Maintenance</span>
+                {% else %}<span class="svc-active ok">All systems running</span>{% endif %}
+            </div>
+            <form method="POST" action="/admin/service">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <div class="svc-row">
+                    <div class="txt">
+                        Kill switch
+                        <div class="sub">Instantly blocks all search &amp; AI requests. Homepage stays up; queries hit a friendly offline page.</div>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" name="kill_switch" {{ 'checked' if service_status.kill_switch else '' }} onchange="this.form.submit()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="svc-row">
+                    <div class="txt">
+                        Maintenance mode
+                        <div class="sub">Signals an outage to visitors with a scheduled tune-up page. Search &amp; AI are paused.</div>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" name="maintenance" {{ 'checked' if service_status.maintenance else '' }} onchange="this.form.submit()">
+                        <span class="slider maint"></span>
+                    </label>
+                </div>
+                <div style="padding:12px 20px;border-top:1px solid #f1f3f4;font-size:12px;color:#5f6368">
+                    Last changed: {{ service_status.updated_at if service_status.updated_at else 'never' }}
+                </div>
+            </form>
+        </div>
+
+        <div class="card" style="border-left:4px solid #c5221f">
+            <div class="card-title">
+                Error Activity — last 24h
+                <span class="err-stat {{ 'bad' if error_total >= 20 else ('mid' if error_total >= 5 else 'ok') }}">{{ error_total }} errors</span>
+            </div>
+            {% set emax = (error_series|map(attribute='count')|max) if error_series else 1 %}
+            {% set elabel_step = [ ((error_series|length / 8)|round|int), 1 ]|max if error_series else 1 %}
+            {% if error_total %}
+            <div class="err-graph">
+                {% for s in error_series %}
+                <div class="err-bar {{ 'peak' if s.count == error_peak and error_peak > 0 else '' }}" style="height:{{ ((s.count / emax) * 100)|round|int }}%" title="{{ s.label }} — {{ s.count }} error(s)"></div>
+                {% endfor %}
+            </div>
+            <div class="err-labels">
+                {% for s in error_series %}
+                <span {% if not loop.index0 % elabel_step == 0 %} style="opacity:0" {% endif %}>{{ s.label }}</span>
+                {% endfor %}
+            </div>
+            <div style="padding:10px 20px;font-size:12px;color:#5f6368;display:flex;gap:16px;flex-wrap:wrap">
+                <span><strong>Peak:</strong> {{ error_peak }} errors/hour</span>
+                <span><strong>Latest:</strong> {{ error_latest|length }} shown below</span>
+                <span>Source: <code style="font-size:11px">search_engine.log</code></span>
+            </div>
+            {% else %}
+            <div class="empty">No errors logged in the last 24 hours. Clean bill of health.</div>
+            {% endif %}
+            {% if error_latest %}
+            <div style="border-top:1px solid #e8eaed">
+                {% for line in error_latest %}
+                <div class="err-line">{{ line }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
         </div>
 
         <div class="card">

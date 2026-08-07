@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>{{ 'Arlong is offline' if mode == 'kill' else 'Arlong is getting a tune-up' }}</title>
+<style>
+    :root{--bg:#000000;--bg2:#0d0d0d;--bg3:#1a1a1a;--text:#e8eaed;--text2:#bdc1c6;--text3:#8a8f96;--link:#8ab4f8;--border:#2a2a2a}
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:arial,sans-serif;display:flex;align-items:center;justify-content:center;-webkit-font-smoothing:antialiased}
+    .wrap{max-width:640px;width:100%;padding:32px 20px;text-align:center}
+    .logo{font-size:30px;font-weight:700;letter-spacing:-1px;margin-bottom:36px}
+    .logo span{background:linear-gradient(to top,#0066cc,#3399ff 50%,#e8eaed 50%);background-size:100% 200%;-webkit-background-clip:text;background-clip:text;color:transparent}
+    .card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:40px 36px;text-align:left}
+    .badge{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:500;letter-spacing:.4px;text-transform:uppercase;color:var(--text3);border:1px solid var(--border);border-radius:20px;padding:6px 14px;margin-bottom:20px}
+    .badge .dot{width:8px;height:8px;border-radius:50%;background:#fbbc04}
+    .badge.kill .dot{background:#f28b82}
+    .badge.kill{border-color:#5c2a26;color:#f28b82}
+    h1{font-size:26px;line-height:1.25;margin:0 0 14px;font-weight:600}
+    p{color:var(--text2);font-size:15px;line-height:1.7;margin:0 0 8px}
+    p.strong{color:var(--text)}
+    .hr{height:1px;background:var(--border);margin:24px 0}
+    .actions{display:flex;gap:12px;flex-wrap:wrap}
+    .btn{display:inline-flex;align-items:center;padding:11px 22px;border-radius:8px;font-size:14px;font-weight:500;text-decoration:none;transition:opacity .15s}
+    .btn-primary{background:var(--link);color:#000;border:none}
+    .btn-primary:hover{opacity:.88}
+    .btn-ghost{color:var(--text2);border:1px solid var(--border)}
+    .btn-ghost:hover{color:var(--text);border-color:var(--text3)}
+    .foot{margin-top:28px;color:var(--text3);font-size:12.5px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="logo"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></div>
+    <div class="card">
+        {% if mode == 'kill' %}
+        <span class="badge kill"><span class="dot"></span>Engine offline</span>
+        <h1>The lights are on, but nobody's answering the door.</h1>
+        <p class="strong">Arlong has been temporarily switched off for a safety check.</p>
+        <p>Think of it as a pit stop mid-race: the car is fine, the crew just needs a minute. We've pulled the search engine and the AI out of the circuit so nothing gets served half-finished. This is a precaution, not a farewell.</p>
+        {% else %}
+        <span class="badge"><span class="dot"></span>Scheduled maintenance</span>
+        <h1>Arlong is getting a tune-up.</h1>
+        <p class="strong">We're polishing the algorithms and re-tying the wires.</p>
+        <p>Every now and then even the best search engines need a nap. Right now we're changing the tires on the results crawler and teaching the AI a few new tricks. Service resumes shortly &mdash; the internet isn't going anywhere, but we appreciate you waiting for it.</p>
+        {% endif %}
+        <div class="hr"></div>
+        <div class="actions">
+            <a class="btn btn-primary" href="/">Back to homepage</a>
+            <a class="btn btn-ghost" href="javascript:location.reload()">Check again</a>
+        </div>
+    </div>
+    <div class="foot">
+        We'll be back before you've finished scrolling.<br>
+        If this page lingers, we're probably having more fun than you are.
+    </div>
+</div>
+</body>
+</html>

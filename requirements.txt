@@ -14,6 +14,7 @@ groq>=0.15
 resend>=0.5
 markdown>=3.5
 cryptography>=42.0
+tiktoken>=0.7
 
 # Testing
 pytest>=8.0
