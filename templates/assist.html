@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Search Assist - arlong</title>
+<link rel="icon" type="image/x-icon" href="data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+vr6/y4uLqcAAAAAAAAAAAAAAAAAAAAALS0t0i0tLdIAAAAAAAAAAAAAAAAAAAAAMTExrvr6+v8AAAAA+vr6//7+/v4sLCx4AAAAAAAAAAAAAAAA/v7+/uvr6//m5ub//v7+/gAAAAAAAAAAAAAAACQkJH7+/v7++vr6/zExMa4kJCR+/v7+/igoKGoAAAAADgsJ42RkZPv39/f/9fX1/2lpaP8OCwnjAAAAACIiIm/+/v7+LCwseC4uLqcAAAAAAAAAACIiIm/+/v7+akUh/0syGP/8/Pz/kZGR/4yMjP/8/Pz/Py4a/mRAH//+/v7+KCgoagAAAAAAAAAAAAAAAAAAAAAcHyEIakUh//7+/+64uLj//v7+/v7+/v7+/v7+/v7+/tLS0v/+/v7+akUh/zgzLBUAAAAAAAAAAAAAAAAAAAAArG40/7x8PP/y8vL+8vLy/v7+/v5NTU3/XFxc//7+/v7u7u7//f39/7x8PP+zdzn/AAAAAAAAAAAAAAAAHB8hCMODP/9TPij+KSkp/wAAAP4AAAD+8vLy/vr6+v8AAAD+AAAA/hgTDv9aUEX/w4M//y0kFyIAAAAAAAAAABsUCaPHiEL/9fX1/wAAAP4AAAD+AAAA/np6e/+fn5/+AAAA/gAAAP4AAAD+/v7+/seIQv8jGQzTAAAAAAAAAAAAHzT6AJL0//7+/v7i4uL/AAAA/gAAAP7+/v7+/v7+/gAAAP4AAAD+zMzM//7+/v4AlPj/AB80+gAAAAAAAAAAAFiU/wCX/v4Agtn/N1Bg/5GRkf/Hx8f+29vb/9vb2//Hx8f+l5iY/zdQYP8Aecr/AJf+/gBYlP8AAAAAAAAAADIxMBnZnU7/Hx8e/gAKmv4ACYX/AAdr/wAIYP8ACGD/AAdr/wAJhf8ACpr+AQ02/9mdTv8pHQ41AAAAAAAAAAAAAAAA26BP/31dLv4Al/7+AJf+/gCX/v4Al/7+AJf+/gCX/v4Al/7+AJf+/oRiMf/do1H/AAAAAAAAAAAAAAAAAAAAAB0aFoH+/v7+hGIx/wCU+P8Al/7+AJf+/gCX/v4Al/7+AJf+/nZYLf7+/v7+GxoaiwAAAAAAAAAAMTExriQkJH7+/v7+GxQJo+ivWP/or1j/r4BA/xdBVv4XQVb+mXA4/+ivWP/or1j/GBIKuf7+/v4sLCx4Li4up/r6+v/+/v7+LCwseAAAAAAAAAAAa1Ep/uyzWv/ss1r/7LNa/+yzWv99XS7+JiIeBAAAAAAkJCR+/v7+/vr6+v8AAAAA+vr6/y4uLqcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMTExrvr6+v8AAAAAnnkAADw8AABYGgAA4AcAAOAHAADAAwAAwAMAAIABAACAAQAAgAEAAMADAADAAwAAwAMAAEACAAA4HAAAn/kAAA==">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+<style>
+    :root{
+        --bg:#09090a;--surface:#0f0f10;--line:rgba(255,255,255,.09);
+        --line2:rgba(255,255,255,.18);--text:#ececec;--text2:#9c9c9c;--text3:#666666;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{max-width:100vw;overflow-x:hidden}
+    body{background:var(--bg);color:var(--text);font-family:Inter,-apple-system,'Segoe UI',Arial,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased;min-height:100dvh;display:flex;flex-direction:column;font-feature-settings:'ss01'}
+    a{color:var(--text);text-decoration:none}
+    a:hover{text-decoration:none}
+
+    .topbar{position:sticky;top:0;z-index:100;background:rgba(9,9,10,.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
+    .topbar-inner{width:90%;max-width:1080px;margin:0 auto;height:60px;display:flex;align-items:center;gap:24px}
+    .mini-logo{font-size:23px;font-weight:700;letter-spacing:-1px;color:var(--text)}
+    .mini-logo:hover{opacity:.85}
+    .top-nav{margin-left:auto;display:flex;gap:4px;align-items:center}
+    .top-nav a{padding:8px 13px;border-radius:8px;font-size:13px;font-weight:400;color:var(--text2);white-space:nowrap;transition:color .15s,background .15s}
+    .top-nav a:hover{color:var(--text);background:rgba(255,255,255,.05)}
+    .top-nav a.here{color:var(--text);background:rgba(255,255,255,.07)}
+
+    .wrap{width:90%;max-width:1080px;margin:0 auto;flex:1;padding:96px 0 80px}
+    .hero{border-bottom:1px solid var(--line);padding-bottom:72px;margin-bottom:64px}
+    .kicker{font-size:11px;font-weight:600;letter-spacing:.42em;text-transform:uppercase;color:var(--text3);margin-bottom:28px}
+    .hero h1{font-size:clamp(44px,9vw,96px);font-weight:600;letter-spacing:-.045em;line-height:.98;margin-bottom:36px}
+    .hero p{color:var(--text2);font-size:17px;font-weight:300;max-width:560px;letter-spacing:-.01em}
+
+    .principle{display:grid;grid-template-columns:110px 1fr;gap:28px;padding:30px 0;border-bottom:1px solid var(--line);align-items:baseline}
+    .principle .num{font-size:13px;font-weight:500;color:var(--text3);font-variant-numeric:tabular-nums;letter-spacing:.08em}
+    .principle h3{font-size:21px;font-weight:500;letter-spacing:-.02em;margin-bottom:8px}
+    .principle p{font-size:14px;color:var(--text2);font-weight:300;max-width:520px}
+    .principle a{color:var(--text);border-bottom:1px solid var(--line2);padding-bottom:1px;transition:border-color .15s}
+    .principle a:hover{border-color:var(--text)}
+
+    .links{display:flex;gap:12px;flex-wrap:wrap;margin-top:64px}
+    .links a{display:inline-block;border:1px solid var(--line2);border-radius:2px;padding:13px 30px;font-size:13px;font-weight:500;letter-spacing:.02em;transition:background .15s,border-color .15s}
+    .links a:hover{background:rgba(255,255,255,.05);border-color:var(--text2)}
+
+    .prefs{margin-top:64px;font-size:12.5px;color:var(--text3);letter-spacing:.02em;line-height:1.9}
+    .prefs b{color:var(--text2);font-weight:500}
+
+    .notice{margin-top:64px;padding:18px 22px;border:1px solid var(--line2);font-size:13.5px;color:var(--text2);font-weight:300;letter-spacing:.01em}
+
+    footer{text-align:center;padding:28px 0 44px;font-size:12px;color:var(--text3);border-top:1px solid var(--line);letter-spacing:.02em}
+    footer a{color:var(--text3)}
+    footer a:hover{color:var(--text)}
+    @media(max-width:640px){
+        .wrap{padding:56px 0 56px}
+        .hero{padding-bottom:48px;margin-bottom:40px}
+        .principle{grid-template-columns:1fr;gap:10px;padding:22px 0}
+        .top-nav a{display:none}
+        .top-nav a:first-child{display:inline-block}
+    }
+</style>
+</head>
+<body>
+<header class="topbar">
+    <div class="topbar-inner">
+        <a href="/" class="mini-logo">arlong</a>
+        <nav class="top-nav">
+            <a href="/search">Web</a>
+            <a href="/images">Images</a>
+            <a href="/videos">Videos</a>
+            <a href="/assist" class="here">Search Assist</a>
+            <a href="https://arlong.org/ai" target="_blank" rel="noopener" class="ai">Arlong AI</a>
+        </nav>
+    </div>
+</header>
+
+<main class="wrap">
+    <section class="hero">
+        <div class="kicker">Search Assist</div>
+        <h1>The web,<br>distilled.</h1>
+        <p>Search Assist turns any query into a concise, cited overview &mdash; generated only when you ask, kept private by default, and always under your control.</p>
+    </section>
+
+    <section>
+        <div class="principle">
+            <span class="num">01</span>
+            <div>
+                <h3>Summaries, on request</h3>
+                <p>Nothing is generated unless you ask. The page behind a search is yours to explore without a layer of interpretation between you and the source.</p>
+            </div>
+        </div>
+        <div class="principle">
+            <span class="num">02</span>
+            <div>
+                <h3>Quotes every claim</h3>
+                <p>Every summary line carries its source, so you can trace any statement back to the page it came from &mdash; and judge it for yourself.</p>
+            </div>
+        </div>
+        <div class="principle">
+            <span class="num">03</span>
+            <div>
+                <h3>Private by default</h3>
+                <p>No profiles, no ad tracking, no fingerprints. Search history stays in your control and AI features are strictly opt-in.</p>
+            </div>
+        </div>
+        <div class="principle">
+            <span class="num">04</span>
+            <div>
+                <h3>You stay in charge</h3>
+                <p>Regional and language preferences tune results to you. Adjust them any time in <a href="/settings">settings</a>, or read the full <a href="/privacy-policy">privacy policy</a>.</p>
+            </div>
+        </div>
+    </section>
+
+    <div class="links">
+        <a href="/assist">Read the guide</a>
+        <a href="/settings">Preferences</a>
+    </div>
+
+    {% if preferences %}
+    <div class="prefs">
+        {% if preferences.get('region') %}<div>Region&nbsp;&nbsp;<b>{{ preferences.region }}</b></div>{% endif %}
+        {% if preferences.get('language') %}<div>Language&nbsp;&nbsp;<b>{{ preferences.language }}</b></div>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if announcement %}
+    <div class="notice">{{ announcement }}</div>
+    {% endif %}
+</main>
+
+<footer>
+    <a href="/">Home</a> &middot; <a href="/settings">Settings</a> &middot; <a href="/privacy-policy">Privacy</a> &middot; <a href="/docs">API</a> &middot; <a href="/faq">FAQ</a> &middot; <a href="/changelogs">Changelogs</a>
+</footer>
+</body>
+</html>

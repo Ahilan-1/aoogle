@@ -7,79 +7,138 @@
     <style>
         *{box-sizing:border-box}
         body{margin:0;padding:20px;font-family:arial,sans-serif;background:#f0f2f5;color:#222}
-        a{color:#1a73e8;text-decoration:none}
+        a{color:var(--a-link-strong);text-decoration:none}
         a:hover{text-decoration:underline}
         .login-box{max-width:360px;margin:80px auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
-        .login-box h1{font-size:22px;margin:0 0 20px;text-align:center;color:#1a73e8}
-        .login-box input{width:100%;padding:10px 14px;border:1px solid #dadce0;border-radius:6px;font-size:14px;outline:none;margin-bottom:12px}
-        .login-box input:focus{border-color:#1a73e8}
-        .login-box button{width:100%;padding:10px;background:#1a73e8;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer}
-        .login-box button:hover{background:#1557b0}
-        .login-box .error{color:#c5221f;font-size:13px;margin-bottom:10px;text-align:center}
+        .login-box h1{font-size:22px;margin:0 0 20px;text-align:center;color:var(--a-link-strong)}
+        .login-box input{width:100%;padding:10px 14px;border:1px solid var(--a-border);border-radius:6px;font-size:14px;outline:none;margin-bottom:12px}
+        .login-box input:focus{border-color:var(--a-link-strong)}
+        .login-box button{width:100%;padding:10px;background:var(--a-primary);color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer}
+        .login-box button:hover{background:var(--a-primary-hover)}
+        .login-box .error{color:var(--a-red);font-size:13px;margin-bottom:10px;text-align:center}
         .header{display:flex;align-items:center;justify-content:space-between;max-width:1100px;margin:0 auto 20px}
-        .header h1{font-size:20px;margin:0;color:#1a73e8}
-        .header a{font-size:13px;color:#5f6368;padding:6px 12px;border:1px solid #dadce0;border-radius:6px}
-        .header a:hover{background:#f1f3f4;text-decoration:none}
+        .header h1{font-size:20px;margin:0;color:var(--a-link-strong)}
+        .header a{font-size:13px;color:var(--a-text3);padding:6px 12px;border:1px solid var(--a-border);border-radius:6px}
+        .header a:hover{background:var(--a-bg3);text-decoration:none}
         .container{max-width:1100px;margin:0 auto}
         .stats{display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap}
         .stat-card{background:#fff;border-radius:10px;padding:18px 24px;flex:1;min-width:140px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
-        .stat-card .num{font-size:28px;font-weight:600;color:#1a73e8;margin-bottom:2px}
-        .stat-card .label{font-size:12px;color:#5f6368;text-transform:uppercase;letter-spacing:.3px}
+        .stat-card .num{font-size:28px;font-weight:600;color:var(--a-link-strong);margin-bottom:2px}
+        .stat-card .label{font-size:12px;color:var(--a-text3);text-transform:uppercase;letter-spacing:.3px}
         .card{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:20px;overflow:hidden}
-        .card-title{padding:14px 20px;font-size:15px;font-weight:600;border-bottom:1px solid #e8eaed;margin:0;display:flex;align-items:center;justify-content:space-between}
-        .card-title .badge{background:#e8f0fe;color:#1a73e8;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:500}
+        .card-title{padding:14px 20px;font-size:15px;font-weight:600;border-bottom:1px solid var(--a-border);margin:0;display:flex;align-items:center;justify-content:space-between}
+        .card-title .badge{background:#e8f0fe;color:var(--a-link-strong);font-size:11px;padding:2px 8px;border-radius:10px;font-weight:500}
         table{width:100%;border-collapse:collapse;font-size:13px}
-        th{text-align:left;padding:10px 16px;background:#f8f9fa;color:#5f6368;font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid #e8eaed}
-        td{padding:10px 16px;border-bottom:1px solid #f1f3f4;color:#3c4043;vertical-align:top}
+        th{text-align:left;padding:10px 16px;background:var(--a-bg3);color:var(--a-text3);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid var(--a-border)}
+        td{padding:10px 16px;border-bottom:1px solid var(--a-border);color:var(--a-text2);vertical-align:top}
         tr:last-child td{border-bottom:none}
-        tr:hover td{background:#f8f9fa}
-        .url-cell{max-width:300px;word-break:break-all;font-size:12px;color:#1a73e8}
+        tr:hover td{background:var(--a-bg3)}
+        .url-cell{max-width:300px;word-break:break-all;font-size:12px;color:var(--a-link-strong)}
         .title-cell{max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
         .query-cell{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        .date-cell{font-size:12px;color:#5f6368;white-space:nowrap}
+        .date-cell{font-size:12px;color:var(--a-text3);white-space:nowrap}
         .status-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500}
         .status-pending{background:#fef7e0;color:#e37400}
         .status-approved{background:#e6f4ea;color:#137333}
-        .status-denied{background:#fce8e6;color:#c5221f}
+        .status-denied{background:#fce8e6;color:var(--a-red)}
         .btn{display:inline-block;padding:5px 12px;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-family:arial,sans-serif}
-        .btn-approve{background:#1a73e8;color:#fff}
-        .btn-approve:hover{background:#1557b0}
-        .btn-deny{background:#f1f3f4;color:#3c4043;border:1px solid #dadce0}
-        .btn-deny:hover{background:#e8eaed}
-        .btn-remove{background:#c5221f;color:#fff;font-size:11px;padding:3px 8px}
+        .btn-approve{background:var(--a-primary);color:#fff}
+        .btn-approve:hover{background:var(--a-primary-hover)}
+        .btn-deny{background:var(--a-bg3);color:var(--a-text2);border:1px solid var(--a-border)}
+        .btn-deny:hover{background:var(--a-border)}
+        .btn-remove{background:var(--a-red-btn);color:#fff;font-size:11px;padding:3px 8px}
         .btn-remove:hover{background:#a50e0e}
         .btn-group{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-        .penalty-input{width:50px;padding:4px 6px;border:1px solid #dadce0;border-radius:4px;font-size:12px;text-align:center}
-        .empty{text-align:center;padding:30px 20px;color:#5f6368;font-size:14px}
-        .bl-word{display:inline-flex;align-items:center;gap:8px;background:#f1f3f4;padding:4px 10px;border-radius:16px;font-size:13px;margin:3px}
-        .bl-word .bl-penalty{color:#c5221f;font-weight:600;font-size:11px}
+        .penalty-input{width:50px;padding:4px 6px;border:1px solid var(--a-border);border-radius:4px;font-size:12px;text-align:center}
+        .empty{text-align:center;padding:30px 20px;color:var(--a-text3);font-size:14px}
+        .bl-word{display:inline-flex;align-items:center;gap:8px;background:var(--a-bg3);padding:4px 10px;border-radius:16px;font-size:13px;margin:3px}
+        .bl-word .bl-penalty{color:var(--a-red);font-weight:600;font-size:11px}
         .bl-word form{display:inline}
         .switch{position:relative;display:inline-block;width:46px;height:25px;flex-shrink:0}
         .switch input{opacity:0;width:0;height:0}
         .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#dadce0;border-radius:25px;transition:.2s}
         .slider:before{position:absolute;content:"";height:19px;width:19px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
-        .switch input:checked+.slider{background:#c5221f}
+        .switch input:checked+.slider{background:var(--a-red-btn)}
         .switch input:checked+.slider.maint{background:#e37400}
         .switch input:checked+.slider:before{transform:translateX(21px)}
-        .svc-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px;border-bottom:1px solid #f1f3f4}
+        .svc-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px;border-bottom:1px solid var(--a-border)}
         .svc-row:last-child{border-bottom:none}
-        .svc-row .txt{font-size:13px;color:#3c4043}
-        .svc-row .sub{font-size:12px;color:#5f6368;margin-top:2px}
+        .svc-row .txt{font-size:13px;color:var(--a-text2)}
+        .svc-row .sub{font-size:12px;color:var(--a-text3);margin-top:2px}
         .svc-active{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;margin-left:8px}
-        .svc-active.kill{background:#fce8e6;color:#c5221f}
+        .svc-active.kill{background:#fce8e6;color:var(--a-red)}
         .svc-active.maint{background:#fef7e0;color:#e37400}
         .svc-active.ok{background:#e6f4ea;color:#137333}
         .err-graph{display:flex;align-items:flex-end;gap:3px;height:110px;padding:18px 20px 0}
-        .err-bar{flex:1;background:#c5221f;border-radius:3px 3px 0 0;min-height:2px;opacity:.75}
+        .err-bar{flex:1;background:var(--a-red-btn);border-radius:3px 3px 0 0;min-height:2px;opacity:.75}
         .err-bar.peak{background:#a50e0e;opacity:1}
-        .err-labels{display:flex;gap:3px;padding:6px 20px 0;font-size:9px;color:#5f6368}
+        .err-labels{display:flex;gap:3px;padding:6px 20px 0;font-size:9px;color:var(--a-text3)}
         .err-labels span{flex:1;text-align:center;overflow:hidden;white-space:nowrap}
         .err-stat{display:inline-block;padding:3px 10px;border-radius:8px;font-size:12px;font-weight:600}
-        .err-stat.bad{background:#fce8e6;color:#c5221f}
+        .err-stat.bad{background:#fce8e6;color:var(--a-red)}
         .err-stat.mid{background:#fef7e0;color:#e37400}
         .err-stat.ok{background:#e6f4ea;color:#137333}
-        .err-line{font-family:monospace;font-size:11px;color:#5f6368;padding:5px 20px;border-bottom:1px solid #f1f3f4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .err-line{font-family:monospace;font-size:11px;color:var(--a-text3);padding:5px 20px;border-bottom:1px solid var(--a-border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .err-line:last-child{border-bottom:none}
+
+        /* ── Dark repack: token block + overrides ── */
+        :root{
+            --a-bg:#0a0d13; --a-bg2:#11151d; --a-bg3:#171c26;
+            --a-border:#232a37; --a-border2:#1c222d;
+            --a-text:#e7eaf0; --a-text2:#b9c1cf; --a-text3:#8b95a5;
+            --a-link:#7fa6f5; --a-link-strong:#8ab4f8;
+            --a-primary:#5b8def; --a-primary-hover:#4a7ce0;
+            --a-blue-bg:#16233f;
+            --a-red:#f28b82; --a-red-bg:#2d1517; --a-red-btn:#d93025;
+            --a-green:#7dd98b; --a-green-bg:#0d2214; --a-green-btn:#2e7d32;
+            --a-orange:#f9ab00; --a-orange-bg:#2b2112;
+            --shadow-card:0 1px 3px rgba(0,0,0,.5);
+        }
+        body{background:var(--a-bg);color:var(--a-text)}
+        a{color:var(--a-link)}
+        .login-box,.stat-card,.card{background:var(--a-bg2);box-shadow:var(--shadow-card)}
+        .login-box h1,.header h1,.stat-card .num{color:var(--a-link-strong)}
+        .login-box input{background:var(--a-bg3);border-color:var(--a-border);color:var(--a-text)}
+        .login-box input:focus{border-color:var(--a-primary)}
+        .login-box button{background:var(--a-primary)}
+        .login-box button:hover{background:var(--a-primary-hover)}
+        .card-title{border-bottom-color:var(--a-border)}
+        .card-title .badge{background:var(--a-blue-bg);color:var(--a-link-strong)}
+        table th{background:var(--a-bg3);color:var(--a-text3);border-bottom-color:var(--a-border)}
+        table td{color:var(--a-text2);border-bottom-color:var(--a-border2)}
+        tr:hover td{background:var(--a-bg3)}
+        .url-cell{color:var(--a-link)}
+        .date-cell{color:var(--a-text3)}
+        .empty{color:var(--a-text3)}
+        .status-pending{background:var(--a-orange-bg);color:var(--a-orange)}
+        .status-approved{background:var(--a-green-bg);color:var(--a-green)}
+        .status-denied{background:var(--a-red-bg);color:var(--a-red)}
+        .status-new{background:var(--a-orange-bg);color:var(--a-orange)}
+        .status-read{background:var(--a-blue-bg);color:var(--a-link-strong)}
+        .btn-approve{background:var(--a-primary)}
+        .btn-approve:hover{background:var(--a-primary-hover)}
+        .btn-deny{background:var(--a-bg3);color:var(--a-text2);border-color:var(--a-border)}
+        .btn-deny:hover{background:var(--a-border)}
+        .btn-remove{background:var(--a-red-btn)}
+        .btn-remove:hover{background:#e0483c}
+        .penalty-input{background:var(--a-bg3);border-color:var(--a-border);color:var(--a-text)}
+        .bl-word{background:var(--a-bg3)}
+        .bl-penalty{color:var(--a-red)}
+        .slider{background:var(--a-border)}
+        .svc-row{border-bottom-color:var(--a-border2)}
+        .svc-row .txt{color:var(--a-text2)}
+        .svc-row .sub{color:var(--a-text3)}
+        .svc-active.kill,.err-stat.bad{background:var(--a-red-bg);color:var(--a-red)}
+        .svc-active.maint,.err-stat.mid{background:var(--a-orange-bg);color:var(--a-orange)}
+        .svc-active.ok,.err-stat.ok{background:var(--a-green-bg);color:var(--a-green)}
+        .err-bar{background:var(--a-red-btn)}
+        .err-bar.peak{background:#e0483c}
+        .err-labels span{color:var(--a-text3)}
+        .err-line{color:var(--a-text3);border-bottom-color:var(--a-border2)}
+        input,select,textarea{background-color:var(--a-bg3);border-color:var(--a-border);color:var(--a-text)}
+        select option{background-color:var(--a-bg2);color:var(--a-text)}
+        .header a{color:var(--a-text3);border-color:var(--a-border);background:transparent}
+        .header a:hover{background:var(--a-bg3)}
     </style>
 </head>
 <body>
@@ -97,11 +156,11 @@
     <div class="header">
         <h1>arlong Admin Panel</h1>
         <div style="display:flex;gap:12px;align-items:center">
-            <a href="/admin/dashboard" style="font-size:13px;color:#5f6368;padding:6px 12px;border:1px solid #dadce0;border-radius:6px">Dashboard</a>
-            <a href="/admin/collections" style="font-size:13px;color:#5f6368;padding:6px 12px;border:1px solid #dadce0;border-radius:6px">Collections</a>
-            <a href="/admin/accounts" style="font-size:13px;color:#5f6368;padding:6px 12px;border:1px solid #dadce0;border-radius:6px">Accounts</a>
-            <a href="/admin/keys" style="font-size:13px;color:#5f6368;padding:6px 12px;border:1px solid #dadce0;border-radius:6px">Keys</a>
-            <a href="/admin/logout" style="font-size:13px;color:#5f6368;padding:6px 12px;border:1px solid #dadce0;border-radius:6px">Sign out</a>
+            <a href="/admin/dashboard" style="font-size:13px;color:var(--a-text3);padding:6px 12px;border:1px solid var(--a-border);border-radius:6px">Dashboard</a>
+            <a href="/admin/collections" style="font-size:13px;color:var(--a-text3);padding:6px 12px;border:1px solid var(--a-border);border-radius:6px">Collections</a>
+            <a href="/admin/accounts" style="font-size:13px;color:var(--a-text3);padding:6px 12px;border:1px solid var(--a-border);border-radius:6px">Accounts</a>
+            <a href="/admin/keys" style="font-size:13px;color:var(--a-text3);padding:6px 12px;border:1px solid var(--a-border);border-radius:6px">Keys</a>
+            <a href="/admin/logout" style="font-size:13px;color:var(--a-text3);padding:6px 12px;border:1px solid var(--a-border);border-radius:6px">Sign out</a>
         </div>
     </div>
     <div class="container">
@@ -123,11 +182,11 @@
                 <div class="label">Blacklisted Domains</div>
             </div>
             <div class="stat-card" style="border-left:4px solid #1a73e8">
-                <div class="num" style="color:#1a73e8">{{ stats.verified_sites }}</div>
+                <div class="num" style="color:var(--a-link-strong)">{{ stats.verified_sites }}</div>
                 <div class="label">Verified Sites</div>
             </div>
             <div class="stat-card" style="border-left:4px solid #1a73e8">
-                <div class="num" style="color:#1a73e8">{{ stats.submitted_sites }}</div>
+                <div class="num" style="color:var(--a-link-strong)">{{ stats.submitted_sites }}</div>
                 <div class="label">Crawled Sites</div>
             </div>
             <div class="stat-card">
@@ -139,9 +198,9 @@
             <div class="card" style="border-left:4px solid #c5221f;cursor:pointer" onclick="window.location='/admin/accounts'">
                 <div class="card-title">
                     Account Manager
-                    <span class="badge" style="background:#c5221f;color:#fff">Manage users</span>
+                    <span class="badge" style="background:var(--a-red-btn);color:#fff">Manage users</span>
                 </div>
-                <div style="padding:16px 20px;font-size:13px;color:#5f6368">
+                <div style="padding:16px 20px;font-size:13px;color:var(--a-text3)">
                     View all user accounts, see click/search stats, and wipe test accounts &rarr;
                 </div>
             </div>
@@ -154,13 +213,13 @@
                 <div style="padding:16px 20px">
                     <form method="POST" action="/admin/generate-key" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                         <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                        <span style="font-size:13px;color:#3c4043">Tier:</span>
-                        <select name="tier" style="padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px;background:#fff">
+                        <span style="font-size:13px;color:var(--a-text2)">Tier:</span>
+                        <select name="tier" style="padding:8px 12px;border:1px solid var(--a-border);border-radius:6px;font-size:13px;background:var(--a-bg3)">
                             <option value="pass">Pass ($4/mo)</option>
                             <option value="golden">Premium Pass ($10/mo)</option>
                         </select>
-                        <span style="font-size:13px;color:#3c4043">Count:</span>
-                        <input type="number" name="count" value="1" min="1" max="100" style="width:70px;padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px">
+                        <span style="font-size:13px;color:var(--a-text2)">Count:</span>
+                        <input type="number" name="count" value="1" min="1" max="100" style="width:70px;padding:8px 12px;border:1px solid var(--a-border);border-radius:6px;font-size:13px">
                         <button type="submit" class="btn btn-approve" style="padding:8px 16px">Generate Keys</button>
                         <a href="/admin/keys" class="btn btn-deny" style="padding:8px 16px;text-decoration:none">View all keys</a>
                     </form>
@@ -176,27 +235,27 @@
             <div style="padding:16px 20px">
                 <form method="POST" action="/admin/celebration" style="display:flex;gap:8px;flex-wrap:wrap">
                     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                    <input type="text" name="celebration" value="{{ celebration }}" placeholder="e.g. Happy World Snake Day!" style="flex:1;min-width:200px;padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:14px;outline:none">
+                    <input type="text" name="celebration" value="{{ celebration }}" placeholder="e.g. Happy World Snake Day!" style="flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--a-border);border-radius:6px;font-size:14px;outline:none">
                     <button type="submit" class="btn btn-approve" style="padding:8px 16px">Set</button>
                     {% if celebration %}<button type="submit" class="btn btn-deny" name="celebration" value="" style="padding:8px 16px">Clear</button>{% endif %}
                 </form>
-                {% if celebration %}<p style="font-size:13px;color:#5f6368;margin:8px 0 0">Currently showing on homepage: <strong>{{ celebration }}</strong></p>{% endif %}
+                {% if celebration %}<p style="font-size:13px;color:var(--a-text3);margin:8px 0 0">Currently showing on homepage: <strong>{{ celebration }}</strong></p>{% endif %}
             </div>
         </div>
 
         <div class="card" style="border-left:4px solid #c5221f">
             <div class="card-title">
                 Urgent Announcement
-                {% if announcement %}<span class="badge" style="background:#c5221f;color:#fff">active</span>{% endif %}
+                {% if announcement %}<span class="badge" style="background:var(--a-red-btn);color:#fff">active</span>{% endif %}
             </div>
             <div style="padding:16px 20px">
                 <form method="POST" action="/admin/announcement" style="display:flex;gap:8px;flex-wrap:wrap">
                     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                    <textarea name="announcement" placeholder="e.g. Search is slower than usual due to high traffic. We're working on it." style="flex:1;min-width:300px;padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:14px;outline:none;font-family:arial,sans-serif" rows="2">{{ announcement }}</textarea>
+                    <textarea name="announcement" placeholder="e.g. Search is slower than usual due to high traffic. We're working on it." style="flex:1;min-width:300px;padding:8px 12px;border:1px solid var(--a-border);border-radius:6px;font-size:14px;outline:none;font-family:arial,sans-serif" rows="2">{{ announcement }}</textarea>
                     <button type="submit" class="btn btn-approve" style="padding:8px 16px">Set</button>
                     {% if announcement %}<button type="submit" class="btn btn-deny" name="announcement" value="" style="padding:8px 16px">Clear</button>{% endif %}
                 </form>
-                {% if announcement %}<p style="font-size:13px;color:#c5221f;margin:8px 0 0">Currently showing as red banner: <strong>{{ announcement }}</strong></p>{% endif %}
+                {% if announcement %}<p style="font-size:13px;color:var(--a-red);margin:8px 0 0">Currently showing as red banner: <strong>{{ announcement }}</strong></p>{% endif %}
             </div>
         </div>
 
@@ -229,7 +288,7 @@
                         <span class="slider maint"></span>
                     </label>
                 </div>
-                <div style="padding:12px 20px;border-top:1px solid #f1f3f4;font-size:12px;color:#5f6368">
+                <div style="padding:12px 20px;border-top:1px solid #f1f3f4;font-size:12px;color:var(--a-text3)">
                     Last changed: {{ service_status.updated_at if service_status.updated_at else 'never' }}
                 </div>
             </form>
@@ -253,7 +312,7 @@
                 <span {% if not loop.index0 % elabel_step == 0 %} style="opacity:0" {% endif %}>{{ s.label }}</span>
                 {% endfor %}
             </div>
-            <div style="padding:10px 20px;font-size:12px;color:#5f6368;display:flex;gap:16px;flex-wrap:wrap">
+            <div style="padding:10px 20px;font-size:12px;color:var(--a-text3);display:flex;gap:16px;flex-wrap:wrap">
                 <span><strong>Peak:</strong> {{ error_peak }} errors/hour</span>
                 <span><strong>Latest:</strong> {{ error_latest|length }} shown below</span>
                 <span>Source: <code style="font-size:11px">search_engine.log</code></span>
@@ -262,12 +321,90 @@
             <div class="empty">No errors logged in the last 24 hours. Clean bill of health.</div>
             {% endif %}
             {% if error_latest %}
-            <div style="border-top:1px solid #e8eaed">
+            <div style="border-top:1px solid var(--a-border)">
                 {% for line in error_latest %}
                 <div class="err-line">{{ line }}</div>
                 {% endfor %}
             </div>
             {% endif %}
+        </div>
+
+        <div class="card" style="border-left:4px solid #f9ab00">
+            <div class="card-title">
+                External API Alerts
+                <span class="err-stat {{ 'bad' if (api_stats|length) else 'ok' }}">{{ api_stats|length }} failing API(s)</span>
+            </div>
+            {% if api_stats %}
+            <div style="padding:8px 20px 12px;display:flex;gap:10px;flex-wrap:wrap">
+                {% for api, count in api_stats.items() %}
+                <span class="err-stat bad" title="{{ api }}">{{ api }} — {{ count }} fail(s) in 24h</span>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty">All external APIs (digidates, aqicn, abstractapi, 7timer) healthy.</div>
+            {% endif %}
+            {% if api_errors %}
+            <div style="border-top:1px solid var(--a-border);max-height:260px;overflow:auto">
+                {% for e in api_errors %}
+                <div class="err-line" title="{{ e.message }}">
+                    <strong>{{ e.api }}</strong>
+                    <span style="color:var(--a-text3)">{{ e.message[:110] }}{% if e.message|length > 110 %}…{% endif %}</span>
+                    <span style="color:var(--a-text3);font-size:11px">{{ e.time_str }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="card" style="border-left:4px solid #5b8def">
+            <div class="card-title">
+                User Feedback
+                <span class="badge" style="background:var(--a-blue-bg);color:var(--a-link-strong)">{{ feedback|length }} total · {{ feedback|selectattr('status', 'equalto', 'new')|list|length }} new</span>
+            </div>
+            {% if feedback %}
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:70px">ID</th>
+                        <th>Category</th>
+                        <th>Message</th>
+                        <th>Context</th>
+                        <th>Received</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for f in feedback|reverse %}
+                    <tr data-fb-id="{{ f.id }}">
+                        <td style="font-weight:600">#{{ f.id }}</td>
+                        <td><span class="status-badge status-{% if f.status == 'read' %}approved{% else %}pending{% endif %}">{{ f.category }}</span></td>
+                        <td style="max-width:320px">{{ f.message }}</td>
+                        <td style="font-size:12px;color:var(--a-text3);max-width:180px">
+                            {% if f.query %}<div><strong style="color:var(--a-text2)">Query:</strong> {{ f.query|truncate(50) }}</div>{% endif %}
+                            {% if f.url %}<div class="url-cell" style="max-width:160px">{{ f.url|truncate(60) }}</div>{% endif %}
+                            {% if f.contact %}<div><strong style="color:var(--a-text2)">Contact:</strong> {{ f.contact }}</div>{% endif %}
+                        </td>
+                        <td class="date-cell">{{ f.created_at[:16] }}</td>
+                        <td><span class="status-badge status-{{ f.status }}">{{ f.status }}</span></td>
+                        <td>
+                            <div class="btn-group">
+                                {% if f.status != 'read' %}
+                                <button type="button" class="btn btn-approve" onclick="fbAct(this, 'read')">Mark read</button>
+                                {% endif %}
+                                <button type="button" class="btn btn-remove" onclick="fbAct(this, 'delete')">Delete</button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">No feedback yet. The in-app Feedback button on search pages posts here.</div>
+            {% endif %}
+            <div style="padding:10px 20px;border-top:1px solid var(--a-border);font-size:12px;color:var(--a-text3)">
+                Submissions come from the search-page feedback modal — category, message, and optional query/page context. No IP or device data is stored.
+            </div>
         </div>
 
         <div class="card">
@@ -373,21 +510,21 @@
         <div class="card" style="border-left:4px solid #1a73e8">
             <div class="card-title">
                 arlong Verified — Manage verified sites
-                <span class="badge" style="background:#2e7d32;color:#fff">{{ verified_sites|length }} sites</span>
+                <span class="badge" style="background:var(--a-green-btn);color:#fff">{{ verified_sites|length }} sites</span>
             </div>
-            <div style="padding:16px 20px;border-bottom:1px solid #e8eaed">
+            <div style="padding:16px 20px;border-bottom:1px solid var(--a-border)">
                 <form method="POST" action="/admin/verified/add" style="display:flex;gap:8px;flex-wrap:wrap">
-                    <input type="text" name="domain" placeholder="Domain (e.g., example.com)" required style="flex:1;min-width:120px;padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px">
-                    <input type="text" name="name" placeholder="Business name" required style="flex:1;min-width:120px;padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px">
-                    <input type="email" name="email" placeholder="Contact email" style="flex:1;min-width:120px;padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px">
-                    <input type="tel" name="phone" placeholder="Phone number" style="flex:1;min-width:120px;padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px">
-                    <input type="text" name="description" placeholder="Description" style="flex:2;min-width:200px;padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px">
-                    <select name="scope" style="padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px;background:#fff">
+                    <input type="text" name="domain" placeholder="Domain (e.g., example.com)" required style="flex:1;min-width:120px;padding:8px 12px;border:1px solid var(--a-border);border-radius:6px;font-size:13px">
+                    <input type="text" name="name" placeholder="Business name" required style="flex:1;min-width:120px;padding:8px 12px;border:1px solid var(--a-border);border-radius:6px;font-size:13px">
+                    <input type="email" name="email" placeholder="Contact email" style="flex:1;min-width:120px;padding:8px 12px;border:1px solid var(--a-border);border-radius:6px;font-size:13px">
+                    <input type="tel" name="phone" placeholder="Phone number" style="flex:1;min-width:120px;padding:8px 12px;border:1px solid var(--a-border);border-radius:6px;font-size:13px">
+                    <input type="text" name="description" placeholder="Description" style="flex:2;min-width:200px;padding:8px 12px;border:1px solid var(--a-border);border-radius:6px;font-size:13px">
+                    <select name="scope" style="padding:8px 12px;border:1px solid var(--a-border);border-radius:6px;font-size:13px;background:var(--a-bg3)">
                         <option value="regional">Regional — $5/mo</option>
                         <option value="global">Global — $9/mo</option>
                     </select>
-                    <input type="text" name="regions" placeholder="Regions (comma-sep, e.g. us,in,uk)" style="flex:1;min-width:100px;padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px">
-                    <select name="region" style="padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px;background:#fff">
+                    <input type="text" name="regions" placeholder="Regions (comma-sep, e.g. us,in,uk)" style="flex:1;min-width:100px;padding:8px 12px;border:1px solid var(--a-border);border-radius:6px;font-size:13px">
+                    <select name="region" style="padding:8px 12px;border:1px solid var(--a-border);border-radius:6px;font-size:13px;background:var(--a-bg3)">
                         <option value="us">Default: USA</option>
                         <option value="in">India</option>
                         <option value="uk">UK</option>
@@ -400,7 +537,7 @@
                         <option value="es">Spain</option>
                         <option value="it">Italy</option>
                     </select>
-                    <select name="plan" style="padding:8px 12px;border:1px solid #dadce0;border-radius:6px;font-size:13px;background:#fff">
+                    <select name="plan" style="padding:8px 12px;border:1px solid var(--a-border);border-radius:6px;font-size:13px;background:var(--a-bg3)">
                         <option value="monthly">Monthly</option>
                         <option value="yearly">Yearly</option>
                     </select>
@@ -451,7 +588,7 @@
                         <div class="btn-group">
                             <form method="POST" action="/admin/submission/approve" style="display:inline">
                                 <input type="hidden" name="domain" value="{{ s.domain }}">
-                                <button type="submit" class="btn btn-approve" style="background:#2e7d32">Approve</button>
+                                <button type="submit" class="btn btn-approve" style="background:var(--a-green-btn)">Approve</button>
                             </form>
                         </div>
                     </td>
@@ -474,7 +611,7 @@
                 {% for r in domain_reports %}
                 <tr>
                     <td style="font-weight:600">{{ r.domain }}</td>
-                    <td><span style="color:#c5221f;font-weight:600">-{{ r.downvotes }}</span></td>
+                    <td><span style="color:var(--a-red);font-weight:600">-{{ r.downvotes }}</span></td>
                     <td style="font-size:12px">{{ r.reported_by|length }} users</td>
                     <td class="date-cell">{{ r.created_at[:10] }}</td>
                     <td>
@@ -495,7 +632,7 @@
             {% else %}
             <div class="empty">No pending domain reports. Community downvotes will appear here for moderator review.</div>
             {% endif %}
-            <div style="padding:10px 20px;border-top:1px solid #e8eaed;font-size:12px;color:#5f6368">
+            <div style="padding:10px 20px;border-top:1px solid var(--a-border);font-size:12px;color:var(--a-text3)">
                 Users can downvote domains on search results. Domains with enough downvotes appear here. Click Block to add to blacklist, or Dismiss to clear.
             </div>
         </div>
@@ -517,15 +654,36 @@ document.querySelector('form[action="/admin/generate-key"]')?.addEventListener('
             res.innerHTML = '<strong style="color:#137333">Generated ' + data.keys.length + ' key(s):</strong><br><code style="font-size:12px;word-break:break-all">' + data.keys.join('<br>') + '</code><br><button class="btn btn-approve" style="padding:4px 12px;font-size:12px;margin-top:6px" onclick="navigator.clipboard.writeText(\'' + data.keys.join('\\n') + '\')">Copy all</button>';
         } else {
             res.style.display = 'block';
-            res.innerHTML = '<strong style="color:#c5221f">Error:</strong> ' + data.error;
+            res.innerHTML = '<strong style="color:var(--a-red)">Error:</strong> ' + data.error;
         }
     } catch(err){
         res.style.display = 'block';
-        res.innerHTML = '<strong style="color:#c5221f">Error:</strong> ' + err.message;
+        res.innerHTML = '<strong style="color:var(--a-red)">Error:</strong> ' + err.message;
     }
     btn.disabled = false;
     btn.textContent = 'Generate Keys';
 });
+window.fbAct = async function(btn, action){
+    var row = btn.closest('tr[data-fb-id]');
+    if(!row) return;
+    var id = row.getAttribute('data-fb-id');
+    if(action === 'delete' && !confirm('Delete feedback #' + id + '?')) return;
+    btn.disabled = true;
+    try {
+        var resp = await fetch('/api/admin/feedback/' + id + '/' + action, { method:'POST' });
+        var data = await resp.json().catch(function(){ return {}; });
+        if(data.ok){
+            if(action === 'delete'){ row.remove(); }
+            else { window.location.reload(); }
+        } else {
+            alert(data.error || 'Action failed');
+            btn.disabled = false;
+        }
+    } catch(err){
+        alert('Action failed');
+        btn.disabled = false;
+    }
+};
 </script>
 </body>
 </html>

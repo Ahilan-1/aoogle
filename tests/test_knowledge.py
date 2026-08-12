@@ -1,7 +1,13 @@
 """Tests for knowledge panels including Wikipedia integration."""
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+import pytest
 from main import get_info_box, get_wikipedia_panel, get_media_panel
+
+_TMDB = pytest.mark.skipif(
+    not os.environ.get('TMDB_API_KEY'),
+    reason='TMDB_API_KEY not set (live media panel test)',
+)
 
 
 class TestStaticKnowledgePanels:
@@ -65,6 +71,7 @@ class TestWikipediaPanel:
 
 
 class TestMediaPanel:
+    @_TMDB
     def test_movie_inception(self):
         panel = get_media_panel("Inception")
         assert panel is not None
@@ -74,6 +81,7 @@ class TestMediaPanel:
         assert panel["rating"]
         assert len(panel["cast"]) > 0
 
+    @_TMDB
     def test_tv_breaking_bad(self):
         panel = get_media_panel("Breaking Bad")
         assert panel is not None
@@ -97,6 +105,7 @@ class TestMediaPanel:
         assert panel.get("panel_type") != "media"
         assert "Python" in panel["title"]
 
+    @_TMDB
     def test_tv_office_cast(self):
         panel = get_media_panel("The Office cast")
         assert panel is not None

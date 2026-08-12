@@ -1,6 +1,6 @@
 # aoogle
 
-A meta search engine that scrapes public web indexes and re-ranks results using a multi-factor scoring algorithm. No ads, no AI summaries, no tracking.
+A meta search engine that scrapes public web indexes and re-ranks results using a multi-factor scoring algorithm. No ads, no promoted links, no user tracking. AI features (chat at `/ai` and the optional search "AI Summary" button) are opt-in and never run by default.
 
 ## How it works
 
@@ -23,6 +23,8 @@ A meta search engine that scrapes public web indexes and re-ranks results using 
 - Knowledge panels for popular entities
 - Search suggestions (powered by Google Suggest API)
 - "I'm Feeling Lucky" — random wholesome query
+- Domain sitelinks — repeated hits from the same root domain collapse into a single parent card with indented child links
+- Opt-in AI Summary button on results plus a dedicated AI chat at `/ai`
 - Scoring is fully transparent and heuristic (no ML, no vectors, no indexing)
 
 ## API
@@ -64,7 +66,7 @@ The server runs on `http://localhost:5000`.
 
 ## Deployment
 
-The app is Flask-based and ready for any WSGI server. A `vercel.json` is included for Vercel deployment.
+The app is Flask-based and ready for any WSGI server. A `railway.json` is included for Railway deployment.
 
 ## Tech stack
 
@@ -72,7 +74,7 @@ The app is Flask-based and ready for any WSGI server. A `vercel.json` is include
 - BeautifulSoup for scraping
 - DuckDuckGo HTML endpoint (web results)
 - Bing Images (image results)
-- Google Suggest API (autocomplete)
+- Google Suggest API (autocomplete fallback)
 - In-memory caching (Redis optional)
 - Chart.js (live stats dashboard)
 

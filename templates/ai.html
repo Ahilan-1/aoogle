@@ -180,9 +180,10 @@
     .ai-link-fav{width:16px;height:16px;border-radius:4px;flex-shrink:0;background:var(--bg-surface-hover)}
     .ai-link-fav-ph{width:16px;height:16px;border-radius:4px;background:#2C2C30;color:#FFFFFF;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
     .ai-link-domain{font-size:12px;color:var(--text-muted);flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:45%}
-    .ai-link-title{display:block;font-size:15px;font-weight:600;color:#FFFFFF;line-height:1.4;margin-bottom:7px;overflow-wrap:break-word;word-break:break-word}
+    .ai-link-title{display:block;font-size:15px;font-weight:600;color:#FFFFFF;line-height:1.45;margin-bottom:7px;overflow-wrap:break-word;word-break:break-word}
     .ai-link-title:hover{text-decoration:underline}
-    .ai-link-snip{font-size:12.5px;color:var(--text-muted);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:break-word;word-break:break-word}
+    .ai-link-snip{font-size:12.5px;color:var(--text-muted);line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:break-word;word-break:break-word}
+    .ai-link-card:hover{border-color:#3a3f55;box-shadow:0 4px 18px rgba(0,0,0,.25)}
     .ai-eval{
         margin-top:10px;background:var(--bg-inner);border-left:3px solid #FFFFFF;
         border-radius:0 8px 8px 0;padding:9px 12px;font-size:13px;color:#D1D1D6;line-height:1.5;
@@ -194,25 +195,46 @@
     .ai-dot:nth-child(3){animation-delay:.3s}
     @keyframes aiBlink{0%,80%,100%{opacity:.25}40%{opacity:1}}
 
-    .ai-overview{background:var(--bg-surface);border:1px solid var(--border-color);border-radius:12px;padding:20px 24px}
-    .ai-overview .ai-ov-label{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#FFFFFF;font-weight:600;display:inline-flex;align-items:center;gap:7px;background:var(--bg-inner);padding:6px 12px;border-radius:8px;margin-bottom:14px}
+    /* ── Source quality tags ── */
+    .ai-src-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+    .ai-src-tag{
+        display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;
+        letter-spacing:.2px;line-height:1.35;padding:3px 9px;border-radius:999px;border:1px solid transparent;
+    }
+    .ai-src-tag .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+    .ai-src-tag.primary{background:rgba(52,199,89,.12);border-color:rgba(52,199,89,.35);color:#B5E7C0}
+    .ai-src-tag.primary .dot{background:#34C759}
+    .ai-src-tag.community{background:rgba(255,204,0,.1);border-color:rgba(255,204,0,.32);color:#EBD99A}
+    .ai-src-tag.community .dot{background:#FFCC00}
+    .ai-src-tag.trusted{background:rgba(10,132,255,.12);border-color:rgba(10,132,255,.38);color:#A6CBF5}
+    .ai-src-tag.trusted .dot{background:#0A84FF}
+
+    .ai-overview{background:var(--bg-surface);border:1px solid var(--border-color);border-radius:14px;padding:24px 28px}
+    .ai-overview .ai-ov-label{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#FFFFFF;font-weight:600;display:inline-flex;align-items:center;gap:7px;background:var(--bg-inner);padding:6px 12px;border-radius:8px;margin-bottom:16px}
     .ai-overview .ai-ov-label svg{width:14px;height:14px;color:#FFFFFF}
-    .ai-md{font-size:15px;color:var(--text-main);word-wrap:break-word}
-    .ai-md h1,.ai-md h2,.ai-md h3,.ai-md h4{margin:18px 0 8px;line-height:1.3;font-weight:700}
-    .ai-md h1{font-size:22px}.ai-md h2{font-size:19px}.ai-md h3{font-size:16.5px}
-    .ai-md p{margin:10px 0}
+    .ai-md{font-size:15.5px;color:var(--text-main);word-wrap:break-word;line-height:1.72}
+    .ai-md > :first-child{margin-top:0}
+    .ai-md > :last-child{margin-bottom:0}
+    .ai-md p{margin:12px 0}
+    .ai-md strong{color:#FFFFFF;font-weight:700}
+    .ai-md h1,.ai-md h2,.ai-md h3,.ai-md h4{margin:22px 0 9px;line-height:1.32;font-weight:700;color:#FFFFFF}
+    .ai-md h1{font-size:21px}.ai-md h2{font-size:18px;letter-spacing:-.01em}.ai-md h3{font-size:16px}.ai-md h4{font-size:14.5px}
+    .ai-md h2:first-child,.ai-md h3:first-child{margin-top:14px}
     .ai-md ul,.ai-md ol{margin:10px 0;padding-left:22px}
-    .ai-md li{margin:4px 0}
-    .ai-md a{color:#FFFFFF}
-    .ai-md blockquote{border-left:3px solid #FFFFFF;margin:12px 0;padding:4px 14px;color:var(--text-muted);background:rgba(255,255,255,.03);border-radius:0 8px 8px 0}
+    .ai-md ul{list-style:disc}
+    .ai-md li{margin:5px 0;padding-left:2px}
+    .ai-md li::marker{color:#B8B8BF}
+    .ai-md a{color:#FFFFFF;text-decoration:underline;text-underline-offset:2px}
+    .ai-md a:hover{opacity:.85}
+    .ai-md blockquote{border-left:3px solid #B8B8BF;margin:14px 0;padding:10px 16px;color:var(--text-muted);background:rgba(255,255,255,.035);border-radius:0 8px 8px 0;font-size:14.5px}
     .ai-md code{background:var(--bg-base);border:1px solid var(--border-soft);border-radius:5px;padding:1px 6px;font-size:13px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace}
     .ai-md pre{background:#12131a;border:1px solid var(--border-color);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:12px 0;line-height:1.5}
     .ai-md pre code{background:none;border:none;padding:0;font-size:13px}
-    .ai-md table{border-collapse:collapse;margin:12px 0;width:100%;font-size:13.5px}
-    .ai-md th,.ai-md td{border:1px solid var(--border-color);padding:7px 11px;text-align:left}
-    .ai-md th{background:var(--bg-surface-hover);font-weight:600}
+    .ai-md table{border-collapse:collapse;margin:14px 0;width:100%;font-size:13.5px;line-height:1.55}
+    .ai-md th,.ai-md td{border:1px solid var(--border-color);padding:8px 12px;text-align:left;vertical-align:top}
+    .ai-md th{background:var(--bg-surface-hover);font-weight:600;color:#FFFFFF}
     .ai-md tr:nth-child(even) td{background:rgba(255,255,255,.015)}
-    .ai-md hr{border:none;border-top:1px solid var(--border-soft);margin:16px 0}
+    .ai-md hr{border:none;border-top:1px solid var(--border-soft);margin:18px 0}
     .ai-md img{max-width:100%;border-radius:8px}
     .ai-cite{
         display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;
@@ -275,6 +297,20 @@
     .ai-modal-q{font-size:13px;color:#D1D1D6;font-weight:600}
     .ai-modal-in{background:var(--bg-base);border:1px solid var(--border-color);border-radius:8px;padding:10px 12px;color:#FFFFFF;font-size:14px;outline:none}
     .ai-modal-in:focus{border-color:#FFFFFF}
+    .ai-modal-select{
+        width:100%;background:var(--bg-base);border:1px solid var(--border-color);border-radius:8px;
+        padding:9px 12px;color:#FFFFFF;font-size:14px;outline:none;font-family:inherit;
+    }
+    .ai-modal-select:focus{border-color:#FFFFFF}
+    .ai-modal-select option{color:#000000;background:#FFFFFF}
+    .ai-modal-divider{height:1px;background:var(--border-soft);margin:2px 0}
+    .ai-modal-combo textarea{
+        width:100%;background:var(--bg-base);border:1px solid var(--border-color);border-radius:8px;
+        padding:10px 12px;color:#FFFFFF;font-size:14px;outline:none;resize:none;font-family:inherit;min-height:46px;
+    }
+    .ai-modal-combo textarea:focus{border-color:#FFFFFF}
+    .ai-modal-combo textarea.err{border-color:#ff6b6b}
+    .ai-modal-single-note{font-size:11.5px;color:var(--text-muted);margin-top:4px;line-height:1.5}
     .ai-modal-foot{display:flex;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid var(--border-soft)}
     .ai-btn-ghost{background:var(--bg-inner);border:1px solid var(--border-color);color:#D1D1D6;border-radius:8px;padding:9px 14px;font-size:13.5px;cursor:pointer}
     .ai-btn-ghost:hover{border-color:#FFFFFF}
@@ -780,6 +816,8 @@
     }
 
     var clarifyModal = null;
+    function clarifyQText(q){ return (q && typeof q === 'object') ? String(q.q||'') : String(q||''); }
+    function clarifyQOptions(q){ return (q && typeof q === 'object' && Array.isArray(q.options)) ? q.options : []; }
     function openClarifyModal(questions, q, cid){
         if(!clarifyModal){
             clarifyModal = document.createElement('div');
@@ -797,38 +835,103 @@
         }
         var body = clarifyModal.querySelector('.ai-modal-body');
         body.innerHTML = '';
-        (questions||[]).forEach(function(qtext, i){
+        var list = (questions||[]).slice(0,5);
+        list.forEach(function(qi, i){
+            var qtext = clarifyQText(qi);
+            var opts = clarifyQOptions(qi);
             var row = document.createElement('div');
             row.className = 'ai-modal-row';
-            row.innerHTML = '<label class="ai-modal-q">'+(i+1)+'. '+esc(qtext)+'</label>'
-                + '<input class="ai-modal-in" type="text" data-i="'+i+'" placeholder="Your answer..." autocomplete="off">';
+            if(opts.length){
+                var selHtml = '<label class="ai-modal-q">'+(i+1)+'. '+esc(qtext)+'</label>'
+                    + '<select class="ai-modal-select" data-i="'+i+'"><option value="">Choose an option...</option>';
+                opts.forEach(function(o){ selHtml += '<option value="'+esc(o)+'">'+esc(o)+'</option>'; });
+                selHtml += '</select>';
+                row.innerHTML = selHtml;
+            } else {
+                row.innerHTML = '<label class="ai-modal-q">'+(i+1)+'. '+esc(qtext)+'</label>'
+                    + '<input class="ai-modal-in" type="text" data-i="'+i+'" placeholder="Your answer..." autocomplete="off">';
+            }
             body.appendChild(row);
         });
+        var combo = document.createElement('div');
+        combo.className = 'ai-modal-row ai-modal-combo';
+        var nums = list.map(function(_, i){ return i+1; }).join(', ');
+        combo.innerHTML = '<div class="ai-modal-divider"></div>'
+            + '<label class="ai-modal-q">Or type all answers in one box</label>'
+            + '<textarea data-combo placeholder="e.g. Mumbai, 4 people, Adventure"></textarea>'
+            + '<div class="ai-modal-single-note">Separate with commas or semicolons, in the order of the questions above ('+nums+'). Picking a dropdown fills it in automatically.</div>';
+        body.appendChild(combo);
         clarifyModal._q = q || '';
         clarifyModal._cid = cid;
         clarifyModal.style.display = 'flex';
-        var first = clarifyModal.querySelector('.ai-modal-in');
-        if(first){ setTimeout(function(){ first.focus(); }, 60); }
+        clarifyModal.querySelectorAll('.ai-modal-select').forEach(function(sel){
+            sel.addEventListener('change', syncClarifyCombo);
+        });
+        clarifyModal.querySelectorAll('.ai-modal-in').forEach(function(inp){
+            inp.addEventListener('input', syncClarifyCombo);
+        });
+        var comboInput = clarifyModal.querySelector('[data-combo]');
+        if(comboInput){ setTimeout(function(){ comboInput.focus(); }, 60); }
+    }
+    function syncClarifyCombo(){
+        var combo = clarifyModal ? clarifyModal.querySelector('[data-combo]') : null;
+        if(!combo) return;
+        var out = [];
+        clarifyModal.querySelectorAll('.ai-modal-in, .ai-modal-select').forEach(function(el){
+            var v = '';
+            if(el.tagName === 'SELECT'){
+                var sel = el.selectedOptions && el.selectedOptions[0];
+                if(sel && sel.value) v = sel.value;
+            } else {
+                v = (el.value||'').trim();
+            }
+            if(v) out.push(v);
+        });
+        combo.value = out.join(', ');
     }
     function closeClarifyModal(){
         if(clarifyModal) clarifyModal.style.display = 'none';
     }
     function collectClarifyAnswers(){
         if(!clarifyModal) return [];
-        var out = [];
         var qs = [];
         clarifyModal.querySelectorAll('.ai-modal-q').forEach(function(l){ qs.push((l.textContent||'').replace(/^\d+\.\s*/,'')); });
-        clarifyModal.querySelectorAll('.ai-modal-in').forEach(function(inp, i){
-            var a = (inp.value||'').trim();
-            if(a){ out.push({q: qs[i] || '', a: a}); }
-        });
+        var vals = new Array(qs.length);
+        for(var z=0;z<vals.length;z++){ vals[z]=''; }
+        var combo = clarifyModal.querySelector('[data-combo]');
+        if(combo && combo.value){
+            var parts = combo.value.split(/[;,]+/).map(function(s){ return s.trim(); }).filter(function(s){ return s; });
+            if(parts.length === qs.length){
+                for(var p=0;p<parts.length;p++){ vals[p] = parts[p]; }
+            } else {
+                parts.forEach(function(part){
+                    for(var i=0;i<vals.length;i++){
+                        if(!vals[i]){ vals[i] = part; break; }
+                    }
+                });
+            }
+        } else {
+            clarifyModal.querySelectorAll('.ai-modal-in, .ai-modal-select').forEach(function(el){
+                var i = parseInt(el.getAttribute('data-i'), 10);
+                var v = '';
+                if(el.tagName === 'SELECT'){
+                    var sel = el.selectedOptions && el.selectedOptions[0];
+                    if(sel && sel.value) v = sel.value;
+                } else {
+                    v = (el.value||'').trim();
+                }
+                if(i >= 0 && i < vals.length && v) vals[i] = v;
+            });
+        }
+        var out = [];
+        vals.forEach(function(v, i){ if(v) out.push({q: qs[i]||'', a: v}); });
         return out;
     }
     window.submitClarify = function(){
         var answers = collectClarifyAnswers();
         if(!answers.length){
-            var first = clarifyModal ? clarifyModal.querySelector('.ai-modal-in') : null;
-            if(first){ first.style.borderColor = '#ff6b6b'; first.focus(); }
+            var first = clarifyModal ? (clarifyModal.querySelector('[data-combo]') || clarifyModal.querySelector('.ai-modal-in')) : null;
+            if(first){ first.classList.add('err'); first.focus(); }
             return;
         }
         var q = clarifyModal ? clarifyModal._q : '';
@@ -847,6 +950,7 @@
                     : '<span class="ai-link-fav-ph">'+esc((r.domain||'?')[0].toUpperCase())+'</span>';
         return '<div class="ai-link-card" id="ai-src-'+idx+'">'
             + '<div class="ai-link-head">'+fav+'<span class="ai-link-domain">'+esc(r.domain||'')+'</span></div>'
+            + '<div class="ai-src-tags" id="ai-src-tags-'+idx+'"></div>'
             + '<a class="ai-link-title" href="'+esc(r.url)+'" target="_blank" rel="noopener">'+idx+'. '+esc(r.title||'')+'</a>'
             + '<div class="ai-link-snip">'+esc(r.snippet||'')+'</div>'
             + '<div class="ai-eval" id="ai-eval-'+idx+'"><span class="ai-eval-label">AI Evaluation</span>'
@@ -872,12 +976,29 @@
         });
         zone.innerHTML = html;
     }
+    var SOURCE_TAG_DEFS = {
+        primary:   { cls: 'primary',   label: 'Primary Source' },
+        community: { cls: 'community', label: 'Community' },
+        trusted:   { cls: 'trusted',   label: 'Trusted Source' }
+    };
+    function renderSourceTag(idx, tag, ov){
+        var box = ov.querySelector('#ai-src-tags-'+idx);
+        if(!box) return;
+        var def = SOURCE_TAG_DEFS[tag] || SOURCE_TAG_DEFS.trusted;
+        box.innerHTML = '<span class="ai-src-tag '+def.cls+'"><span class="dot"></span>'+def.label+'</span>';
+    }
     function fireLinkEvals(q, results, ov, offset){
         offset = offset || 0;
         fetch('/api/ai/links', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q, results:results, offset:offset})})
         .then(function(r){ return r.json(); })
         .then(function(d){
-            if(!d.ok || !d.evaluations) return;
+            if(!d.ok) return;
+            if(d.tags){
+                Object.keys(d.tags).forEach(function(k){
+                    renderSourceTag(k, d.tags[k], ov);
+                });
+            }
+            if(!d.evaluations) return;
             Object.keys(d.evaluations).forEach(function(k){
                 var box = ov.querySelector('#ai-eval-'+k);
                 if(box) box.innerHTML = '<span class="ai-eval-label">AI Evaluation</span><span>'+esc(d.evaluations[k])+'</span>';
@@ -1042,6 +1163,7 @@
                 var a = document.createElement('div'); a.className='ai-assistant';
                 var srcs = m.sources || [];
                 var evals = m.evaluations || {};
+                var tags = m.source_tags || {};
                 var srcHtml = '';
                 if(srcs.length){
                     var lastGroup = null;
@@ -1053,8 +1175,11 @@
                         }
                         var fav = r.favicon ? '<img class="ai-link-fav" src="'+esc(r.favicon)+'" alt="" loading="lazy" onerror="this.outerHTML=\'<span class=&quot;ai-link-fav-ph&quot;>'+esc((r.domain||'?')[0].toUpperCase())+'</span>\'">' : '<span class="ai-link-fav-ph">'+esc((r.domain||'?')[0].toUpperCase())+'</span>';
                         var evalBody = evals[i+1] ? '<span>'+esc(evals[i+1])+'</span>' : '<span class="ai-eval-loading">No evaluation recorded.</span>';
+                        var tagDef = SOURCE_TAG_DEFS[tags[i+1]] || null;
+                        var tagHtml = tagDef ? '<span class="ai-src-tag '+tagDef.cls+'"><span class="dot"></span>'+tagDef.label+'</span>' : '';
                         srcHtml += '<div class="ai-link-card" id="ai-src-'+(i+1)+'">'
                             + '<div class="ai-link-head">'+fav+'<span class="ai-link-domain">'+esc(r.domain||'')+'</span></div>'
+                            + (tagHtml ? '<div class="ai-src-tags">'+tagHtml+'</div>' : '')
                             + '<a class="ai-link-title" href="'+esc(r.url)+'" target="_blank" rel="noopener">'+(i+1)+'. '+esc(r.title||'')+'</a>'
                             + '<div class="ai-link-snip">'+esc(r.snippet||'')+'</div>'
                             + '<div class="ai-eval" id="ai-eval-'+(i+1)+'"><span class="ai-eval-label">AI Evaluation</span>'+evalBody+'</div></div>';

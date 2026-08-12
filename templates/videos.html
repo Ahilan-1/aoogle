@@ -25,12 +25,22 @@
         .mini-logo span:nth-child(1){animation-delay:0s}.mini-logo span:nth-child(2){animation-delay:.15s}.mini-logo span:nth-child(3){animation-delay:.3s}.mini-logo span:nth-child(4){animation-delay:.45s}.mini-logo span:nth-child(5){animation-delay:.6s}.mini-logo span:nth-child(6){animation-delay:.75s}
         @keyframes arlong-wave{0%,100%{background-position:0 45%}50%{background-position:0 55%}}
         .rs-wrap{flex:1;max-width:640px}
-        .rs-input{width:100%;height:40px;border:1px solid var(--border);border-radius:24px;padding:0 16px;font-size:14px;outline:none;transition:box-shadow .2s;background:var(--input-bg);color:var(--text)}
-        .rs-input:focus{box-shadow:0 1px 6px var(--shadow)}
-        .results-nav{max-width:1100px;margin:0 auto;padding:2px 0 0;display:flex}
+        .rs-wrap form{display:flex;align-items:center;justify-content:space-between;border-radius:16px;background:#2a2a2e;border:none;height:40px;padding:0 16px 0 18px;transition:background .2s,box-shadow .2s}
+        .rs-wrap form:focus-within{background:#303034;box-shadow:0 0 0 1px rgba(255,255,255,.07)}
+        .rs-input{flex:1;min-width:0;background:transparent;border:none;outline:none;color:#ffffff;font-size:14px;padding:12px 0}
+        .rs-ic{width:16px;height:16px;color:#9a9aa2;flex-shrink:0;margin-left:12px}
+        .results-nav{max-width:1100px;margin:0 auto;padding:2px 0 0;display:flex;overflow-x:auto}
         .results-nav a{padding:10px 14px 8px;font-size:13px;color:var(--text3);display:inline-block;border-bottom:3px solid transparent;white-space:nowrap;text-decoration:none}
         .results-nav a.active{color:var(--nav-active);border-bottom-color:var(--nav-active)}
         .results-nav a:hover{color:var(--nav-active);text-decoration:none}
+        .results-nav a.ai-tab{color:var(--text3)}
+        .results-nav a.ai-tab:hover{color:var(--nav-active)}
+        .results-nav a.assist-tab{padding:10px 14px 8px;font-size:13px;display:inline-block;border-bottom:3px solid transparent;white-space:nowrap;background:linear-gradient(90deg,#e62e70 0%,#a855f7 50%,#38bdf8 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+        .results-nav a.assist-tab:hover{background:linear-gradient(90deg,#e62e70 0%,#a855f7 50%,#38bdf8 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;filter:brightness(1.2)}
+        .privacy-quote{display:none;align-items:center;gap:6px;font-size:11.5px;color:var(--text3);white-space:nowrap;border:1px solid var(--border);border-radius:999px;padding:5px 12px;letter-spacing:.2px;text-decoration:none}
+        .privacy-quote b{color:var(--text2);font-weight:600}
+        .privacy-quote .lock-ic{width:11px;height:11px;fill:var(--nav-active);opacity:.9}
+        @media(min-width:1100px){.privacy-quote{display:inline-flex}}
 
         .results-list{max-width:900px;margin:16px auto;padding:0 16px 60px}
         .video-card{display:flex;gap:14px;margin-bottom:20px;padding:12px;border-radius:10px;transition:background .15s}
@@ -55,7 +65,7 @@
             .header{padding:8px 12px 0}
             .header .top-row{gap:8px}
             .mini-logo{font-size:20px}
-            .rs-input{height:36px;font-size:13px}
+            .rs-wrap form{height:36px}.rs-input{font-size:13px}
             .results-nav a{padding:8px 10px 6px;font-size:12px}
         }
         @media(max-width:600px){
@@ -95,16 +105,21 @@
             <div class="rs-wrap">
                 <form action="/videos" method="GET" onsubmit="return delayedSubmit(this)">
                     <input type="search" name="q" class="rs-input" value="{{ query if query else '' }}" required autocomplete="off" placeholder="Search videos..." enterkeyhint="search">
+                    <svg class="rs-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
                 </form>
             </div>
             <a href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" style="flex-shrink:0;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--text3);display:flex;align-items:center;justify-content:center;text-decoration:none;transition:.15s" aria-label="Account">
                 <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
             </a>
+            <a class="privacy-quote" href="/privacy-policy" title="Your searches stay yours"><svg class="lock-ic" viewBox="0 0 24 24"><path d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5zm-3 8V6a3 3 0 0 1 6 0v3H9z"/></svg>Privacy first, <b>by default</b></a>
         </div>
         <div class="results-nav">
             <a href="/search?q={{ query }}">Web</a>
             <a href="/images?q={{ query }}">Images</a>
             <a href="/videos?q={{ query }}" class="active">Videos</a>
+            <a href="/search?q={{ query }}&as=1" class="assist-tab">Search Assist</a>
+            <a href="https://arlong.org/ai" target="_blank" rel="noopener" class="ai-tab">Arlong AI</a>
+            <a href="/assist">Help</a>
         </div>
     </header>
 
