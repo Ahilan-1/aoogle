@@ -52,6 +52,7 @@ try:
     ddgs_available = True
 except ImportError:
     ddgs_available = False
+import pg_db
 
 # ── Encryption layer (AES-256-GCM) ──
 _ENCRYPTION_KEY_HEX = os.environ.get('ENCRYPTION_KEY', '')
@@ -2164,6 +2165,11 @@ def detect_user_country():
 DATA_FILE = os.environ.get('DATA_FILE') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data.json')
 BACKUP_DIR = os.environ.get('BACKUP_DIR') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backups')
 
+# Postgres mirror (optional). When DATABASE_URL is set, data.json is still the
+# source of truth but every save is mirrored to Postgres and reads try Postgres
+# first, falling back to data.json when a key is missing or PG is unreachable.
+DATABASE_URL = os.environ.get('DATABASE_URL', '').strip()
+
 _json_cache = {'data': None, 'ts': 0}
 _JSON_CACHE_TTL = 2
 
@@ -2171,11 +2177,12 @@ def _load_json():
     now = time.time()
     if _json_cache['data'] is not None and (now - _json_cache['ts']) < _JSON_CACHE_TTL:
         return _json_cache['data']
-    result = None
+    # 1) Read the source-of-truth copy (S3 or local data.json).
+    file_doc = None
     if S3_ENABLED and s3_client:
         try:
             resp = s3_client.get_object(Bucket=S3_BUCKET, Key=S3_DATA_KEY)
-            result = json.loads(resp['Body'].read().decode('utf-8'))
+            file_doc = json.loads(resp['Body'].read().decode('utf-8'))
         except ClientError as e:
             if e.response['Error']['Code'] == 'NoSuchKey':
                 pass
@@ -2187,9 +2194,24 @@ def _load_json():
         if os.path.exists(DATA_FILE):
             try:
                 with open(DATA_FILE, 'r', encoding='utf-8-sig') as f:
-                    result = json.load(f)
+                    file_doc = json.load(f)
             except Exception as e:
                 app.logger.error(f"data.json parse failed: {e}")
+    # 2) Try Postgres first; data.json fills any keys PG is missing.
+    pg_doc = None
+    if DATABASE_URL and pg_db.enabled():
+        pg_doc = pg_db.pg_load_all()
+    if pg_doc is not None:
+        if pg_db.last_save_ok() is False:
+            # Last mirror write failed: trust the freshly-written data.json copy.
+            result = dict(pg_doc)
+            result.update(file_doc or {})
+        else:
+            result = dict(file_doc or {})
+            result.update(pg_doc)
+    else:
+        # PG disabled or unreachable: plain data.json behavior.
+        result = file_doc
     if result is not None:
         _json_cache['data'] = result
         _json_cache['ts'] = now
@@ -2204,6 +2226,14 @@ def _load_json():
 def _invalidate_json_cache():
     _json_cache['data'] = None
     _json_cache['ts'] = 0
+
+def _mirror_to_pg(data):
+    """Best-effort mirror of a successful data.json save into Postgres."""
+    if DATABASE_URL and pg_db.enabled():
+        try:
+            pg_db.pg_save_all(data)
+        except Exception as e:
+            app.logger.error(f"PG mirror error: {e}")
 
 def _save_json(data):
     _invalidate_json_cache()
@@ -2235,6 +2265,7 @@ def _save_json(data):
             with open(tmp_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2)
             os.replace(tmp_path, DATA_FILE)
+            _mirror_to_pg(data)
             return True
         except Exception as e:
             app.logger.error(f"data.json save error: {e}")
@@ -2262,6 +2293,7 @@ def _save_json(data):
             Body=json.dumps(data, indent=2).encode('utf-8'),
             ContentType='application/json'
         )
+        _mirror_to_pg(data)
         return True
     except Exception as e:
         app.logger.error(f"S3 save error: {e}")
@@ -2340,6 +2372,25 @@ class DataManager:
         else:
             self.data = {"reports": [], "blacklist": {}, "total_searches": 0, "celebration": "", "announcement": "", "feedback": []}
             _save_json(self.data)
+        # Postgres mirror: report connection state and auto-seed on first boot
+        # with an empty app_data table so the DB is never left blank.
+        if DATABASE_URL:
+            if not pg_db.enabled():
+                app.logger.warning("DATABASE_URL is set but Postgres support is unavailable (psycopg2 missing); using data.json only")
+            else:
+                try:
+                    existing = pg_db.pg_load_all()
+                    if existing is None:
+                        app.logger.warning("Postgres mirror configured but unreachable; falling back to data.json")
+                    elif not existing and self.data:
+                        if pg_db.pg_save_all(self.data):
+                            app.logger.info("Postgres app_data auto-seeded from data.json (%d keys)", len(self.data))
+                        else:
+                            app.logger.warning("Postgres auto-seed failed; using data.json fallback")
+                    else:
+                        app.logger.info("Postgres mirror ready (%d keys in app_data)", len(existing))
+                except Exception as e:
+                    app.logger.error(f"Postgres auto-seed failed: {e}")
 
     def add_feedback(self, category, message, query='', url='', page='', contact=''):
         """Store user feedback submitted from the in-app feedback modal.
@@ -5912,6 +5963,7 @@ class ImprovedSearch:
 
     def search(self, query, page=1, filter_type='general', region=None, force=False):
         """Main search method with pagination and fallback"""
+        self._search_ts = time.time()
         self._current_region = region
         per_page = 20
         cache_key = self._get_cache_key(f"{query}_{filter_type}_{region or 'all'}", 1)
@@ -5926,7 +5978,13 @@ class ImprovedSearch:
             all_results = None
 
             futures = {}
-            for search_url in self.search_urls:
+            # Fast path: only the DDG-family engines run synchronously — they
+            # answer in ~1s. The slow engines (google/brave/reddit_scrape/
+            # invidious, 5-15s timeouts) are fetched in the background and
+            # merged into the cache so the NEXT query gets full cross-engine
+            # diversity without paying their latency on the first one.
+            fast_engines = [u for u in self.search_urls if u.split('://')[0] in ('ddg_html', 'ddgs', 'ddg_reddit', 'ddg_video')]
+            for search_url in fast_engines:
                 future = self.executor.submit(self._search_single_engine, search_url, query, page, region)
                 futures[future] = search_url
 
@@ -5936,9 +5994,9 @@ class ImprovedSearch:
                 # slow straggler can never stack on top of the panel fetches.
                 # Every engine that finishes inside the window still contributes
                 # to the RRF fusion — ranking/quality logic is untouched.
-                _engine_deadline = time.monotonic() + 3.0
+                _engine_deadline = time.monotonic() + 1.8
                 # Stage 1: collect fast results (DDG sources typically finish in 1-2s)
-                done, not_done = wait(list(futures.keys()), timeout=2.5, return_when=FIRST_COMPLETED)
+                done, not_done = wait(list(futures.keys()), timeout=1.6, return_when=FIRST_COMPLETED)
                 for future in done:
                     try:
                         current_results = future.result()
@@ -5985,6 +6043,7 @@ class ImprovedSearch:
                 ranked_results = self._rerank_with_content(query, ranked_results)
                 all_results = [result.to_dict() for result in ranked_results]
                 self._save_to_cache(cache_key, all_results)
+            app.logger.info(f"[TRACE] engine+rank done in {time.time()-self._search_ts:.2f}s n={len(all_results) if all_results else 0}")
 
         if not all_results:
             return [], 0
@@ -9078,6 +9137,7 @@ def search():
                 places_prompt = places_query
 
         results, total_results = search_engine.search(query, page, filter_type, region or None, force=(request.args.get('refresh') == '1'))
+        app.logger.info(f"[TRACE] search_engine.search() done in {time.time()-_search_start:.2f}s total={total_results}")
         serper_fallback = getattr(search_engine, '_serper_fallback_used', False)
 
         verified_info = data_manager.get_verified_info(query.lower().strip(), user_country)
@@ -9192,6 +9252,7 @@ def search():
             for _pfut in _panel_futures.values():
                 if not _pfut.done():
                     _pfut.cancel()
+        app.logger.info(f"[TRACE] panel collection done in {time.time()-_search_start:.2f}s")
 
         # Interleave video results into main results (BEFORE grouping so videos appear in domain groups).
         # Videos are placed by relevance to the query: demoted for meaning/lyrics/analysis queries
@@ -9246,6 +9307,7 @@ def search():
             ai_summary_enabled = prefs.get('ai_summary', True)
 
         search_time = round(time.time() - _search_start, 2)
+        app.logger.info(f"[TRACE] post-search processing done in {search_time:.2f}s")
 
         resp = make_response(render_template(
             'search.html',

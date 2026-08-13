@@ -15,6 +15,7 @@ resend>=0.5
 markdown>=3.5
 cryptography>=42.0
 tiktoken>=0.7
+psycopg2-binary>=2.9
 
 # Testing
 pytest>=8.0
