@@ -8329,6 +8329,12 @@ ANON_API_WINDOW = 3600
 KEY_API_LIMIT = 80
 KEY_API_WINDOW = 1800
 
+# First-party whitelist: the Arlong Pure browser extension sends this static
+# token in the X-Arlong-Client header and is exempt from anonymous IP limits.
+# Requests without a matching header are never whitelisted, so ordinary
+# anonymous traffic keeps the anti-abuse floor.
+EXTENSION_CLIENT_TOKEN = os.environ.get('ARLONG_EXTENSION_TOKEN', 'arlong-pure-extension-v1')
+
 anon_api_limiter = RateLimiter(limit=ANON_API_LIMIT, window=ANON_API_WINDOW)
 
 # Feedback portal: a light anti-spam throttle (5 submissions/hour/IP).
@@ -9623,6 +9629,11 @@ def api_search():
     ip = request.headers.get('X-Forwarded-For', request.remote_addr)
     ip = ip.split(',')[0].strip()
 
+    # First-party whitelist: the Arlong Pure extension identifies itself with
+    # the X-Arlong-Client header and is exempt from anonymous IP limits.
+    client_token = request.headers.get('X-Arlong-Client', '').strip()
+    whitelisted_client = bool(client_token) and client_token == EXTENSION_CLIENT_TOKEN
+
     # Resolve access tier: Bearer token header or key/api_key query param.
     api_key = None
     auth_header = request.headers.get('Authorization', '')
@@ -9632,7 +9643,10 @@ def api_search():
         api_key = (request.args.get('key', '') or request.args.get('api_key', '') or request.args.get('apikey', '')).strip()
 
     tier = 'token'
-    if api_key:
+    if whitelisted_client:
+        tier = 'extension'
+        rate = {"allowed": True, "remaining": -1, "retry_after": 0}
+    elif api_key:
         key_rec = data_manager.get_api_key_by_value(api_key)
         if not key_rec or key_rec.get('status') != 'active':
             resp = jsonify({
@@ -9722,6 +9736,8 @@ def api_search():
             mimetype='application/json'
         )
         resp.headers['X-RateLimit-Remaining'] = str(rate['remaining'])
+        if whitelisted_client:
+            resp.headers['X-Arlong-Client-Whitelisted'] = '1'
         # Identical public results: safe for clients and shared caches to reuse
         # briefly, cutting repeat engine load. Overrides the no-store default.
         resp.headers['Cache-Control'] = 'public, max-age=300'
