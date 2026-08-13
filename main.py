@@ -1114,7 +1114,7 @@ def add_security_headers(response):
     response.headers['Permissions-Policy'] = 'interest-cohort=()'
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, X-Requested-With'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, X-Requested-With, X-Arlong-Client'
     response.headers['Access-Control-Max-Age'] = '86400'
     # User-specific HTML and API pages must not be cached by shared proxies;
     # individual routes opt into public caching by overriding this header.
