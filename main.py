@@ -9858,7 +9858,15 @@ def _arlong_completeness_check(q, answer, sources, max_followups=2):
                     'surface the missing data (e.g. "RTX 5080 TDP memory bandwidth official specs", '
                     '"Model X official datasheet TDP bandwidth"). At most ' + str(max_followups) +
                     ' queries. NEVER invent queries when the answer is complete — asking is the '
-                    'exception, not the rule.'
+                    'exception, not the rule.\n'
+                    'For NUMERIC metrics (GDP, population, price, rating, specs, dates), the '
+                    'answer must contain the actual value — a hedge like "not stated in the '
+                    'sources" means the data point is MISSING. When it is missing, generate '
+                    'queries aimed at pages that expose the raw number in plain text: Wikipedia '
+                    'data/table pages (e.g. "List of countries by GDP (nominal)"), statistics '
+                    'sites (trading economics, statista, worldometers), official releases (IMF '
+                    'WEO, World Bank data), and include the current year (2026) when the '
+                    'question asks for "current" data.'
                 )},
                 {'role': 'user', 'content': f"Question: {q}\n\nDraft answer:\n{answer[:1200]}\n\nSources used:\n{src_lines}\n\nCheck completeness."},
             ],
@@ -9896,59 +9904,61 @@ def _arlong_completeness_check(q, answer, sources, max_followups=2):
 
 
 def _arlong_followup_retrieve(q, queries, limit=3):
-    """Run follow-up searches targeting missing data and return
-    (extra_sources, extra_context). extra_sources is a list of
-    {url, title, content, snippet} dicts, already relevance-gated by the
-    neural layer, ready to inject into arlong_ai_answer on a second pass.
+    """Recursive-Execution-Loop retrieval: run every missing-data query through
+    the Gen-2 agentic fan-out (parallel sub-searches) and ground the winners
+    with FULL-PAGE reads, so the re-answer model sees raw values (GDP, prices,
+    specs) instead of search snippets. Returns (extra_sources, extra_context)
+    where extra_sources carry {url, title, content} ready to inject into
+    arlong_ai_answer on the next round.
     """
-    import httpx as _httpx
-    from concurrent.futures import ThreadPoolExecutor, as_completed
     try:
-        import neural_search as _neural
-    except Exception:
-        _neural = None
-
-    urls = []
-    seen = set()
-    for fq in (queries or []):
-        hits = _serper_web_search(fq)
-        for h in (hits or []):
-            u = (h.get('url') or '').strip()
-            if u.startswith('http') and u not in seen:
-                seen.add(u)
-                urls.append((u, h.get('title') or '', h.get('snippet') or ''))
-    if not urls:
+        tasks = [{'label': f'Follow-up {i + 1}', 'query': fq}
+                 for i, fq in enumerate((queries or [])[:limit])]
+        if not tasks:
+            return [], ''
+        flat, _groups = _ai_agentic_gather(q, tasks, per_query=4)
+        if not flat:
+            return [], ''
+        _ai_ground_results(q, flat, per_fetch=4, max_fetch=8)
+        return _ai_agentic_context(flat)
+    except Exception as e:
+        app.logger.warning(f"AI follow-up retrieve failed: {e}")
         return [], ''
 
-    fetched = []
-    deadline = time.monotonic() + 6.0
-    with ThreadPoolExecutor(max_workers=min(4, len(urls))) as pool:
-        futs = {pool.submit(_arlong_fetch_page_text, u): (u, t, s) for u, t, s in urls[:limit]}
-        for fut in as_completed(futs, timeout=6):
-            if time.monotonic() > deadline:
-                break
-            u, t, s = futs[fut]
-            try:
-                text = fut.result()
-                if text and len(text) > 100:
-                    fetched.append((u, t, text, s))
-            except Exception:
-                continue
 
-    out = []
-    ctx = ''
-    for u, t, text, snip in fetched:
-        if _neural is not None:
-            try:
-                ev = _neural.evaluate_page(q, title=t, url=u, snippet=snip[:200], content=text[:4000])
-                if ev['reputation']['status'] == 'BLOCKED' or ev['relevance_score'] < 0.35:
-                    app.logger.info(f"AI follow-up dropped {u} (rel={ev['relevance_score']})")
-                    continue
-            except Exception:
-                pass
-        out.append({'url': u, 'title': t or '', 'content': text[:2000], 'snippet': snip[:300]})
-        ctx += f"\n[Follow-up] {t or u}: {snip[:300]} ({u})"
-    return out, ctx
+def _arlong_recursive_followup(q, answer, sources, extra_sources, extra_context, max_rounds=3):
+    """Recursive Execution Loop: gap-check the draft answer, spawn targeted
+    searches for any missing data points, MERGE the new grounded context with
+    everything from prior rounds, and re-answer — repeating until the answer is
+    complete or max_rounds is reached. Returns (answer, sources, followup)
+    where followup = {'ran', 'queries', 'rounds'}."""
+    followup = {'ran': False, 'queries': [], 'rounds': 1}
+    try:
+        for rnd in range(2, max_rounds + 1):
+            missing = _arlong_completeness_check(q, answer, sources)
+            if not missing:
+                break
+            f_extra, f_ctx = _arlong_followup_retrieve(q, missing)
+            if not (f_extra or f_ctx):
+                break
+            followup['ran'] = True
+            followup['queries'].extend(missing)
+            merged_sources = (list(extra_sources) if extra_sources else []) + list(f_extra)
+            merged_ctx = ((str(extra_context or '').strip() + '\n' + f_ctx).strip()
+                          if f_ctx else (extra_context or None))
+            answer, sources = arlong_ai_answer(
+                q, [],
+                extra_sources=merged_sources or None,
+                extra_context=merged_ctx or None,
+                followup_round=rnd,
+            )
+            followup['rounds'] = rnd
+        return answer, sources, followup
+    except AIAllModelsFailedError:
+        return answer, sources, followup
+    except Exception as e:
+        app.logger.error(f"Recursive follow-up error: {e}")
+        return answer, sources, followup
 
 
 def _serper_web_search(q, understood=None):
@@ -10016,6 +10026,8 @@ def api_ai_summary():
 
         web_context = ''
         sources = []
+        extra_sources = []
+        extra_context = ''
         import re as _re
         if not (url and snippet):
             # ── Planner LLM decides single vs multi-hop and emits the sub-search
@@ -10030,6 +10042,8 @@ def api_ai_summary():
                     _ai_ground_results(q, _flat, per_fetch=4, max_fetch=8)
                     _extra, _ctx = _ai_agentic_context(_flat)
                     web_context += _ctx
+                    extra_sources = list(_extra)
+                    extra_context = _ctx
                     sources.extend({'url': s['url'], 'title': s['title']} for s in _extra)
             if not web_context:
                 import httpx as _httpx
@@ -10079,6 +10093,7 @@ def api_ai_summary():
                                         idx = len(sources) + 1
                                         sources.append({'url': r_url, 'title': r_title})
                                         web_context += f"\n\n[Source {idx}]\nURL: {r_url}\nTitle: {r_title}\nContent: {text}"
+                                        extra_sources.append({'url': r_url, 'title': r_title, 'content': text})
                             except Exception:
                                 continue
                     except Exception:
@@ -10110,6 +10125,7 @@ def api_ai_summary():
                                     idx = len(sources) + 1
                                     sources.append({'url': fu, 'title': ''})
                                     web_context += f"\n\n[Source {idx}]\nURL: {fu}\nContent: {text}"
+                                    extra_sources.append({'url': fu, 'title': '', 'content': text})
                         except Exception:
                             continue
                 except Exception as fetch_err:
@@ -10171,7 +10187,25 @@ Give the most accurate answer you can in 2-3 sentences. If you are not certain, 
         )
         answer = polish_ai_summary_text(completion.choices[0].message.content.strip())
 
-        # Post-process: replace hallucinated URLs with real source URLs
+        # ── Recursive Execution Loop ──
+        # Gap-check the draft: if concrete data points are still missing (e.g.
+        # the GDP figure), spawn targeted searches, MERGE the new grounded
+        # context with everything from round 1, and re-answer until complete or
+        # 3 rounds. Every round reads full page bodies so raw numbers actually
+        # reach the synthesis model.
+        _followed = {'ran': False, 'queries': [], 'rounds': 1}
+        try:
+            answer, sources, _followed = _arlong_recursive_followup(
+                q, answer, sources, extra_sources, extra_context, max_rounds=3,
+            )
+        except Exception as _e:
+            app.logger.warning(f"AI summary recursive follow-up failed: {_e}")
+
+        # Post-process: replace hallucinated URLs with real source URLs.
+        # When the recursive loop re-answered, arlong_ai_answer already
+        # formatted the citations, so skip round-1's markdown rewrite.
+        if _followed.get('ran'):
+            return jsonify({'ok': True, 'summary': answer, 'sources': sources})
         if url and snippet:
             safe_url = url.replace(')', '%29')
             answer = _re.sub(r'\[([^\]]+)\]\([^)]+\)', lambda m: f'[{m.group(1)}]({safe_url})', answer)
@@ -10537,8 +10571,9 @@ def _arlong_search_payload(q, page=1):
 def _arlong_answer_payload(q):
     """Run the grounded answer pipeline and build the agentic response dict.
     Raises AIAllModelsFailedError on model unavailability.
-    Uses multi-step reasoning: if the first pass misses concrete data points,
-    it runs a follow-up search automatically and re-answers on round 2.
+    Uses a Recursive Execution Loop: if the first pass misses concrete data
+    points, it spawns targeted searches, merges the grounded context, and
+    re-answers until complete (max 3 rounds).
     """
     try:
         results, _total = search_engine.search(q, 1)
@@ -10566,7 +10601,7 @@ def _arlong_answer_payload(q):
             app.logger.warning(f"Arlong answer agentic plan failed: {e}")
     if not extra_sources:
         try:
-            _top = _ai_pick_sources(q, _ai_clean_sources(q, results), 6)
+            _top = _ai_top_results(_plan.get('query') or q, 6)
             if _top:
                 _ai_ground_results(q, _top, per_fetch=4, max_fetch=8)
                 extra_sources, extra_context = _ai_agentic_context(_top)
@@ -10578,33 +10613,17 @@ def _arlong_answer_payload(q):
         extra_sources=extra_sources or None,
         extra_context=(extra_context if extra_sources else None),
     )
-    followup = {'ran': False, 'queries': [], 'rounds': 1}
+    # ── Recursive Execution Loop ──
+    # Gap-check the round-1 answer: if concrete data points are still missing
+    # (e.g. the GDP figure), spawn targeted searches, MERGE the grounded
+    # context with everything seen so far, and re-answer until complete or
+    # max_rounds. Unlike the old single follow-up, every round reads full
+    # page bodies, so raw numbers actually reach the synthesis model.
+    answer, sources, followup = _arlong_recursive_followup(
+        q, answer, sources, extra_sources, extra_context, max_rounds=3,
+    )
     if plan_note:
         followup['plan'] = plan_note
-    try:
-        missing_queries = _arlong_completeness_check(q, answer, sources)
-        if missing_queries:
-            f_extra, f_ctx = _arlong_followup_retrieve(q, missing_queries)
-            if f_extra or f_ctx:
-                app.logger.info(
-                    f"Arlong answer follow-up: {len(missing_queries)} queries "
-                    f"→ {len(f_extra)} extra sources"
-                )
-                answer2, sources2 = arlong_ai_answer(
-                    q, [],
-                    extra_sources=extra_sources + (f_extra or []) or None,
-                    extra_context=(extra_context + '\n' + f_ctx).strip() if f_ctx else (extra_context or None),
-                    followup_round=2,
-                )
-                answer = answer2
-                sources = sources2
-                followup = {'ran': True, 'queries': missing_queries, 'rounds': 2}
-                if plan_note:
-                    followup['plan'] = plan_note
-    except AIAllModelsFailedError:
-        pass  # keep round-1 answer when models are too busy for round 2
-    except Exception as e:
-        app.logger.error(f"Arlong answer follow-up error: {e}")
     evaluated = [_arlong_eval_result(q, r, i) for i, r in enumerate(results[:5], start=1)]
     response = {
         "query": q,
@@ -12812,17 +12831,21 @@ _AI_AGENTIC_PLAN_SYSTEM = (
     'keyword query that captures the whole request. Simple lookups ("python '
     'tutorial", "what is the capital of France", "best restaurants in NYC", '
     '"compare iphone 16 and s25") are single.\n'
-    '- MULTI is right only for genuinely MULTI-HOP questions: a fact must first be '
-    'discovered, and its VALUE is then reused to look up another fact, so each hop '
-    'needs its own search. Example: "find the birth city of the director who won '
-    'Best Director the year Everything Everywhere All at Once won Best Picture; '
-    'what is the population of that city?" needs:\n'
+    '- MULTI is required whenever the question is MULTI-HOP: a value must first '
+    'be discovered and its VALUE is then reused to look up another fact, so each '
+    'hop needs its own search. THE #1 SIGNAL IS A NESTED RELATIVE CLAUSE feeding '
+    'a later clause: "...the director WHO won ... the YEAR that ... won Best '
+    'Picture; what is the population of THAT city/country?" Always split these '
+    'into one search per hop.\n'
+    'Example (must produce mode:multi): "find the birth city of the director who '
+    'won Best Director the year Everything Everywhere All at Once won Best '
+    'Picture; what is the population of that city?" needs:\n'
     '   1. label "Best Director winner" query "Everything Everywhere All at Once '
     'Best Picture year Best Director winner"\n'
     '   2. label "Birth city" query "Daniel Kwan director birth city birthplace"\n'
     '   3. label "Population" query "Westborough Massachusetts population 2026"\n'
-    '- MULTI is also right when the question names 2+ INDEPENDENT topics that each '
-    'deserve their own search (a wedding needs venues AND caterers AND a budget).\n'
+    '- Another multi case: 2+ INDEPENDENT topics that each deserve their own '
+    'search (a wedding needs venues AND caterers AND a budget).\n'
     'Rules: at most 3 tasks; every query is a concrete self-contained keyword '
     'search, NOT a question and NOT the user\'s whole sentence; labels are 2-6 '
     'words; never split one topic into overlapping queries.'
