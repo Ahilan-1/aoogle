@@ -283,6 +283,8 @@
     .ai-clarify-open:hover{opacity:.9}
 
     .ai-report-cta{background:var(--bg-inner);border:1px solid var(--border-color);border-radius:10px;padding:18px 20px;margin:8px 0}
+    .ai-regen-menu{background:var(--bg-inner);border:1px solid var(--border-color);border-radius:10px;padding:18px 20px;margin:8px 0}
+    .ai-regen-title{font-size:14.5px;font-weight:700;color:#FFFFFF;margin-bottom:14px}
     .ai-report-title{font-size:14.5px;font-weight:700;color:#FFFFFF;margin-bottom:6px}
     .ai-report-sub{font-size:13px;color:var(--text-muted);line-height:1.55;margin-bottom:14px}
     .ai-report-actions{display:flex;flex-wrap:wrap;gap:10px}
@@ -748,6 +750,12 @@
                 return;
             }
             chatId = d.chat_id;
+            ov._q = displayQ;
+            ov._cid = d.chat_id || pendingChatId || null;
+            ov._deep = deepMode ? true : false;
+            ov._results = d.results || [];
+            ov._groups = (d.groups && d.groups.length) ? d.groups : null;
+            ov._report = false;
             if(d.msg_used != null) setUsage(d.msg_used, d.msg_limit || LIMIT);
             if(d.ctx_used != null) setCtxUsage(d.ctx_used, d.ctx_limit || CTX_LIMIT);
             if(d.chat_id && !pendingChatId){
@@ -793,6 +801,7 @@
         ov._pendingCid = cid || null;
         ov._pendingResults = results || [];
         ov._pendingIdx = document.querySelectorAll('.ai-assistant').length - 1;
+        ov._report = false;
         var md = ov.querySelector('.ai-md');
         if(md) md.innerHTML = reportCtaHtml((results||[]).length);
         scrollBottom();
@@ -802,9 +811,10 @@
         if(!ov) return;
         if(busy) return;
         busy = true; setBusy(true);
+        ov._report = true;
         var md = ov.querySelector('.ai-md');
         if(md) md.innerHTML = '<span class="ai-cursor"></span>';
-        streamAnswer(ov._pendingQ, ov._pendingCid, ov._pendingResults||[], ov, false, true, true, ov._pendingIdx);
+        streamAnswer(ov._q || ov._pendingQ, ov._cid || ov._pendingCid, ov._results || ov._pendingResults || [], ov, false, true, true, ov._pendingIdx);
     };
     window.declineReport = function(btn){
         var ov = btn ? btn.closest('.ai-overview') : null;
@@ -1202,28 +1212,69 @@
     window.regenerate = function(btn){
         if(busy) return;
         var ov = currentOv(btn);
-        var thread = ov.parentNode;
-        var userMsg = thread.previousElementSibling;
-        var q = '';
-        if(userMsg && userMsg.querySelector('.ai-user-bubble')){
-            q = userMsg.querySelector('.ai-user-bubble').textContent.trim();
-        }
+        if(!ov) return;
+        var q = ov._q || ov._pendingQ || '';
         if(!q) q = window._lastQuery || '';
         if(!q) return;
-        /* remove previous assistant frame, then re-stream with existing chat context */
-        var sources = [];
-        var frame = (ov.classList && ov.classList.contains('ai-assistant')) ? ov : (ov.parentNode || ov);
-        frame.querySelectorAll('.ai-link-card').forEach(function(c, i){
-            var a = c.querySelector('.ai-link-title');
-            var d = c.querySelector('.ai-link-domain');
-            if(a){ sources.push({title: a.textContent.replace(/^\d+\.\s*/,''), url: a.href, domain: d?d.textContent:'', favicon:'https://www.google.com/s2/favicons?domain='+encodeURIComponent(a.hostname), snippet:''}); }
-        });
+        var md = ov.querySelector('.ai-md');
+        if(md) md.innerHTML = ''
+            + '<div class="ai-regen-menu">'
+            + '<div class="ai-regen-title">How would you like to retry?</div>'
+            + '<button type="button" class="ai-btn-main" onclick="redoQuery(this)">Redo entire query (new multi-search)</button>'
+            + '<button type="button" class="ai-btn-ghost" onclick="redoOverview(this)">Regenerate ' + (ov._report ? 'report' : 'AI overview') + ' only (keep sources)</button>'
+            + '</div>';
+    };
+    window.redoQuery = function(btn){
+        if(busy) return;
+        if(refreshDisableState()) return;
+        var ov = currentOv(btn);
+        if(!ov) return;
+        var q = ov._q || ov._pendingQ || '';
+        if(!q) return;
+        /* re-run the FULL search pipeline (planner + fan-out + grounding),
+           keeping the original deep flag so the redo matches the first attempt */
+        deepMode = ov._deep ? true : false;
+        syncDeepBtns();
+        var cid = ov._cid || ov._pendingCid;
+        var thread = ov.parentNode;
+        thread.remove();
+        submitQuery(q, null, cid, true);
+    };
+    window.redoOverview = function(btn){
+        if(busy) return;
+        var ov = currentOv(btn);
+        if(!ov) return;
+        var q = ov._q || ov._pendingQ || '';
+        if(!q) return;
+        var report = ov._report ? true : false;
+        var cid = ov._cid || ov._pendingCid || chatId;
+        var results = ov._results || ov._pendingResults || [];
+        var pidx = ov._pendingIdx != null ? ov._pendingIdx : (document.querySelectorAll('.ai-assistant').length - 1);
+        var frame = ov.parentNode;
+        var srcZone = frame.querySelector('.ai-sources');
+        var zoneHtml = srcZone ? srcZone.innerHTML : '';
+        var thread = frame;
         thread.remove();
         busy = true;
         var nf = showAssistantFrame();
         setBusy(true);
-        if(sources.length) renderSources(nf, sources);
-        streamAnswer(q, chatId, sources, nf.querySelector('.ai-overview'), true);
+        var ov2 = nf.querySelector('.ai-overview');
+        if(zoneHtml){
+            var zone = nf.querySelector('.ai-src-zone');
+            zone.style.display = '';
+            zone.innerHTML = zoneHtml;
+        }
+        ov2._q = q; ov2._cid = cid; ov2._deep = ov._deep; ov2._results = results; ov2._report = report; ov2._pendingIdx = pidx;
+        if(report){
+            var lab = ov2.querySelector('.ai-ov-label');
+            if(lab){
+                var tn = lab.lastChild;
+                if(tn && tn.nodeType === 3){ tn.nodeValue = ' Deep Report'; }
+            }
+        }
+        var md = ov2.querySelector('.ai-md');
+        if(md) md.innerHTML = '<span class="ai-cursor"></span>';
+        streamAnswer(q, cid, results, ov2, true, report ? true : false, report, pidx);
         window._lastQuery = q;
     };
     window.feedback = function(btn, val){
@@ -1292,6 +1343,12 @@
                 thread.appendChild(a);
                 var mdEl = a.querySelector('.ai-md');
                 var ovEl = a.querySelector('.ai-overview');
+                ovEl._q = m.query || '';
+                ovEl._cid = chatId;
+                ovEl._deep = m.deep ? true : false;
+                ovEl._results = srcs;
+                ovEl._groups = null;
+                ovEl._report = false;
                 if(m.pending && !m.content && m.multitask){
                     ovEl._pendingQ = m.query || '';
                     ovEl._pendingCid = chatId;

@@ -5,6 +5,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import pytest
 import main as m
+import ai_router as ar
 
 
 class TestAgenticPlanOffline:
@@ -223,3 +224,140 @@ class TestRecursiveFollowup:
         answer, sources, followup = m._arlong_recursive_followup('q', 'round1', [], [], '', max_rounds=3)
         assert answer == 'round1'
         assert followup['ran'] is True
+
+
+class _Clock:
+    """Injectable clock for ModelRouter tests (t starts at 1000s)."""
+    def __init__(self):
+        self.t = 1000.0
+
+    def __call__(self):
+        return self.t
+
+
+_BUDGETS = {'a': {'rpm': 30, 'rpd': 1000, 'tpm': 100, 'tpd': 5000},
+            'b': {'rpm': 30, 'rpd': 1000, 'tpm': 100, 'tpd': 5000}}
+
+
+class TestRouterBestAvailable:
+    def test_picks_closest_to_recovery_when_all_exhausted(self):
+        """pick() finds no headroom anywhere, but pick_best_available() still
+        returns the model whose rate window frees up first instead of None."""
+        clock = _Clock()
+        r = ar.ModelRouter(_BUDGETS, order=['a', 'b'], now=clock)
+        r.record('a', tokens=80)          # t=1000 → ages out at t=1060
+        clock.t = 1010
+        r.record('b', tokens=80)          # t=1010 → ages out at t=1070
+        clock.t = 1020
+        assert r.pick(est_tokens=50) is None, 'all models over budget'
+        assert r.pick_best_available(est_tokens=50) == 'a', \
+            'must transfer to the model closest to usable (a recovers first)'
+
+    def test_skips_hard_cooldown(self):
+        clock = _Clock()
+        r = ar.ModelRouter(_BUDGETS, order=['a', 'b'], now=clock)
+        r.record('a', tokens=80)
+        clock.t = 1010
+        r.record('b', tokens=80)
+        r.mark_failure('b', 'rate limit')   # b is closest but cooled down
+        clock.t = 1020
+        assert r.pick_best_available(est_tokens=50) == 'a'
+
+    def test_tiebreaks_by_failure_streak(self):
+        clock = _Clock()
+        r = ar.ModelRouter(_BUDGETS, order=['a', 'b'], now=clock)
+        r.record('a', tokens=80)
+        r.record('b', tokens=80)
+        r.mark_failure('a', '429')          # same usage, but a has a failure
+        clock.t = 1030                      # a's 15s cooldown has expired
+        assert r.pick_best_available(est_tokens=50) == 'b'
+
+    def test_returns_none_when_everything_in_cooldown(self):
+        clock = _Clock()
+        r = ar.ModelRouter(_BUDGETS, order=['a', 'b'], now=clock)
+        r.mark_failure('a', '429')
+        r.mark_failure('b', '429')
+        clock.t = 1005
+        assert r.pick_best_available() is None
+
+
+class _FakeRouter:
+    """Stub router for exercising the middleware fallback path."""
+    def __init__(self, pick=None, best=None):
+        self.pick_result = pick
+        self.best_result = best
+        self.failures = []
+        self.recorded = []
+
+    def pick(self, est_tokens=0, prefer=None):
+        return self.pick_result
+
+    def pick_best_available(self, est_tokens=0):
+        return self.best_result
+
+    def mark_failure(self, model, error=''):
+        self.failures.append((model, error))
+
+    def record(self, model, tokens=0, success=True):
+        self.recorded.append((model, tokens, success))
+
+
+class TestMiddlewareBestAvailable:
+    def _stub_llm(self, monkeypatch, router, on_create):
+        calls = {}
+
+        class _FakeClient:
+            class _Completions:
+                def __init__(self, cb):
+                    self._cb = cb
+                def create(self, **kw):
+                    calls.update(kw)
+                    return self._cb(kw)
+            def __init__(self):
+                self.chat = type('_Chat', (), {
+                    'completions': self._Completions(on_create)})()
+
+        monkeypatch.setattr(m, 'AI_MODE_GROQ_API_KEY', 'test-key')
+        monkeypatch.setattr(m, '_ai_groq', lambda api_key=None: _FakeClient())
+        monkeypatch.setattr(m._ai_router_module, 'get_router', lambda: router)
+        return calls
+
+    def test_completion_transfers_to_best_available(self, monkeypatch):
+        """When pick() says 'all busy', _ai_completion must still try the model
+        closest to usable instead of immediately declaring an overload."""
+        router = _FakeRouter(pick=None, best='b')
+        calls = self._stub_llm(
+            monkeypatch, router,
+            lambda kw: type('R', (), {'ok': True}),
+        )
+        resp = m._ai_completion([{'role': 'user', 'content': 'hi'}], max_tokens=20)
+        assert resp.ok
+        assert calls['model'] == 'b'
+        assert router.recorded, 'successful best-available attempt must be recorded'
+
+    def test_completion_overloads_only_when_no_best_available(self, monkeypatch):
+        router = _FakeRouter(pick=None, best=None)
+        self._stub_llm(monkeypatch, router, lambda kw: None)
+        with pytest.raises(m.AIAllModelsFailedError) as ei:
+            m._ai_completion([{'role': 'user', 'content': 'hi'}], max_tokens=20)
+        assert ei.value.overloaded is True
+
+    def test_stream_transfers_to_best_available(self, monkeypatch):
+        router = _FakeRouter(pick=None, best='b')
+        calls = {}
+
+        class _FakeClient:
+            class _Completions:
+                def create(self, **kw):
+                    calls.update(kw)
+                    return object()
+            def __init__(self):
+                self.chat = type('_Chat', (), {
+                    'completions': self._Completions()})()
+
+        monkeypatch.setattr(m, 'AI_MODE_GROQ_API_KEY', 'test-key')
+        monkeypatch.setattr(m, '_ai_groq', lambda: _FakeClient())
+        monkeypatch.setattr(m._ai_router_module, 'get_router', lambda: router)
+        model, stream = m._ai_open_stream([{'role': 'user', 'content': 'hi'}], max_tokens=20)
+        assert model == 'b'
+        assert calls['stream'] is True

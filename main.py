@@ -12428,23 +12428,26 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
         model = None
         if router is not None:
             model = router.pick(est_tokens=est_tokens, prefer=model_list[0] if model_list else None)
-        if model is None:
+            if model is None:
+                # Smart transfer: every model is at/near its rolling budget.
+                # Rather than failing the user, transfer to the model closest
+                # to usable right now (not in hard cooldown, shortest recovery,
+                # fewest recent failures). The API is the final arbiter — a 429
+                # there escalates that model's cooldown and the loop naturally
+                # moves on to the next-closest model.
+                model = router.pick_best_available(est_tokens=est_tokens)
+                if model is None and not tried:
+                    # Even the closest model is in hard cooldown — genuinely busy.
+                    overloaded = True
+                    errors.append('all models busy (rate limited or in cooldown)')
+                    break
+        else:
             # Plain-iteration fallback is ONLY for environments with no router
-            # (tests / no budgets). When a router exists, its pick() already
-            # skipped cooldown/over-budget models — falling back to a blind
-            # list would retry the exact model we were told to skip.
-            if router is None:
-                for m in model_list:
-                    if m not in tried:
-                        model = m
-                        break
-            elif not tried:
-                # Router exists but every model is busy right now — tell the
-                # caller it's an overload (with a wait hint) instead of firing
-                # a doomed request.
-                overloaded = True
-                errors.append('all models busy (rate limited or in cooldown)')
-                break
+            # (tests / no budgets) — retry each model in order.
+            for m in model_list:
+                if m not in tried:
+                    model = m
+                    break
         if model is None:
             break
         tried.add(model)
@@ -12493,19 +12496,23 @@ def _ai_open_stream(messages, max_tokens=1600, temperature=0.4, timeout=120, rea
         model = None
         if router is not None:
             model = router.pick(est_tokens=est_tokens, prefer=model_list[0] if model_list else None)
-        if model is None:
-            # Plain-iteration fallback is ONLY for environments with no router.
-            # A live router already skipped cooldown/over-budget models; a
-            # blind list retry would hammer the exact model we skipped.
-            if router is None:
-                for m in model_list:
-                    if m not in tried:
-                        model = m
-                        break
-            elif not tried:
-                overloaded = True
-                errors.append('all models busy (rate limited or in cooldown)')
-                break
+            if model is None:
+                # Smart transfer: every model is at/near its rolling budget.
+                # Transfer to the model closest to usable instead of failing
+                # the user; a 429 there escalates its cooldown via mark_failure
+                # and the loop tries the next-closest model.
+                model = router.pick_best_available(est_tokens=est_tokens)
+                if model is None and not tried:
+                    overloaded = True
+                    errors.append('all models busy (rate limited or in cooldown)')
+                    break
+        else:
+            # Plain-iteration fallback is ONLY for environments with no router
+            # (tests / no budgets) — retry each model in order.
+            for m in model_list:
+                if m not in tried:
+                    model = m
+                    break
         if model is None:
             break
         tried.add(model)

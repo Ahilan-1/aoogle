@@ -129,6 +129,36 @@ class ModelRouter:
             tpm <= budget.get('tpm', 1 << 30) and \
             tpd <= budget.get('tpd', 1 << 30)
 
+    def pick_best_available(self, est_tokens=0, prefer=None):
+        """Last-resort fallback for when `pick()` finds zero models with full
+        headroom. Instead of failing the request, smartly transfer to the model
+        CLOSEST to usable right now: not in hard cooldown, shortest recovery
+        time, lowest failure streak, least recently used.
+
+        The returned model may be marginally over its rolling budget; the
+        caller still tries it and relies on mark_failure to escalate the
+        cooldown if the API actually 429s. This is what keeps a near-quota
+        fleet from turning a recoverable request into a hard failure.
+        """
+        now = self._now()
+        with self._lock:
+            best = None
+            best_key = None
+            for model in self.order:
+                if model not in self.budgets:
+                    continue
+                if self._cooldown_until.get(model, 0) > now:
+                    continue
+                rec = self._recovery_s(model, self.budgets[model], now,
+                                       est_tokens=est_tokens)
+                streak = self._fail_streak.get(model, 0)
+                last = self._last_used.get(model, 0)
+                key = (rec, streak, last)
+                if best is None or key < best_key:
+                    best = model
+                    best_key = key
+            return best
+
     def record(self, model, tokens=0, success=True):
         """Record a completed request. Call after the model call resolves."""
         now = self._now()
