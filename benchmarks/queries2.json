@@ -1,0 +1,111 @@
+{
+  "meta": {
+    "created": "2026-08-15",
+    "engines": ["arlong", "exa", "perplexity", "parallel"]
+  },
+  "queries": [
+    {
+      "id": "q01",
+      "query": "Explain how speculative decoding speeds up LLM inference, and quantify the typical speedup it gives over autoregressive generation.",
+      "category": "deep"
+    },
+    {
+      "id": "q02",
+      "query": "Compare the architectural tradeoffs between AMD EPYC Turin and Bergamo for cloud compute, and which major cloud providers now offer EPYC Turin instances?",
+      "category": "comparison"
+    },
+    {
+      "id": "q03",
+      "query": "What is the difference between RLHF and direct preference optimization (DPO) for aligning language models, and what are the practical tradeoffs of each?",
+      "category": "deep"
+    },
+    {
+      "id": "q04",
+      "query": "What obligations does the EU AI Act place on general-purpose AI models (GPAI) that went into effect in August 2025, and how are they being enforced?",
+      "category": "policy",
+      "expected": ["GPAI", "transparency", "copyright"]
+    },
+    {
+      "id": "q05",
+      "query": "How many Olympic gold medals has Katie Ledecky won in her career through the 2024 Paris Games, and does she hold the record for most individual golds by a female swimmer?",
+      "category": "factoid",
+      "expected": ["9"]
+    },
+    {
+      "id": "q06",
+      "query": "What is the current state of NASA's Artemis program in 2026 - which crewed lunar landing is planned, what hardware is being used, and what is the target date?",
+      "category": "current"
+    },
+    {
+      "id": "q07",
+      "query": "Analyze whether S&P 500 companies that disclose ESG metrics outperform those that do not, citing any meta-analyses or longitudinal studies.",
+      "category": "deep"
+    },
+    {
+      "id": "q08",
+      "query": "What were the main provisions and economic consequences of the US-China trade war tariffs in the 2018-2019 period, and how did they affect the semiconductor industry specifically?",
+      "category": "historical"
+    },
+    {
+      "id": "q09",
+      "query": "Who is the youngest person ever to receive a Nobel Prize, in which year and category, and what was the reason for the award?",
+      "category": "factoid",
+      "expected": ["Malala"]
+    },
+    {
+      "id": "q10",
+      "query": "What is the projected cost per kWh of LFP vs NMC lithium-ion battery packs in 2026, and which cell manufacturers dominate production for each chemistry?",
+      "category": "current"
+    },
+    {
+      "id": "q11",
+      "query": "Explain the differences between SIMD, SIMT, and MIMD parallel architectures, and give a real example of a processor that uses each.",
+      "category": "deep"
+    },
+    {
+      "id": "q12",
+      "query": "What is the mechanism of action of GLP-1 receptor agonists for weight loss, and what do recent head-to-head trials say about semaglutide vs tirzepatide efficacy?",
+      "category": "science"
+    },
+    {
+      "id": "q13",
+      "query": "How does a bill become a law in the United States? Walk through the full legislative process from introduction to veto override.",
+      "category": "howto"
+    },
+    {
+      "id": "q14",
+      "query": "What caused the 2026 global stock market drawdown in early 2026, which sectors were hit hardest, and how much did major indices recover by mid-year?",
+      "category": "current"
+    },
+    {
+      "id": "q15",
+      "query": "Compare RAG vs long-context (context caching) approaches for enterprise document Q&A in 2026: latency, cost, accuracy, and when each is the better choice.",
+      "category": "comparison"
+    },
+    {
+      "id": "q16",
+      "query": "What is the difference between a fixed-rate and adjustable-rate mortgage, and in a falling-rate environment which one tends to be better and why?",
+      "category": "finance"
+    },
+    {
+      "id": "q17",
+      "query": "How do LSD (d-lysergic acid diethylamide) microdosing studies control for placebo effects, and what does the current randomized-trial evidence conclude about benefits?",
+      "category": "science"
+    },
+    {
+      "id": "q18",
+      "query": "What is the official exchange rate mechanism and timeline of the 1997 Asian financial crisis - which currencies collapsed, what triggered it, and what were IMF responses?",
+      "category": "historical"
+    },
+    {
+      "id": "q19",
+      "query": "What are the main arguments for and against open-weight AI models like Llama and DeepSeek, including recent security and policy findings from 2025-2026?",
+      "category": "comparison"
+    },
+    {
+      "id": "q20",
+      "query": "Explain the concept of a 'tournament' in GPU scheduling for transformer inference, how it compares to round-robin or priority scheduling, and which inference engines implement it.",
+      "category": "deep"
+    }
+  ]
+}

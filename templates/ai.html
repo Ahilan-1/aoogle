@@ -198,16 +198,19 @@
     /* ── Source quality tags ── */
     .ai-src-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
     .ai-src-tag{
-        display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;
-        letter-spacing:.2px;line-height:1.35;padding:3px 9px;border-radius:999px;border:1px solid transparent;
+        display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:600;
+        letter-spacing:.3px;line-height:1.35;padding:4px 10px;border-radius:999px;border:1px solid transparent;
+        box-shadow:0 1px 3px rgba(0,0,0,.25);backdrop-filter:blur(4px);
     }
-    .ai-src-tag .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
-    .ai-src-tag.primary{background:rgba(52,199,89,.12);border-color:rgba(52,199,89,.35);color:#B5E7C0}
-    .ai-src-tag.primary .dot{background:#34C759}
-    .ai-src-tag.community{background:rgba(255,204,0,.1);border-color:rgba(255,204,0,.32);color:#EBD99A}
+    .ai-src-tag .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;box-shadow:0 0 6px currentColor}
+    .ai-src-tag svg{width:11px;height:11px;flex-shrink:0}
+    .ai-src-tag.primary{background:linear-gradient(180deg,rgba(52,199,89,.18),rgba(52,199,89,.08));border-color:rgba(52,199,89,.45);color:#B5E7C0}
+    .ai-src-tag.primary .dot{background:#34C759;animation:aiTagPulse 2.2s ease-in-out infinite}
+    .ai-src-tag.community{background:rgba(255,204,0,.12);border-color:rgba(255,204,0,.4);color:#EBD99A}
     .ai-src-tag.community .dot{background:#FFCC00}
-    .ai-src-tag.trusted{background:rgba(10,132,255,.12);border-color:rgba(10,132,255,.38);color:#A6CBF5}
+    .ai-src-tag.trusted{background:linear-gradient(180deg,rgba(10,132,255,.16),rgba(10,132,255,.07));border-color:rgba(10,132,255,.45);color:#A6CBF5}
     .ai-src-tag.trusted .dot{background:#0A84FF}
+    @keyframes aiTagPulse{0%,100%{box-shadow:0 0 3px rgba(52,199,89,.4)}50%{box-shadow:0 0 9px rgba(52,199,89,.9)}}
 
     .ai-overview{background:var(--bg-surface);border:1px solid var(--border-color);border-radius:14px;padding:24px 28px}
     .ai-overview .ai-ov-label{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#FFFFFF;font-weight:600;display:inline-flex;align-items:center;gap:7px;background:var(--bg-inner);padding:6px 12px;border-radius:8px;margin-bottom:16px}
@@ -278,6 +281,11 @@
 
     .ai-clarify-open{margin-top:4px;background:#FFFFFF;color:#000;border:none;border-radius:8px;padding:9px 16px;font-size:13.5px;font-weight:600;cursor:pointer}
     .ai-clarify-open:hover{opacity:.9}
+
+    .ai-report-cta{background:var(--bg-inner);border:1px solid var(--border-color);border-radius:10px;padding:18px 20px;margin:8px 0}
+    .ai-report-title{font-size:14.5px;font-weight:700;color:#FFFFFF;margin-bottom:6px}
+    .ai-report-sub{font-size:13px;color:var(--text-muted);line-height:1.55;margin-bottom:14px}
+    .ai-report-actions{display:flex;flex-wrap:wrap;gap:10px}
 
     .ai-group-head{
         display:inline-block;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
@@ -752,19 +760,61 @@
                     fireLinkEvals(g.query, g.results, ov, startIdx);
                     startIdx += (g.results||[]).length;
                 });
+                renderReportCta(ov, displayQ, d.chat_id, d.results||[]);
+                setBusy(false); busy = false;
             } else if(d.results && d.results.length){
                 renderSources(ov, d.results);
                 fireLinkEvals(q, d.results, ov);
+                streamAnswer(displayQ, d.chat_id, d.results||[], ov, false, false, false, document.querySelectorAll('.ai-assistant').length - 1);
             } else {
                 var srcBox = ov.querySelector('.ai-src-zone');
                 if(srcBox) srcBox.innerHTML = '<div class="ai-link-card"><div class="ai-link-snip">No web results were found for this query.</div></div>';
+                streamAnswer(displayQ, d.chat_id, d.results||[], ov, false, false, false, document.querySelectorAll('.ai-assistant').length - 1);
             }
-            streamAnswer(displayQ, d.chat_id, d.results||[], ov, false, !!d.multitask);
         })
         .catch(function(e){
             setBusy(false); busy = false;
             failTurn(ov, 'Network error. Please try again.');
         });
+    };
+
+    function reportCtaHtml(n){
+        return '<div class="ai-report-cta">'
+            + '<div class="ai-report-title">Deep search complete</div>'
+            + '<div class="ai-report-sub">Arlong gathered '+(n||0)+' sources across multiple angles. Generate a detailed report?</div>'
+            + '<div class="ai-report-actions">'
+            + '<button type="button" class="ai-btn-main" onclick="generateReport(this)">Generate detailed report</button>'
+            + '<button type="button" class="ai-btn-ghost" onclick="declineReport(this)">Skip</button>'
+            + '</div></div>';
+    }
+    function renderReportCta(ov, q, cid, results){
+        if(!ov) return;
+        ov._pendingQ = q || '';
+        ov._pendingCid = cid || null;
+        ov._pendingResults = results || [];
+        ov._pendingIdx = document.querySelectorAll('.ai-assistant').length - 1;
+        var md = ov.querySelector('.ai-md');
+        if(md) md.innerHTML = reportCtaHtml((results||[]).length);
+        scrollBottom();
+    }
+    window.generateReport = function(btn){
+        var ov = btn ? btn.closest('.ai-overview') : null;
+        if(!ov) return;
+        if(busy) return;
+        busy = true; setBusy(true);
+        var md = ov.querySelector('.ai-md');
+        if(md) md.innerHTML = '<span class="ai-cursor"></span>';
+        streamAnswer(ov._pendingQ, ov._pendingCid, ov._pendingResults||[], ov, false, true, true, ov._pendingIdx);
+    };
+    window.declineReport = function(btn){
+        var ov = btn ? btn.closest('.ai-overview') : null;
+        if(ov && ov._pendingCid){
+            fetch('/api/ai/report-decline', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({chat_id: ov._pendingCid})}).catch(function(){});
+        }
+        if(ov){
+            var md = ov.querySelector('.ai-md');
+            if(md) md.innerHTML = '<p style="color:var(--text-muted);font-size:13px">Report skipped — the sources above remain available.</p>';
+        }
     };
 
     function showTurnUser(q){
@@ -977,46 +1027,78 @@
         zone.innerHTML = html;
     }
     var SOURCE_TAG_DEFS = {
-        primary:   { cls: 'primary',   label: 'Primary Source' },
-        community: { cls: 'community', label: 'Community' },
-        trusted:   { cls: 'trusted',   label: 'Trusted Source' }
+        primary:   { cls: 'primary',   label: 'Primary Source', glyph: '<path d="M9 16.2 4.8 12l1.4-1.4L9 13.4l7.8-7.8 1.4 1.4z"/>' },
+        community: { cls: 'community', label: 'Community', glyph: '<path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-3.3 0-8 1.7-8 5v1h16v-1c0-3.3-4.7-5-8-5z"/>' },
+        trusted:   { cls: 'trusted',   label: 'Trusted Source', glyph: '<path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3zm-1 14-4-4 1.4-1.4L11 13.2l6.6-6.6L19 8l-8 8z"/>' }
     };
     function renderSourceTag(idx, tag, ov){
         var box = ov.querySelector('#ai-src-tags-'+idx);
         if(!box) return;
         var def = SOURCE_TAG_DEFS[tag] || SOURCE_TAG_DEFS.trusted;
-        box.innerHTML = '<span class="ai-src-tag '+def.cls+'"><span class="dot"></span>'+def.label+'</span>';
+        box.innerHTML = '<span class="ai-src-tag '+def.cls+'"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'+(def.glyph||'')+'</svg>'+def.label+'</span>';
     }
     function fireLinkEvals(q, results, ov, offset){
         offset = offset || 0;
-        fetch('/api/ai/links', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q, results:results, offset:offset})})
-        .then(function(r){ return r.json(); })
-        .then(function(d){
-            if(!d.ok) return;
+        function apply(d){
+            if(!d || !d.ok || !d.evaluations) return false;
             if(d.tags){
                 Object.keys(d.tags).forEach(function(k){
                     renderSourceTag(k, d.tags[k], ov);
                 });
             }
-            if(!d.evaluations) return;
             Object.keys(d.evaluations).forEach(function(k){
                 var box = ov.querySelector('#ai-eval-'+k);
                 if(box) box.innerHTML = '<span class="ai-eval-label">AI Evaluation</span><span>'+esc(d.evaluations[k])+'</span>';
             });
-        }).catch(function(){});
+            return true;
+        }
+        function markUnavailable(){
+            if(!results) return;
+            results.forEach(function(r, i){
+                var box = ov ? ov.querySelector('#ai-eval-'+(offset+i+1)) : null;
+                if(box && box.querySelector('.ai-eval-loading')){
+                    box.innerHTML = '<span class="ai-eval-label">AI Evaluation</span><span class="ai-eval-loading">Evaluation unavailable right now.</span>';
+                }
+            });
+        }
+        function attempt(n){
+            fetch('/api/ai/links', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q, results:results, offset:offset})})
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if(!apply(d)){
+                    if(n < 3){ setTimeout(function(){ attempt(n+1); }, 800*n + 600); }
+                    else { markUnavailable(); }
+                }
+            })
+            .catch(function(){
+                if(n < 3){ setTimeout(function(){ attempt(n+1); }, 800*n + 600); }
+                else { markUnavailable(); }
+            });
+        }
+        attempt(1);
     }
 
     /* ── streaming ── */
-    function streamAnswer(q, cid, results, ov, replaceLast, multitask){
+    function streamAnswer(q, cid, results, ov, replaceLast, multitask, report, pidx){
         if(!ov){ ov = document.querySelector('.ai-assistant .ai-overview'); }
         if(!ov){ setBusy(false); busy=false; return; }
         var md = ov.querySelector('.ai-md');
         var full = '';
+        if(report){
+            var lab = ov.querySelector('.ai-ov-label');
+            if(lab){
+                var tn = lab.lastChild;
+                if(tn && tn.nodeType === 3 && lab.textContent.indexOf('Deep Report') === -1){
+                    tn.nodeValue = ' Deep Report';
+                }
+            }
+            if(md) md.innerHTML = '<span class="ai-cursor"></span>';
+        }
         function finish(){
             bindCites(ov);
             refreshChats();
         }
-        fetch('/api/ai/stream', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q, chat_id:cid, results:results, replace_last: replaceLast?true:false, multitask: multitask?true:false})})
+        fetch('/api/ai/stream', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q, chat_id:cid, results:results, replace_last: replaceLast?true:false, multitask: multitask?true:false, report: report?true:false, pending_idx: (pidx!=null?pidx:null)})})
         .then(function(res){
             if(!res.ok){ return res.text().then(function(t){
                 var parsed = null; try{ parsed = JSON.parse(t); }catch(e){}
@@ -1176,7 +1258,7 @@
                         var fav = r.favicon ? '<img class="ai-link-fav" src="'+esc(r.favicon)+'" alt="" loading="lazy" onerror="this.outerHTML=\'<span class=&quot;ai-link-fav-ph&quot;>'+esc((r.domain||'?')[0].toUpperCase())+'</span>\'">' : '<span class="ai-link-fav-ph">'+esc((r.domain||'?')[0].toUpperCase())+'</span>';
                         var evalBody = evals[i+1] ? '<span>'+esc(evals[i+1])+'</span>' : '<span class="ai-eval-loading">No evaluation recorded.</span>';
                         var tagDef = SOURCE_TAG_DEFS[tags[i+1]] || null;
-                        var tagHtml = tagDef ? '<span class="ai-src-tag '+tagDef.cls+'"><span class="dot"></span>'+tagDef.label+'</span>' : '';
+                        var tagHtml = tagDef ? '<span class="ai-src-tag '+tagDef.cls+'"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'+(tagDef.glyph||'')+'</svg>'+tagDef.label+'</span>' : '';
                         srcHtml += '<div class="ai-link-card" id="ai-src-'+(i+1)+'">'
                             + '<div class="ai-link-head">'+fav+'<span class="ai-link-domain">'+esc(r.domain||'')+'</span></div>'
                             + (tagHtml ? '<div class="ai-src-tags">'+tagHtml+'</div>' : '')
@@ -1200,8 +1282,22 @@
                     + '<div class="ai-md"></div><div class="ai-actions">'+act+'</div></div>';
                 thread.appendChild(a);
                 var mdEl = a.querySelector('.ai-md');
-                renderMd(mdEl, m.content || '');
-                bindCites(a.querySelector('.ai-overview'));
+                var ovEl = a.querySelector('.ai-overview');
+                if(m.pending && !m.content && m.multitask){
+                    ovEl._pendingQ = m.query || '';
+                    ovEl._pendingCid = chatId;
+                    ovEl._pendingResults = srcs;
+                    ovEl._pendingIdx = aiIdx;
+                    mdEl.innerHTML = reportCtaHtml(srcs.length);
+                } else if(m.pending && !m.content){
+                    mdEl.innerHTML = '<p style="color:#D1D1D6">This answer did not finish generating.</p>'
+                        + '<div class="ai-report-actions"><button type="button" class="ai-btn-ghost" onclick="regenerate(this)">Try again</button></div>';
+                } else if(m.declined && !m.content){
+                    mdEl.innerHTML = '<p style="color:var(--text-muted);font-size:13px">Report skipped — the sources above remain available.</p>';
+                } else {
+                    renderMd(mdEl, m.content || '');
+                }
+                bindCites(ovEl);
                 aiIdx++;
             }
         });

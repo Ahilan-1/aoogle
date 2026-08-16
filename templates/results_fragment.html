@@ -1,0 +1,650 @@
+        <div class="results-main" id="results-main">
+            {% if error %}
+                <div class="error-message">{{ error }}</div>
+            {% endif %}
+
+            {% if crisis_info %}
+                <div class="crisis-banner">
+                    <div class="cb-title">You matter</div>
+                    <p class="cb-text">Whatever you are going through, you do not have to face it alone. Help is available, free and confidential. These resources are here for you.</p>
+                    <a class="cb-link" href="/crisis">Find support resources</a>
+                </div>
+            {% endif %}
+
+            {% if safety_info %}
+                <div class="safety-box">
+                    <div class="sb-title">{{ safety_info.info.title }}</div>
+                    <div class="sb-sub">Stay calm and follow these steps to stay safe.</div>
+                    {% for step in safety_info.info.steps %}
+                    <div class="sb-step">{{ step }}</div>
+                    {% endfor %}
+                    <div class="sb-footer">For real-time alerts: <a href="https://www.weather.gov" target="_blank">weather.gov</a> (US) or your local emergency services.</div>
+                </div>
+            {% endif %}
+
+            {% if news_box %}
+                <div class="news-box">
+                    <div class="nb-header">
+                        <span class="nb-icon">&#x1F4F0;</span>
+                        <div class="nb-title">Top News</div>
+                        <span class="nb-topic">{{ news_box.topic }}</span>
+                    </div>
+                    <div class="nb-items">
+                    {% for item in news_box['items'] %}
+                    <div class="nb-item">
+                        <span class="nb-rank">{{ loop.index }}.</span>
+                        <div class="nb-content">
+                            <a href="{{ item.url }}" class="nb-headline" target="_blank">{{ item.title }}</a>
+                            <div class="nb-source">
+                                <span class="nb-domain">{{ item.display_url.split('/')[0] if '/' in item.display_url else item.display_url }}</span>
+                                {% if item.snippet %}<span class="nb-time">{{ item.snippet[:100] }}</span>{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+
+            {% if notice %}
+                <div class="notice-banner {{ notice.type }}">
+                    {% if notice.icon %}<span class="notice-icon">{{ notice.icon|safe }}</span>{% endif %}
+                    {{ notice.message|safe }}
+                </div>
+            {% endif %}
+
+            {% if serper_fallback %}
+            <div class="notice-banner warning" id="serper-notice">
+                <strong>Server trouble detected.</strong> Our primary search servers didn't respond, so we switched this query to a backup server to fetch your results. They're coming through &mdash; please hold on.
+            </div>
+            {% endif %}
+
+            {% if places_prompt %}
+            <div class="places-prompt" id="places-prompt" data-q="{{ places_prompt }}">
+                <div class="places-prompt-head">
+                    <div class="places-prompt-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                    </div>
+                    <div>
+                        <div class="places-prompt-title">Where are you looking for <strong>{{ places_prompt }}</strong>?</div>
+                        <p class="places-prompt-sub">Tell us your city or area and we'll find local places instantly &mdash; no need to type &ldquo;near me&rdquo;.</p>
+                    </div>
+                    <button class="places-prompt-close" onclick="document.getElementById('places-prompt').remove();" aria-label="Dismiss">&times;</button>
+                </div>
+                <div class="places-prompt-form">
+                    <div class="places-input-wrap">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+                        <input type="text" id="places-loc-input" placeholder="Enter city or area, e.g. Chennai" autocomplete="off" onkeydown="if(event.key==='Enter'){placesSearch(this);return false;}">
+                    </div>
+                    <button class="places-btn primary" onclick="placesSearch(this)">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+                        Search
+                    </button>
+                    <button class="places-btn geo" onclick="locatePlaces()">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg>
+                        Use my location
+                    </button>
+                </div>
+                <div class="places-chips">
+                    <span class="chips-label">Popular:</span>
+                    <button class="places-chip-btn" onclick="setLoc('Chennai')">Chennai</button>
+                    <button class="places-chip-btn" onclick="setLoc('Mumbai')">Mumbai</button>
+                    <button class="places-chip-btn" onclick="setLoc('Bengaluru')">Bengaluru</button>
+                    <button class="places-chip-btn" onclick="setLoc('Delhi')">Delhi</button>
+                    <button class="places-chip-btn" onclick="setLoc('Hyderabad')">Hyderabad</button>
+                </div>
+                <div class="places-error" id="places-error"></div>
+            </div>
+            <div id="places-target"></div>
+            {% endif %}
+
+            {% if places_results %}
+            <script>window._plsInit={places:{{ places_results|tojson }},location:{{ places_location|tojson }},q:{{ (places_prompt or places_query or '')|tojson }},cached:{{ 'true' if places_cached else 'false' }}};</script>
+            <div id="places-target"></div>
+            {% endif %}
+
+            {% if query == "1776" %}
+                <div class="usa-banner">
+                    <div class="ub-stars">&#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733; &#9733;</div>
+                    <div class="ub-year">1776</div>
+                    <div class="ub-title">Happy Independence Day, America!</div>
+                    <div class="ub-sub">&#x201C;Life, Liberty and the pursuit of Happiness.&#x201D;</div>
+                    <div style="margin:10px 0 0;position:relative">
+                        <div style="font-size:14px;color:#fff;line-height:1.6;text-shadow:0 1px 4px rgba(0,0,0,.2);font-style:italic">
+                            From arlong, wishing you a joyful 250th Independence Day. &#x1F30A;
+                        </div>
+                    </div>
+                    <div class="ub-arlong">&#x1F1FA;&#x1F1F8; arlong &#x00B7; celebrating freedom since 2025 &#x1F1FA;&#x1F1F8;</div>
+                </div>
+            {% endif %}
+
+            {% if results %}
+                <div style="color:var(--text3);font-size:13px;margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                    {% if crisis_info %}You are not alone. These resources can help.
+                    {% elif notice and notice.type == 'redirect' %}No results found
+                    {% else %}About {{ total_results }} results{% if search_time is defined %} ({{ search_time }}s){% endif %}
+                        <button type="button" class="refresh-results-btn" onclick="refreshResults({{ total_results }})" title="Re-fetch the results">Not satisfied? Refresh</button>
+                    {% endif %}
+                </div>
+                {% if ai_summary_enabled is not defined or ai_summary_enabled %}
+                <div class="ais-box" id="ais-box">
+                    <div class="ais-head">
+                        <svg class="ais-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 6.1L20 11l-6.1 1.9L12 19l-1.9-6.1L4 11l6.1-1.9z"/></svg>
+                        <div class="ais-title">Search Assist</div>
+                        <div class="ais-tools">
+                            <button class="ais-tool" id="ais-copy" onclick="copyAis()" title="Copy answer" aria-label="Copy answer">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                            </button>
+                            <button class="ais-tool" id="ais-info" onclick="toggleAisInfo()" title="About Search Assist" aria-label="About Search Assist">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="ais-body" id="ais-content"></div>
+                    <div class="ais-sources" id="ais-sources"></div>
+                    <div class="ais-foot">
+                        <span class="ais-note">Auto-generated based on listed sources. May contain inaccuracies.</span>
+                        <span class="ais-fb">Was this helpful?
+                            <button class="ais-fb-btn" id="ais-thumb-up" onclick="aisFeedback(1)" aria-label="Yes" title="Yes">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
+                            </button>
+                            <button class="ais-fb-btn" id="ais-thumb-down" onclick="aisFeedback(0)" aria-label="No" title="No">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg>
+                            </button>
+                        </span>
+                    </div>
+                </div>
+                <div class="ais-info-ov" id="ais-info-ov" aria-hidden="true">
+                    <div class="ais-info-backdrop" onclick="toggleAisInfo()"></div>
+                    <aside class="ais-info-drawer" role="dialog" aria-modal="true" aria-labelledby="ais-info-title">
+                        <div class="ais-info-head">
+                            <svg class="ais-info-spark" viewBox="0 0 24 24" aria-hidden="true">
+                                <defs><linearGradient id="aisSparkGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#e62e70"/><stop offset="50%" stop-color="#a855f7"/><stop offset="100%" stop-color="#38bdf8"/></linearGradient></defs>
+                                <path fill="url(#aisSparkGrad)" d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z"/>
+                            </svg>
+                            <h4 id="ais-info-title">Search Assist</h4>
+                            <button class="ais-info-x" onclick="toggleAisInfo()" aria-label="Close">&times;</button>
+                        </div>
+                        <div class="ais-info-body">
+                            <p>Search Assist is an on-page feature that <a class="ais-info-link" href="/search?q={{ query }}">scans the web</a> in the background while you browse results. It composes a concise overview of the most relevant pages and shows the sources it drew from, so every claim can be verified at its origin.</p>
+                            <p>Answers are generated on the fly from public search results. Your queries and page content are not used to train any model, and nothing is forwarded to third-party AI providers. You can control when Search Assist appears and how much of the page it may read from your <a class="ais-info-link" href="/settings">Search Settings</a>.</p>
+                            <p>For the long-form conversational experience, visit <a class="ais-info-link" href="https://arlong.org/ai">arlong.org/ai</a> — a dedicated interface that works across longer questions and follow-ups.</p>
+                            <p class="ais-info-muted">Search Assist may occasionally produce inaccurate, incomplete, or outdated answers, and it does not replace professional or medical advice. Use it at your own discretion. By using it you agree to the <a class="ais-info-link" href="/terms-of-service">Terms of Service</a>.</p>
+                        </div>
+                    </aside>
+                </div>
+                {% endif %}
+                {% if board_results %}
+                <div class="board-results" style="margin-bottom:20px">
+                    <div style="font-size:13px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;padding:0 4px">&#x270F; Blog Posts</div>
+                    <div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:6px">
+                    {% for board in board_results %}
+                        <a href="/explore/{{ board.id }}" style="flex-shrink:0;width:min(260px,72vw);background:var(--card-bg);border:1px solid var(--border);border-radius:12px;overflow:hidden;text-decoration:none;transition:.15s;display:block" onmouseover="this.style.borderColor='var(--text3)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border)';this.style.transform='translateY(0)'">
+                            {% if board.thumbnail %}
+                            <div style="height:120px;overflow:hidden;background:var(--bg3)"><img src="{{ board.thumbnail }}" alt="" style="width:100%;height:100%;object-fit:cover"></div>
+                            {% else %}
+                            <div style="height:60px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:24px;opacity:.15">&#x270F;</div>
+                            {% endif %}
+                            <div style="padding:12px 14px 14px">
+                                <div style="font-size:14px;font-weight:600;color:var(--link);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ board.name }}</div>
+                                <div style="font-size:12px;color:var(--text3);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:6px">{{ board.description or board.content[:150] if board.content else '' }}</div>
+                                <div style="font-size:11px;color:var(--text4);display:flex;gap:6px;align-items:center">
+                                    <span>u/{{ board.creator_name }}</span>
+                                    <span>&middot;</span>
+                                    <span>{{ (board.created_at or '')[:10] }}</span>
+                                </div>
+                            </div>
+                        </a>
+                    {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                {% set ns = namespace(disc=[], rcount=0, ddone=false, vdone=false, idone=false) %}
+                {% for result in results %}
+                    {% set is_disc = result.category == 'discussions' or result.category == 'discussion' or 'reddit' in result.url or 'forum' in result.url or 'stackexchange' in result.url %}
+                    {% if is_disc %}
+                        {% set ns.disc = ns.disc + [result] %}
+                    {% endif %}
+                {% endfor %}
+                {% for result in result_groups %}
+                    {% set is_video = result.category == 'videos' or result.category == 'video' %}
+                    {% set has_siblings = result.sitelinks and result.sitelinks|length > 0 %}
+                    {% if has_siblings %}
+                    <div class="domain-group">
+                    {% endif %}
+                    <div class="rc-modern{% if has_siblings %} domain-parent{% endif %}" data-url="{{ result.url }}" data-title="{{ result.title }}" data-category="{{ result.category or 'general' }}">
+                        <div class="rc-row">
+                            <div class="rc-body">
+                                {% set is_yt = (result.category == 'video' or result.category == 'videos') and result.url and ('youtube.com' in result.url or 'youtu.be' in result.url) %}
+                                {% set vid_len = result.duration or '' %}
+                                {% set yt_thumb = result.thumbnail or '' %}
+                                {% if not yt_thumb and result.url and is_yt %}
+                                    {% if 'youtube.com/watch?v=' in result.url %}{% set yt_id = result.url.split('youtube.com/watch?v=')[1].split('&')[0] %}
+                                    {% elif '/shorts/' in result.url %}{% set yt_id = result.url.split('/shorts/')[1].split('/')[0].split('?')[0] %}
+                                    {% elif 'youtu.be/' in result.url %}{% set yt_id = result.url.split('youtu.be/')[1].split('/')[0].split('?')[0] %}
+                                    {% else %}{% set yt_id = '' %}{% endif %}
+                                    {% if yt_id %}{% set yt_thumb = 'https://i.ytimg.com/vi/' ~ yt_id ~ '/hqdefault.jpg' %}{% endif %}
+                                {% endif %}
+                                <div class="rc-sitename-row">
+                                    {% set du = result.url %}
+                                    {% set dom = result.domain or (du.split('/')[2] if '/' in du else du) or 'this site' %}
+                                    {% set site_name = pretty_site_name(dom) %}
+                                    {% if is_yt %}
+                                    <img src="https://icons.duckduckgo.com/ip3/www.youtube.com.ico" alt="" class="rc-sitename-fav" onerror="this.style.display='none'">
+                                    <span class="rc-sitename">YouTube</span>
+                                    {% if vid_len %}<span class="rc-sep">&#x00B7;</span><span class="rc-vid-len">{{ vid_len }}</span>{% endif %}
+                                    {% else %}
+                                    <img src="{{ result.favicon }}" alt="" class="rc-sitename-fav" onerror="this.style.display='none'">
+                                    <span class="rc-sitename">{% if site_name %}{{ site_name }}{% else %}{{ dom }}{% endif %}</span>
+                                    {% endif %}
+                                    {% if result.date and result.date != vid_len %}<span class="rc-date">{{ result.date }}</span>{% endif %}
+                                </div>
+                                <div class="rc-bread">
+                                    <span class="rc-dom">{{ dom }}</span>
+                                    {% if is_yt %}
+                                        {% if result.channel %}<span class="rc-sep">&#x00B7;</span><span class="rc-path">{{ result.channel }}</span>{% endif %}
+                                    {% else %}
+                                        {% set path_raw = du.split('://', 1)[1] if '://' in du else du %}
+                                        {% set path_clean = path_raw.split('/', 1)[1] if '/' in path_raw else '' %}
+                                        {% if path_clean %}
+                                        <span class="rc-sep">&#x203A;</span>
+                                        <span class="rc-path">{{ path_clean }}</span>
+                                        {% endif %}
+                                    {% endif %}
+                                </div>
+                                <div class="rc-title-line">
+                                    <a href="{{ result.url }}" class="rc-title" target="_blank">{{ result.title }}</a>
+                                    <div class="rc-acts">
+                                         <button class="rc-save" onclick="pinFromSearch(this)" title="Save"><svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z"/></svg></button>
+                                         <div class="rc-pos">
+                                             <button class="rc-dots" onclick="toggleRcMenu(this)" title="More">&#x22EE;</button>
+                                             <div class="rc-report-menu">
+                                                 <div class="rc-report-opt" onclick="reportResult(this)"><span>&#x26A0;</span> Report low quality</div>
+                                             </div>
+                                         </div>
+                                    </div>
+                                </div>
+                                {% if is_video and yt_thumb %}
+                                <div class="rc-video-preview">
+                                    <div class="rc-vp-thumb" onclick="openVidViewerFromResult(this)">
+                                        <img src="{{ yt_thumb }}" alt="" loading="lazy">
+                                        {% if vid_len %}<span class="rc-vp-dur">{{ vid_len }}</span>{% endif %}
+                                    </div>
+                                    <div class="rc-vp-info">
+                                        {% if result.channel %}<span class="rc-vp-ch">{{ result.channel }}</span>{% endif %}
+                                        {% if result.views %}<span class="rc-vp-views">{{ result.views }}</span>{% endif %}
+                                    </div>
+                                </div>
+                                {% endif %}
+                                <div class="rc-snip">{{ result.snippet }}</div>
+                            </div>
+                        </div>
+                        {% if has_siblings %}
+                        <div class="nested-sitelink-group">
+                            {% for child in result.sitelinks %}
+                            <div class="nested-sitelink" data-url="{{ child.url }}" data-title="{{ child.title }}" data-category="{{ child.category or 'general' }}">
+                                <a href="{{ child.url }}" class="ns-title" target="_blank">{{ child.title }}</a>
+                                <div class="ns-snip">{{ child.snippet }}</div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% set ns.rcount = ns.rcount + 1 %}
+                    {% if ns.rcount >= 2 and ns.disc and not ns.ddone %}
+                    <div class="disc-sec" data-category="discussion">
+                        <div class="disc-head"><svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg> Discussions</div>
+                        <div class="disc-car">
+                        {% for r2 in ns.disc %}
+                            <div class="disc-c" data-url="{{ r2.url }}" data-title="{{ r2.title }}" data-category="discussion">
+                                <div class="disc-ch">
+                                    <img src="{{ r2.favicon }}" alt="" class="disc-fav" onerror="this.style.display='none'">
+                                    {% set du2 = r2.get('display_url', '') %}
+                                    <span class="disc-dom">{{ r2.domain or (du2.split('/')[2] if '/' in du2 else du2) }}</span>
+                                </div>
+                                <a href="{{ r2.url }}" class="disc-ct" target="_blank">{{ r2.title }}</a>
+                                <div class="disc-cs">{{ r2.snippet }}</div>
+                                <div class="disc-cf">
+                                    {% if r2.date %}<span class="disc-date">{{ r2.date }}</span>{% endif %}
+                                    <span style="display:flex;align-items:center;gap:2px;margin-left:auto">
+                                        <button class="rc-dots" onclick="toggleRcMenu(this)" title="More">&#x22EE;</button>
+                                        <div class="rc-report-menu">
+                                            <div class="rc-report-opt" onclick="reportResult(this)"><span>&#x26A0;</span> Report low quality</div>
+                                        </div>
+                                    </span>
+                                </div>
+                            </div>
+                        {% endfor %}
+                        </div>
+                    </div>
+                    {% set ns.ddone = true %}
+                    {% endif %}
+                    {% if ns.rcount >= 3 and image_results and not ns.idone %}
+                    <div class="img-sec" data-category="image" data-q="{{ query }}">
+                        <div class="img-head"><svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor;opacity:.7"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg> Images<button class="img-refresh" onclick="refreshImages(this)" title="Refresh images" aria-label="Refresh images"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button></div>
+                        <div class="img-row">
+                        {% for img in image_results[:8] %}
+                            <div class="img-card" onclick="openImgViewer({{ loop.index0 }})">
+                                <div class="img-thumb">
+                            <img src="{{ img.thumbnail }}" alt="{{ img.title }}" loading="lazy" onerror="this.outerHTML='<div class=&quot;img-ph&quot;><svg viewBox=&quot;0 0 24 24&quot; width=&quot;24&quot; height=&quot;24&quot; fill=&quot;currentColor&quot;><path d=&quot;M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z&quot;/></svg></div>'">
+                                </div>
+                                <div class="img-info">
+                                    <div class="img-title">{{ img.title[:60] }}</div>
+                                    <div class="img-src">{{ img.source_domain }}</div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                        </div>
+                    </div>
+                    {% set ns.idone = true %}
+                    {% endif %}
+                    {% if has_siblings %}
+                    </div>
+                    {% endif %}
+                {% endfor %}
+
+                {% if ns.disc and not ns.ddone %}
+                <div class="disc-sec" data-category="discussion">
+                    <div class="disc-head"><svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg> Discussions</div>
+                    <div class="disc-car">
+                    {% for r2 in ns.disc %}
+                        <div class="disc-c" data-url="{{ r2.url }}" data-title="{{ r2.title }}" data-category="discussion">
+                            <div class="disc-ch">
+                                <img src="{{ r2.favicon }}" alt="" class="disc-fav" onerror="this.style.display='none'">
+                                {% set du2 = r2.get('display_url', '') %}
+                                <span class="disc-dom">{{ r2.domain or (du2.split('/')[2] if '/' in du2 else du2) }}</span>
+                            </div>
+                            <a href="{{ r2.url }}" class="disc-ct" target="_blank">{{ r2.title }}</a>
+                            <div class="disc-cs">{{ r2.snippet }}</div>
+                            <div class="disc-cf">
+                                {% if r2.date %}<span class="disc-date">{{ r2.date }}</span>{% endif %}
+                                <span style="display:flex;align-items:center;gap:2px;margin-left:auto">
+                                    <button class="rc-dots" onclick="toggleRcMenu(this)" title="More">&#x22EE;</button>
+                                    <div class="rc-report-menu">
+                                        <div class="rc-report-opt" onclick="reportResult(this)"><span>&#x26A0;</span> Report low quality</div>
+                                    </div>
+                                </span>
+                            </div>
+                        </div>
+                    {% endfor %}
+                    </div>
+                </div>
+                {% set ns.ddone = true %}
+                {% endif %}
+
+                {% if image_results and not ns.idone %}
+                <div class="img-sec" data-category="image" data-q="{{ query }}">
+                    <div class="img-head"><svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor;opacity:.7"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg> Images<button class="img-refresh" onclick="refreshImages(this)" title="Refresh images" aria-label="Refresh images"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button></div>
+                    <div class="img-row">
+                    {% for img in image_results[:8] %}
+                        <div class="img-card" onclick="openImgViewer({{ loop.index0 }})">
+                            <div class="img-thumb">
+                                <img src="{{ img.thumbnail }}" alt="{{ img.title }}" loading="lazy" onerror="this.outerHTML='<div class=&quot;img-ph&quot;><svg viewBox=&quot;0 0 24 24&quot; width=&quot;24&quot; height=&quot;24&quot; fill=&quot;currentColor&quot;><path d=&quot;M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z&quot;/></svg></div>'">
+                            </div>
+                            <div class="img-info">
+                                <div class="img-title">{{ img.title[:60] }}</div>
+                                <div class="img-src">{{ img.source_domain }}</div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                    </div>
+                </div>
+                {% set ns.idone = true %}
+                {% endif %}
+
+                <nav class="pagination">
+                    {% set total_pages = ((total_results - 1) // 10) + 1 %}
+                    {% if page > 1 %}
+                        <a href="/search?q={{ query }}&page={{ page - 1 }}">Previous</a>
+                    {% endif %}
+                    {% for p in range(1, total_pages + 1) %}
+                        {% if p == page %}
+                            <span style="display:inline-block;padding:8px 14px;color:var(--link);font-weight:700;font-size:13px">{{ p }}</span>
+                        {% else %}
+                            <a href="/search?q={{ query }}&page={{ p }}">{{ p }}</a>
+                        {% endif %}
+                    {% endfor %}
+                    {% if page < total_pages %}
+                        <a href="/search?q={{ query }}&page={{ page + 1 }}">Next</a>
+                    {% endif %}
+                </nav>
+                <div id="supplement-target" style="display:none"></div>
+            {% endif %}
+
+            {% if not results and query and query != "1776" and not error %}
+                <div style="text-align:center;padding:60px 20px;color:var(--text3);font-size:16px;line-height:1.6">
+                    <div style="font-size:40px;margin-bottom:16px;opacity:0.4">&#x1F50D;</div>
+                    <div style="font-size:18px;font-weight:500;margin-bottom:8px;color:var(--text)">No results found</div>
+                    <div>Try different keywords or check your spelling</div>
+                </div>
+            {% endif %}
+        </div>
+
+        {% if verified_info %}
+        <aside class="results-sidebar">
+            <div class="info-box verified-panel">
+                <div class="ib-title"><span class="v-checkmark" style="width:20px;height:20px"><svg viewBox="0 0 24 24"><circle class="ck-bg" cx="12" cy="12" r="12"/><polyline class="ck-check" points="7,12.5 10.5,16 17,8.5"/></svg></span> {{ verified_info.name }}</div>
+                <div class="ib-type">Verified business</div>
+                <div class="ib-desc">{{ verified_info.description }}</div>
+                {% if verified_info.phone %}<div class="ib-phone" style="font-size:13px;color:var(--text2);margin-top:4px">&#9742; {{ verified_info.phone }}</div>{% endif %}
+                <div class="v-domain" style="font-size:13px;color:var(--link);margin-top:6px">{{ verified_info.domain }}</div>
+                <div class="v-status" style="font-size:11px;color:#1a73e8;margin-top:4px">arlong Verified</div>
+            </div>
+        {% elif info_box %}
+        <aside class="results-sidebar">
+            {% if info_box.panel_type == 'weather' %}
+            <div class="info-box weather-panel">
+                <div class="ib-title">{{ info_box.title }}</div>
+                <div class="ib-type">{{ info_box.type }}</div>
+                <div class="wp-main">
+                    <div class="wp-icon">
+                        {% set wi = info_box.image or 'clear' %}
+                        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            {% if wi == 'clear' %}
+                            <circle cx="24" cy="24" r="10" fill="#FBBC04"/>
+                            <g stroke="#FBBC04" stroke-width="2" stroke-linecap="round">
+                                <line x1="24" y1="4" x2="24" y2="10"/>
+                                <line x1="24" y1="38" x2="24" y2="44"/>
+                                <line x1="4" y1="24" x2="10" y2="24"/>
+                                <line x1="38" y1="24" x2="44" y2="24"/>
+                                <line x1="9.9" y1="9.9" x2="14.1" y2="14.1"/>
+                                <line x1="33.9" y1="33.9" x2="38.1" y2="38.1"/>
+                                <line x1="9.9" y1="38.1" x2="14.1" y2="33.9"/>
+                                <line x1="33.9" y1="14.1" x2="38.1" y2="9.9"/>
+                            </g>
+                            {% elif wi == 'cloudy' %}
+                            <g fill="#9AA0A6">
+                                <circle cx="20" cy="26" r="10"/>
+                                <circle cx="30" cy="30" r="10"/>
+                                <circle cx="25" cy="22" r="8"/>
+                            </g>
+                            {% elif wi == 'rainy' %}
+                            <g fill="#9AA0A6">
+                                <circle cx="20" cy="22" r="10"/>
+                                <circle cx="30" cy="26" r="10"/>
+                                <circle cx="25" cy="18" r="8"/>
+                            </g>
+                            <g stroke="#4285F4" stroke-width="2" stroke-linecap="round">
+                                <line x1="16" y1="36" x2="14" y2="42"/>
+                                <line x1="24" y1="38" x2="22" y2="44"/>
+                                <line x1="32" y1="36" x2="30" y2="42"/>
+                            </g>
+                            {% elif wi == 'snowy' %}
+                            <g fill="#9AA0A6">
+                                <circle cx="20" cy="22" r="10"/>
+                                <circle cx="30" cy="26" r="10"/>
+                                <circle cx="25" cy="18" r="8"/>
+                            </g>
+                            <circle cx="16" cy="36" r="2" fill="#8AB4F8"/>
+                            <circle cx="24" cy="38" r="2" fill="#8AB4F8"/>
+                            <circle cx="32" cy="36" r="2" fill="#8AB4F8"/>
+                            <circle cx="20" cy="41" r="2" fill="#8AB4F8"/>
+                            {% elif wi == 'stormy' %}
+                            <g fill="#5F6368">
+                                <circle cx="20" cy="22" r="10"/>
+                                <circle cx="30" cy="26" r="10"/>
+                                <circle cx="25" cy="18" r="8"/>
+                            </g>
+                            <polygon points="20,28 18,38 24,38 22,48 32,34 26,34 28,28" fill="#FBBC04"/>
+                            {% endif %}
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="wp-temp">{{ info_box.temp }}</div>
+                        <div class="wp-condition">
+                            <span class="wp-cond-label">{{ info_box.condition }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% if info_box.hourly %}
+                <div class="wp-hourly">
+                    {% for h in info_box.hourly[:8] %}
+                    <div class="wp-hour">
+                        <div class="wp-hour-time">{{ h.time }}</div>
+                        <div class="wp-hour-icon" aria-hidden="true">
+                            {% if h.icon == 'clear' %}&#9728;&#65039;{% elif h.icon == 'cloudy' %}&#9925;&#65039;{% elif h.icon == 'rainy' %}&#127783;&#65039;{% elif h.icon == 'snowy' %}&#10052;&#65039;{% elif h.icon == 'stormy' %}&#9929;&#65039;{% else %}&#9925;&#65039;{% endif %}
+                        </div>
+                        <div class="wp-hour-temp">{{ h.temp }}{% if h.temp is not none %}&#176;{% endif %}</div>
+                        {% if h.precip %}<div class="wp-hour-precip">&#128167;{{ h.precip }}mm</div>{% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if info_box.facts %}
+                <table class="ib-facts">
+                    {% for label, value in info_box.facts %}
+                    <tr><td>{{ label }}</td><td>{{ value }}</td></tr>
+                    {% endfor %}
+                </table>
+                {% endif %}
+            </div>
+            {% elif info_box.panel_type in ('digidates', 'aqi', 'holidays', 'exchange', 'special') %}
+            <div class="info-box instant-panel">
+                <div class="ib-title">{{ info_box.title }}</div>
+                <div class="ib-type">{{ info_box.type }}</div>
+                {% if info_box.temp or info_box.condition %}
+                <div class="ip-hero">
+                    <div class="ip-temp">{{ info_box.temp }}</div>
+                    <div class="ip-condition">{{ info_box.condition }}</div>
+                </div>
+                {% endif %}
+                {% if info_box.description %}
+                <div class="ib-desc">{{ info_box.description }}</div>
+                {% endif %}
+                {% if info_box.facts %}
+                <table class="ib-facts">
+                    {% for label, value in info_box.facts %}
+                    <tr><td>{{ label }}</td><td>{{ value }}</td></tr>
+                    {% endfor %}
+                </table>
+                {% endif %}
+            </div>
+            {% elif info_box.panel_type == 'definition' %}
+            <div class="info-box def-panel">
+                <div class="ib-title">{{ info_box.title }}</div>
+                {% if info_box.phonetic %}
+                <div class="dp-phonetic">{{ info_box.phonetic }}</div>
+                {% endif %}
+                <div class="ib-type">{{ info_box.type }}</div>
+                <div class="ib-desc">{{ info_box.description }}</div>
+                {% if info_box.example %}
+                <div class="dp-example">{{ info_box.example }}</div>
+                {% endif %}
+                {% if info_box.synonyms %}
+                <div class="dp-synonyms"><strong>Synonyms:</strong> {{ info_box.synonyms|join(', ') }}</div>
+                {% endif %}
+                {% if info_box.facts %}
+                <table class="ib-facts">
+                    {% for label, value in info_box.facts %}
+                    <tr><td>{{ label }}</td><td>{{ value }}</td></tr>
+                    {% endfor %}
+                </table>
+                {% endif %}
+            </div>
+            {% elif info_box.panel_type == 'media' %}
+            <div class="info-box media-panel">
+                <div class="mp-main">
+                    {% if info_box.image %}
+                    <img src="{{ info_box.image }}" alt="{{ info_box.title }}" class="mp-poster">
+                    {% endif %}
+                    <div class="mp-head">
+                        <div class="ib-title mp-title">{{ info_box.title }}</div>
+                        <div class="ib-type">{{ info_box.type }}</div>
+                        {% if info_box.rating %}
+                        <div class="mp-rating">
+                            <span class="mp-stars">&#9733;</span>
+                            <span class="mp-score">{{ info_box.rating }}</span>
+                            {% if info_box.vote_count %}
+                            <span class="mp-votes">({{ info_box.vote_count }})</span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if info_box.description %}
+                <div class="mp-overview">{{ info_box.description }}</div>
+                {% endif %}
+                {% if info_box.cast %}
+                <div class="mp-section-title">Cast</div>
+                <div class="mp-cast">
+                    {% for person in info_box.cast[:6] %}
+                    <div class="mp-cast-item">
+                        {% if person.photo %}
+                        <img src="{{ person.photo }}" alt="{{ person.name }}" class="mp-cast-photo" loading="lazy">
+                        {% else %}
+                        <div class="mp-cast-photo mp-cast-photo-placeholder">{{ person.name[:1] }}</div>
+                        {% endif %}
+                        <div class="mp-cast-name">{{ person.name }}</div>
+                        <div class="mp-cast-char">{{ person.character }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if info_box.watch_providers %}
+                <div class="mp-section-title">Where to Watch</div>
+                <div class="mp-watch">
+                    {% for p in info_box.watch_providers[:6] %}
+                    <div class="mp-watch-item">
+                        {% if p.logo %}
+                        <img src="{{ p.logo }}" alt="{{ p.name }}" class="mp-watch-logo" loading="lazy">
+                        {% endif %}
+                        <span class="mp-watch-name">{{ p.name }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if info_box.gallery %}
+                <div class="mp-section-title">Photos</div>
+                <div class="mp-gallery">
+                    {% for img in info_box.gallery[:4] %}
+                    <img src="{{ img }}" alt="" class="mp-gallery-img" loading="lazy">
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if info_box.facts %}
+                <table class="ib-facts">
+                    {% for label, value in info_box.facts %}
+                    <tr><td>{{ label }}</td><td>{{ value }}</td></tr>
+                    {% endfor %}
+                </table>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="info-box">
+                <div class="ib-title">{{ info_box.title }}</div>
+                <div class="ib-type">{{ info_box.type }}</div>
+                {% if info_box.image %}
+                <img src="{{ info_box.image }}" alt="{{ info_box.title }}" class="ib-img">
+                {% endif %}
+                <div class="ib-desc">{{ info_box.description }}</div>
+                {% if info_box.facts %}
+                <table class="ib-facts">
+                    {% for label, value in info_box.facts %}
+                    <tr><td>{{ label }}</td><td>{% if label == 'Read more' %}<a href="{{ value }}" target="_blank" rel="noopener" style="color:var(--link);text-decoration:none">{{ value }}</a>{% else %}{{ value }}{% endif %}</td></tr>
+                    {% endfor %}
+                </table>
+                {% endif %}
+            </div>
+            {% endif %}
+        </aside>
+        {% endif %}

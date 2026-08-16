@@ -1,0 +1,185 @@
+================================================================================
+ TOFIX — ARLONG AI: EVERYTHING WRONG FOUND IN THE BENCHMARK AUDIT
+ Date: 2026-08-15
+ Source: main.py, benchmarks/engine_clients.py, benchmark data in
+         benchmarks/results/ (bench_output*.json, raw/, raw_queries2/)
+ Severity: [CRITICAL] = breaks the product  [MAJOR] = corrupts output / data
+           [MINOR] = quality or polish
+================================================================================
+
+--------------------------------------------------------------------------------
+1. [CRITICAL] Chain-of-thought ("<think>") leakage in AI answers
+--------------------------------------------------------------------------------
+What: 15 of 40 Arlong answers (4/20 in set 1, 11/20 in set 2) begin with a
+      full "<think> Here's a thinking process: ..." block that exposes the
+      model's private reasoning to the end user.
+
+Affected queries:
+  Set 1: q10, q11, q12, q17
+  Set 2: q06, q07, q08, q11, q12, q14, q15, q16, q17, q18, q20
+
+Evidence (set 2 q07, first 400 chars):
+  "<think> Here's a thinking process: 1. **Analyze User Input:** - **Question:**
+   Analyze whether S&P 500 companies that disclose ESG metrics outperform..."
+
+Root cause:
+  - main.py:9594-9604 builds summary_models as [GROQ_AI_MODEL (default
+    llama-3.3-70b-versatile)] + AI_MODE_FALLBACK_MODELS, which default to
+    "qwen/qwen3.6-27b,openai/gpt-oss-20b,allam-2-7b" (main.py:276-280).
+  - qwen / gpt-oss / allam are reasoning models that emit `<think>` blocks.
+  - _ai_completion (main.py:11510-11542) never passes a "reasoning"/
+    thinking-off parameter and never strips <think> output.
+  - polish_ai_summary_text (main.py:7754-7766) only collapses whitespace and
+    strips "According to/Based on" prefixes — it does NOT strip <think>.
+
+Fix ideas:
+  - Strip /<think>.*?<\/think>/s (and <|start_of_thought|>... for qwen) from
+    the completion text in polish_ai_summary_text before any other step.
+  - Prefer non-reasoning models for the default; disable reasoning when the
+    provider supports it (Groq: "reasoning_format": "hidden").
+  - Move <think>-stripping into _ai_completion so ALL callers benefit.
+
+--------------------------------------------------------------------------------
+2. [CRITICAL] Truncated answers — the real answer never gets written
+--------------------------------------------------------------------------------
+What: Every <think>-leaking answer is cut off mid-sentence (verified all 15).
+      Because the thinking block is generated first, it burns the entire
+      max_tokens=650 budget (main.py:9600), and the model is then killed
+      before it finishes the answer.
+
+Evidence (set 2, last ~80 chars of each leak answer):
+  q06: "...NASA is utilizing SpaceX's"        (cut off)
+  q07: "...ESG metrics versus those that do not" (cut off)
+  q11: "...Not explicitly given in the"       (cut off)
+  q12: "...in body weight and H"              (cut off)
+  q20: "...but the"                           (cut off)
+
+Impact: Users receive a useless half-answer plus a leaked reasoning dump.
+Fix: fixing bug #1 (strip/disable thinking) also fixes this. Additionally,
+      raise max_tokens for reasoning models and verify a trailing sentence
+      terminal before accepting the answer.
+
+--------------------------------------------------------------------------------
+3. [CRITICAL] Fabricated citations — empty sources, but fake [1][4] markers
+--------------------------------------------------------------------------------
+What: Set 2 q08 answer contains inline citation markers "[1][3][4]" while the
+      citations list is EMPTY and raw sources is EMPTY.
+
+Evidence (set 2 q08):
+  citations = []
+  raw.sources = []
+  answer tail: "...reshaped trade relations between the US, China, and other
+                nations [1][4]. The sources do not specify exact tariff rates..."
+
+Root cause (main.py:9607-9617):
+  - The `if sources:` block that replaces [n] markers with hyperlinks is
+    skipped entirely when `sources` is empty, so bare "[1][4]" markers survive
+    into the final answer, implying citations that do not exist.
+  - Also: `answer = _re.sub(r'\(\s*\)', f'[1]({first_url})', answer)` blindly
+    replaces ANY empty parentheses in the text with a citation link to
+    sources[0] — this can corrupt unrelated text like "function()" or "(not
+    available)".
+
+Fix ideas:
+  - When sources is empty, strip ALL "[n]" / "[Source n]" markers from the
+    answer and tell the user "no sources were retrieved".
+  - Only run the paren-substitution on citation markers, not arbitrary "()".
+  - This is a hallucination vector: the model cites sources it never had.
+
+--------------------------------------------------------------------------------
+4. [MAJOR] Raw per-query JSON files don't contain the answer text
+--------------------------------------------------------------------------------
+What: ALL 40 `*_arlong_answer.json` files under results/raw and
+      results/raw_queries2 contain ONLY a `sources` array — no answer text
+      (verified 20/20 in each directory).
+
+Evidence: raw/q01_arlong_answer.json == { "sources": [ ... ] }
+
+Root cause (benchmarks/engine_clients.py:70-84):
+  - ArlongClient.answer() runs main.arlong_ai_answer() in-process and returns
+    {"answer": ..., "citations": ..., "raw": {"sources": sources}}.
+  - The per-query raw file saved to disk is the FULL engine payload, but
+    Arlong's payload only stores `sources`, so the answer is never persisted
+    to raw files. (Exa/Perplexity/Parallel store their full API response.)
+
+Impact: The raw files are not self-contained; the answer text only exists in
+        the merged bench_output*.json. Anyone replaying from raw/ cannot see
+        what the engine actually answered.
+Fix: include the answer text in the raw payload:
+     "raw": {"sources": sources, "answer": answer}.
+
+--------------------------------------------------------------------------------
+5. [MAJOR] Extremely high latency (slowest engine by a wide margin)
+--------------------------------------------------------------------------------
+What: Arlong average latency is 16.8-19.3s per request with worst cases of
+      52.9s and 62.6s. Compare: Exa ~3.1s, Parallel ~6.5s, Perplexity ~9.1s.
+
+  Set 1: avg 19.28s, max 52.9s
+  Set 2: avg 16.81s, max 62.6s
+
+Root cause (main.py:9459-9554):
+  - arlong_ai_answer() serially fetches up to 5 result pages with httpx,
+    each with an 8s timeout (main.py:9510). If a page is slow, latency stacks.
+  - Fallback: DDG search + up to 3 more serial page fetches (main.py:9527-9555).
+  - Then a Groq completion on top. No concurrency anywhere.
+
+Fix ideas:
+  - Fetch pages concurrently (asyncio / ThreadPoolExecutor) with a shared
+    wall-clock budget (e.g. 6s total, cap at 3 pages).
+  - Cache page fetches keyed by URL (benchmarks re-run the same URLs in
+    search + answer mode).
+  - Shorten httpx timeout from 8s to ~3-4s.
+
+--------------------------------------------------------------------------------
+6. [MINOR] Weak/absent authoritative links in results
+--------------------------------------------------------------------------------
+What: Authoritative-domain rate (top-3 results) is poor:
+  Set 1: 2/20 (q02, q03) — worst in the set, tied with the "no raw results"
+         engines; Exa had 8/20, Perplexity 2/20 (citations only).
+  Set 2: 9/20.
+
+Note: Arlong's search mode returns real search-engine results (not just
+      citations), so 2/20 in set 1 is genuinely low-quality result coverage.
+Fix: promote/boost authoritative domains (.gov/.edu, wikipedia, arxiv, news)
+      in result ranking.
+
+--------------------------------------------------------------------------------
+7. [MINOR] Answer length inconsistency — leak inflates "length" metric
+--------------------------------------------------------------------------------
+What: Set 1 avg answer length 710 chars, Set 2 avg 1647 chars — the set-2
+      jump is almost entirely the <think> blocks, not better answers.
+Fix: fixed by bug #1.
+
+--------------------------------------------------------------------------------
+8. [MINOR] _answer_http path omits "results" key
+--------------------------------------------------------------------------------
+What: ArlongClient._answer_http() (benchmarks/engine_clients.py:107-111)
+      returns {"answer", "citations", "latency", "cost", "raw"} but NO
+      "results" key, while search() and the internal answer() path DO include
+      it. Any consumer doing rec["results"] (e.g. report code) will KeyError
+      if the HTTP AI-summary endpoint is used.
+Fix: add "results": [] (or mapped result list) to the returned dict.
+
+--------------------------------------------------------------------------------
+9. [MINOR] Missing error handling for the empty-sources case
+--------------------------------------------------------------------------------
+What: When search succeeds but every page fetch fails/returns <100 chars of
+      text, arlong_ai_answer proceeds with web_context == "" and answers from
+      pure model prior knowledge, with sources = [] (main.py:9587-9592).
+      The answer looks authoritative but has zero grounding. q08 in set 2 is
+      exactly this case (answer given, no sources, fake [n] markers).
+Fix: when web_context is empty, answer with an explicit
+     "I couldn't retrieve any sources" notice instead of guessing.
+
+--------------------------------------------------------------------------------
+10. [INFO] Benchmark-harness notes (not Arlong bugs, but skew its score)
+--------------------------------------------------------------------------------
+  - Judge gave 5/5 to terse Parallel answers ("Au", "Paris") and is
+    inconsistent (same fact scored 1 for Perplexity, 5 for Exa on q07 set 1).
+  - Arlong answers that leak <think> may have scored artificially higher
+    (the judge reads the reasoning). Re-judge after bug #1 is fixed.
+  - Arlong cost = $0.00 by design (self-hosted, in-process), which is correct,
+    but the 16.8s avg latency is real CPU/IO cost on the host machine.
+================================================================================
+ END OF TOFIX
+================================================================================

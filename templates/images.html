@@ -11,12 +11,21 @@
         body{background:var(--bg);color:var(--text);transition:background .2s,color .2s}
         a{text-decoration:none;color:var(--link)}a:hover{text-decoration:underline}a:visited{color:var(--link-v)}
 
-        @keyframes al-spin{to{transform:rotate(360deg)}}
-        .ao-loading{display:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:99999;background:var(--bg);flex-direction:column;align-items:center;justify-content:center;opacity:0;transition:opacity .35s ease}
+        .ao-loading{display:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:99999;background:var(--bg);flex-direction:column;align-items:center;opacity:0;transition:opacity .35s ease;overflow-y:auto;overflow-x:hidden}
         .ao-loading.show{display:flex;opacity:1}
-        .ao-loading .al-spinner{width:22px;height:22px;border:2.5px solid var(--border);border-top-color:var(--link);border-radius:50%;animation:al-spin .7s linear infinite;margin-bottom:18px}
-        .ao-loading .al-logo{font-size:20px;font-weight:600;letter-spacing:-.3px;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',sans-serif;margin-bottom:2px}
-        .ao-loading .al-text{font-size:13px;color:var(--text3);font-weight:400;transition:opacity .3s;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif}
+        .ao-sk-wrap{width:min(680px,100%);max-width:680px;margin:auto;padding:28px 16px}
+        .ao-sk-brand{text-align:center;margin-bottom:30px;animation:ao-sk-fade .5s ease .04s both}
+        .ao-sk-logo{font-size:30px;font-weight:700;letter-spacing:-.8px;color:var(--text);font-family:'Product Sans',Arial,sans-serif;line-height:1.1}
+        .ao-sk-logo::after{content:'';display:inline-block;width:8px;height:8px;border-radius:3px;background:var(--nav-active);margin-left:9px;vertical-align:6px;box-shadow:0 0 14px rgba(26,115,232,.45)}
+        .ao-sk-tag{font-size:12.5px;color:var(--text3);margin-top:8px;letter-spacing:.2px}
+        .ao-sk-list{display:flex;flex-direction:column;gap:14px}
+        .ao-sk{display:flex;flex-direction:column;gap:11px;border-radius:14px;padding:18px 20px;background:var(--card-fill);border:1px solid var(--border2);box-shadow:0 1px 3px var(--shadow2),inset 0 1px 0 rgba(255,255,255,.04);opacity:0;animation:ao-sk-in .5s cubic-bezier(.16,1,.3,1) both;animation-delay:calc(var(--i)*120ms)}
+        .ao-sk-line{height:13px;border-radius:6px;background:linear-gradient(90deg,var(--bg3) 25%,var(--border2) 50%,var(--bg3) 75%);background-size:200% 100%;animation:sk-shine 1.4s ease-in-out infinite}
+        .ao-sk-ico{flex-shrink:0;width:34px;height:34px;border-radius:50%;background:linear-gradient(90deg,var(--bg3) 25%,var(--border2) 50%,var(--bg3) 75%);background-size:200% 100%;animation:sk-shine 1.4s ease-in-out infinite}
+        .ao-sk-head{display:flex;align-items:center;gap:12px;margin-bottom:1px}
+        @keyframes ao-sk-in{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+        @keyframes ao-sk-fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+        @keyframes sk-shine{0%{background-position:200% 0}100%{background-position:-200% 0}}
 
         .header{padding:12px 16px 0;position:sticky;top:0;background:var(--bg);z-index:100;border-bottom:1px solid var(--border2)}
         .header .top-row{display:flex;align-items:center;gap:12px;max-width:1400px;margin:0 auto}
@@ -109,9 +118,29 @@
 </head>
 <body>
     <div class="ao-loading" id="ao-loading">
-        <div class="al-spinner"></div>
-        <div class="al-logo">arlong</div>
-        <div class="al-text" id="al-text">Searching images</div>
+        <div class="ao-sk-wrap">
+            <div class="ao-sk-brand">
+                <div class="ao-sk-logo">arlong</div>
+                <div class="ao-sk-tag" id="al-text">Searching images</div>
+            </div>
+            <div class="ao-sk-list" id="al-skeleton">
+                <div class="ao-sk" style="--i:0">
+                    <div class="ao-sk-head"><span class="ao-sk-ico"></span><div style="flex:1;min-width:0"><div class="ao-sk-line" style="width:38%"></div><div class="ao-sk-line" style="width:90%;margin-top:9px"></div></div></div>
+                    <div class="ao-sk-line" style="width:72%"></div>
+                    <div class="ao-sk-line" style="width:84%"></div>
+                </div>
+                <div class="ao-sk" style="--i:1">
+                    <div class="ao-sk-head"><span class="ao-sk-ico"></span><div style="flex:1;min-width:0"><div class="ao-sk-line" style="width:44%"></div><div class="ao-sk-line" style="width:94%;margin-top:9px"></div></div></div>
+                    <div class="ao-sk-line" style="width:66%"></div>
+                    <div class="ao-sk-line" style="width:80%"></div>
+                </div>
+                <div class="ao-sk" style="--i:2">
+                    <div class="ao-sk-head"><span class="ao-sk-ico"></span><div style="flex:1;min-width:0"><div class="ao-sk-line" style="width:33%"></div><div class="ao-sk-line" style="width:86%;margin-top:9px"></div></div></div>
+                    <div class="ao-sk-line" style="width:74%"></div>
+                    <div class="ao-sk-line" style="width:58%"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <a class="acc-btn" id="acc-btn" href="{% if session.user_id %}/u/{{ session.username }}{% else %}/login{% endif %}" aria-label="Account">
@@ -183,22 +212,23 @@
     </div>
 
     <script>
-        var LOADING_PHRASES=["Searching the web for images","Finding the best results","Scanning the interwebs","Almost there...","Loading pixels..."];
-        var LOADING_TIMER=null,LOADING_PINDEX=0,TEXT_EL=null;
+        function restartSkeleton(){
+            var list=document.getElementById('al-skeleton');
+            if(!list)return;
+            var kids=[].slice.call(list.children);
+            kids.forEach(function(el){list.removeChild(el)});
+            kids.forEach(function(el){list.appendChild(el)});
+        }
         function startLoading(){
             var el=document.getElementById('ao-loading');
-            TEXT_EL=document.getElementById('al-text');
             if(!el)return;
             el.classList.add('show');
-            LOADING_PINDEX=0;
-            if(TEXT_EL)TEXT_EL.textContent=LOADING_PHRASES[0];
-            clearInterval(LOADING_TIMER);
-            LOADING_TIMER=setInterval(function(){
-                LOADING_PINDEX=(LOADING_PINDEX+1)%LOADING_PHRASES.length;
-                if(TEXT_EL)TEXT_EL.textContent=LOADING_PHRASES[LOADING_PINDEX];
-            },500);
+            restartSkeleton();
         }
-        function stopLoading(){clearInterval(LOADING_TIMER);LOADING_TIMER=null}
+        function stopLoading(){
+            var el=document.getElementById('ao-loading');
+            if(el)el.classList.remove('show');
+        }
         function delayedSubmit(form){
             if(!form||form._submitting)return false;
             form._submitting=true;

@@ -16,22 +16,29 @@
         a{color:var(--link);text-decoration:none}
         a:hover{text-decoration:underline}
         .top{position:sticky;top:0;z-index:100;background:var(--bg);border-bottom:1px solid var(--border)}
-        .top-inner{display:flex;align-items:center;gap:12px;max-width:860px;margin:0 auto;padding:10px 16px}
+        .top-inner{display:flex;align-items:center;gap:12px;max-width:1060px;margin:0 auto;padding:10px 16px}
         .ml{font-size:24px;font-family:'Product Sans',Arial,sans-serif;letter-spacing:-1px;line-height:1;flex-shrink:0}
         .nav{display:flex;overflow-x:auto;margin-left:8px}
         .nav a{padding:10px 14px 8px;font-size:13px;color:var(--text3);border-bottom:3px solid transparent;white-space:nowrap}
         .nav a.active{color:var(--blue);border-bottom-color:var(--blue)}
         .nav a:hover{color:var(--text);text-decoration:none}
-        .wrap{max-width:860px;margin:0 auto;padding:28px 20px 60px}
-        h1{font-size:28px;font-weight:400;margin:0 0 6px}
-        .sub{color:var(--text2);font-size:14px;margin:0 0 28px}
-        .card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px}
-        .card h2{font-size:16px;font-weight:500;margin:0 0 14px}
+        .layout{display:flex;gap:0;max-width:1060px;margin:0 auto;padding:24px 16px 60px}
+        .side{width:200px;flex-shrink:0;padding-right:8px}
+        .side .item{padding:9px 12px;font-size:13px;color:var(--text2);border-radius:8px;cursor:pointer;margin-bottom:2px}
+        .side .item:hover{background:var(--bg2);color:var(--text)}
+        .side .item.active{background:var(--blue-bg);color:var(--blue);font-weight:500}
+        .content{flex:1;min-width:0;padding-left:16px}
+        h1{font-size:26px;font-weight:400;margin:0 0 6px}
+        .sub{color:var(--text2);font-size:14px;margin:0 0 22px}
+        .pane{display:none}
+        .pane.active{display:block}
+        .card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:22px;margin-bottom:18px}
+        .card h2{font-size:15px;font-weight:500;margin:0 0 14px}
         .alert{background:var(--red-bg);border:1px solid #f5c6c2;color:var(--red);padding:12px 14px;border-radius:8px;font-size:13px;margin-bottom:16px}
         .success{background:var(--green-bg);border:1px solid #b8e6c0;color:var(--green);padding:12px 14px;border-radius:8px;font-size:13px;margin-bottom:16px}
-        .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin:0 0 8px}
-        .stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
-        .stat .num{font-size:26px;font-weight:600;color:var(--blue);line-height:1.1}
+        .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:0 0 8px}
+        .stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:15px 16px}
+        .stat .num{font-size:25px;font-weight:600;color:var(--blue);line-height:1.1}
         .stat .label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
         .key-box{display:flex;align-items:center;gap:10px;background:var(--code-bg);color:#d4d4d4;border-radius:8px;padding:12px 14px;font-family:var(--mono);font-size:13px;word-break:break-all;margin-bottom:8px}
         .key-box button{flex-shrink:0;background:#3a3a3a;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:arial,sans-serif}
@@ -49,11 +56,31 @@
         .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
         .tier{font-size:12px;color:var(--text3);margin:0 0 10px}
         .tier strong{color:var(--text)}
-        .check{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px}
         .muted{color:var(--text3);font-size:13px}
-        .footer{margin-top:36px;padding-top:16px;border-top:1px solid var(--border);font-size:13px}
+        .tabbar{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:18px}
+        .tabbar a{padding:9px 14px;font-size:13px;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+        .tabbar a:hover{color:var(--text);text-decoration:none}
+        .tabbar a.active{color:var(--blue);border-bottom-color:var(--blue)}
+        .mbar{display:flex;flex-direction:column;gap:10px}
+        .mrow{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+        .mrow .mtop{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+        .mrow .mname{font-family:var(--mono);font-size:13px;font-weight:600}
+        .mrow .msub{font-size:11px;color:var(--text3);font-family:var(--mono)}
+        .gbar{height:8px;background:var(--bg2);border:1px solid var(--border);border-radius:5px;overflow:hidden}
+        .gbar>div{height:100%;background:var(--blue);border-radius:5px}
+        .gbar.g-danger>div{background:var(--red)}
+        .gbar.g-warn>div{background:#e37400}
+        .pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+        .pill.ok{background:var(--green-bg);color:var(--green)}
+        .pill.warn{background:#fef7e0;color:#e37400}
+        .pill.danger{background:var(--red-bg);color:var(--red)}
+        .footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--border);font-size:13px}
         .footer a{margin-right:12px}
-        @media(max-width:640px){.wrap{padding:20px 14px 50px}.card{padding:18px}}
+        table{width:100%;border-collapse:collapse;font-size:13px}
+        th{text-align:left;padding:8px 10px;color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid var(--border)}
+        td{padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:top}
+        code.inline{background:var(--bg2);padding:2px 5px;border-radius:4px;font-family:var(--mono);font-size:12px}
+        @media(max-width:760px){.layout{flex-direction:column;padding:20px 14px 50px}.side{width:100%;display:flex;overflow-x:auto;padding-right:0}.side .item{white-space:nowrap}.content{padding-left:0}.content>h1{display:none}}
     </style>
 </head>
 <body>
@@ -69,93 +96,217 @@
     </div>
 </div>
 
-<div class="wrap">
-    <h1>API Dashboard</h1>
-    <div class="sub">Manage your arlong API key and track usage. Signed in as <strong>{{ user.username }}</strong>.</div>
-
-    {% if error %}<div class="alert">{{ error }}</div>{% endif %}
-    {% if success %}<div class="success">{{ success }}</div>{% endif %}
-
-    {% if not accepted_tos %}
-    <div class="card">
-        <h2>Get your API key</h2>
-        <p style="margin:0 0 12px;color:var(--text2)">
-            Tokenless access is limited to <strong>{{ anon_limit }} requests per hour</strong> per IP address. To get the full
-            quota of <strong>{{ key_limit }} requests per {{ (key_window // 60) }} minutes</strong>, accept the
-            <a href="/terms-of-service">Terms of Service</a> and a key will be issued to your account immediately.
-        </p>
-        <form method="POST" action="/api/dashboard">
-            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="action" value="accept_tos">
-            <button type="submit" class="btn btn-blue">Accept Terms of Service &amp; generate my API key</button>
-        </form>
-        <p class="muted" style="margin-top:12px">By accepting, you agree to the <a href="/terms-of-service">Terms of Service</a> and the <a href="/privacy-policy">Privacy Policy</a>. You can revoke or regenerate the key at any time.</p>
+<div class="layout">
+    <div class="side">
+        <div class="item active" data-tab="overview">Overview</div>
+        <div class="item" data-tab="apikey">API Key</div>
+        <div class="item" data-tab="usage">Usage &amp; Models</div>
+        <div class="item" data-tab="mcp">MCP</div>
+        <div class="item" data-tab="ucurl">ucurl</div>
+        <div class="item" data-tab="endpoints">Endpoints</div>
     </div>
-    {% else %}
-        {% if keys %}
-        <div class="card">
-            <h2>Your API key</h2>
-            <div class="tier">Tier: <strong>Project</strong> &mdash; {{ key_limit }} requests per {{ (key_window // 60) }} minutes</div>
-            <div class="key-box" id="key-box">
-                <span id="key-val">{{ keys[0].key }}</span>
-                <button onclick="copyKey()" id="copy-btn">Copy</button>
+
+    <div class="content">
+        <h1>API Dashboard</h1>
+        <div class="sub">Manage your arlong API key and track usage. Signed in as <strong>{{ user.username }}</strong>.</div>
+
+        {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+        {% if success %}<div class="success">{{ success }}</div>{% endif %}
+
+        <!-- ── Overview ─────────────────────────────────────────────────── -->
+        <div class="pane active" id="pane-overview">
+            <div class="grid">
+                <div class="stat"><div class="num">{{ usage.used_30m if usage else 0 }}</div><div class="label">Used ({{ usage.window_min if usage else 30 }} min)</div></div>
+                <div class="stat"><div class="num" style="color:{% if usage and usage.remaining > 20 %}#188038{% elif usage and usage.remaining > 0 %}#e37400{% else %}#c5221f{% endif %}">{{ usage.remaining if usage else '—' }}</div><div class="label">Requests remaining</div></div>
+                <div class="stat"><div class="num" style="color:var(--text)">{{ usage.requests_total if usage else 0 }}</div><div class="label">Requests all-time</div></div>
+                <div class="stat"><div class="num" style="color:var(--text);font-size:15px;padding-top:8px">{{ usage.last_used_at or 'Never' }}</div><div class="label">Last request</div></div>
             </div>
-            <p class="muted">Keep this key secret. Anyone with it can use your quota.</p>
-            <div class="btn-row">
-                <form method="POST" action="/api/dashboard" onsubmit="return confirm('Generate a new key? The old one stops working immediately.')">
-                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="action" value="regenerate">
-                    <button type="submit" class="btn btn-ghost">Regenerate key</button>
-                </form>
-                <form method="POST" action="/api/dashboard" onsubmit="return confirm('Revoke this API key? API access will stop until you generate a new key.')">
-                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="action" value="revoke">
-                    <button type="submit" class="btn btn-red">Revoke key</button>
-                </form>
+            <div class="card">
+                <h2>How to call Arlong</h2>
+                <p class="muted" style="margin:0 0 8px">Three ways to reach the agentic engine — HTTP, ucurl, or an MCP client:</p>
+                <pre><span class="c1"># REST</span>
+curl "https://aoogle-production.up.railway.app/api/arlong/search?q=python" -H "Authorization: Bearer YOUR_KEY"</pre>
+                <p class="muted" style="margin:10px 0 0">Jump to the <a href="javascript:switchTab('mcp')">MCP</a>, <a href="javascript:switchTab('ucurl')">ucurl</a>, or <a href="javascript:switchTab('endpoints')">Endpoints</a> tabs.</p>
             </div>
         </div>
 
-        {% if usage %}
-        <div class="card">
-            <h2>Usage</h2>
+        <!-- ── API Key ──────────────────────────────────────────────────── -->
+        <div class="pane" id="pane-apikey">
+            {% if not accepted_tos %}
+            <div class="card">
+                <h2>Get your API key</h2>
+                <p style="margin:0 0 12px;color:var(--text2)">
+                    Tokenless access is limited to <strong>{{ anon_limit }} requests per hour</strong> per IP address. To get the full
+                    quota of <strong>{{ key_limit }} requests per {{ (key_window // 60) }} minutes</strong>, accept the
+                    <a href="/terms-of-service">Terms of Service</a> and a key will be issued to your account immediately.
+                </p>
+                <form method="POST" action="/api/dashboard">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="accept_tos">
+                    <button type="submit" class="btn btn-blue">Accept Terms of Service &amp; generate my API key</button>
+                </form>
+                <p class="muted" style="margin-top:12px">By accepting, you agree to the <a href="/terms-of-service">Terms of Service</a> and the <a href="/privacy-policy">Privacy Policy</a>. You can revoke or regenerate the key at any time.</p>
+            </div>
+            {% else %}
+                {% if keys %}
+                <div class="card">
+                    <h2>Your API key</h2>
+                    <div class="tier">Tier: <strong>Project</strong> &mdash; {{ key_limit }} requests per {{ (key_window // 60) }} minutes</div>
+                    <div class="key-box" id="key-box">
+                        <span id="key-val">{{ keys[0].key }}</span>
+                        <button onclick="copyKey()" id="copy-btn">Copy</button>
+                    </div>
+                    <p class="muted">Keep this key secret. Anyone with it can use your quota.</p>
+                    <div class="btn-row">
+                        <form method="POST" action="/api/dashboard" onsubmit="return confirm('Generate a new key? The old one stops working immediately.')">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="regenerate">
+                            <button type="submit" class="btn btn-ghost">Regenerate key</button>
+                        </form>
+                        <form method="POST" action="/api/dashboard" onsubmit="return confirm('Revoke this API key? API access will stop until you generate a new key.')">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="revoke">
+                            <button type="submit" class="btn btn-red">Revoke key</button>
+                        </form>
+                    </div>
+                </div>
+                {% else %}
+                <div class="card">
+                    <h2>No API key</h2>
+                    <p style="margin:0 0 12px;color:var(--text2)">Your key was revoked or you don't have one yet.</p>
+                    <form method="POST" action="/api/dashboard">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="action" value="accept_tos">
+                        <button type="submit" class="btn btn-blue">Generate my API key</button>
+                    </form>
+                </div>
+                {% endif %}
+            {% endif %}
+        </div>
+
+        <!-- ── Usage & Models ───────────────────────────────────────────── -->
+        <div class="pane" id="pane-usage">
+            {% if usage %}
             <div class="grid">
-                <div class="stat"><div class="num">{{ usage.used_30m }}</div><div class="label">Used in last {{ usage.window_min }} min</div></div>
+                <div class="stat"><div class="num">{{ usage.used_30m }}</div><div class="label">Used ({{ usage.window_min }} min)</div></div>
                 <div class="stat"><div class="num" style="color:{% if usage.remaining > 20 %}#188038{% elif usage.remaining > 0 %}#e37400{% else %}#c5221f{% endif %}">{{ usage.remaining }}</div><div class="label">Requests remaining</div></div>
                 <div class="stat"><div class="num" style="color:var(--text)">{{ usage.requests_total }}</div><div class="label">Requests all-time</div></div>
-                <div class="stat"><div class="num" style="color:var(--text);font-size:16px;padding-top:6px">{{ usage.last_used_at or 'Never' }}</div><div class="label">Last request</div></div>
             </div>
-            <p class="muted" style="margin:14px 0 0">The 30-minute window slides continuously: older requests expire out of it as time passes.</p>
+            <p class="muted" style="margin:0 0 18px">The 30-minute window slides continuously: older requests expire out of it as time passes.</p>
+            {% else %}
+            <div class="card"><h2>No usage yet</h2><p class="muted" style="margin:0">Call the API once and your request counts will appear here.</p></div>
+            {% endif %}
+
+            <div class="card">
+                <h2>Live model router</h2>
+                <p class="muted" style="margin:0 0 12px">Rolling rate-limit budgets for the models behind Arlong AI. Bars show current RPM/TPM pressure; a cooldown means that model is being skipped.</p>
+                <div id="router-models" class="mbar"><p class="muted">Loading router status…</p></div>
+            </div>
         </div>
 
-        <div class="card">
-            <h2>Quickstart</h2>
-            <p class="muted" style="margin:0 0 8px">Pass your key in the <code style="background:var(--bg2);padding:2px 5px;border-radius:4px">Authorization</code> header or as a query parameter:</p>
-<pre>curl "https://aoogle-production.up.railway.app/api/search?q=python+programming" \
-  -H "Authorization: Bearer {{ keys[0].key }}"</pre>
-            <p class="muted" style="margin:8px 0 0">Alternative: <code style="background:var(--bg2);padding:2px 5px;border-radius:4px">/api/search?q=python&key=YOUR_KEY</code></p>
-        </div>
-        {% endif %}
-        {% else %}
-        <div class="card">
-            <h2>No API key</h2>
-            <p style="margin:0 0 12px;color:var(--text2)">Your key was revoked or you don't have one yet.</p>
-            <form method="POST" action="/api/dashboard">
-                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="action" value="accept_tos">
-                <button type="submit" class="btn btn-blue">Generate my API key</button>
-            </form>
-        </div>
-        {% endif %}
-    {% endif %}
+        <!-- ── MCP ──────────────────────────────────────────────────────── -->
+        <div class="pane" id="pane-mcp">
+            <div class="card">
+                <h2>Model Context Protocol server</h2>
+                <p class="muted" style="margin:0 0 12px">Run <code class="inline">mcp_arlong.py</code> on this machine and point Claude Desktop / Cursor / any MCP client at it. The server exposes Arlong's search, answer, and status as tools with the agentic schema.</p>
+<pre><span class="c1"># 1. install the client SDK</span>
+pip install "mcp[cli]"
 
-    <div class="footer">
-        <a href="/docs">API documentation</a>
-        <a href="/terms-of-service">Terms of Service</a>
-        <a href="/privacy-policy">Privacy Policy</a>
+<span class="c1"># 2. add this server to your MCP client config (mcpServers)</span>
+{
+  "mcpServers": {
+    "arlong": {
+      "command": "python",
+      "args": ["C:\\path\\to\\mcp_arlong.py"],
+      "env": {
+        "ARLONG_BASE_URL": "http://127.0.0.1:5000",
+        "ARLONG_API_KEY": "{{ keys[0].key if keys else 'YOUR_KEY' }}"
+      }
+    }
+  }
+}</pre>
+                <p class="muted" style="margin:10px 0 0">Tools exposed: <code class="inline">arlong_search</code>, <code class="inline">arlong_answer</code>, <code class="inline">arlong_status</code>.</p>
+            </div>
+        </div>
+
+        <!-- ── ucurl ────────────────────────────────────────────────────── -->
+        <div class="pane" id="pane-ucurl">
+            <div class="card">
+                <h2>ucurl — JSON API from the command line</h2>
+                <p class="muted" style="margin:0 0 12px">No SDK needed. Every endpoint is plain GET JSON with your key in the <code class="inline">Authorization</code> header (or <code class="inline">?key=</code>).</p>
+<pre><span class="c1"># search (agentic schema)</span>
+ucurl "https://aoogle-production.up.railway.app/api/arlong/search?q=python" \
+  -H "Authorization: Bearer {{ keys[0].key if keys else 'YOUR_KEY' }}"
+
+<span class="c1"># grounded answer + epistemic state</span>
+ucurl "https://aoogle-production.up.railway.app/api/arlong/answer?q=python" \
+  -H "Authorization: Bearer {{ keys[0].key if keys else 'YOUR_KEY' }}"
+
+<span class="c1"># live model-router health</span>
+ucurl "https://aoogle-production.up.railway.app/api/arlong/status"
+
+<span class="c1"># classic search</span>
+ucurl "https://aoogle-production.up.railway.app/api/search?q=python&key={{ keys[0].key if keys else 'YOUR_KEY' }}"</pre>
+            </div>
+        </div>
+
+        <!-- ── Endpoints ────────────────────────────────────────────────── -->
+        <div class="pane" id="pane-endpoints">
+            <div class="card">
+                <h2>Agentic response schema</h2>
+                <p class="muted" style="margin:0 0 12px">Each result in <code class="inline">/api/arlong/search</code> and <code class="inline">/api/arlong/answer</code> carries a neural evaluation:</p>
+<pre>{
+  "id": "arlong-1",
+  "title": "…",
+  "url": "https://…",
+  "domain": "…",
+  "ai_evaluation": {
+    "relevance_score": 0.81,
+    "summary": "…",
+    "fact_check_status": "VERIFIED"
+  },
+  "reputation": {
+    "status": "SAFE",
+    "trust_score": 92
+  },
+  "threat_flags": [],
+  "snippet": "…",
+  "content": "…"
+}</pre>
+                <p class="muted" style="margin:10px 0 0"><code class="inline">relevance_score</code> is an embedding cosine (0–1), <code class="inline">reputation.status</code> is <code class="inline">SAFE / UNVERIFIED / BLOCKED</code>, and <code class="inline">threat_flags</code> surfaces prompt-injection signals. The top-level <code class="inline">epistemic_state</code> string tells you how many independent sources agree.</p>
+            </div>
+            <table>
+                <tr><th>Endpoint</th><th>Description</th></tr>
+                <tr><td><code class="inline">GET /api/arlong/search?q=…</code></td><td>Agentic search: evaluated results + corroboration</td></tr>
+                <tr><td><code class="inline">GET /api/arlong/answer?q=…</code></td><td>Grounded AI answer + sources + epistemic state</td></tr>
+                <tr><td><code class="inline">GET /api/arlong/status</code></td><td>Model router + neural health</td></tr>
+                <tr><td><code class="inline">GET /api/search?q=…</code></td><td>Classic search JSON</td></tr>
+                <tr><td><code class="inline">GET /api/ai-summary?q=…</code></td><td>Standalone AI summary</td></tr>
+            </table>
+        </div>
+
+        <div class="footer">
+            <a href="/docs">API documentation</a>
+            <a href="/terms-of-service">Terms of Service</a>
+            <a href="/privacy-policy">Privacy Policy</a>
+        </div>
     </div>
 </div>
 
 <script>
+    function switchTab(name){
+        document.querySelectorAll('.pane').forEach(function(p){ p.classList.remove('active'); });
+        document.querySelectorAll('.side .item').forEach(function(i){ i.classList.remove('active'); });
+        var pane = document.getElementById('pane-' + name);
+        if(pane) pane.classList.add('active');
+        var item = document.querySelector('.side .item[data-tab="' + name + '"]');
+        if(item) item.classList.add('active');
+        if(name === 'usage') loadRouter();
+    }
+    document.querySelectorAll('.side .item').forEach(function(i){
+        i.addEventListener('click', function(){ switchTab(i.getAttribute('data-tab')); });
+    });
+
     function copyKey(){
         var val = document.getElementById('key-val');
         if(!val) return;
@@ -168,6 +319,44 @@
         sel.removeAllRanges();
         var b = document.getElementById('copy-btn');
         if(b){ b.textContent = 'Copied!'; setTimeout(function(){ b.textContent = 'Copy'; }, 1500); }
+    }
+
+    function bar(label, used, limit, unit){
+        if(!limit) return '<div class="mrow"><div class="mtop"><div class="mname">' + label + '</div></div><div class="msub">no budget configured</div></div>';
+        var pct = Math.min(100, Math.round(used / limit * 100));
+        var cls = pct >= 90 ? 'g-danger' : (pct >= 70 ? 'g-warn' : '');
+        var pill = pct >= 90 ? '<span class="pill danger">' + pct + '%</span>'
+                  : (pct >= 70 ? '<span class="pill warn">' + pct + '%</span>'
+                  : '<span class="pill ok">' + pct + '%</span>');
+        return '<div class="mrow"><div class="mtop"><div class="mname">' + label + '</div>' + pill + '</div>' +
+               '<div class="gbar ' + cls + '"><div style="width:' + pct + '%"></div></div>' +
+               '<div class="msub" style="margin-top:6px">' + used + ' / ' + limit + ' ' + unit + ' in window</div></div>';
+    }
+
+    function loadRouter(){
+        fetch('/api/arlong/status').then(function(r){ return r.json(); }).then(function(d){
+            var box = document.getElementById('router-models');
+            if(!d.router || !d.router.enabled || !d.router.models.length){
+                box.innerHTML = '<p class="muted" style="margin:0">Router budgets are not configured on this deployment.</p>';
+                return;
+            }
+            var html = '';
+            d.router.models.forEach(function(m){
+                var state = m.cooldown_s > 0 ? '<span class="pill danger">cooldown ' + Math.ceil(m.cooldown_s) + 's</span>' : '<span class="pill ok">ready</span>';
+                html += '<div class="mrow"><div class="mtop"><div class="mname">' + m.model + '</div>' + state + '</div>' +
+                        '<div class="msub" style="margin-bottom:8px">' +
+                        'reqs ' + (m.counters.requests || 0) + ' · ok ' + (m.counters.successes || 0) +
+                        ' · fail ' + (m.counters.failures || 0) + ' · fail-streak ' + (m.fail_streak || 0) + '</div>';
+                html += bar('RPM (1 min)', m.rpm, m.rpm_limit, 'req');
+                html += bar('RPD (24 h)', m.rpd, m.rpd_limit, 'req');
+                html += bar('TPM (1 min)', m.tpm, m.tpm_limit, 'tok');
+                html += bar('TPD (24 h)', m.tpd, m.tpd_limit, 'tok');
+                html += '</div>';
+            });
+            box.innerHTML = html;
+        }).catch(function(){
+            document.getElementById('router-models').innerHTML = '<p class="muted" style="margin:0">Router status unavailable.</p>';
+        });
     }
 </script>
 </body>

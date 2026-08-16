@@ -8,6 +8,7 @@ venv/
 .DS_Store
 data.json
 .env
+.env.bench
 .secret_key
 test_*.py
 *.zip
@@ -17,3 +18,4 @@ backups/
 places_photos/
 testerr.txt
 testout.txt
+benchmarks/results/

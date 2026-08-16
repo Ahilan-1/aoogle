@@ -1,0 +1,116 @@
+{
+  "meta": {
+    "created": "2026-08-15",
+    "engines": ["arlong", "exa", "perplexity", "parallel"]
+  },
+  "queries": [
+    {
+      "id": "q01",
+      "query": "What is the capital of France?",
+      "category": "factoid",
+      "expected": ["Paris"]
+    },
+    {
+      "id": "q02",
+      "query": "Who is the CEO of OpenAI?",
+      "category": "factoid",
+      "expected": ["Sam Altman"]
+    },
+    {
+      "id": "q03",
+      "query": "What is the tallest mountain in the world?",
+      "category": "factoid",
+      "expected": ["Mount Everest", "Everest"]
+    },
+    {
+      "id": "q04",
+      "query": "What is the currency of Japan?",
+      "category": "factoid",
+      "expected": ["yen"]
+    },
+    {
+      "id": "q05",
+      "query": "Who wrote One Hundred Years of Solitude?",
+      "category": "factoid",
+      "expected": ["Gabriel Garcia Marquez", "M\u00e1rquez", "Garcia Marquez"]
+    },
+    {
+      "id": "q06",
+      "query": "What is the chemical symbol for gold?",
+      "category": "factoid",
+      "expected": ["Au"]
+    },
+    {
+      "id": "q07",
+      "query": "In what year was Python 3.0 released?",
+      "category": "factoid",
+      "expected": ["2008"]
+    },
+    {
+      "id": "q08",
+      "query": "How many continents are there on Earth?",
+      "category": "factoid",
+      "expected": ["seven", "7"]
+    },
+    {
+      "id": "q09",
+      "query": "Who won the 2026 FIFA World Cup?",
+      "category": "current"
+    },
+    {
+      "id": "q10",
+      "query": "What are the most important AI model releases announced in August 2026?",
+      "category": "current"
+    },
+    {
+      "id": "q11",
+      "query": "Best budget laptops under $700 in 2026",
+      "category": "product"
+    },
+    {
+      "id": "q12",
+      "query": "Python vs Rust for web backends in 2026",
+      "category": "comparison"
+    },
+    {
+      "id": "q13",
+      "query": "How to fix a blue screen (BSOD) error in Windows 11",
+      "category": "howto"
+    },
+    {
+      "id": "q14",
+      "query": "How does RAG (retrieval-augmented generation) work for enterprise document search?",
+      "category": "deep"
+    },
+    {
+      "id": "q15",
+      "query": "What was Nvidia's revenue for fiscal year 2026?",
+      "category": "current"
+    },
+    {
+      "id": "q16",
+      "query": "Best south Indian restaurants in Bangalore",
+      "category": "local"
+    },
+    {
+      "id": "q17",
+      "query": "Electric vehicles vs hydrogen fuel cells in 2026",
+      "category": "comparison"
+    },
+    {
+      "id": "q18",
+      "query": "How to prepare for a software engineering interview",
+      "category": "howto"
+    },
+    {
+      "id": "q19",
+      "query": "What are the biggest risks of AI agents in 2026?",
+      "category": "deep"
+    },
+    {
+      "id": "q20",
+      "query": "Most anticipated video games coming out in 2026",
+      "category": "product"
+    }
+  ]
+}

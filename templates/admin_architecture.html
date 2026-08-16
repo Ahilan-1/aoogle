@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Arlong Architecture — Admin</title>
+    <style>
+        :root{--a-bg:#0a0d13;--a-bg2:#11151d;--a-bg3:#171c26;--a-border:#232a37;--a-text:#e7eaf0;--a-text2:#b9c1cf;--a-text3:#8b95a5;--a-link:#7fa6f5;--a-link-strong:#8ab4f8;--a-primary:#5b8def;--a-red:#f28b82;--a-green:#7dd98b;--a-orange:#f9ab00;--a-blue-bg:#16233f;}
+        *{box-sizing:border-box}
+        body{margin:0;padding:20px;font-family:arial,sans-serif;background:var(--a-bg);color:var(--a-text);font-size:14px}
+        a{color:var(--a-link);text-decoration:none}
+        a:hover{text-decoration:underline}
+        .header{display:flex;align-items:center;justify-content:space-between;max-width:1200px;margin:0 auto 18px;flex-wrap:wrap;gap:10px}
+        .header h1{font-size:20px;margin:0;color:var(--a-link-strong)}
+        .header .links{display:flex;gap:10px;flex-wrap:wrap}
+        .header .links a{font-size:13px;color:var(--a-text3);padding:6px 12px;border:1px solid var(--a-border);border-radius:6px}
+        .header .links a:hover{background:var(--a-bg3);text-decoration:none}
+        .header .links a.hot{color:var(--a-link-strong);border-color:var(--a-primary)}
+        .wrap{max-width:1200px;margin:0 auto}
+        .card{background:var(--a-bg2);border:1px solid var(--a-border);border-radius:12px;margin-bottom:18px;overflow:hidden}
+        .card-title{padding:12px 18px;font-size:14px;font-weight:600;border-bottom:1px solid var(--a-border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+        .card-title .badge{background:var(--a-blue-bg);color:var(--a-link-strong);font-size:11px;padding:2px 8px;border-radius:10px;font-weight:500}
+        #graph{width:100%;height:auto;display:block}
+        .statstrip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;padding:16px 18px}
+        .stat{background:var(--a-bg3);border:1px solid var(--a-border);border-radius:10px;padding:12px 14px}
+        .stat .num{font-size:22px;font-weight:600;color:var(--a-link-strong);line-height:1.1}
+        .stat .label{font-size:11px;color:var(--a-text3);text-transform:uppercase;letter-spacing:.3px;margin-top:3px}
+        .legend{display:flex;gap:16px;flex-wrap:wrap;padding:0 18px 16px;font-size:12px;color:var(--a-text3)}
+        .legend span{display:inline-flex;align-items:center;gap:6px}
+        .legend .dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+        .model-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;padding:16px 18px}
+        .mcard{background:var(--a-bg3);border:1px solid var(--a-border);border-radius:10px;padding:14px}
+        .mcard .mtop{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+        .mcard .mname{font-family:monospace;font-size:12.5px;font-weight:600;word-break:break-all}
+        .pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+        .pill.ok{background:#0d2214;color:var(--a-green)}
+        .pill.warn{background:#2b2112;color:var(--a-orange)}
+        .pill.danger{background:#2d1517;color:var(--a-red)}
+        .gbar{height:7px;background:#0a0d13;border:1px solid var(--a-border);border-radius:5px;overflow:hidden}
+        .gbar>div{height:100%;background:var(--a-primary);border-radius:5px}
+        .gbar.g-warn>div{background:var(--a-orange)}
+        .gbar.g-danger>div{background:#d93025}
+        .msub{font-family:monospace;font-size:11px;color:var(--a-text3);margin-top:6px}
+        .empty{padding:20px;color:var(--a-text3);font-size:13px;text-align:center}
+        .pane-noise{display:flex;gap:16px;flex-wrap:wrap;padding:0 18px 18px;align-items:center}
+        .tog{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--a-text2);cursor:pointer}
+        .tog input{accent-color:var(--a-primary)}
+        @media(max-width:700px){body{padding:12px}.card-title{flex-direction:column;align-items:flex-start}}
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>Arlong Architecture</h1>
+    <div class="links">
+        <a href="/admin/dashboard">Dashboard</a>
+        <a href="/admin/accounts">Accounts</a>
+        <a href="/admin/keys">Keys</a>
+        <a href="/admin/architecture" class="hot">Architecture</a>
+        <a href="/admin/logout">Sign out</a>
+    </div>
+</div>
+
+<div class="wrap">
+    <div class="card">
+        <div class="card-title">
+            Neural query → search → evaluation → routing pipeline
+            <span class="badge" id="status-badge">loading…</span>
+        </div>
+        <div class="pane-noise">
+            <label class="tog"><input type="checkbox" id="toggle-threat" checked> Show threat/injection nodes</label>
+            <label class="tog"><input type="checkbox" id="toggle-cache" checked> Show URL cache</label>
+            <span style="color:var(--a-text3);font-size:12px">Live from <code style="font-size:11px">/api/arlong/status</code> · refreshes every 5&nbsp;s</span>
+        </div>
+        <svg id="graph" viewBox="0 0 1200 700" role="img" aria-label="Arlong architecture node graph"></svg>
+        <div class="legend">
+            <span><i class="dot" style="background:#5b8def"></i> Query &amp; understanding</span>
+            <span><i class="dot" style="background:#2e7d32"></i> Retrieval</span>
+            <span><i class="dot" style="background:#e37400"></i> Neural evaluation</span>
+            <span><i class="dot" style="background:#7b1fa2"></i> Synthesis (model router)</span>
+            <span><i class="dot" style="background:#c5221f"></i> Threats / blocked</span>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Live model router <span class="badge" id="router-count">— models</span></div>
+        <div class="model-grid" id="router-models"><div class="empty">Loading…</div></div>
+    </div>
+</div>
+
+<script>
+var GRAPH_NS = 'http://www.w3.org/2000/svg';
+
+function el(tag, attrs, text){
+    var n = document.createElementNS(GRAPH_NS, tag);
+    for(var k in attrs){ n.setAttribute(k, attrs[k]); }
+    if(text !== undefined) n.textContent = text;
+    return n;
+}
+
+var NODES = [
+    {id:'query',  label:'Query', x:80, y:70, w:150, color:'#5b8def', sub:'natural language input'},
+    {id:'und',    label:'Neural understanding', x:80, y:180, w:170, color:'#5b8def', sub:'terms · phrase · polysemy hints'},
+    {id:'emb',    label:'Embedding cache', x:80, y:300, w:170, color:'#5b8def', sub:'512-d local · LRU', toggle:'cache'},
+    {id:'int',    label:'Internal search', x:380, y:120, w:160, color:'#2e7d32', sub:'DDG engines · news/wiki intents'},
+    {id:'serp',   label:'Serper.dev fallback', x:620, y:120, w:170, color:'#2e7d32', sub:'key rotation on 429'},
+    {id:'fetch',  label:'Concurrent page fetch', x:470, y:250, w:180, color:'#2e7d32', sub:'ThreadPool · 6s budget · URL cache', toggle:'cache'},
+    {id:'rel',    label:'Relevance gate', x:380, y:380, w:160, color:'#e37400', sub:'cosine ≥ 0.35'},
+    {id:'inj',    label:'Injection detector', x:620, y:300, w:180, color:'#e37400', sub:'heuristics → LLM only if ambiguous', toggle:'threat'},
+    {id:'block',  label:'Blocked pages', x:860, y:380, w:170, color:'#c5221f', sub:'drop from context', toggle:'threat'},
+    {id:'corr',   label:'Corroboration', x:380, y:500, w:160, color:'#e37400', sub:'claim clusters ≥ 0.78'},
+    {id:'router', label:'Model router', x:620, y:500, w:190, color:'#7b1fa2', sub:'llama-3.3 > gpt-oss > qwen', live:true},
+    {id:'out',    label:'Answer + epistemic state', x:870, y:500, w:220, color:'#7b1fa2', sub:'citations + source list'},
+];
+
+var EDGES = [
+    ['query','und'], ['und','int'],
+    ['und','emb'], ['int','serp'], ['und','serp'],
+    ['int','fetch'], ['serp','fetch'],
+    ['emb','rel'], ['fetch','rel'],
+    ['rel','inj'], ['inj','block'], ['rel','block'],
+    ['inj','corr'], ['rel','corr'],
+    ['corr','router'], ['inj','router'], ['block','out'], ['router','out'],
+];
+
+function drawGraph(){
+    var svg = document.getElementById('graph');
+    svg.innerHTML = '';
+
+    var defs = el('defs', {});
+    var m = el('marker', {id:'arrow', viewBox:'0 0 10 10', refX:'9', refY:'5', markerWidth:'7', markerHeight:'7', orient:'auto'});
+    m.appendChild(el('path', {d:'M 0 0 L 10 5 L 0 10 z', fill:'#3a4556'}));
+    defs.appendChild(m);
+    svg.appendChild(defs);
+
+    var showThreat = document.getElementById('toggle-threat').checked;
+    var showCache = document.getElementById('toggle-cache').checked;
+
+    EDGES.forEach(function(e){
+        var a = NODES.filter(function(n){ return n.id === e[0]; })[0];
+        var b = NODES.filter(function(n){ return n.id === e[1]; })[0];
+        if(!a || !b) return;
+        if(a.toggle && !(a.toggle === 'threat' ? showThreat : showCache)) return;
+        if(b.toggle && !(b.toggle === 'threat' ? showThreat : showCache)) return;
+        var ax = a.x + a.w / 2, ay = a.y + 44, bx = b.x + b.w / 2, by = b.y;
+        svg.appendChild(el('line', {
+            x1:ax, y1:ay, x2:bx, y2:by, stroke:'#3a4556', 'stroke-width':2, 'marker-end':'url(#arrow)'
+        }));
+    });
+
+    NODES.forEach(function(n){
+        if(n.toggle === 'threat' && !showThreat) return;
+        if(n.toggle === 'cache' && !showCache) return;
+        var g = el('g', {}, null);
+        g.appendChild(el('rect', {
+            x:n.x, y:n.y, width:n.w, height:44, rx:10, fill:n.color, opacity:.16,
+            stroke:n.color, 'stroke-width':1.6
+        }));
+        g.appendChild(el('text', {x:n.x + n.w / 2, y:n.y + 20, 'text-anchor':'middle', fill:'#e7eaf0', 'font-size':13, 'font-weight':600}, n.label));
+        g.appendChild(el('text', {x:n.x + n.w / 2, y:n.y + 34, 'text-anchor':'middle', fill:'#8b95a5', 'font-size':9.5}, n.sub));
+        svg.appendChild(g);
+    });
+}
+
+function bar(label, used, limit, unit){
+    if(!limit) return '';
+    var pct = Math.min(100, Math.round(used / limit * 100));
+    var cls = pct >= 90 ? 'g-danger' : (pct >= 70 ? 'g-warn' : '');
+    var pill = pct >= 90 ? '<span class="pill danger">' + pct + '%</span>'
+              : (pct >= 70 ? '<span class="pill warn">' + pct + '%</span>'
+              : '<span class="pill ok">' + pct + '%</span>');
+    return '<div style="margin-top:7px"><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--a-text3);margin-bottom:2px">' +
+           '<span>' + label + '</span>' + pill + '</div>' +
+           '<div class="gbar ' + cls + '"><div style="width:' + pct + '%"></div></div></div>';
+}
+
+function loadRouter(){
+    fetch('/api/arlong/status').then(function(r){ return r.json(); }).then(function(d){
+        var badge = document.getElementById('status-badge');
+        badge.textContent = d.neural.embedding_backend === 'remote' ? 'remote embeddings' : 'local embeddings';
+        var box = document.getElementById('router-models');
+        var rcrumb = document.getElementById('router-count');
+        if(!d.router || !d.router.enabled || !d.router.models.length){
+            box.innerHTML = '<div class="empty">Router budgets not configured on this deployment.</div>';
+            rcrumb.textContent = '— models';
+            badge.textContent += ' · router off';
+            return;
+        }
+        rcrumb.textContent = d.router.models.length + ' models';
+        var html = '';
+        d.router.models.forEach(function(m){
+            var state = m.cooldown_s > 0 ? '<span class="pill danger">cooldown ' + Math.ceil(m.cooldown_s) + 's</span>'
+                        : '<span class="pill ok">ready</span>';
+            html += '<div class="mcard"><div class="mtop"><div class="mname">' + m.model + '</div>' + state + '</div>' +
+                    '<div class="msub">reqs ' + (m.counters.requests || 0) +
+                    ' · ok ' + (m.counters.successes || 0) +
+                    ' · fail ' + (m.counters.failures || 0) + '</div>';
+            html += bar('RPM', m.rpm, m.rpm_limit, 'req');
+            html += bar('RPD', m.rpd, m.rpd_limit, 'req');
+            html += bar('TPM', m.tpm, m.tpm_limit, 'tok');
+            html += bar('TPD', m.tpd, m.tpd_limit, 'tok');
+            if(m.cooldown_s > 0){ html += '<div class="msub">fail-streak ' + (m.fail_streak || 0) + ' → backoff active</div>'; }
+            html += '</div>';
+        });
+        box.innerHTML = html;
+    }).catch(function(){
+        document.getElementById('status-badge').textContent = 'status unavailable';
+        document.getElementById('router-models').innerHTML = '<div class="empty">Router status unavailable.</div>';
+    });
+}
+
+document.getElementById('toggle-threat').addEventListener('change', drawGraph);
+document.getElementById('toggle-cache').addEventListener('change', drawGraph);
+
+drawGraph();
+loadRouter();
+setInterval(loadRouter, 5000);
+</script>
+</body>
+</html>
