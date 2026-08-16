@@ -1037,18 +1037,23 @@
         var def = SOURCE_TAG_DEFS[tag] || SOURCE_TAG_DEFS.trusted;
         box.innerHTML = '<span class="ai-src-tag '+def.cls+'"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'+(def.glyph||'')+'</svg>'+def.label+'</span>';
     }
-    function fireLinkEvals(q, results, ov, offset){
+    function fireLinkEvals(q, results, ov, offset, cid){
         offset = offset || 0;
+        cid = cid || chatId;
         function apply(d){
             if(!d || !d.ok || !d.evaluations) return false;
+            var evals = d.evaluations || {};
+            var keys = Object.keys(evals);
+            var tks = (d.tags && Object.keys(d.tags)) || [];
+            if(!keys.length && !tks.length) return false;   // empty = not ready/failed
             if(d.tags){
                 Object.keys(d.tags).forEach(function(k){
                     renderSourceTag(k, d.tags[k], ov);
                 });
             }
-            Object.keys(d.evaluations).forEach(function(k){
+            Object.keys(evals).forEach(function(k){
                 var box = ov.querySelector('#ai-eval-'+k);
-                if(box) box.innerHTML = '<span class="ai-eval-label">AI Evaluation</span><span>'+esc(d.evaluations[k])+'</span>';
+                if(box) box.innerHTML = '<span class="ai-eval-label">AI Evaluation</span><span>'+esc(evals[k])+'</span>';
             });
             return true;
         }
@@ -1062,16 +1067,20 @@
             });
         }
         function attempt(n){
-            fetch('/api/ai/links', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q, results:results, offset:offset})})
+            fetch('/api/ai/links', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q, results:results, offset:offset, chat_id: cid || undefined})})
             .then(function(r){ return r.json(); })
             .then(function(d){
-                if(!apply(d)){
-                    if(n < 3){ setTimeout(function(){ attempt(n+1); }, 800*n + 600); }
-                    else { markUnavailable(); }
+                if(apply(d)) return;
+                var retryAfter = (d && d.retry_after) ? Number(d.retry_after) : 0;
+                var delay = retryAfter > 0 ? (retryAfter * 1000) : (800 * n + 600);
+                if(n < 3){
+                    setTimeout(function(){ attempt(n + 1); }, delay);
+                } else {
+                    markUnavailable();
                 }
             })
             .catch(function(){
-                if(n < 3){ setTimeout(function(){ attempt(n+1); }, 800*n + 600); }
+                if(n < 3){ setTimeout(function(){ attempt(n + 1); }, 800 * n + 600); }
                 else { markUnavailable(); }
             });
         }

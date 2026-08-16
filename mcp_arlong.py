@@ -1,20 +1,22 @@
 """mcp_arlong — Model Context Protocol server for the Arlong agentic search API.
 
-Exposes Arlong's neural search + answer pipeline as MCP tools so Claude,
-Cursor, or any MCP client can run searches and get grounded answers with an
-epistemic state (how many independent sources agree).
+Two ways to use Arlong's tools:
+
+1. REMOTE (recommended) — point your MCP client straight at the hosted
+   endpoint over HTTP:
+       https://arlong.org/mcp
+   No local Python is needed. Claude Desktop / Cursor / any MCP client can use
+   it directly (add the API key in the MCP client's Authorization header).
+
+2. LOCAL — run this script over stdio. It proxies to Arlong's REST API:
+       ARLONG_BASE_URL=https://arlong.org ARLONG_API_KEY=al_... python mcp_arlong.py
+   Then point your MCP client at:  python C:\\path\\to\\mcp_arlong.py
 
 Zero-dependency: speaks the MCP stdio transport (JSON-RPC 2.0, newline
 delimited) with no external packages required.
 
-Run it:
-    ARLONG_BASE_URL=http://127.0.0.1:5000 ARLONG_API_KEY=al_... python mcp_arlong.py
-
-Then point your MCP client at:  python C:\\path\\to\\mcp_arlong.py
-(env vars above can also live in the client's env block.)
-
 For ucurl clients the same endpoints are reachable directly:
-    ucurl "http://127.0.0.1:5000/api/arlong/answer?q=python&key=al_..."
+    ucurl "https://arlong.org/api/arlong/answer?q=python&key=al_..."
 """
 import json
 import os
@@ -25,7 +27,7 @@ try:
 except Exception:  # pragma: no cover
     _http = None
 
-BASE_URL = os.environ.get('ARLONG_BASE_URL', 'http://127.0.0.1:5000').rstrip('/')
+BASE_URL = os.environ.get('ARLONG_BASE_URL', 'https://arlong.org').rstrip('/')
 API_KEY = os.environ.get('ARLONG_API_KEY', '')
 
 TOOLS = [

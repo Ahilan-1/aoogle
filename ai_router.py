@@ -59,12 +59,17 @@ class ModelRouter:
     def pick(self, est_tokens=0, prefer=None):
         """Return the best model for est_tokens, or None if all are exhausted.
 
+        A model is only returned when it has real headroom right now
+        (recovery == 0). Models that are merely "closest to recovering" but
+        still over budget are NOT returned — the caller treats a None result
+        as "all models busy" and surfaces a wait/retry hint instead of firing
+        a request that would 429 and escalate cooldowns.
+
         `prefer` (optional) is a model to try first even if it is not at the
         top of self.order (used to keep a chat on the same model).
         """
         now = self._now()
         with self._lock:
-            candidates = []
             order = list(self.order)
             if prefer and prefer in order:
                 order.remove(prefer)
@@ -84,31 +89,26 @@ class ModelRouter:
                         rpd <= budget.get('rpd', 1 << 30) and \
                         tpm <= budget.get('tpm', 1 << 30) and \
                         tpd <= budget.get('tpd', 1 << 30):
-                    candidates.append((model, 0.0))
-                else:
-                    # how long until this model recovers (best-effort)
-                    candidates.append((model, self._recovery_s(model, budget, now)))
-            if not candidates:
-                return None
-            candidates.sort(key=lambda c: c[1])
-            return candidates[0][0]
+                    return model
+            return None
 
-    def _recovery_s(self, model, budget, now):
+    def _recovery_s(self, model, budget, now, est_tokens=0):
         """Seconds until the limiting window slides far enough to free up."""
         wait = 0.0
         hist = self._usage.get(model, [])
         rpm = self._rpm(model, now)
-        if rpm >= budget.get('rpm', 1 << 30):
+        tpm = self._tpm(model, now)
+        if rpm + 1 > budget.get('rpm', 1 << 30):
             # oldest of the newest rpm+1 requests must age out
-            need = rpm - budget['rpm'] + 1
+            need = rpm - budget['rpm'] + 2
             if len(hist) >= need:
                 wait = max(wait, 60 - (now - hist[-need][0]))
-        tpm = self._tpm(model, now)
-        if tpm >= budget.get('tpm', 1 << 30):
+        tpm_est = tpm + est_tokens
+        if tpm_est > budget.get('tpm', 1 << 30):
             need = 1
             for i in range(len(hist) - 1, -1, -1):
-                tpm -= hist[i][1]
-                if tpm < budget['tpm']:
+                tpm_est -= hist[i][1]
+                if tpm_est <= budget['tpm']:
                     need = i
                     break
             if need < len(hist):
@@ -117,6 +117,17 @@ class ModelRouter:
         if cooldown > now:
             wait = max(wait, cooldown - now)
         return wait
+
+    def _fits(self, model, budget, est_tokens, now):
+        """True if `model` has headroom for a request of est_tokens right now."""
+        rpm = self._rpm(model, now)
+        rpd = self._rpd(model, now)
+        tpm = self._tpm(model, now) + est_tokens
+        tpd = self._tpd(model, now) + est_tokens
+        return rpm + 1 <= budget.get('rpm', 1 << 30) and \
+            rpd + 1 <= budget.get('rpd', 1 << 30) and \
+            tpm <= budget.get('tpm', 1 << 30) and \
+            tpd <= budget.get('tpd', 1 << 30)
 
     def record(self, model, tokens=0, success=True):
         """Record a completed request. Call after the model call resolves."""
@@ -162,6 +173,40 @@ class ModelRouter:
         """Remaining cooldown seconds for a model (0 = usable)."""
         now = self._now()
         return max(0.0, self._cooldown_until.get(model, 0) - now)
+
+    def recovery(self, model, est_tokens=0):
+        """Seconds until `model` has real headroom again (0 = usable now).
+
+        Accounts for both rate-limit cooldown (from mark_failure) and rolling
+        window pressure (RPM/RPD/TPM/TPD). est_tokens lets callers ask "will
+        this request fit?" instead of a zero-size probe.
+        """
+        now = self._now()
+        with self._lock:
+            if model not in self.budgets:
+                return 0.0
+            budget = self.budgets[model]
+            return self._recovery_s(model, budget, now, est_tokens=est_tokens)
+
+    def wait(self, est_tokens=0):
+        """Shortest wait (s) until ANY model can take a request (0 = ready now).
+
+        The router's best answer to "when can I send work again?" — used for
+        the busy/retry hint instead of a generic message.
+        """
+        now = self._now()
+        with self._lock:
+            best = float('inf')
+            for model in self.order:
+                if model not in self.budgets:
+                    continue
+                if self._cooldown_until.get(model, 0) <= now and \
+                        self._fits(model, self.budgets[model], est_tokens, now):
+                    return 0.0
+                rec = self._recovery_s(model, self.budgets[model], now, est_tokens=est_tokens)
+                if rec < best:
+                    best = rec
+            return 0.0 if best == float('inf') else best
 
     def usage(self, model):
         now = self._now()

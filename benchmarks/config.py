@@ -34,7 +34,7 @@ def load_config():
         return os.environ.get(name, default)
 
     return {
-        "arlong_base_url": get("ARLONG_BASE_URL", "http://127.0.0.1:5000").rstrip("/"),
+        "arlong_base_url": get("ARLONG_BASE_URL", "https://arlong.org").rstrip("/"),
         "arlong_api_key": get("ARLONG_API_KEY"),
         "arlong_use_internal": get("ARLONG_USE_INTERNAL", "1") in ("1", "true", "yes", "on"),
         "exa_api_key": get("EXA_API_KEY"),

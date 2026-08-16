@@ -125,7 +125,7 @@
                 <h2>How to call Arlong</h2>
                 <p class="muted" style="margin:0 0 8px">Three ways to reach the agentic engine — HTTP, ucurl, or an MCP client:</p>
                 <pre><span class="c1"># REST</span>
-curl "https://aoogle-production.up.railway.app/api/arlong/search?q=python" -H "Authorization: Bearer YOUR_KEY"</pre>
+curl "https://arlong.org/api/arlong/search?q=python" -H "Authorization: Bearer YOUR_KEY"</pre>
                 <p class="muted" style="margin:10px 0 0">Jump to the <a href="javascript:switchTab('mcp')">MCP</a>, <a href="javascript:switchTab('ucurl')">ucurl</a>, or <a href="javascript:switchTab('endpoints')">Endpoints</a> tabs.</p>
             </div>
         </div>
@@ -207,24 +207,26 @@ curl "https://aoogle-production.up.railway.app/api/arlong/search?q=python" -H "A
         <!-- ── MCP ──────────────────────────────────────────────────────── -->
         <div class="pane" id="pane-mcp">
             <div class="card">
-                <h2>Model Context Protocol server</h2>
-                <p class="muted" style="margin:0 0 12px">Run <code class="inline">mcp_arlong.py</code> on this machine and point Claude Desktop / Cursor / any MCP client at it. The server exposes Arlong's search, answer, and status as tools with the agentic schema.</p>
-<pre><span class="c1"># 1. install the client SDK</span>
-pip install "mcp[cli]"
-
-<span class="c1"># 2. add this server to your MCP client config (mcpServers)</span>
+                <h2>Model Context Protocol — hosted endpoint</h2>
+                <p class="muted" style="margin:0 0 12px">Arlong exposes its tools as a hosted MCP server at <code class="inline">https://arlong.org/mcp</code> — no local Python needed. Point Claude Desktop, Cursor, or any MCP client at it and pass your key in the client's <code class="inline">Authorization</code> header (<code class="inline">Bearer YOUR_KEY</code>).</p>
+<pre><span class="c1"># 1. add this server to your MCP client config (mcpServers)</span>
 {
   "mcpServers": {
     "arlong": {
-      "command": "python",
-      "args": ["C:\\path\\to\\mcp_arlong.py"],
-      "env": {
-        "ARLONG_BASE_URL": "http://127.0.0.1:5000",
-        "ARLONG_API_KEY": "{{ keys[0].key if keys else 'YOUR_KEY' }}"
+      "type": "http",
+      "url": "https://arlong.org/mcp",
+      "headers": {
+        "Authorization": "Bearer {{ keys[0].key if keys else 'YOUR_KEY' }}"
       }
     }
   }
-}</pre>
+}
+
+<span class="c1"># 2. local stdio relay (optional — no SDK needed)</span>
+pip install httpx
+ARLONG_BASE_URL=https://arlong.org \
+ARLONG_API_KEY={{ keys[0].key if keys else 'YOUR_KEY' }} \
+python mcp_arlong.py</pre>
                 <p class="muted" style="margin:10px 0 0">Tools exposed: <code class="inline">arlong_search</code>, <code class="inline">arlong_answer</code>, <code class="inline">arlong_status</code>.</p>
             </div>
         </div>
@@ -235,18 +237,18 @@ pip install "mcp[cli]"
                 <h2>ucurl — JSON API from the command line</h2>
                 <p class="muted" style="margin:0 0 12px">No SDK needed. Every endpoint is plain GET JSON with your key in the <code class="inline">Authorization</code> header (or <code class="inline">?key=</code>).</p>
 <pre><span class="c1"># search (agentic schema)</span>
-ucurl "https://aoogle-production.up.railway.app/api/arlong/search?q=python" \
+ucurl "https://arlong.org/api/arlong/search?q=python" \
   -H "Authorization: Bearer {{ keys[0].key if keys else 'YOUR_KEY' }}"
 
 <span class="c1"># grounded answer + epistemic state</span>
-ucurl "https://aoogle-production.up.railway.app/api/arlong/answer?q=python" \
+ucurl "https://arlong.org/api/arlong/answer?q=python" \
   -H "Authorization: Bearer {{ keys[0].key if keys else 'YOUR_KEY' }}"
 
 <span class="c1"># live model-router health</span>
-ucurl "https://aoogle-production.up.railway.app/api/arlong/status"
+ucurl "https://arlong.org/api/arlong/status"
 
 <span class="c1"># classic search</span>
-ucurl "https://aoogle-production.up.railway.app/api/search?q=python&key={{ keys[0].key if keys else 'YOUR_KEY' }}"</pre>
+ucurl "https://arlong.org/api/search?q=python&key={{ keys[0].key if keys else 'YOUR_KEY' }}"</pre>
             </div>
         </div>
 

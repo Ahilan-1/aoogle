@@ -307,6 +307,19 @@ _ai_router = _ai_router_module.ModelRouter(
 )
 _ai_router_module.set_router(_ai_router)
 
+# Groq models that accept `reasoning_format` (hidden/tracked thinking). The
+# plain Llama models reject it with a 400, so it is only attached when the
+# router picks one of these.
+_AI_REASONING_FORMAT_MODELS = {
+    'openai/gpt-oss-20b', 'openai/gpt-oss-120b',
+    'deepseek-r1-distill-llama-70b', 'deepseek-r1-distill-llama-70b-0405',
+    'deepseek-r1-distill-qwen-32b',
+}
+
+
+def _ai_supports_reasoning(model):
+    return model in _AI_REASONING_FORMAT_MODELS
+
 # Per-user limits: message count resets 12h after the user's first message in
 # the window; the token budget is 15k per user and refreshes every 6 hours on a
 # fixed clock cycle.
@@ -7826,7 +7839,7 @@ def _strip_reasoning_blocks(text):
     text = re.sub(
         r"(?is)^\s*(here'?s? a (thinking|reasoning) process:?|thought process:?).*?("
         r"(?:\n\s*(?:[A-Z][a-z]{3,}\b.*?)(?:\n|$))|"
-        r"(?:\n\s*(?:-|\*|1\.)\s+)|(?:\n[A-Z])|$))",
+        r"(?:\n\s*(?:-|\*|1\.)\s+)|(?:\n[A-Z])|$)",
         lambda m: ('\n' + m.group(3) if m.group(3) and len(m.group(3)) < 200 else ' '),
         text,
     )
@@ -9523,7 +9536,7 @@ def search():
     return Response(stream_with_context(_stream()), mimetype='text/html')
 
 
-def arlong_ai_answer(q, results=None):
+def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None, followup_round=None):
     """Generate Arlong's final AI answer for a query from internal functions.
 
     Pipeline (understand → search → evaluate → synthesize):
@@ -9534,6 +9547,10 @@ def arlong_ai_answer(q, results=None):
          heuristics — low-relevance or flagged pages are dropped from context.
       4. Run the Groq model over the filtered context.
       5. Post-process citations. Returns (answer_text, sources).
+
+    `extra_context` / `extra_sources` inject a second-round retrieval (from the
+    completeness-triggered follow-up search) so the model can fill gaps its
+    first pass missed. `followup_round` labels the pass for the system prompt.
     """
     import re as _re
     import httpx as _httpx
@@ -9696,6 +9713,32 @@ def arlong_ai_answer(q, results=None):
             sources.append({'url': u, 'title': t or ''})
             web_context += f"\n\n[Source {idx}]\nURL: {u}\nTitle: {t}\nContent: {text}"
 
+    # ── 3b. Merge second-round (follow-up) retrieval, if any ─────────────
+    if extra_sources:
+        seen_urls = {s.get('url') for s in sources}
+        for s in (extra_sources or []):
+            u = s.get('url') or ''
+            if not u or u in seen_urls:
+                continue
+            seen_urls.add(u)
+            idx = len(sources) + 1
+            sources.append({'url': u, 'title': s.get('title') or ''})
+            web_context += (f"\n\n[Source {idx}]\nURL: {u}\nTitle: {s.get('title') or ''}"
+                            f"\nContent: {s.get('content') or (s.get('snippet') or '')[:800]}")
+    if extra_context and not extra_sources:
+        web_context += '\n\n' + str(extra_context).strip()
+
+    round_note = ''
+    if followup_round:
+        round_note = (
+            f"\n\nThis is round {followup_round} of a multi-step answer. The first "
+            f"pass may have missed specific figures the user asked about (metrics, "
+            f"specs, numbers, dates). You have been given ADDITIONAL sources found "
+            f"by a follow-up search specifically targeting those gaps. Extract every "
+            f"requested data point you can from the sources below — do not say a "
+            f"figure is unavailable unless it truly appears nowhere in the sources."
+        )
+
     system_msg = (
         "You are a world-class search assistant. "
         "Answer search queries with direct, specific, factual answers — like Google's featured snippet. "
@@ -9711,6 +9754,7 @@ def arlong_ai_answer(q, results=None):
         "Cite sources inline as [1], [2] only when there are multiple distinct facts from different sources. "
         "Keep total length to 2-4 sentences unless the question clearly requires more. "
         "Write in clean prose: no extra spaces before punctuation, no bullet symbols unless the user sees a list format."
+        + round_note
     )
 
     if web_context:
@@ -9766,6 +9810,140 @@ Give the most accurate answer you can in 2-3 sentences. If you are not certain, 
         answer = _re.sub(r'\[\d+\]', '', answer)
 
     return answer, sources
+
+
+def _arlong_fetch_page_text(url):
+    """Fetch + clean one page for follow-up retrieval. Returns cleaned text or ''."""
+    try:
+        import httpx as _httpx
+        resp = _httpx.get(url, timeout=6, follow_redirects=True,
+                          headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) rv:136.0 Firefox/136.0'})
+        if resp.status_code == 200:
+            text = re.sub(r'<script[^>]*>.*?</script>', '', resp.text or '', flags=re.DOTALL | re.IGNORECASE)
+            text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+            text = re.sub(r'<[^>]+>', ' ', text)
+            text = re.sub(r'\s+', ' ', text).strip()
+            return text[:4000]
+    except Exception:
+        pass
+    return ''
+
+
+def _arlong_completeness_check(q, answer, sources, max_followups=2):
+    """Ask the model whether the first-pass answer is missing concrete data the
+    user asked for (metrics, specs, numbers, dates, names). Returns a list of
+    follow-up search queries (empty = answer is complete).
+    """
+    if not AI_MODE_GROQ_API_KEY or not answer:
+        return []
+    try:
+        src_lines = '\n'.join(f"- {s.get('title') or ''} ({s.get('url') or ''})"
+                              for s in (sources or [])[:6]) or '(no sources)'
+        comp = _ai_completion(
+            messages=[
+                {'role': 'system', 'content': (
+                    'You are a research completeness checker. Given a user question, a draft '
+                    'answer, and the sources it used, decide whether the answer is COMPLETE or '
+                    'is MISSING specific requested data points (numbers, metrics, specs, prices, '
+                    'dates, names). Reply with STRICT JSON only: '
+                    '{"complete":true,"missing_queries":[]} when the answer has everything the '
+                    'question asked for, or {"complete":false,"missing_queries":["<concrete '
+                    'web-search query targeting the missing data>", ...]} when specific figures '
+                    'are missing. Follow-up queries must be concrete web-search queries that would '
+                    'surface the missing data (e.g. "RTX 5080 TDP memory bandwidth official specs", '
+                    '"Model X official datasheet TDP bandwidth"). At most ' + str(max_followups) +
+                    ' queries. NEVER invent queries when the answer is complete — asking is the '
+                    'exception, not the rule.'
+                )},
+                {'role': 'user', 'content': f"Question: {q}\n\nDraft answer:\n{answer[:1200]}\n\nSources used:\n{src_lines}\n\nCheck completeness."},
+            ],
+            max_tokens=300,
+            temperature=0.1,
+            response_format={'type': 'json_object'},
+            reasoning_format='hidden',
+        )
+        raw = comp.choices[0].message.content or '{}'
+        parsed = {}
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            m = re.search(r'\{.*\}', raw, re.S)
+            if m:
+                try:
+                    parsed = json.loads(m.group(0))
+                except Exception:
+                    parsed = {}
+        if parsed.get('complete'):
+            return []
+        queries = []
+        ql = (q or '').strip().lower()
+        for x in (parsed.get('missing_queries') or [])[:max_followups]:
+            x = str(x or '').strip()
+            if x and x.lower() != ql:
+                queries.append(x[:200])
+        return queries
+    except AIAllModelsFailedError as e:
+        app.logger.warning(f"Completeness check unavailable (all models busy): {e}")
+        return []
+    except Exception as e:
+        app.logger.error(f"Completeness check error: {e}")
+        return []
+
+
+def _arlong_followup_retrieve(q, queries, limit=3):
+    """Run follow-up searches targeting missing data and return
+    (extra_sources, extra_context). extra_sources is a list of
+    {url, title, content, snippet} dicts, already relevance-gated by the
+    neural layer, ready to inject into arlong_ai_answer on a second pass.
+    """
+    import httpx as _httpx
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    try:
+        import neural_search as _neural
+    except Exception:
+        _neural = None
+
+    urls = []
+    seen = set()
+    for fq in (queries or []):
+        hits = _serper_web_search(fq)
+        for h in (hits or []):
+            u = (h.get('url') or '').strip()
+            if u.startswith('http') and u not in seen:
+                seen.add(u)
+                urls.append((u, h.get('title') or '', h.get('snippet') or ''))
+    if not urls:
+        return [], ''
+
+    fetched = []
+    deadline = time.monotonic() + 6.0
+    with ThreadPoolExecutor(max_workers=min(4, len(urls))) as pool:
+        futs = {pool.submit(_arlong_fetch_page_text, u): (u, t, s) for u, t, s in urls[:limit]}
+        for fut in as_completed(futs, timeout=6):
+            if time.monotonic() > deadline:
+                break
+            u, t, s = futs[fut]
+            try:
+                text = fut.result()
+                if text and len(text) > 100:
+                    fetched.append((u, t, text, s))
+            except Exception:
+                continue
+
+    out = []
+    ctx = ''
+    for u, t, text, snip in fetched:
+        if _neural is not None:
+            try:
+                ev = _neural.evaluate_page(q, title=t, url=u, snippet=snip[:200], content=text[:4000])
+                if ev['reputation']['status'] == 'BLOCKED' or ev['relevance_score'] < 0.35:
+                    app.logger.info(f"AI follow-up dropped {u} (rel={ev['relevance_score']})")
+                    continue
+            except Exception:
+                pass
+        out.append({'url': u, 'title': t or '', 'content': text[:2000], 'snippet': snip[:300]})
+        ctx += f"\n[Follow-up] {t or u}: {snip[:300]} ({u})"
+    return out, ctx
 
 
 def _serper_web_search(q, understood=None):
@@ -10320,29 +10498,12 @@ def _arlong_eval_result(q, r, idx):
     return item
 
 
-@app.route('/api/arlong/search', methods=['GET', 'POST'])
-def api_arlong_search():
-    if request.method == 'POST':
-        body = request.get_json(silent=True) or {}
-        q = (body.get('q') or '').strip()
-        page = max(1, int(body.get('page', 1)))
-    else:
-        q = request.args.get('q', '').strip()
-        page = max(1, int(request.args.get('page', 1)))
-    if not q:
-        return jsonify({"error": "Missing query parameter", "usage": "/api/arlong/search?q=your+query"}), 400
-    gate = _arlong_api_gate()
-    if not isinstance(gate, tuple):
-        return gate
-    rate, tier, api_key = gate
-    try:
-        results, total_results = search_engine.search(q, page)
-        search_stats.record()
-        data_manager.increment_total_searches()
-    except Exception as e:
-        app.logger.error(f"Arlong API search error: {e}")
-        return jsonify({"error": "Search failed", "message": "An internal error occurred while searching."}), 500
-
+def _arlong_search_payload(q, page=1):
+    """Run a search and build the full agentic response dict (shared by the
+    REST endpoints and the /mcp MCP tools). Raises on engine failure."""
+    results, total_results = search_engine.search(q, page)
+    search_stats.record()
+    data_manager.increment_total_searches()
     evaluated = [_arlong_eval_result(q, r, i) for i, r in enumerate(results, start=1)]
     response = {
         "query": q,
@@ -10350,7 +10511,59 @@ def api_arlong_search():
         "total_results": total_results,
         "results": evaluated,
     }
-    # Epistemic state from corroboration of the top snippets.
+    _arlong_attach_epistemic(response, results)
+    return response
+
+
+def _arlong_answer_payload(q):
+    """Run the grounded answer pipeline and build the agentic response dict.
+    Raises AIAllModelsFailedError on model unavailability.
+    Uses multi-step reasoning: if the first pass misses concrete data points,
+    it runs a follow-up search automatically and re-answers on round 2.
+    """
+    try:
+        results, _total = search_engine.search(q, 1)
+    except Exception as e:
+        app.logger.error(f"Arlong API answer search error: {e}")
+        results = []
+    answer, sources = arlong_ai_answer(q, results)
+    followup = {'ran': False, 'queries': [], 'rounds': 1}
+    try:
+        missing_queries = _arlong_completeness_check(q, answer, sources)
+        if missing_queries:
+            extra_sources, extra_context = _arlong_followup_retrieve(q, missing_queries)
+            if extra_sources or extra_context:
+                app.logger.info(
+                    f"Arlong answer follow-up: {len(missing_queries)} queries "
+                    f"→ {len(extra_sources)} extra sources"
+                )
+                answer2, sources2 = arlong_ai_answer(
+                    q, results,
+                    extra_sources=extra_sources or None,
+                    extra_context=extra_context or None,
+                    followup_round=2,
+                )
+                answer = answer2
+                sources = sources2
+                followup = {'ran': True, 'queries': missing_queries, 'rounds': 2}
+    except AIAllModelsFailedError:
+        pass  # keep round-1 answer when models are too busy for round 2
+    except Exception as e:
+        app.logger.error(f"Arlong answer follow-up error: {e}")
+    evaluated = [_arlong_eval_result(q, r, i) for i, r in enumerate(results[:5], start=1)]
+    response = {
+        "query": q,
+        "answer": answer,
+        "sources": sources,
+        "followup": followup,
+        "results": evaluated,
+    }
+    _arlong_attach_epistemic(response, results)
+    return response
+
+
+def _arlong_attach_epistemic(response, results):
+    """Epistemic state from corroboration of the top snippets."""
     try:
         import neural_search as _neural
         claims = [{"source_url": (r.get('url') or ''), "claim_text": clean_snippet_text(r.get('snippet') or '')[:400]}
@@ -10365,6 +10578,28 @@ def api_arlong_search():
             )
     except Exception:
         pass
+    return response
+
+
+@app.route('/api/arlong/search', methods=['GET', 'POST'])
+def api_arlong_search():
+    if request.method == 'POST':
+        body = request.get_json(silent=True) or {}
+        q = (body.get('q') or '').strip()
+        page = max(1, int(body.get('page', 1)))
+    else:
+        q = request.args.get('q', '').strip()
+        page = max(1, int(request.args.get('page', 1)))
+    if not q:
+        return jsonify({"error": "Missing query parameter", "usage": "/api/arlong/search?q=your+query"}), 400
+    gate = _arlong_api_gate()
+    if not isinstance(gate, tuple):
+        return gate
+    try:
+        response = _arlong_search_payload(q, page)
+    except Exception as e:
+        app.logger.error(f"Arlong API search error: {e}")
+        return jsonify({"error": "Search failed", "message": "An internal error occurred while searching."}), 500
     return jsonify(response)
 
 
@@ -10380,14 +10615,8 @@ def api_arlong_answer():
     gate = _arlong_api_gate()
     if not isinstance(gate, tuple):
         return gate
-    rate, tier, api_key = gate
     try:
-        results, _total = search_engine.search(q, 1)
-    except Exception as e:
-        app.logger.error(f"Arlong API answer search error: {e}")
-        results = []
-    try:
-        answer, sources = arlong_ai_answer(q, results)
+        response = _arlong_answer_payload(q)
     except AIAllModelsFailedError as e:
         wait = _ai_busy_hint()
         msg = f'Arlong AI is busy right now. Try again in about {max(5, wait)} seconds.' if (e.overloaded and wait > 0) else 'AI is busy right now. Please try again in a moment.'
@@ -10395,35 +10624,11 @@ def api_arlong_answer():
     except Exception as e:
         app.logger.error(f"Arlong API answer error: {e}")
         return jsonify({"error": "Generation failed", "message": "An internal error occurred while generating the answer."}), 500
-
-    evaluated = [_arlong_eval_result(q, r, i) for i, r in enumerate(results[:5], start=1)]
-    response = {
-        "query": q,
-        "answer": answer,
-        "sources": sources,
-        "results": evaluated,
-    }
-    try:
-        import neural_search as _neural
-        claims = [{"source_url": (r.get('url') or ''), "claim_text": clean_snippet_text(r.get('snippet') or '')[:400]}
-                  for r in results[:5] if (r.get('url') or '') and (r.get('snippet') or '')]
-        if claims:
-            corr = _neural.corroborate(claims)
-            response["corroboration"] = corr
-            response["epistemic_state"] = (
-                f"{len(claims)} sources examined; {int(round(corr['agreement'] * len(claims)))} "
-                f"agree on a common claim (agreement {corr['agreement']:.0%}), "
-                f"{corr['disagreement']} cluster(s) of disagreement."
-            )
-    except Exception:
-        pass
     return jsonify(response)
 
 
-@app.route('/api/arlong/status')
-def api_arlong_status():
-    """Live model-router + neural-module health snapshot for the account page
-    and the admin architecture graph (refreshed by the client on a timer)."""
+def _arlong_status_payload():
+    """Live model-router + neural-module health snapshot."""
     payload = {
         'router': {'enabled': False, 'models': [], 'order': []},
         'neural': {'embedding_backend': 'local'},
@@ -10451,7 +10656,146 @@ def api_arlong_status():
         }
     except Exception:
         pass
-    return jsonify(payload)
+    return payload
+
+
+@app.route('/api/arlong/status')
+def api_arlong_status():
+    """Live model-router + neural-module health snapshot for the account page
+    and the admin architecture graph (refreshed by the client on a timer)."""
+    return jsonify(_arlong_status_payload())
+
+
+MCP_TOOLS = [
+    {
+        'name': 'arlong_search',
+        'description': ('Search the web and return Arlong\'s agentic result '
+                        'schema: per-page relevance score, reputation/trust '
+                        'status, threat flags, plus a corroboration report '
+                        'showing how many independent sources agree.'),
+        'inputSchema': {
+            'type': 'object',
+            'properties': {
+                'query': {'type': 'string', 'description': 'The search query'},
+                'page': {'type': 'integer', 'description': 'Result page (1-based)', 'default': 1},
+            },
+            'required': ['query'],
+        },
+    },
+    {
+        'name': 'arlong_answer',
+        'description': ('Ask a question and get a grounded AI answer. The '
+                        'response includes the answer text, source list, and '
+                        'an epistemic_state string like "4 sources examined; '
+                        '3 agree on a common claim".'),
+        'inputSchema': {
+            'type': 'object',
+            'properties': {
+                'query': {'type': 'string', 'description': 'The question to answer'},
+            },
+            'required': ['query'],
+        },
+    },
+    {
+        'name': 'arlong_status',
+        'description': ('Live health snapshot of Arlong\'s model router '
+                        '(RPM/RPD/TPM/TPD usage + cooldowns per model) and the '
+                        'neural module (local vs remote embeddings).'),
+        'inputSchema': {'type': 'object', 'properties': {}},
+    },
+]
+
+
+def _mcp_call_tool(name, args):
+    """Execute one MCP tool. Returns JSON-serializable text."""
+    args = args or {}
+    name = (name or '')
+    if name == 'arlong_search':
+        query = (args.get('query') or '').strip()
+        if not query:
+            raise ValueError('query is required')
+        return json.dumps(_arlong_search_payload(query, int(args.get('page') or 1)), indent=2)
+    if name == 'arlong_answer':
+        query = (args.get('query') or '').strip()
+        if not query:
+            raise ValueError('query is required')
+        return json.dumps(_arlong_answer_payload(query), indent=2)
+    if name == 'arlong_status':
+        return json.dumps(_arlong_status_payload(), indent=2)
+    raise ValueError(f'Unknown tool: {name}')
+
+
+@app.route('/mcp', methods=['GET', 'POST'])
+def mcp_endpoint():
+    """MCP (Model Context Protocol) streamable-HTTP endpoint.
+
+    Serves the Arlong agentic tools at https://arlong.org/mcp for Claude
+    Desktop, Cursor, and any MCP client over HTTP — no local Python needed.
+    Authentication uses the same API-key tiers as /api/arlong (Bearer header,
+    ?key= param, or anonymous IP limit).
+    """
+    if request.method == 'GET':
+        return jsonify({
+            'protocolVersion': '2024-11-05',
+            'capabilities': {'tools': {'listChanged': False}},
+            'serverInfo': {'name': 'arlong-mcp', 'version': '1.0.0'},
+            'instructions': 'Arlong agentic search. Use tools/arlong_search for results with per-source evaluation, arlong_answer for a grounded answer, arlong_status for model health.',
+        })
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({'jsonrpc': '2.0', 'id': None, 'error': {'code': -32700, 'message': 'Parse error'}}), 400
+
+    method = body.get('method', '')
+    msg_id = body.get('id', None)
+    params = body.get('params') or {}
+
+    if method == 'initialize':
+        session_id = request.headers.get('Mcp-Session-Id', '')
+        if not session_id:
+            import uuid
+            session_id = 'arlong-' + uuid.uuid4().hex
+        resp = jsonify({
+            'jsonrpc': '2.0',
+            'id': msg_id,
+            'result': {
+                'protocolVersion': params.get('protocolVersion', '2024-11-05'),
+                'capabilities': {'tools': {'listChanged': False}},
+                'serverInfo': {'name': 'arlong-mcp', 'version': '1.0.0'},
+                'instructions': 'Arlong agentic search. arlong_search = evaluated results, arlong_answer = grounded answer, arlong_status = model health.',
+            },
+        })
+        resp.headers['Mcp-Session-Id'] = session_id
+        return resp
+
+    if method in ('notifications/initialized', 'notifications/cancelled', 'notifications/progress'):
+        return ('', 202)
+
+    if method == 'ping':
+        return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {}})
+
+    if method == 'tools/list':
+        return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {'tools': MCP_TOOLS}})
+
+    if method == 'tools/call':
+        gate = _arlong_api_gate()
+        if not isinstance(gate, tuple):
+            # Rejected by rate/API gating — surface as an MCP error.
+            return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'error': {'code': -32001, 'message': 'Unauthorized or rate limited'}})
+        name = params.get('name')
+        arguments = params.get('arguments') or {}
+        try:
+            text = _mcp_call_tool(name, arguments)
+            return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {'content': [{'type': 'text', 'text': text}]}})
+        except AIAllModelsFailedError as e:
+            wait = _ai_busy_hint()
+            msg = f'Arlong AI is busy right now. Try again in about {max(5, wait)} seconds.' if (e.overloaded and wait > 0) else 'AI is busy right now. Please try again in a moment.'
+            return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {'isError': True, 'content': [{'type': 'text', 'text': json.dumps({'error': msg})}]}})
+        except Exception as e:
+            app.logger.error(f"MCP tool error: {e}")
+            return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'error': {'code': -32603, 'message': str(e)}})
+
+    return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'error': {'code': -32601, 'message': f'Method not found: {method}'}})
 
 
 @app.route('/api/enc-search', methods=['POST'])
@@ -11976,6 +12320,8 @@ def _ai_busy_hint():
         router = _ai_router_module.get_router()
         if router is None:
             return 0
+        if hasattr(router, 'wait'):
+            return max(0, int(router.wait()))
         waits = []
         for m in getattr(router, 'order', []) or []:
             if m not in getattr(router, 'budgets', {}):
@@ -12009,11 +12355,22 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
         if router is not None:
             model = router.pick(est_tokens=est_tokens, prefer=model_list[0] if model_list else None)
         if model is None:
-            # fall back to plain iteration when no router (tests / no budgets)
-            for m in model_list:
-                if m not in tried:
-                    model = m
-                    break
+            # Plain-iteration fallback is ONLY for environments with no router
+            # (tests / no budgets). When a router exists, its pick() already
+            # skipped cooldown/over-budget models — falling back to a blind
+            # list would retry the exact model we were told to skip.
+            if router is None:
+                for m in model_list:
+                    if m not in tried:
+                        model = m
+                        break
+            elif not tried:
+                # Router exists but every model is busy right now — tell the
+                # caller it's an overload (with a wait hint) instead of firing
+                # a doomed request.
+                overloaded = True
+                errors.append('all models busy (rate limited or in cooldown)')
+                break
         if model is None:
             break
         tried.add(model)
@@ -12027,7 +12384,7 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
             }
             if response_format:
                 kwargs['response_format'] = response_format
-            if reasoning_format:
+            if reasoning_format and _ai_supports_reasoning(model):
                 kwargs['reasoning_format'] = reasoning_format
             resp = client.chat.completions.create(**kwargs)
             if router is not None:
@@ -12063,10 +12420,18 @@ def _ai_open_stream(messages, max_tokens=1600, temperature=0.4, timeout=120, rea
         if router is not None:
             model = router.pick(est_tokens=est_tokens, prefer=model_list[0] if model_list else None)
         if model is None:
-            for m in model_list:
-                if m not in tried:
-                    model = m
-                    break
+            # Plain-iteration fallback is ONLY for environments with no router.
+            # A live router already skipped cooldown/over-budget models; a
+            # blind list retry would hammer the exact model we skipped.
+            if router is None:
+                for m in model_list:
+                    if m not in tried:
+                        model = m
+                        break
+            elif not tried:
+                overloaded = True
+                errors.append('all models busy (rate limited or in cooldown)')
+                break
         if model is None:
             break
         tried.add(model)
@@ -12079,7 +12444,7 @@ def _ai_open_stream(messages, max_tokens=1600, temperature=0.4, timeout=120, rea
                 'timeout': timeout,
                 'stream': True,
             }
-            if reasoning_format:
+            if reasoning_format and _ai_supports_reasoning(model):
                 kwargs['reasoning_format'] = reasoning_format
             stream = client.chat.completions.create(**kwargs)
             if router is not None:
@@ -12336,8 +12701,16 @@ def _ai_pick_sources(query, candidates, k=5):
 
 def _ai_top_results(query, limit=5):
     """Top web results pulled from the internal Arlong search engine, falling
-    back to Serper when the primary engines return nothing."""
-    results, _total = _ai_fetch_all_results(query)
+    back to Serper when the primary engines return nothing. The neural query
+    understanding (keywords + phrase + ambiguity hints) steers the search."""
+    understood = None
+    try:
+        import neural_search as _neural
+        understood = _neural.understand_query(query)
+    except Exception:
+        pass
+    search_q = (understood or {}).get('phrase') or query
+    results, _total = _ai_fetch_all_results(search_q)
     top = []
     for r in results:
         d = r.to_dict() if hasattr(r, 'to_dict') else r
@@ -12352,7 +12725,15 @@ def _ai_top_results(query, limit=5):
             'snippet': (d.get('snippet') or '')[:280],
         })
     top = _ai_clean_sources(query, top)
-    return _ai_pick_sources(query, top, limit)
+    top = _ai_pick_sources(query, top, limit)
+    if understood:
+        for r in top:
+            r['understanding'] = {
+                'phrase': understood.get('phrase') or '',
+                'terms': understood.get('terms') or [],
+                'ambiguity': understood.get('ambiguity') or [],
+            }
+    return top
 
 
 _AI_GATE_SYSTEM_PROMPT = (
@@ -12628,14 +13009,16 @@ def _ai_dedupe_task_queries(tasks, fallback_q):
 def _ai_link_evaluations(query, results, max_links=5):
     """One Groq call producing per-link relevance evaluations AND quality tags.
 
-    Returns (evaluations, tags) where evaluations maps 1-based source index to a
-    short positive sentence on what the source contributes, and tags maps the
-    same index to 'primary' | 'community' | 'trusted'. Weak sources are meant to
-    have been dropped earlier by _ai_pick_sources, so evaluations are framed
-    positively and never criticize a source.
+    Returns (evaluations, tags, err) where evaluations maps 1-based source index
+    to a short positive sentence on what the source contributes, and tags maps
+    the same index to 'primary' | 'community' | 'trusted'. `err` is None on
+    success or a short reason string when the evaluation could not be produced
+    (e.g. every model is busy). Weak sources are meant to have been dropped
+    earlier by _ai_pick_sources, so evaluations are framed positively and never
+    criticize a source.
     """
     if not AI_MODE_GROQ_API_KEY or not results:
-        return {}, {}
+        return {}, {}, None
     try:
         links = '\n'.join(
             f"{i+1}. {r['title']} | {r['url']} | {(r.get('snippet') or '')[:160]}"
@@ -12681,10 +13064,13 @@ def _ai_link_evaluations(query, results, max_links=5):
                 tags[idx] = tag
             except Exception:
                 continue
-        return evals, tags
+        return evals, tags, None
+    except AIAllModelsFailedError as e:
+        app.logger.warning(f"AI link evaluations unavailable (all models busy): {e}")
+        return {}, {}, ('busy' if e.overloaded else 'failed')
     except Exception as e:
         app.logger.error(f"AI link evaluations error: {e}")
-        return {}, {}
+        return {}, {}, str(e)[:120] or 'failed'
 
 
 _AI_SOURCE_BLOCK_RE = re.compile(r'^\[\d+\]\s+.*?https?://\S+[^\n]*(?:\n[ \t]+[^\n]*)?', re.M)
@@ -13113,9 +13499,34 @@ def api_ai_links():
         offset = int(data.get('offset') or 0)
     except Exception:
         offset = 0
-    evals, tags = _ai_link_evaluations(query, results)
+    evals, tags, err = _ai_link_evaluations(query, results)
+    if err:
+        wait = _ai_busy_hint() if err == 'busy' else 0
+        return jsonify({'ok': False, 'error': 'busy' if err == 'busy' else 'failed',
+                        'retry_after': wait}), 503 if err == 'busy' else 200
     evals = {int(k) + offset: v for k, v in evals.items()}
     tags = {int(k) + offset: v for k, v in tags.items()}
+    # Persist evaluations into the chat so reloads show them without another
+    # LLM call. The stream endpoint no longer recomputes evaluations.
+    chat_id = data.get('chat_id') or ''
+    if chat_id:
+        try:
+            chat = data_manager.get_ai_chat(session['user_id'], chat_id)
+            if chat:
+                msgs = chat.get('messages', [])
+                target = None
+                for i in range(len(msgs) - 1, -1, -1):
+                    m = msgs[i]
+                    if m.get('role') == 'assistant' and m.get('query') == query:
+                        target = m
+                        break
+                if target is not None:
+                    target['evaluations'] = evals
+                    target['source_tags'] = tags
+                    chat['updated_at'] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+                    data_manager.save_ai_chat(session['user_id'], chat)
+        except Exception as e:
+            app.logger.error(f"AI links persist error: {e}")
     return jsonify({'ok': True, 'evaluations': evals, 'tags': tags})
 
 
@@ -13208,6 +13619,49 @@ def api_ai_stream():
                 if delta:
                     full += delta
                     yield delta
+            # ── Multi-step reasoning: completeness check + auto follow-up ──
+            # If the first pass left out concrete data points the user asked
+            # for, run a targeted follow-up search and stream a round-2 pass
+            # right after. Errors here are swallowed — round 1 stands alone.
+            if full.strip() and not report:
+                try:
+                    missing_queries = _arlong_completeness_check(query, full, [], max_followups=2)
+                    if missing_queries:
+                        extra_sources, extra_context = _arlong_followup_retrieve(query, missing_queries)
+                        if extra_sources or extra_context:
+                            app.logger.info(
+                                f"AI stream follow-up: {len(missing_queries)} queries "
+                                f"→ {len(extra_sources)} extra sources"
+                            )
+                            follow_messages = list(messages)
+                            follow_messages.append({
+                                'role': 'user',
+                                'content': (
+                                    "I need more precision. Some specific figures the user asked "
+                                    "about (numbers, specs, metrics, dates, names) are still missing "
+                                    "or unclear. Extra sources found by follow-up searches:\n\n"
+                                    + str(extra_context)[:2500] + "\n\n"
+                                    "Continue the answer above, extracting every missing concrete "
+                                    "data point from these sources. Do not repeat what you already "
+                                    "said — only add or correct specific facts, citing the follow-up "
+                                    "sources. Keep it to 2-4 sentences."
+                                ),
+                            })
+                            yield "\n\n"
+                            _model2, stream2 = _ai_open_stream(
+                                follow_messages, max_tokens=900, temperature=0.3,
+                                reasoning_format='hidden')
+                            for chunk in stream2:
+                                if not chunk.choices:
+                                    continue
+                                delta = chunk.choices[0].delta.content
+                                if delta:
+                                    full += delta
+                                    yield delta
+                except AIAllModelsFailedError:
+                    pass
+                except Exception as e:
+                    app.logger.error(f"AI stream follow-up error: {e}")
         except AIAllModelsFailedError as e:
             app.logger.error(f"AI stream unavailable (all models failed): {e}")
             if e.overloaded:
@@ -13237,16 +13691,27 @@ def api_ai_stream():
                         clean = full
                     chat = data_manager.get_ai_chat(user_id, chat_id)
                     if chat:
-                        evals, tags = _ai_link_evaluations(query, results, max_links=(15 if multitask else 5))
+                        # Evaluations are computed + persisted by /api/ai/links
+                        # (one call per query) — do NOT recompute them here. If
+                        # a previous message already has them, keep them; the
+                        # frontend re-fires fireLinkEvals when they're missing.
+                        existing_evals = {}
+                        existing_tags = {}
+                        msgs = chat.setdefault('messages', [])
+                        for i in range(len(msgs) - 1, -1, -1):
+                            m = msgs[i]
+                            if m.get('role') == 'assistant' and m.get('query') == query:
+                                existing_evals = m.get('evaluations') or {}
+                                existing_tags = m.get('source_tags') or {}
+                                break
                         filled = {
                             'content': clean,
                             'query': query,
                             'sources': results,
-                            'evaluations': evals,
-                            'source_tags': tags,
+                            'evaluations': existing_evals,
+                            'source_tags': existing_tags,
                             'ts': datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                         }
-                        msgs = chat.setdefault('messages', [])
                         target = None
                         try:
                             pi = int(pending_idx)
@@ -13273,7 +13738,7 @@ def api_ai_stream():
                         else:
                             _ai_append_message(chat, 'assistant', clean,
                                                query=query, sources=results,
-                                               evaluations=evals, source_tags=tags)
+                                               evaluations=existing_evals, source_tags=existing_tags)
                         chat['updated_at'] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
                         data_manager.save_ai_chat(user_id, chat)
                 except Exception as e:
