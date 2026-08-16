@@ -8487,6 +8487,11 @@ search_stats = SearchStats()
 # Initialize search engine
 search_engine = ImprovedSearch()
 
+# Serializes search_engine.search() so the agentic fan-out never runs the
+# shared engine (DDGS session, TLS-scraper session, instance attrs) from
+# multiple threads at once.
+_AI_SEARCH_ENGINE_LOCK = threading.Lock()
+
 # ── Places helpers (Serper.dev) ──
 
 def _clean_places_query(q):
@@ -9667,8 +9672,8 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None, fo
             pass
 
     # ── 2b. Serper.dev fallback when provided results look weak / missing ─
-    _need_fallback = not candidate_pages
-    if not _need_fallback and _neural is not None:
+    _need_fallback = not candidate_pages and not (extra_sources or extra_context)
+    if not _need_fallback and _neural is not None and candidate_pages:
         # quick neural sanity check: are the provided snippets even on-topic?
         _probe = ' '.join((r.get('snippet') or '')[:120] for r in provided[:3])
         if _probe and _neural.keyword_similarity(q, _probe) < 0.30:
@@ -9688,7 +9693,7 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None, fo
                     candidate_pages.append((r_url, r_title))
 
     # ── 2c. DDG fallback when even Serper returns nothing ────────────────
-    if not candidate_pages:
+    if not candidate_pages and not (extra_sources or extra_context):
         try:
             from ddgs import DDGS as _DDGS
             _ddgs = _DDGS(timeout=5)
@@ -10013,57 +10018,71 @@ def api_ai_summary():
         sources = []
         import re as _re
         if not (url and snippet):
-            import httpx as _httpx
-            from urllib.parse import urlparse as _urlparse
-            _skip_domains = ['youtube.com', 'youtu.be', 'vimeo.com', 'instagram.com',
-                             'facebook.com', 'fb.com', 'tiktok.com', 'twitter.com', 'x.com']
-            if results_raw:
-                try:
-                    import json
-                    provided = json.loads(results_raw)
-                    news_items = [r for r in provided if r.get('category') == 'news']
-                    wiki_items = [r for r in provided if 'wikipedia.org' in (r.get('url') or '').lower()]
-                    rest_items = [r for r in provided if r not in news_items and r not in wiki_items]
-                    q_lower = q.lower()
-                    if any(kw in q_lower for kw in AI_FACTUAL_QUERY_KEYWORDS):
-                        sorted_provided = wiki_items + news_items + rest_items
-                    else:
-                        sorted_provided = news_items + wiki_items + rest_items
-                    snippet_context = ''
-                    for r in sorted_provided[:5]:
-                        r_snip = clean_snippet_text(r.get('snippet') or '')
-                        r_url = (r.get('url') or '').strip()
-                        if r_snip and r_url:
-                            snippet_context += f"\n[Snippet] {r.get('title', '')}: {r_snip} ({r_url})"
-                    if snippet_context:
-                        web_context += snippet_context
-                    for r in sorted_provided[:5]:
-                        r_url = (r.get('url') or '').strip()
-                        r_title = (r.get('title') or '').strip()
-                        if not r_url or not r_url.startswith('http'):
-                            continue
-                        r_domain = _urlparse(r_url).netloc.lower()
-                        r_domain = re.sub(r'^www\.', '', r_domain)
-                        if any(s in r_domain for s in _skip_domains):
-                            continue
-                        try:
-                            resp = _httpx.get(r_url, timeout=8, follow_redirects=True,
-                                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0'})
-                            if resp.status_code == 200:
-                                text = resp.text
-                                text = _re.sub(r'<script[^>]*>.*?</script>', '', text, flags=_re.DOTALL|_re.IGNORECASE)
-                                text = _re.sub(r'<style[^>]*>.*?</style>', '', text, flags=_re.DOTALL|_re.IGNORECASE)
-                                text = _re.sub(r'<[^>]+>', ' ', text)
-                                text = _re.sub(r'\s+', ' ', text).strip()
-                                text = text[:2000]
-                                if len(text) > 100:
-                                    idx = len(sources) + 1
-                                    sources.append({'url': r_url, 'title': r_title})
-                                    web_context += f"\n\n[Source {idx}]\nURL: {r_url}\nTitle: {r_title}\nContent: {text}"
-                        except Exception:
-                            continue
-                except Exception:
-                    pass
+            # ── Planner LLM decides single vs multi-hop and emits the sub-search
+            #    "tools". Multi-hop bypasses the front-end snippets (which come
+            #    from one keyword search of the whole sentence and are usually
+            #    garbage for chained reasoning): planner → parallel fan-out →
+            #    full-page grounding → synthesis. ──
+            _plan = _ai_agentic_plan(q, max_tasks=3)
+            if _plan.get('mode') == 'multi' and _plan.get('tasks'):
+                _flat, _groups = _ai_agentic_gather(q, _plan['tasks'], per_query=5)
+                if _flat:
+                    _ai_ground_results(q, _flat, per_fetch=4, max_fetch=8)
+                    _extra, _ctx = _ai_agentic_context(_flat)
+                    web_context += _ctx
+                    sources.extend({'url': s['url'], 'title': s['title']} for s in _extra)
+            if not web_context:
+                import httpx as _httpx
+                from urllib.parse import urlparse as _urlparse
+                _skip_domains = ['youtube.com', 'youtu.be', 'vimeo.com', 'instagram.com',
+                                 'facebook.com', 'fb.com', 'tiktok.com', 'twitter.com', 'x.com']
+                if results_raw:
+                    try:
+                        import json
+                        provided = json.loads(results_raw)
+                        news_items = [r for r in provided if r.get('category') == 'news']
+                        wiki_items = [r for r in provided if 'wikipedia.org' in (r.get('url') or '').lower()]
+                        rest_items = [r for r in provided if r not in news_items and r not in wiki_items]
+                        q_lower = q.lower()
+                        if any(kw in q_lower for kw in AI_FACTUAL_QUERY_KEYWORDS):
+                            sorted_provided = wiki_items + news_items + rest_items
+                        else:
+                            sorted_provided = news_items + wiki_items + rest_items
+                        snippet_context = ''
+                        for r in sorted_provided[:5]:
+                            r_snip = clean_snippet_text(r.get('snippet') or '')
+                            r_url = (r.get('url') or '').strip()
+                            if r_snip and r_url:
+                                snippet_context += f"\n[Snippet] {r.get('title', '')}: {r_snip} ({r_url})"
+                        if snippet_context:
+                            web_context += snippet_context
+                        for r in sorted_provided[:5]:
+                            r_url = (r.get('url') or '').strip()
+                            r_title = (r.get('title') or '').strip()
+                            if not r_url or not r_url.startswith('http'):
+                                continue
+                            r_domain = _urlparse(r_url).netloc.lower()
+                            r_domain = re.sub(r'^www\.', '', r_domain)
+                            if any(s in r_domain for s in _skip_domains):
+                                continue
+                            try:
+                                resp = _httpx.get(r_url, timeout=8, follow_redirects=True,
+                                    headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0'})
+                                if resp.status_code == 200:
+                                    text = resp.text
+                                    text = _re.sub(r'<script[^>]*>.*?</script>', '', text, flags=_re.DOTALL|_re.IGNORECASE)
+                                    text = _re.sub(r'<style[^>]*>.*?</style>', '', text, flags=_re.DOTALL|_re.IGNORECASE)
+                                    text = _re.sub(r'<[^>]+>', ' ', text)
+                                    text = _re.sub(r'\s+', ' ', text).strip()
+                                    text = text[:2000]
+                                    if len(text) > 100:
+                                        idx = len(sources) + 1
+                                        sources.append({'url': r_url, 'title': r_title})
+                                        web_context += f"\n\n[Source {idx}]\nURL: {r_url}\nTitle: {r_title}\nContent: {text}"
+                            except Exception:
+                                continue
+                    except Exception:
+                        pass
             if not web_context:
                 try:
                     from ddgs import DDGS as _DDGS
@@ -10526,26 +10545,62 @@ def _arlong_answer_payload(q):
     except Exception as e:
         app.logger.error(f"Arlong API answer search error: {e}")
         results = []
-    answer, sources = arlong_ai_answer(q, results)
+
+    # ── Gen-2 agentic first pass ─────────────────────────────────────────────
+    # Planner LLM decides single vs multi-hop and, when multi-hop, emits the
+    # sub-search "tools"; those run in parallel and their pages are grounded so
+    # the synthesis model reads full content instead of one keyword search of
+    # the whole sentence. Falls back to grounding the primary results when the
+    # question is single-hop or the planner produced nothing useful.
+    extra_sources, extra_context = [], ''
+    plan_note = None
+    _plan = _ai_agentic_plan(q, max_tasks=3)
+    if _plan.get('mode') == 'multi' and _plan.get('tasks'):
+        try:
+            _flat, _groups = _ai_agentic_gather(q, _plan['tasks'], per_query=5)
+            if _flat:
+                _ai_ground_results(q, _flat, per_fetch=4, max_fetch=8)
+                extra_sources, extra_context = _ai_agentic_context(_flat)
+                plan_note = [t['query'] for t in _plan['tasks']]
+        except Exception as e:
+            app.logger.warning(f"Arlong answer agentic plan failed: {e}")
+    if not extra_sources:
+        try:
+            _top = _ai_pick_sources(q, _ai_clean_sources(q, results), 6)
+            if _top:
+                _ai_ground_results(q, _top, per_fetch=4, max_fetch=8)
+                extra_sources, extra_context = _ai_agentic_context(_top)
+        except Exception as e:
+            app.logger.warning(f"Arlong answer grounding failed: {e}")
+
+    answer, sources = arlong_ai_answer(
+        q, [],
+        extra_sources=extra_sources or None,
+        extra_context=(extra_context if extra_sources else None),
+    )
     followup = {'ran': False, 'queries': [], 'rounds': 1}
+    if plan_note:
+        followup['plan'] = plan_note
     try:
         missing_queries = _arlong_completeness_check(q, answer, sources)
         if missing_queries:
-            extra_sources, extra_context = _arlong_followup_retrieve(q, missing_queries)
-            if extra_sources or extra_context:
+            f_extra, f_ctx = _arlong_followup_retrieve(q, missing_queries)
+            if f_extra or f_ctx:
                 app.logger.info(
                     f"Arlong answer follow-up: {len(missing_queries)} queries "
-                    f"→ {len(extra_sources)} extra sources"
+                    f"→ {len(f_extra)} extra sources"
                 )
                 answer2, sources2 = arlong_ai_answer(
-                    q, results,
-                    extra_sources=extra_sources or None,
-                    extra_context=extra_context or None,
+                    q, [],
+                    extra_sources=extra_sources + (f_extra or []) or None,
+                    extra_context=(extra_context + '\n' + f_ctx).strip() if f_ctx else (extra_context or None),
                     followup_round=2,
                 )
                 answer = answer2
                 sources = sources2
                 followup = {'ran': True, 'queries': missing_queries, 'rounds': 2}
+                if plan_note:
+                    followup['plan'] = plan_note
     except AIAllModelsFailedError:
         pass  # keep round-1 answer when models are too busy for round 2
     except Exception as e:
@@ -12574,15 +12629,16 @@ def _ai_fetch_all_results(query, max_fetch=40):
     collected = []
     total = 0
     try:
-        page = 1
-        while page <= 3 and len(collected) < max_fetch:
-            results, total = search_engine.search(query, page)
-            if not results:
-                break
-            collected.extend(results)
-            if len(collected) >= total or len(results) < 20:
-                break
-            page += 1
+        with _AI_SEARCH_ENGINE_LOCK:
+            page = 1
+            while page <= 3 and len(collected) < max_fetch:
+                results, total = search_engine.search(query, page)
+                if not results:
+                    break
+                collected.extend(results)
+                if len(collected) >= total or len(results) < 20:
+                    break
+                page += 1
     except Exception as e:
         app.logger.error(f"AI deep retrieval error: {e}")
     if not collected:
@@ -12734,6 +12790,202 @@ def _ai_top_results(query, limit=5):
                 'ambiguity': understood.get('ambiguity') or [],
             }
     return top
+
+
+# ── Gen-2 agentic search layer ───────────────────────────────────────────────
+# Proactive multi-hop decomposition (planner LLM) + parallel sub-query fan-out +
+# full-page grounding. This is what lets Arlong AI answer multi-hop questions
+# like "find the birth city of the director who won Best Director the year movie
+# X won Best Picture; what is the population of that city?" — a class of question
+# that a single keyword search of the whole sentence fails at.
+
+_AI_AGENTIC_PLAN_SYSTEM = (
+    'You are the planning stage of an agentic web-search engine (Gen-2 search). '
+    'Given the user question, decide how a researcher would search it and reply '
+    'with STRICT JSON:\n'
+    '{"mode":"single","query":"<one concrete web-search query>"}\n'
+    'OR\n'
+    '{"mode":"multi","tasks":[{"label":"<short facet heading>","query":"<concrete web-search query>"}, ...]}\n'
+    '\n'
+    'DECIDE LIKE A HUMAN RESEARCHER:\n'
+    '- SINGLE is the default and is right for almost everything: one well-worded '
+    'keyword query that captures the whole request. Simple lookups ("python '
+    'tutorial", "what is the capital of France", "best restaurants in NYC", '
+    '"compare iphone 16 and s25") are single.\n'
+    '- MULTI is right only for genuinely MULTI-HOP questions: a fact must first be '
+    'discovered, and its VALUE is then reused to look up another fact, so each hop '
+    'needs its own search. Example: "find the birth city of the director who won '
+    'Best Director the year Everything Everywhere All at Once won Best Picture; '
+    'what is the population of that city?" needs:\n'
+    '   1. label "Best Director winner" query "Everything Everywhere All at Once '
+    'Best Picture year Best Director winner"\n'
+    '   2. label "Birth city" query "Daniel Kwan director birth city birthplace"\n'
+    '   3. label "Population" query "Westborough Massachusetts population 2026"\n'
+    '- MULTI is also right when the question names 2+ INDEPENDENT topics that each '
+    'deserve their own search (a wedding needs venues AND caterers AND a budget).\n'
+    'Rules: at most 3 tasks; every query is a concrete self-contained keyword '
+    'search, NOT a question and NOT the user\'s whole sentence; labels are 2-6 '
+    'words; never split one topic into overlapping queries.'
+)
+
+
+def _ai_agentic_plan_offline(q, max_tasks=3):
+    """Structural-only fallback used when no planner model is available: split
+    on sentence/question boundaries when the utterance clearly contains more
+    than one full clause. No keyword signals — purely sentence structure."""
+    ql = (q or '').strip()
+    parts = [p.strip() for p in re.split(r'[.!?]', ql) if len(p.strip()) > 6]
+    if len(parts) >= 2:
+        return {'mode': 'multi', 'tasks': [
+            {'label': f'Part {i + 1}', 'query': p[:220]}
+            for i, p in enumerate(parts[:max_tasks])]}
+    return {'mode': 'single', 'query': ql[:220]}
+
+
+def _ai_agentic_plan(q, max_tasks=3):
+    """One LLM call decides whether the question is single- or multi-hop and,
+    when multi-hop, emits the focused sub-queries (the search "tools" the agent
+    runs in parallel). Returns {'mode':'single'|'multi', 'query'|'tasks'}.
+    Falls back to the structural split only when no model is configured."""
+    ql = (q or '').strip()
+    if not ql:
+        return {'mode': 'single', 'query': 'general search'}
+    if not AI_MODE_GROQ_API_KEY:
+        return _ai_agentic_plan_offline(ql, max_tasks)
+    try:
+        comp = _ai_completion(
+            messages=[
+                {'role': 'system', 'content': _AI_AGENTIC_PLAN_SYSTEM},
+                {'role': 'user', 'content': f'User question: {ql}\n\nPlan the search(es).'},
+            ],
+            max_tokens=360,
+            temperature=0.1,
+            response_format={'type': 'json_object'},
+            models=[os.environ.get('GROQ_AI_MODE_MODEL', 'llama-3.3-70b-versatile'),
+                    'llama-3.1-8b-instant', 'qwen/qwen3.6-27b', 'openai/gpt-oss-20b'],
+        )
+        raw = comp.choices[0].message.content or '{}'
+        parsed = {}
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            m = re.search(r'\{.*\}', raw, re.S)
+            if m:
+                try:
+                    parsed = json.loads(m.group(0))
+                except Exception:
+                    parsed = {}
+        if isinstance(parsed, dict):
+            if parsed.get('mode') == 'multi':
+                tasks = []
+                for t in (parsed.get('tasks') or [])[:max_tasks]:
+                    if isinstance(t, dict) and str(t.get('query') or '').strip():
+                        tasks.append({
+                            'label': (str(t.get('label') or '').strip() or 'search')[:60],
+                            'query': str(t['query']).strip()[:220],
+                        })
+                tasks = _ai_dedupe_task_queries(tasks, ql)
+                if len(tasks) >= 2:
+                    return {'mode': 'multi', 'tasks': tasks}
+            q2 = str(parsed.get('query') or '').strip() or ql
+            return {'mode': 'single', 'query': q2[:220]}
+    except Exception as e:
+        app.logger.warning(f"AI agentic plan failed: {e}")
+    return _ai_agentic_plan_offline(ql, max_tasks)
+
+
+def _ai_agentic_gather(q, tasks, per_query=5):
+    """Run every planned sub-query in PARALLEL (async fan-out), dedupe by URL,
+    and return (flat, groups). Results share dict objects between the two lists,
+    so mutating one is visible in the other."""
+    if not tasks:
+        tasks = [{'label': 'search', 'query': q}]
+    tasks = tasks[:3]
+    per_task = []
+    if len(tasks) > 1:
+        with ThreadPoolExecutor(max_workers=min(3, len(tasks))) as pool:
+            futs = {pool.submit(_ai_top_results, t['query'], per_query): t for t in tasks}
+            for fut in futs:
+                try:
+                    per_task.append((futs[fut], fut.result()))
+                except Exception as e:
+                    app.logger.warning(f"AI agentic sub-search failed: {e}")
+    else:
+        try:
+            per_task = [(tasks[0], _ai_top_results(tasks[0]['query'], per_query))]
+        except Exception as e:
+            app.logger.warning(f"AI agentic sub-search failed: {e}")
+    groups = []
+    flat = []
+    seen = set()
+    for task, res in per_task:
+        g = {'label': task.get('label') or (task.get('query') or '')[:40],
+             'query': task.get('query', ''), 'results': []}
+        for r in res:
+            url = (r.get('url') or '').strip()
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            r['group'] = g['label']
+            g['results'].append(r)
+            flat.append(r)
+        if g['results']:
+            groups.append(g)
+    return flat, groups
+
+
+def _ai_ground_results(query, results, per_fetch=4, max_fetch=8):
+    """Concurrently fetch real page bodies for the strongest results so the
+    synthesis model reads content, not just snippets. Mutates each result dict
+    in place with a 'content' key when the fetch succeeds (up to 2000 chars)."""
+    if not results:
+        return results
+    target = results[:max_fetch]
+
+    def _one(r):
+        try:
+            text = _arlong_page_text(r.get('url') or '')
+            if text and len(text.strip()) > 80 and not _is_junk_body(text[:400]):
+                return (r.get('url'), text[:2000])
+        except Exception:
+            pass
+        return None
+
+    done = {}
+    with ThreadPoolExecutor(max_workers=min(6, len(target))) as pool:
+        futs = [pool.submit(_one, r) for r in target]
+        for fut in futs:
+            try:
+                res = fut.result()
+                if res:
+                    done[res[0]] = res[1]
+            except Exception:
+                continue
+    for r in results:
+        c = done.get(r.get('url') or '')
+        if c:
+            r['content'] = c
+    return results
+
+
+def _ai_agentic_context(grounded_results, per_fetch=4):
+    """Build the [Source n] grounded context block from enriched results,
+    reusing the exact format arlong_ai_answer expects so the synthesis LLM
+    reads full page bodies. Returns (extra_sources, context)."""
+    extra = []
+    ctx = ''
+    idx = 0
+    for r in (grounded_results or []):
+        url = (r.get('url') or '').strip()
+        content = (r.get('content') or '').strip()
+        if not url or not content:
+            continue
+        idx += 1
+        extra.append({'url': url, 'title': r.get('title') or '',
+                      'content': content[:2000], 'snippet': (r.get('snippet') or '')[:300]})
+        ctx += (f"\n\n[Source {idx}]\nURL: {url}\nTitle: {r.get('title') or ''}\n"
+                f"Content: {content[:2000]}")
+    return extra, ctx
 
 
 _AI_GATE_SYSTEM_PROMPT = (
@@ -13194,13 +13446,17 @@ def _ai_build_messages(history, results, report=False):
     messages.extend(history)
     if results:
         shown = results[:15]
-        sources = '\n'.join(
-            f"[{i+1}] {('(' + r.get('group', '') + ') ') if r.get('group') else ''}{r['title']} - {r['url']}\n    {(r.get('snippet') or '')[:200]}"
-            for i, r in enumerate(shown)
-        )
+        lines = []
+        for i, r in enumerate(shown):
+            line = (f"[{i+1}] {('(' + r.get('group', '') + ') ') if r.get('group') else ''}"
+                    f"{r['title']} - {r['url']}\n    {(r.get('snippet') or '')[:200]}")
+            if r.get('content') and i < 8:
+                line += "\n    CONTENT: " + re.sub(r'\s+', ' ', str(r['content'])[:1400])
+            lines.append(line)
+        sources = '\n'.join(lines)
         messages.append({
             'role': 'user',
-            'content': f"Web search results for the current query:\n{sources}\n\nSynthesize your answer using these results and cite them inline as [1]-[{len(shown)}]. Do not invent sources."
+            'content': f"Web search results for the current query:\n{sources}\n\nSynthesize your answer using these results and cite them inline as [1]-[{len(shown)}]. Read the CONTENT sections carefully — they contain the actual page text, which is often where the precise answer lives. Do not invent sources."
         })
     else:
         messages.append({'role': 'user', 'content': 'No web results were retrieved for this query. Answer from your own knowledge.'})
@@ -13435,26 +13691,53 @@ def api_ai_search():
         })
 
     # ── let the AI plan the search(es), then run them (single or multi-task).
-    #    Multi-task planning only runs in deep mode. ──
+    #    Multi-task planning runs in deep mode (clarify-driven) and in normal
+    #    mode whenever the query looks multi-hop. ──
     if is_answer:
         base_q = query if answers else _ai_prior_question(chat)
         plan_answers = _ai_collected_answers(chat) or answers
     else:
         base_q = query
         plan_answers = answers
-    if deep:
-        plan = _ai_plan_search(base_q, plan_answers)
-    else:
-        plan = {'mode': 'single', 'query': base_q}
     groups = []
     flat = []
-    if plan.get('mode') == 'multi' and plan.get('tasks'):
-        for t in plan['tasks']:
-            res = _ai_top_results(t['query'], 5)
-            groups.append({'label': t['label'], 'query': t['query'], 'results': res})
-            flat.extend([dict(r, group=t['label']) for r in res])
+    multi_hop = False
+    if deep:
+        plan = _ai_plan_search(base_q, plan_answers)
+        if plan.get('mode') == 'multi' and plan.get('tasks'):
+            multi_hop = True
+            flat, groups = _ai_agentic_gather(
+                base_q,
+                [{'label': t['label'], 'query': t['query']} for t in plan['tasks']],
+                per_query=5,
+            )
+        else:
+            flat = _ai_top_results(plan.get('query') or base_q, 5)
     else:
-        flat = _ai_top_results(plan.get('query') or query, 5)
+        # Planner LLM decides single vs multi-hop and emits the search "tools";
+        # multi-hop runs them in parallel fan-out, single uses the fast path.
+        plan = _ai_agentic_plan(base_q, max_tasks=3)
+        if plan.get('mode') == 'multi' and plan.get('tasks'):
+            multi_hop = True
+            flat, groups = _ai_agentic_gather(
+                base_q,
+                [{'label': t['label'], 'query': t['query']} for t in plan['tasks']],
+                per_query=5,
+            )
+        else:
+            flat = _ai_top_results(plan.get('query') or base_q, 5)
+
+    # Ground the strongest results with real page bodies so the synthesis LLM
+    # reads actual content — the difference between a wrong multi-hop answer and
+    # a correct one. Deep mode always grounds; normal mode grounds only the
+    # multi-hop path to keep simple queries fast.
+    if flat and (deep or multi_hop):
+        if groups:
+            for g in groups:
+                _ai_ground_results(g['query'], g['results'], per_fetch=3, max_fetch=6)
+            flat = [r for g in groups for r in g['results']]
+        else:
+            _ai_ground_results(base_q, flat, per_fetch=4, max_fetch=8)
     # Persist the gathered sources immediately as a pending assistant message so
     # a refresh before the answer finishes streaming never loses the (multi)
     # search results. The stream fills this message in when generation ends.
