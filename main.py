@@ -786,6 +786,27 @@ PUBLIC_PATHS = {'/', '/search', '/login', '/signup', '/land', '/logout',
 
 @app.before_request
 def validate_session():
+    # CSRF enforcement for authenticated API endpoints.
+    # Browser requests carrying a session cookie must include a valid CSRF
+    # token. API-key and extension-token requests are exempt (they don't
+    # use cookies). Public endpoints (flag, upvote) are exempt.
+    if request.method in ('POST', 'PUT', 'DELETE') and request.path.startswith('/api/'):
+        # Skip API-key / extension-token authenticated paths
+        _api_key_paths = ('/api/search', '/api/arlong/', '/api/ai/search',
+                          '/api/search-images', '/api/search-supplement',
+                          '/api/ai/summary', '/api/enc-')
+        if any(request.path.startswith(p) for p in _api_key_paths):
+            pass  # still fall through to session check below
+        elif request.path == '/mcp':
+            pass
+        else:
+            # If the request has a session (browser), CSRF is required
+            if session.get('user_id') or session.get('admin_logged_in'):
+                client_token = request.headers.get('X-Arlong-Client', '').strip()
+                if not (client_token and EXTENSION_CLIENT_TOKEN and client_token == EXTENSION_CLIENT_TOKEN):
+                    if not validate_csrf_or_json():
+                        return jsonify({'error': 'CSRF token missing or invalid'}), 403
+
     if request.path.startswith('/static/') or request.path.startswith('/api/'):
         return
     user_id = session.get('user_id')
@@ -1209,25 +1230,26 @@ def validate_csrf():
     return True
 
 def validate_csrf_or_json():
-    """Validate CSRF for both form submissions and JSON POST requests."""
+    """Validate CSRF for both form submissions and JSON POST requests.
+    Accepts the token from: form field, JSON body, or X-CSRF-Token header."""
     if request.is_json:
         token = (request.get_json(silent=True) or {}).get('_csrf_token', '')
     else:
         token = request.form.get('_csrf_token', '')
+    # Also accept the token from the X-CSRF-Token header (used by fetch wrapper)
+    if not token:
+        token = request.headers.get('X-CSRF-Token', '')
     expected = session.get('_csrf_token', '')
     if not token or not secrets.compare_digest(expected, token):
         return False
     return True
 
 def _regenerate_session():
-    """Regenerate session ID to prevent session fixation attacks."""
-    session_id = session.get('_id')
+    """Regenerate session ID to prevent session fixation attacks.
+    Clears all session data and lets Flask generate a fresh session cookie."""
     session.clear()
-    if session_id:
-        session['_id'] = session_id
 
 app.jinja_env.globals['csrf_token'] = generate_csrf_token
-app.jinja_env.globals['enc_key'] = _ENCRYPTION_KEY_HEX
 
 @app.context_processor
 def inject_ui_flags():
@@ -8882,7 +8904,7 @@ KEY_API_WINDOW = 1800
 # token in the X-Arlong-Client header and is exempt from anonymous IP limits.
 # Requests without a matching header are never whitelisted, so ordinary
 # anonymous traffic keeps the anti-abuse floor.
-EXTENSION_CLIENT_TOKEN = os.environ.get('ARLONG_EXTENSION_TOKEN', 'arlong-pure-extension-v1')
+EXTENSION_CLIENT_TOKEN = os.environ.get('ARLONG_EXTENSION_TOKEN') or None
 
 anon_api_limiter = RateLimiter(limit=ANON_API_LIMIT, window=ANON_API_WINDOW)
 
@@ -10799,8 +10821,7 @@ def api_search():
     if not query:
         return jsonify({"error": "Missing query parameter", "usage": "/api/search?q=your+query"}), 400
 
-    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-    ip = ip.split(',')[0].strip()
+    ip = request.remote_addr or '127.0.0.1'
 
     # First-party whitelist: the Arlong Pure extension identifies itself with
     # the X-Arlong-Client header and is exempt from anonymous IP limits.
@@ -10936,8 +10957,7 @@ def api_search():
 # Shared auth/rate-limit gate mirroring /api/search access tiers. Returns
 # (rate, tier, api_key) or a Flask response when the request must be rejected.
 def _arlong_api_gate():
-    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-    ip = ip.split(',')[0].strip()
+    ip = request.remote_addr or '127.0.0.1'
     client_token = request.headers.get('X-Arlong-Client', '').strip()
     whitelisted = bool(client_token) and client_token == EXTENSION_CLIENT_TOKEN
     api_key = None
@@ -11920,7 +11940,7 @@ def admin_login():
         return redirect(url_for('admin_dashboard'))
     error = ''
     if request.method == 'POST':
-        ip = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()
+        ip = request.remote_addr or '127.0.0.1'
         if not admin_login_limiter.check(ip).get('allowed', False):
             error = 'Too many attempts. Wait 5 minutes.'
         elif not validate_csrf():
@@ -11928,11 +11948,8 @@ def admin_login():
         else:
             password = request.form.get('password', '')
             if secrets.compare_digest(password, ADMIN_PASSWORD):
-                old_sid = session.get('_id')
-                session.clear()
+                _regenerate_session()
                 session.permanent = True
-                if old_sid:
-                    session['_id'] = old_sid
                 session['admin_logged_in'] = True
                 app.logger.warning(f"Admin login success from {ip}")
                 return redirect(url_for('admin_dashboard'))
@@ -11998,7 +12015,7 @@ def admin_feedback():
     url = str(payload.get('url') or '')[:500]
     page = str(payload.get('page') or '')[:120]
     contact = str(payload.get('contact') or '')[:120]
-    ip = request.headers.get('X-Forwarded-For', request.remote_addr or '')
+    ip = request.remote_addr or '127.0.0.1'
     ip = ip.split(',')[0].strip()
     if not feedback_limiter.check(ip).get('allowed', False):
         return jsonify({'ok': False, 'error': 'Too many submissions from this device. Please try again later.'}), 429
@@ -12220,18 +12237,15 @@ def signup():
             return render_template('signup.html', error='Password must contain both letters and numbers', redirect=redirect_target)
         if email and '@' not in email:
             return render_template('signup.html', error='Invalid email address', email=email, redirect=redirect_target)
-        ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
+        ip = request.remote_addr or '127.0.0.1'
         accept_terms = request.form.get('accept_terms', '')
         if accept_terms != '1':
             return render_template('signup.html', error='You must accept the Terms of Service to create an account.', email=email, redirect=redirect_target)
         user, err = data_manager.create_user(username, password, sq, sa, ip, email, weather_loc)
         if err:
             return render_template('signup.html', error=err, email=email, redirect=redirect_target)
-        old_sid = session.get('_id')
-        session.clear()
+        _regenerate_session()
         session.permanent = True
-        if old_sid:
-            session['_id'] = old_sid
         session['user_id'] = user['user_id']
         session['username'] = user['username']
         data_manager.accept_tos(user['user_id'])
@@ -12259,11 +12273,8 @@ def login():
         user = data_manager.authenticate_user(username, password)
         if not user:
             return render_template('ai_auth.html', login_error='Invalid credentials', redirect=redirect_target)
-        old_sid = session.get('_id')
-        session.clear()
+        _regenerate_session()
         session.permanent = True
-        if old_sid:
-            session['_id'] = old_sid
         session['user_id'] = user['user_id']
         session['username'] = user['username']
         try:
@@ -12275,7 +12286,7 @@ def login():
         user_email = user.get('email', '')
         if user_email and RESEND_API_KEY:
             try:
-                ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
+                ip = request.remote_addr or '127.0.0.1'
                 send_login_notification(user_email, username, ip)
             except:
                 pass
@@ -14440,7 +14451,7 @@ def google_auth():
     session['google_oauth_state'] = state
     params = {
         'client_id': GOOGLE_CLIENT_ID,
-        'redirect_uri': GOOGLE_REDIRECT_URI or (request.host_url.rstrip('/') + '/auth/google/callback'),
+        'redirect_uri': GOOGLE_REDIRECT_URI or url_for('google_auth_callback', _external=True),
         'response_type': 'code',
         'scope': 'openid email profile',
         'state': state,
@@ -14468,7 +14479,7 @@ def google_auth_callback():
             'code': code,
             'client_id': GOOGLE_CLIENT_ID,
             'client_secret': GOOGLE_CLIENT_SECRET,
-            'redirect_uri': GOOGLE_REDIRECT_URI or (request.host_url.rstrip('/') + '/auth/google/callback'),
+            'redirect_uri': GOOGLE_REDIRECT_URI or url_for('google_auth_callback', _external=True),
             'grant_type': 'authorization_code',
         }, timeout=10)
         token_data = token_resp.json()
@@ -14497,7 +14508,8 @@ def google_auth_callback():
             data_manager.join_ai_waitlist(user['user_id'], email, user['username'])
             # Refresh user data
             user = data_manager.get_user_by_id(user['user_id'])
-        # Set session
+        # Set session — regenerate to prevent session fixation
+        _regenerate_session()
         session['user_id'] = user['user_id']
         session['username'] = user.get('username', '')
         session.permanent = True
@@ -14545,7 +14557,7 @@ def api_ai_waitlist_join():
         username = email.split('@')[0]
     if not re.match(r'^[a-zA-Z0-9_]{3,24}$', username):
         username = re.sub(r'[^a-zA-Z0-9_]', '', username)[:24] or 'user'
-    ip = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()
+    ip = request.remote_addr or '127.0.0.1'
     user, err = data_manager.create_user(username, password, 'ai_beta', 'joined', ip, email)
     if err:
         return jsonify({'ok': False, 'error': err}), 400

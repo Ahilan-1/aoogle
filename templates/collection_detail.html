@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ collection.name }} - arlong</title>
     <style>
         :root{--accent:{{ collection.pin_color or '#8ab4f8' }}}
@@ -238,6 +239,25 @@
     <div class="toast" id="toast"></div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.7/marked.min.js"></script>
     <script>
+        /* ── CSRF helper ── */
+        (function(){
+            var _csrfMeta=document.querySelector('meta[name="csrf-token"]');
+            var _csrfToken=_csrfMeta?_csrfMeta.getAttribute('content'):'';
+            if(!_csrfToken)return;
+            var _origFetch=window.fetch;
+            window.fetch=function(url,opts){
+                opts=opts||{};
+                var m=(opts.method||'GET').toUpperCase();
+                if(m!=='GET'&&m!=='HEAD'){
+                    if(opts.body&&typeof opts.body==='string'){
+                        try{var p=JSON.parse(opts.body);p._csrf_token=_csrfToken;opts.body=JSON.stringify(p);}catch(e){}
+                    } else if(opts.body instanceof FormData){
+                        opts.body.append('_csrf_token',_csrfToken);
+                    }
+                }
+                return _origFetch.call(window,url,opts);
+            };
+        })();
         var editor = document.getElementById('editor');
         var preview = document.getElementById('preview');
         var contentHtml = {{ content_html|tojson }};
