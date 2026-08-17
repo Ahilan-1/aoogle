@@ -86,6 +86,82 @@ def _ban_engine(engine, duration=3600):
     with ENGINE_BAN_LOCK:
         ENGINE_BAN_TIMES[engine] = time.time() + duration
 
+
+# ── SSRF protection ──────────────────────────────────────────────────────────
+# Centralized URL safety check. Blocks private/loopback/link-local IPs and
+# non-HTTP(S) schemes. Applied at every HTTP fetch entry point to prevent
+# attackers from using our fetch functions to reach internal services
+# (127.0.0.1, 169.254.169.254 cloud metadata, 10.x.x.x private nets, etc.).
+import ipaddress
+import socket
+
+_BLOCKED_IP_RANGES = [
+    ipaddress.ip_network('127.0.0.0/8'),      # loopback
+    ipaddress.ip_network('10.0.0.0/8'),        # private Class A
+    ipaddress.ip_network('172.16.0.0/12'),     # private Class B
+    ipaddress.ip_network('192.168.0.0/16'),    # private Class C
+    ipaddress.ip_network('169.254.0.0/16'),    # link-local / cloud metadata
+    ipaddress.ip_network('::1/128'),            # IPv6 loopback
+    ipaddress.ip_network('fc00::/7'),           # IPv6 ULA
+    ipaddress.ip_network('::ffff:127.0.0.0/104'),  # IPv4-mapped loopback
+    ipaddress.ip_network('::ffff:10.0.0.0/104'),
+    ipaddress.ip_network('::ffff:172.16.0.0/108'),
+    ipaddress.ip_network('::ffff:192.168.0.0/112'),
+    ipaddress.ip_network('::ffff:169.254.0.0/112'),
+]
+
+def _is_safe_url(url, allow_redirects=True):
+    """Return True only if *url* points to a public HTTP(S) endpoint.
+    Blocks private/loopback/link-local IPs and non-HTTP(S) schemes.
+    When allow_redirects is False the check applies to the raw URL;
+    when True (default) it also protects against 302-bounce bypass."""
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False
+    if parsed.scheme not in ('http', 'https'):
+        return False
+    hostname = (parsed.hostname or '').strip().rstrip('.')
+    if not hostname:
+        return False
+    # Resolve hostname and check against blocked ranges.
+    # We resolve even domain names because an attacker could register
+    # evil.com that points to 127.0.0.1.
+    try:
+        resolved = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC)
+    except (socket.gaierror, OSError):
+        return False
+    for family, _, _, _, sockaddr in resolved:
+        ip = ipaddress.ip_address(sockaddr[0])
+        for blocked in _BLOCKED_IP_RANGES:
+            if ip in blocked:
+                return False
+    return True
+
+def _safe_get(url, **kwargs):
+    """httpx.get wrapper that enforces SSRF protection. Raises ValueError
+    if the URL targets a private/loopback IP."""
+    if not _is_safe_url(url):
+        raise ValueError(f"SSRF blocked: {url} resolves to a private/internal IP")
+    # Disable auto-redirects; we'll follow them manually with validation.
+    kwargs.setdefault('follow_redirects', False)
+    resp = httpx.get(url, **kwargs)
+    # Follow redirects manually, validating each hop.
+    for _ in range(5):
+        if resp.status_code not in (301, 302, 303, 307, 308):
+            break
+        next_url = resp.headers.get('location', '')
+        if not next_url:
+            break
+        # Resolve relative URLs.
+        if next_url.startswith('/'):
+            from urllib.parse import urljoin as _urljoin
+            next_url = _urljoin(str(resp.url), next_url)
+        if not _is_safe_url(next_url):
+            raise ValueError(f"SSRF blocked on redirect: {next_url} resolves to a private/internal IP")
+        resp = httpx.get(next_url, **kwargs)
+    return resp
+
 def _shuffle_tls_context():
     """Create SSL context with shuffled ciphers — defeats JA3 fingerprinting (SearXNG technique)."""
     ctx = httpx.create_ssl_context(verify=True)
@@ -4394,9 +4470,11 @@ def _detect_domain_entity(domain):
 
 def _extract_page_text(url, timeout=5):
     try:
+        if not _is_safe_url(url):
+            return ''
         ua = UserAgent()
         headers = {'User-Agent': ua.random}
-        resp = requests.get(url, timeout=timeout, headers=headers, allow_redirects=True)
+        resp = _safe_get(url, timeout=timeout, headers=headers)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, 'html.parser')
         for tag in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'noscript', 'form', 'svg', 'iframe']):
@@ -10107,6 +10185,12 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None, fo
             seen_urls.add(u)
             # Injection gate — mirror the check evaluate_page runs
             _src_text = (s.get('content') or s.get('snippet') or '')[:4000]
+            # A source with no content at all should NOT get a citation
+            # number — the LLM never read it and shouldn't be able to
+            # fabricate claims attributed to it.
+            if not _src_text.strip():
+                app.logger.info(f"AI skipped empty extra_source {u} (no content to cite)")
+                continue
             try:
                 _src_inj = _neural.detect_injection(
                     (s.get('title') or '') + ' ' + _src_text[:12000]
@@ -10139,6 +10223,9 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None, fo
         "Answer search queries with direct, specific, factual answers — like Google's featured snippet. "
         "Lead with the answer itself, not preamble like \"Based on\" or \"According to\". "
         "Use numbers, dates, names, and concrete details — not vague generalities. "
+        "CRITICAL: NEVER fabricate or infer dates, numbers, or facts that do not appear in the sources below. "
+        "If a source provides a date, use it exactly as written. If no source provides a specific date, "
+        "say the information is not dated rather than guessing. Hallucinated specifics are worse than admitting uncertainty. "
         "MATCH THE QUESTION TYPE: "
         "If the question asks for a specific detail (email, phone, address, price, date, etc.), give ONLY that detail — not a biography. "
         "If the query asks \"what is X\", define X in one crisp sentence first, then add 1-2 key facts. "
@@ -10146,7 +10233,8 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None, fo
         "If the query asks \"when\", give the date/time directly. "
         "If the query asks \"how\", give the step or mechanism concisely. "
         "Never tell users to visit websites. Never use phrases like \"you can find\" or \"for more details\". "
-        "Cite sources inline as [1], [2] only when there are multiple distinct facts from different sources. "
+        "Cite sources inline as [1], [2] ONLY for facts you can trace to a specific source below. "
+        "Never cite a source you cannot point to a specific sentence in. "
         "Keep total length to 2-4 sentences unless the question clearly requires more. "
         "Write in clean prose: no extra spaces before punctuation, no bullet symbols unless the user sees a list format."
         + round_note
@@ -11138,7 +11226,7 @@ def _arlong_answer_payload(q):
     response = {
         "query": q,
         "answer": answer,
-        "sources": sources,
+        "sources": evaluated_sources,
         "followup": followup,
         "results": evaluated_sources,
     }
@@ -11150,8 +11238,20 @@ def _arlong_attach_epistemic(response, results):
     """Epistemic state from corroboration of the top snippets."""
     try:
         import neural_search as _neural
-        claims = [{"source_url": (r.get('url') or ''), "claim_text": clean_snippet_text(r.get('snippet') or '')[:400]}
-                  for r in results[:5] if (r.get('url') or '') and (r.get('snippet') or '')]
+        # Use snippet as the claim text; fall back to first 400 chars of
+        # content when snippet is empty — otherwise corroboration silently
+        # drops sources that have content but no snippet, producing a
+        # misleading "N sources examined" count.
+        claims = []
+        for r in results[:8]:
+            url = (r.get('url') or '').strip()
+            if not url:
+                continue
+            claim_text = clean_snippet_text(r.get('snippet') or '')[:400]
+            if not claim_text:
+                claim_text = clean_snippet_text(r.get('content') or '')[:400]
+            if claim_text:
+                claims.append({"source_url": url, "claim_text": claim_text})
         if claims:
             corr = _neural.corroborate(claims)
             response["corroboration"] = corr

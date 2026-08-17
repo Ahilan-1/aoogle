@@ -22,8 +22,10 @@ import hashlib
 import math
 import os
 import re
+import socket
 import threading
 import time
+from urllib.parse import urlparse
 
 try:
     import httpx
@@ -301,7 +303,7 @@ def evaluate_page(query, title='', url='', snippet='', content=''):
     # floor tiny negatives
     rel = max(0.0, min(1.0, rel))
 
-    inj = detect_injection(' '.join((snippet or '', (content or '')[:12000])))
+    inj = detect_injection(' '.join((title or '', snippet or '', (content or '')[:12000])))
     if inj.flagged:
         status = 'BLOCKED'
         # Blocked sources must always score below UNVERIFIED (55) and unknown (50).
@@ -325,7 +327,7 @@ def evaluate_page(query, title='', url='', snippet='', content=''):
         reason = ''
         flags = inj.flags or []
 
-    fact_check = 'VERIFIED' if status == 'SAFE' else ('FAILED' if status == 'BLOCKED' else 'UNKNOWN')
+    fact_check = 'UNVERIFIED' if status == 'SAFE' else ('FAILED' if status == 'BLOCKED' else 'UNKNOWN')
     return {
         'relevance_score': rel,
         'ai_evaluation': {
