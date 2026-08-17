@@ -304,7 +304,8 @@ def evaluate_page(query, title='', url='', snippet='', content=''):
     inj = detect_injection(' '.join((snippet or '', (content or '')[:12000])))
     if inj.flagged:
         status = 'BLOCKED'
-        trust = max(0, 100 - len(inj.flags) * 35)
+        # Blocked sources must always score below UNVERIFIED (55) and unknown (50).
+        trust = max(0, 30 - len(inj.flags) * 15)
         reason = inj.reason
         flags = inj.flags
     elif rel < 0.20:

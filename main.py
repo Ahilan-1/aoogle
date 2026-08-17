@@ -10094,6 +10094,10 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None, fo
             web_context += f"\n\n[Source {idx}]\nURL: {u}\nTitle: {t}\nContent: {text}"
 
     # ── 3b. Merge second-round (follow-up) retrieval, if any ─────────────
+    # Inject-blocked sources must be excluded from the synthesis prompt —
+    # the evaluation layer already flagged them but agentic results bypass
+    # that filter. Run detect_injection on each extra_source's text and skip
+    # anything that looks like a prompt-injection attempt.
     if extra_sources:
         seen_urls = {s.get('url') for s in sources}
         for s in (extra_sources or []):
@@ -10101,6 +10105,17 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None, fo
             if not u or u in seen_urls:
                 continue
             seen_urls.add(u)
+            # Injection gate — mirror the check evaluate_page runs
+            _src_text = (s.get('content') or s.get('snippet') or '')[:4000]
+            try:
+                _src_inj = _neural.detect_injection(
+                    (s.get('title') or '') + ' ' + _src_text[:12000]
+                ) if _neural else None
+                if _src_inj and _src_inj.flagged:
+                    app.logger.info(f"AI dropped extra_source {u} (injection: {_src_inj.flags})")
+                    continue
+            except Exception:
+                pass
             idx = len(sources) + 1
             sources.append({'url': u, 'title': s.get('title') or ''})
             web_context += (f"\n\n[Source {idx}]\nURL: {u}\nTitle: {s.get('title') or ''}"
@@ -10943,7 +10958,11 @@ def _arlong_eval_result(q, r, idx):
             "trust_score": ev.get('reputation', {}).get('trust_score', 0),
         }
         item["threat_flags"] = ev.get('threat_flags', [])
-        if content:
+        # Do NOT include content for BLOCKED sources — the flag is meaningless
+        # if the synthesis model still sees the raw text. Blocked content
+        # should never reach the answer prompt or the API response body.
+        _block_st = ev.get('reputation', {}).get('status', 'UNVERIFIED')
+        if content and _block_st != 'BLOCKED':
             item["content"] = content[:1500]
     except Exception as e:
         app.logger.debug(f"Arlong eval skip {url}: {e}")
