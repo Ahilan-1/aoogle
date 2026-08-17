@@ -416,6 +416,14 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
             History
         </a>
+        <a class="ai-nav-item" href="/dashboard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Dashboard
+        </a>
+        <a class="ai-nav-item" href="/dashboard?tab=api">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 9l-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"/></svg>
+            Connect MCP
+        </a>
     </nav>
     <div class="ai-sb-label">Chat History</div>
     <div class="ai-history" id="ai-history"><div class="ai-h-empty">No conversations yet</div></div>
@@ -432,8 +440,8 @@
         <div class="ai-limit-title"><span>Token Budget ({{ ctx_reset_hours }}h)</span><span class="ai-limit-num" id="ai-ctx-text">{{ ctx_used }} / {{ ctx_limit }} tokens</span></div>
         <div class="ai-usage-track"><div class="ai-usage-fill" id="ai-ctx-fill" style="width:{{ ctx_pct }}%"></div></div>
         {% if plan_usage is defined and plan_usage.plan == 'free' %}<a class="ai-upgrade" href="/premium">Upgrade your limits</a><div class="ai-upgrade-note">Free: 10 standard answers/day, 3 deep answers/month, 100 API/MCP searches/month.</div>{% else %}<div class="ai-upgrade-note">{{ plan_usage.limits.name if plan_usage is defined else 'Free' }} plan active</div>{% endif %}
-        <a href="/api/dashboard" style="display:block;margin-top:14px;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;font-size:12px;color:#999;text-decoration:none;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='rgba(82,168,255,.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,.1)'">
-            API Dashboard &rarr; MCP Keys, REST Docs
+        <a href="/dashboard" style="display:block;margin-top:14px;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;font-size:12px;color:#bbb;text-decoration:none;text-align:center">
+            Manage account &amp; usage
         </a>
     </div>
 </aside>

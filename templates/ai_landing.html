@@ -231,7 +231,7 @@ a{color:inherit;text-decoration:none}
   </nav>
   <div style="display:flex;align-items:center;gap:12px">
     <button class="menu-toggle" onclick="document.getElementById('mobileMenu').classList.add('open')">&#9776;</button>
-    {% if approved %}
+    {% if user %}
     <a href="/ai/chat" class="btn-square">Launch AI <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></a>
     {% else %}
     <a href="#join" class="btn-square">Sign In <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></a>
@@ -251,7 +251,7 @@ a{color:inherit;text-decoration:none}
       <h1 class="headline-fluid">Search That<br>Knows Before<br>You <span class="accent">Click</span></h1>
       <p class="hero-sub">Every link evaluated. Every source fact-checked. No bloat, no ads, no tracking. Works for humans who want clean results and AI agents who need grounded, cited answers.</p>
       <div class="hero-cta">
-        {% if approved %}
+        {% if user %}
         <a href="/ai/chat" class="btn-square lg">Launch Arlong AI <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></a>
         {% else %}
         <a href="#join" class="btn-square lg">Join the Beta <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></a>
@@ -677,9 +677,9 @@ a{color:inherit;text-decoration:none}
 <section class="cta-section" id="join">
   <div class="cta-glow"></div>
   <div class="cta-inner">
-    <div class="section-label" style="text-align:center">Beta Access</div>
-    <div class="cta-title">Join the beta &mdash; it's free</div>
-    <div class="cta-sub">Create an account to get instant access to Arlong AI.</div>
+    <div class="section-label" style="text-align:center">Open Beta</div>
+    <div class="cta-title">Start researching now</div>
+    <div class="cta-sub">Every signed-in Arlong account gets immediate access. No waitlist approval step.</div>
     {% if approved %}
     <a href="/ai/chat" class="btn-square lg" style="margin:0 auto">Launch Arlong AI <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg></a>
     <div class="cta-slots" style="margin-top:16px">You have <span class="limit">approved</span> access</div>
@@ -697,7 +697,7 @@ a{color:inherit;text-decoration:none}
   <div style="display:flex;gap:24px">
     <a href="/privacy">Privacy</a>
     <a href="/terms-of-service">Terms</a>
-    <a href="/api/dashboard">API Dashboard</a>
+    <a href="/dashboard?tab=api">API &amp; MCP</a>
     <a href="/">Search</a>
   </div>
 </footer>

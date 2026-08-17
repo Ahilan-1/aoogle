@@ -459,6 +459,14 @@ GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 GOOGLE_USERINFO_ENDPOINT = 'https://www.googleapis.com/oauth2/v3/userinfo'
 
+def _google_login_redirect_uri():
+    """Use a fixed OAuth callback, never the post-login destination."""
+    configured = GOOGLE_REDIRECT_URI.rstrip('/')
+    if configured.endswith('/auth/google/callback'):
+        return configured
+    base = os.environ.get('PUBLIC_BASE_URL', '').strip().rstrip('/')
+    return (base + '/auth/google/callback') if base else url_for('google_auth_callback', _external=True)
+
 # ── AI Beta Waitlist ────────────────────────────────────────────────────────
 AI_WAITLIST_LIMIT = int(os.environ.get('AI_WAITLIST_LIMIT', 50))
 
@@ -3277,8 +3285,10 @@ class DataManager:
                 if entry.get('user_id') == user_id:
                     return entry.get('status', 'waitlisted'), entry.get('position', 0)
             position = len(self.data['ai_waitlist']) + 1
-            approved = position <= AI_WAITLIST_LIMIT
-            status = 'approved' if approved else 'waitlisted'
+            # The beta is now open: keep the historical waitlist record for
+            # analytics, but grant every authenticated account immediately.
+            approved = True
+            status = 'approved'
             entry = {
                 'user_id': user_id,
                 'email': email,
@@ -3304,8 +3314,24 @@ class DataManager:
             return False
         if user.get('ai_access') == 'approved':
             return True
-        # Legacy users (pre-waitlist) are auto-approved
-        return False
+        # Open beta: migrate existing accounts (including old waitlisted
+        # records) lazily so a returning user is never stuck at the gate.
+        self.join_ai_waitlist(user_id, user.get('email', ''), user.get('username', ''))
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for entry in self.data.get('ai_waitlist', []):
+                if entry.get('user_id') == user_id:
+                    entry['status'] = 'approved'
+                    entry.setdefault('approved_at', datetime.now().isoformat())
+            for record in self.data.get('users', []):
+                if record.get('user_id') == user_id:
+                    record['ai_access'] = 'approved'
+                    record.setdefault('ai_access_granted_at', datetime.now().isoformat())
+            _save_json(self.data)
+            self._invalidate_user_cache()
+        return True
 
     def get_ai_waitlist_count(self):
         loaded = _load_json()
@@ -11856,6 +11882,7 @@ MCP_TOOLS = [
             },
             'required': ['query'],
         },
+        'annotations': {'readOnlyHint': True, 'destructiveHint': False, 'openWorldHint': True},
     },
     {
         'name': 'arlong_answer',
@@ -11880,6 +11907,7 @@ MCP_TOOLS = [
             },
             'required': ['query'],
         },
+        'annotations': {'readOnlyHint': True, 'destructiveHint': False, 'openWorldHint': True},
     },
     {
         'name': 'arlong_status',
@@ -11887,6 +11915,7 @@ MCP_TOOLS = [
                         '(RPM/RPD/TPM/TPD usage + cooldowns per model) and the '
                         'neural module (local vs remote embeddings).'),
         'inputSchema': {'type': 'object', 'properties': {}},
+        'annotations': {'readOnlyHint': True, 'destructiveHint': False, 'openWorldHint': False},
     },
 ]
 
@@ -11901,11 +11930,6 @@ _MCP_SEMAPHORES = {
 }
 
 # ── MCP OAuth 2.1 (Google identity, Arlong access tokens) ───────────────────
-_MCP_OAUTH_CLIENTS = {}
-_MCP_OAUTH_CODES = {}
-_MCP_OAUTH_LOCK = threading.RLock()
-
-
 def _mcp_oauth_issuer():
     configured = os.environ.get('MCP_OAUTH_ISSUER', '').strip().rstrip('/')
     return configured or request.url_root.rstrip('/')
@@ -11919,14 +11943,16 @@ def _mcp_oauth_serializer():
     return URLSafeTimedSerializer(app.secret_key, salt='arlong-mcp-oauth-v1')
 
 
-def _mcp_oauth_issue_token(identity):
+def _mcp_oauth_issue_token(identity, token_kind='access'):
     payload = {
         'sub': identity.get('sub') or identity.get('email'),
         'email': identity.get('email', ''),
         'aud': _mcp_oauth_resource(),
         'scope': 'mcp:tools',
+        'kind': token_kind,
     }
-    return 'mcp_oauth_' + _mcp_oauth_serializer().dumps(payload)
+    prefix = 'mcp_refresh_' if token_kind == 'refresh' else 'mcp_oauth_'
+    return prefix + _mcp_oauth_serializer().dumps(payload)
 
 
 def _mcp_oauth_verify_token(token):
@@ -11934,7 +11960,8 @@ def _mcp_oauth_verify_token(token):
         return None
     try:
         payload = _mcp_oauth_serializer().loads(token[len('mcp_oauth_'):], max_age=12 * 3600)
-        if payload.get('aud') != _mcp_oauth_resource() or payload.get('scope') != 'mcp:tools':
+        if (payload.get('aud') != _mcp_oauth_resource() or payload.get('scope') != 'mcp:tools'
+                or payload.get('kind', 'access') != 'access'):
             return None
         return payload
     except (BadSignature, SignatureExpired):
@@ -11970,7 +11997,7 @@ def mcp_oauth_server_metadata():
         'token_endpoint': issuer + '/oauth/token',
         'registration_endpoint': issuer + '/oauth/register',
         'response_types_supported': ['code'],
-        'grant_types_supported': ['authorization_code'],
+        'grant_types_supported': ['authorization_code', 'refresh_token'],
         'code_challenge_methods_supported': ['S256'],
         'token_endpoint_auth_methods_supported': ['none'],
         'scopes_supported': ['mcp:tools'],
@@ -11981,11 +12008,12 @@ def mcp_oauth_server_metadata():
 def mcp_oauth_register():
     body = request.get_json(silent=True) or {}
     redirects = body.get('redirect_uris') or []
-    if not redirects or not all(isinstance(u, str) and (u.startswith('https://') or u.startswith('http://localhost')) for u in redirects):
+    if not redirects or not all(isinstance(u, str) and (u.startswith('https://') or u.startswith('http://localhost') or u.startswith('http://127.0.0.1')) for u in redirects):
         return jsonify({'error': 'invalid_redirect_uri'}), 400
-    client_id = 'mcp_client_' + secrets.token_urlsafe(18)
-    with _MCP_OAUTH_LOCK:
-        _MCP_OAUTH_CLIENTS[client_id] = {'redirect_uris': redirects, 'client_name': body.get('client_name', 'MCP client')}
+    # Signed client registrations survive restarts and work across workers.
+    client_id = 'mcp_client_' + _mcp_oauth_serializer().dumps({
+        'redirect_uris': redirects, 'client_name': str(body.get('client_name', 'MCP client'))[:120],
+    })
     return jsonify({'client_id': client_id, 'client_id_issued_at': int(time.time()),
                     'redirect_uris': redirects, 'token_endpoint_auth_method': 'none'}), 201
 
@@ -11997,8 +12025,10 @@ def mcp_oauth_authorize():
     state = request.args.get('state', '')
     challenge = request.args.get('code_challenge', '')
     resource = request.args.get('resource', '') or _mcp_oauth_resource()
-    with _MCP_OAUTH_LOCK:
-        client = _MCP_OAUTH_CLIENTS.get(client_id)
+    try:
+        client = _mcp_oauth_serializer().loads(client_id[len('mcp_client_'):], max_age=365 * 24 * 3600) if client_id.startswith('mcp_client_') else None
+    except (BadSignature, SignatureExpired):
+        client = None
     if not client or redirect_uri not in client.get('redirect_uris', []):
         return jsonify({'error': 'invalid_client'}), 400
     if request.args.get('response_type') != 'code' or not challenge or request.args.get('code_challenge_method') != 'S256':
@@ -12039,9 +12069,13 @@ def mcp_oauth_google_callback():
                              headers={'Authorization': 'Bearer ' + google_token}, timeout=15)
     user_resp.raise_for_status()
     identity = user_resp.json()
-    code = secrets.token_urlsafe(32)
-    with _MCP_OAUTH_LOCK:
-        _MCP_OAUTH_CODES[code] = {**pending, 'identity': identity, 'created': time.time()}
+    user = data_manager.get_user_by_email(identity.get('email', ''))
+    if not user:
+        user = data_manager.create_user_google(identity.get('email', ''), identity.get('name', ''), identity.get('sub', ''))
+    if not user:
+        return jsonify({'error': 'account_creation_failed'}), 500
+    identity = {**identity, 'sub': user['user_id'], 'email': user.get('email', '')}
+    code = 'mcp_code_' + _mcp_oauth_serializer().dumps({**pending, 'identity': identity})
     from urllib.parse import urlencode
     return redirect(pending['redirect_uri'] + ('&' if '?' in pending['redirect_uri'] else '?') + urlencode({
         'code': code, 'state': pending.get('client_state', ''),
@@ -12050,13 +12084,28 @@ def mcp_oauth_google_callback():
 
 @app.route('/oauth/token', methods=['POST'])
 def mcp_oauth_token():
+    grant_type = request.form.get('grant_type', 'authorization_code')
+    if grant_type == 'refresh_token':
+        refresh = request.form.get('refresh_token', '')
+        try:
+            identity = _mcp_oauth_serializer().loads(refresh[len('mcp_refresh_'):], max_age=30 * 24 * 3600) if refresh.startswith('mcp_refresh_') else None
+        except (BadSignature, SignatureExpired):
+            identity = None
+        if not identity or identity.get('kind') != 'refresh' or identity.get('aud') != _mcp_oauth_resource():
+            return jsonify({'error': 'invalid_grant'}), 400
+        return jsonify({'access_token': _mcp_oauth_issue_token(identity), 'refresh_token': _mcp_oauth_issue_token(identity, 'refresh'),
+                        'token_type': 'Bearer', 'expires_in': 12 * 3600, 'scope': 'mcp:tools'})
+    if grant_type != 'authorization_code':
+        return jsonify({'error': 'unsupported_grant_type'}), 400
     code = request.form.get('code', '')
     verifier = request.form.get('code_verifier', '')
     client_id = request.form.get('client_id', '')
-    resource = request.form.get('resource', '')
-    with _MCP_OAUTH_LOCK:
-        rec = _MCP_OAUTH_CODES.pop(code, None)
-    if not rec or time.time() - rec.get('created', 0) > 300:
+    resource = request.form.get('resource', '') or _mcp_oauth_resource()
+    try:
+        rec = _mcp_oauth_serializer().loads(code[len('mcp_code_'):], max_age=300) if code.startswith('mcp_code_') else None
+    except (BadSignature, SignatureExpired):
+        rec = None
+    if not rec:
         return jsonify({'error': 'invalid_grant'}), 400
     if client_id != rec.get('client_id') or resource != rec.get('resource'):
         return jsonify({'error': 'invalid_grant'}), 400
@@ -12064,6 +12113,7 @@ def mcp_oauth_token():
     if not secrets.compare_digest(digest, rec.get('challenge', '')):
         return jsonify({'error': 'invalid_grant'}), 400
     return jsonify({'access_token': _mcp_oauth_issue_token(rec['identity']),
+                    'refresh_token': _mcp_oauth_issue_token(rec['identity'], 'refresh'),
                     'token_type': 'Bearer', 'expires_in': 12 * 3600, 'scope': 'mcp:tools'})
 
 
@@ -12360,18 +12410,9 @@ def api_dashboard():
             'created_at': k.get('created_at', ''),
         }
 
-    return render_template('api_dashboard.html',
-        user=user,
-        keys=keys,
-        accepted_tos=accepted,
-        usage=usage,
-        key_limit=KEY_API_LIMIT,
-        key_window=KEY_API_WINDOW,
-        anon_limit=ANON_API_LIMIT,
-        error=error,
-        success=success,
-        plan_usage=plan_usage,
-    )
+    if request.method == 'POST':
+        return redirect(url_for('dashboard', tab='api', notice=success or error or 'API settings updated.'))
+    return redirect(url_for('dashboard', tab='api'))
 
 @app.route('/change-log')
 def change_log():
@@ -12778,12 +12819,21 @@ def dashboard():
     user = data_manager.get_user_by_id(session['user_id'])
     billing = data_manager.get_billing_record(session['user_id'])
     plan_usage = data_manager.get_plan_usage(session['user_id'])
+    keys = data_manager.get_api_keys_for_user(session['user_id'])
+    accepted = data_manager.user_accepted_tos(session['user_id'])
+    usage = None
+    if keys and accepted:
+        now = time.time()
+        key = keys[0]
+        recent = [t for t in key.get('requests_30m', []) if now - t < KEY_API_WINDOW]
+        usage = {'used_30m': len(recent), 'remaining': max(0, KEY_API_LIMIT - len(recent)),
+                 'requests_total': key.get('requests_total', 0), 'limit_30m': KEY_API_LIMIT}
     return render_template('dashboard.html',
         user=user,
         billing=billing,
         plan_usage=plan_usage,
-        verified_sites=[s for s in data_manager.get_verified_sites() if s.get('submitted_by') == session['user_id']],
-        submitted_sites=[s for s in data_manager.get_submitted_sites() if s.get('submitted_by') == session['user_id']],
+        keys=keys, accepted_tos=accepted, api_usage=usage,
+        active_tab=request.args.get('tab', 'overview'), notice=request.args.get('notice', ''),
         announcement=data_manager.get_announcement()
     )
 
@@ -13782,16 +13832,18 @@ def api_user_update_settings():
     user_id = session.get('user_id')
     if not user_id:
         return jsonify({'ok': False, 'error': 'Login required'}), 403
+    if not validate_csrf():
+        return jsonify({'ok': False, 'error': 'Invalid form submission'}), 403
     action = request.form.get('action', '')
     if action == 'email':
         email = request.form.get('email', '').strip()
         current = request.form.get('current_password', '')
         if not email or '@' not in email:
             return jsonify({'ok': False, 'error': 'Valid email required'}), 400
-        if not current:
-            return jsonify({'ok': False, 'error': 'Current password required'}), 400
         user = data_manager.get_user_by_id(user_id)
-        if not user or not data_manager.check_password(current, user['password_hash']):
+        if not user:
+            return jsonify({'ok': False, 'error': 'Account not found'}), 404
+        if user.get('password_hash') and (not current or not data_manager.check_password(current, user['password_hash'])):
             return jsonify({'ok': False, 'error': 'Current password is incorrect'}), 403
         ok, err = data_manager.update_user_email(user_id, email)
         return jsonify({'ok': ok, 'error': err})
@@ -15277,9 +15329,10 @@ def google_auth():
     import secrets as _secrets
     state = _secrets.token_urlsafe(32)
     session['google_oauth_state'] = state
+    session['google_oauth_after'] = _safe_redirect_target(request.args.get('redirect')) or '/ai/chat'
     params = {
         'client_id': GOOGLE_CLIENT_ID,
-        'redirect_uri': GOOGLE_REDIRECT_URI or url_for('google_auth_callback', _external=True),
+        'redirect_uri': _google_login_redirect_uri(),
         'response_type': 'code',
         'scope': 'openid email profile',
         'state': state,
@@ -15307,7 +15360,7 @@ def google_auth_callback():
             'code': code,
             'client_id': GOOGLE_CLIENT_ID,
             'client_secret': GOOGLE_CLIENT_SECRET,
-            'redirect_uri': GOOGLE_REDIRECT_URI or url_for('google_auth_callback', _external=True),
+            'redirect_uri': _google_login_redirect_uri(),
             'grant_type': 'authorization_code',
         }, timeout=10)
         token_data = token_resp.json()
@@ -15341,8 +15394,7 @@ def google_auth_callback():
         session['user_id'] = user['user_id']
         session['username'] = user.get('username', '')
         session.permanent = True
-        # Redirect to AI chat
-        return redirect('/ai/chat')
+        return redirect(session.pop('google_oauth_after', None) or '/ai/chat')
     except Exception as e:
         app.logger.error(f"Google OAuth error: {e}")
         return redirect(url_for('ai_landing') + '?error=auth_failed')
@@ -15373,6 +15425,9 @@ def api_ai_waitlist_join():
     # Check if user already exists
     existing = data_manager.get_user_by_email(email)
     if existing:
+        if not existing.get('password_hash') or not data_manager.check_password(password, existing.get('password_hash', '')):
+            return jsonify({'ok': False, 'error': 'That email already belongs to an account. Sign in to continue.'}), 401
+        _regenerate_session()
         user_id = existing['user_id']
         session['user_id'] = user_id
         session['username'] = existing.get('username', '')
