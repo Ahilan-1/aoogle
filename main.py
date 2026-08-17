@@ -3477,7 +3477,7 @@ class DataManager:
                 return bool(u.get('accepted_tos_at'))
         return False
 
-    def record_api_usage(self, key, limit=None, window=None):
+    def record_api_usage(self, key, limit=None, window=None, credits=1):
         """Enforce per-key quota (80 requests / 30 minutes) and log usage."""
         if limit is None:
             limit = KEY_API_LIMIT
@@ -3494,7 +3494,7 @@ class DataManager:
                     if len(times) >= limit:
                         return {'allowed': False, 'remaining': 0,
                                 'retry_after': int(window - (now - times[0])), 'limit_type': 'burst'}
-                    allowance = self._consume_plan_usage_locked(k.get('user_id'), 'api')
+                    allowance = self._consume_plan_usage_locked(k.get('user_id'), 'api', credits)
                     if not allowance['allowed']:
                         return {**allowance, 'retry_after': 0, 'remaining': 0, 'limit_type': 'plan'}
                     times.append(now)
@@ -4455,32 +4455,33 @@ class DataManager:
             return {**entitlement, 'usage': usage, 'period_start': record['period_start'],
                     'period_end': record['period_end'], 'day': record['day']}
 
-    def _consume_plan_usage_locked(self, user_id, kind):
+    def _consume_plan_usage_locked(self, user_id, kind, amount=1):
+        amount = max(0, int(amount))
         entitlement, record, usage = self._plan_usage_locked(user_id)
         metric = usage[kind]
-        if metric['used'] >= metric['limit']:
+        if metric['used'] + amount > metric['limit']:
             return {'allowed': False, 'plan': entitlement['plan'], 'kind': kind,
                     'used': metric['used'], 'limit': metric['limit'], 'remaining': 0,
                     'upgrade_url': '/premium'}
         if kind == 'standard':
-            record['standard'] = int(record.get('standard', 0)) + 1
-            record['standard_today'] = int(record.get('standard_today', 0)) + 1
+            record['standard'] = int(record.get('standard', 0)) + amount
+            record['standard_today'] = int(record.get('standard_today', 0)) + amount
         else:
-            record[kind] = int(record.get(kind, 0)) + 1
-        used = metric['used'] + 1
+            record[kind] = int(record.get(kind, 0)) + amount
+        used = metric['used'] + amount
         return {'allowed': True, 'plan': entitlement['plan'], 'kind': kind,
                 'used': used, 'limit': metric['limit'], 'remaining': max(0, metric['limit'] - used),
                 'upgrade_url': '/premium'}
 
-    def consume_plan_usage(self, user_id, kind):
+    def consume_plan_usage(self, user_id, kind, amount=1):
         if kind not in {'standard', 'deep', 'api'}:
             raise ValueError('Unknown plan usage kind')
         with self._lock:
             loaded = _load_json()
             if loaded:
                 self.data = loaded
-            result = self._consume_plan_usage_locked(user_id, kind)
-            if result['allowed']:
+            result = self._consume_plan_usage_locked(user_id, kind, amount)
+            if result['allowed'] and amount:
                 _save_json(self.data)
             return result
 
@@ -11260,7 +11261,8 @@ def api_search():
 # ── Arlong agentic API (/api/arlong/...) ────────────────────────────────────
 # Shared auth/rate-limit gate mirroring /api/search access tiers. Returns
 # (rate, tier, api_key) or a Flask response when the request must be rejected.
-def _arlong_api_gate():
+def _arlong_api_gate(credits=1):
+    credits = max(0, int(credits))
     ip = request.remote_addr or '127.0.0.1'
     client_token = request.headers.get('X-Arlong-Client', '').strip()
     whitelisted = bool(client_token) and client_token == EXTENSION_CLIENT_TOKEN
@@ -11284,7 +11286,7 @@ def _arlong_api_gate():
             oauth_user = data_manager.get_user_by_email(oauth_identity.get('email', ''))
             if not oauth_user:
                 return _mcp_oauth_challenge('account_required')
-            allowance = data_manager.consume_plan_usage(oauth_user['user_id'], 'api')
+            allowance = data_manager.consume_plan_usage(oauth_user['user_id'], 'api', credits)
             if not allowance['allowed']:
                 rate = {**allowance, 'retry_after': 0, 'limit_type': 'plan'}
     elif api_key:
@@ -11299,7 +11301,7 @@ def _arlong_api_gate():
             resp.status_code = 401
             return resp
         tier = 'key'
-        rate = data_manager.record_api_usage(api_key)
+        rate = data_manager.record_api_usage(api_key, credits=credits)
     else:
         rate = anon_api_limiter.check(ip)
     if not rate["allowed"]:
@@ -11656,7 +11658,7 @@ def api_arlong_search():
         source_type = request.args.get('source_type', 'any').strip()
     if not q:
         return jsonify({"error": "Missing query parameter", "usage": "/api/arlong/search?q=your+query"}), 400
-    gate = _arlong_api_gate()
+    gate = _arlong_api_gate(credits=1)
     if not isinstance(gate, tuple):
         return gate
     blocked = _service_blocked()
@@ -11682,7 +11684,7 @@ def api_arlong_answer():
         source_type = request.args.get('source_type', 'any').strip()
     if not q:
         return jsonify({"error": "Missing query parameter", "usage": "/api/arlong/answer?q=your+query"}), 400
-    gate = _arlong_api_gate()
+    gate = _arlong_api_gate(credits=3)
     if not isinstance(gate, tuple):
         return gate
     blocked = _service_blocked()
@@ -12175,7 +12177,7 @@ def mcp_endpoint():
             'protocolVersion': '2024-11-05',
             'capabilities': {'tools': {'listChanged': False}},
             'serverInfo': {'name': 'arlong-mcp', 'version': '1.0.0'},
-            'instructions': 'Arlong agentic search. Use tools/arlong_search for results with per-source evaluation, arlong_answer for a grounded answer, arlong_status for model health.',
+            'instructions': 'Arlong agentic search. Connection, discovery, ping, and arlong_status are free. arlong_search uses 1 account credit; arlong_answer uses 3 credits.',
         })
 
     body = request.get_json(silent=True)
@@ -12198,7 +12200,7 @@ def mcp_endpoint():
                 'protocolVersion': params.get('protocolVersion', '2024-11-05'),
                 'capabilities': {'tools': {'listChanged': False}},
                 'serverInfo': {'name': 'arlong-mcp', 'version': '1.0.0'},
-                'instructions': 'Arlong agentic search. arlong_search = evaluated results, arlong_answer = grounded answer, arlong_status = model health.',
+                'instructions': 'Arlong agentic search. arlong_search = 1 credit, arlong_answer = 3 credits, arlong_status = free. OAuth connection and tool discovery never consume credits.',
             },
         })
         resp.headers['Mcp-Session-Id'] = session_id
@@ -12218,11 +12220,16 @@ def mcp_endpoint():
         if _svc:
             msg = 'Arlong is under maintenance. Try again later.' if _svc == 'maintenance' else 'Arlong is temporarily offline.'
             return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {'isError': True, 'content': [{'type': 'text', 'text': json.dumps({'error': msg})}]}})
-        gate = _arlong_api_gate()
-        if not isinstance(gate, tuple):
-            # Rejected by rate/API gating — surface as an MCP error.
-            return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'error': {'code': -32001, 'message': 'Unauthorized or rate limited'}})
         name = params.get('name')
+        tool_credits = {'arlong_status': 0, 'arlong_search': 1, 'arlong_answer': 3}.get(name, 1)
+        gate = _arlong_api_gate(credits=tool_credits)
+        if not isinstance(gate, tuple):
+            detail = gate.get_json(silent=True) if hasattr(gate, 'get_json') else {}
+            message = (detail or {}).get('message') or (detail or {}).get('error') or 'Unauthorized or rate limited'
+            return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'error': {
+                'code': -32001, 'message': message,
+                'data': {k: v for k, v in (detail or {}).items() if k in {'code', 'used', 'limit', 'upgrade_url'}},
+            }})
         arguments = params.get('arguments') or {}
         try:
             text = _mcp_call_tool(name, arguments)
@@ -12833,6 +12840,7 @@ def dashboard():
         billing=billing,
         plan_usage=plan_usage,
         keys=keys, accepted_tos=accepted, api_usage=usage,
+        mcp_url=_public_base_url() + '/mcp',
         active_tab=request.args.get('tab', 'overview'), notice=request.args.get('notice', ''),
         announcement=data_manager.get_announcement()
     )
