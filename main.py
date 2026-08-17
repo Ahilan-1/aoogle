@@ -12874,7 +12874,10 @@ def _billing_country():
 
 def _public_base_url():
     configured_base = os.environ.get('PUBLIC_BASE_URL', '').strip().rstrip('/')
-    return configured_base or request.url_root.rstrip('/')
+    base = configured_base or request.url_root.rstrip('/')
+    if urlparse(base).hostname == 'arlong.org' and base.startswith('http://'):
+        base = 'https://' + base[len('http://'):]
+    return base
 
 
 def _dodo_product_id(plan):
