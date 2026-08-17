@@ -337,13 +337,19 @@ def evaluate_page(query, title='', url='', snippet='', content=''):
 
 
 # ── corroboration ────────────────────────────────────────────────────────────
+# Local 512-dim hashing embeddings are less precise than remote API embeddings,
+# so we use a lower threshold for them. 0.78 works well for 768-dim remote,
+# 0.55 works better for local 512-dim.
+_CORROBORATION_THRESHOLD = 0.55 if EMBED_DIM <= 512 else 0.78
+
+
 def corroborate(claims):
     """Group claims from independent sources into agreement clusters.
 
     `claims` is a list of {source_url, claim_text}. Claims whose embeddings
-    are mutually similar (cosine >= 0.78) form a cluster; the report tells you
-    how many independent sources agree and which ones disagree — the epistemic
-    state, not just "here's the answer".
+    are mutually similar (cosine >= threshold) form a cluster; the report tells
+    you how many independent sources agree and which ones disagree — the
+    epistemic state, not just "here's the answer".
     """
     if not claims:
         return {'clusters': [], 'agreement': 0.0, 'disagreement': 0}
@@ -361,7 +367,7 @@ def corroborate(claims):
             if assigned[j]:
                 continue
             vj = vecs[j][1]
-            if vj and cosine(v, vj) >= 0.78:
+            if vj and cosine(v, vj) >= _CORROBORATION_THRESHOLD:
                 group.append(vecs[j][0])
                 assigned[j] = True
         clusters.append(group)

@@ -32,6 +32,7 @@ import uuid
 import re
 import string
 import threading
+import contextlib
 import os
 import shutil
 import ssl
@@ -11123,9 +11124,9 @@ def _arlong_status_payload():
         import neural_search as _neural
         payload['neural'] = {
             'embedding_backend': 'remote' if _neural.EMBED_API_KEY else 'local',
-            'local_dim': 512,
+            'local_dim': _neural.EMBED_DIM,
             'injection_heuristics': True,
-            'corroboration_threshold': 0.78,
+            'corroboration_threshold': getattr(_neural, '_CORROBORATION_THRESHOLD', 0.55),
         }
     except Exception:
         pass
@@ -11234,6 +11235,16 @@ MCP_TOOLS = [
     },
 ]
 
+# ── MCP concurrency control ──────────────────────────────────────────────────
+# arlong_answer spawns up to 5 LLM calls + recursive follow-ups — serialize
+# to one-at-a-time so parallel MCP clients don't swamp the model router.
+# arlong_search is cheaper (search + neural eval) so allow a small pool.
+# arlong_status is read-only / trivial — no limit.
+_MCP_SEMAPHORES = {
+    'arlong_answer': threading.BoundedSemaphore(1),
+    'arlong_search': threading.BoundedSemaphore(3),
+}
+
 
 def _mcp_call_tool(name, args):
     """Execute one MCP tool. Returns JSON-serializable text."""
@@ -11243,12 +11254,18 @@ def _mcp_call_tool(name, args):
         query = (args.get('query') or '').strip()
         if not query:
             raise ValueError('query is required')
-        return json.dumps(_arlong_search_payload(query, int(args.get('page') or 1)), indent=2)
+        sem = _MCP_SEMAPHORES.get('arlong_search')
+        ctx = sem if sem else contextlib.nullcontext()
+        with ctx:
+            return json.dumps(_arlong_search_payload(query, int(args.get('page') or 1)), indent=2)
     if name == 'arlong_answer':
         query = (args.get('query') or '').strip()
         if not query:
             raise ValueError('query is required')
-        return json.dumps(_arlong_answer_payload(query), indent=2)
+        sem = _MCP_SEMAPHORES.get('arlong_answer')
+        ctx = sem if sem else contextlib.nullcontext()
+        with ctx:
+            return json.dumps(_arlong_answer_payload(query), indent=2)
     if name == 'arlong_status':
         return json.dumps(_arlong_status_payload(), indent=2)
     raise ValueError(f'Unknown tool: {name}')
@@ -11307,6 +11324,10 @@ def mcp_endpoint():
         return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {'tools': MCP_TOOLS}})
 
     if method == 'tools/call':
+        _svc = _service_blocked()
+        if _svc:
+            msg = 'Arlong is under maintenance. Try again later.' if _svc == 'maintenance' else 'Arlong is temporarily offline.'
+            return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {'isError': True, 'content': [{'type': 'text', 'text': json.dumps({'error': msg})}]}})
         gate = _arlong_api_gate()
         if not isinstance(gate, tuple):
             # Rejected by rate/API gating — surface as an MCP error.
@@ -11322,7 +11343,8 @@ def mcp_endpoint():
             return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {'isError': True, 'content': [{'type': 'text', 'text': json.dumps({'error': msg})}]}})
         except Exception as e:
             app.logger.error(f"MCP tool error: {e}")
-            return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'error': {'code': -32603, 'message': str(e)}})
+            err_msg = 'A temporary error occurred. Please try again.'
+            return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {'isError': True, 'content': [{'type': 'text', 'text': json.dumps({'error': err_msg})}]}})
 
     return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'error': {'code': -32601, 'message': f'Method not found: {method}'}})
 
