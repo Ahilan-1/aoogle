@@ -11367,7 +11367,7 @@ def _arlong_page_text(url):
     return text
 
 
-def _arlong_eval_result(q, r, idx):
+def _arlong_eval_result(q, r, idx, fetch_content=True, content_max_chars=4000):
     """Build one agentic result item in the /api/arlong JSON schema."""
     url = r.get('url') or ''
     title = r.get('title') or ''
@@ -11388,11 +11388,11 @@ def _arlong_eval_result(q, r, idx):
     }
     try:
         import neural_search as _neural
-        content = _arlong_page_text(url)
+        content = _arlong_page_text(url) if fetch_content else None
         # Filter out garbage content (JS loading spinners, "Try again" etc.)
         if content and _is_junk_content(content):
             content = None
-        ev = _neural.evaluate_page(q, title=title, url=url, snippet=snippet[:200], content=(content or '')[:4000])
+        ev = _neural.evaluate_page(q, title=title, url=url, snippet=snippet[:500], content=(content or '')[:4000])
         item["ai_evaluation"] = {
             "relevance_score": ev.get('relevance_score', 0.0),
             "summary": ev.get('ai_evaluation', {}).get('summary') or snippet[:200],
@@ -11408,7 +11408,7 @@ def _arlong_eval_result(q, r, idx):
         # should never reach the answer prompt or the API response body.
         _block_st = ev.get('reputation', {}).get('status', 'UNVERIFIED')
         if content and _block_st not in ('BLOCKED',):
-            item["content"] = content[:4000]
+            item["content"] = content[:max(500, min(int(content_max_chars or 4000), 12000))]
             if len(item["snippet"]) < 500:
                 item["snippet"] = clean_snippet_text(content)[:1000]
     except Exception as e:
@@ -11532,27 +11532,116 @@ def _arlong_prefer_sources(results, source_type='any', q=''):
     return sorted(results or [], key=weight, reverse=True)
 
 
-def _arlong_search_payload(q, page=1, source_type='any'):
+def _arlong_result_quality(item):
+    """Comparable 0-1 quality score used only to order returned results."""
+    ev = item.get('ai_evaluation') or {}
+    rep = item.get('reputation') or {}
+    relevance = max(0.0, min(1.0, float(ev.get('relevance_score') or 0)))
+    trust = max(0.0, min(1.0, float(rep.get('trust_score') or 0) / 100))
+    url = (item.get('url') or '').lower()
+    authoritative = any(x in url for x in (
+        '.gov', '.edu', 'docs.', 'developer.', 'developers.', 'cloud.google.com',
+        'ai.google.dev', 'who.int', 'worldbank.org', 'sec.gov', 'rbi.org.in',
+        'arxiv.org', 'pubmed.ncbi.nlm.nih.gov',
+    ))
+    blocked = rep.get('status') == 'BLOCKED' or bool(item.get('threat_flags'))
+    score = relevance * .72 + trust * .18 + (.10 if authoritative else 0)
+    return 0.0 if blocked else round(min(1.0, score), 3)
+
+
+def _arlong_search_payload(q, page=1, source_type='any', mode='balanced',
+                           max_results=10, include_content=True, content_max_chars=4000):
     """Run a search and build the full agentic response dict (shared by the
     REST endpoints and the /mcp MCP tools). Raises on engine failure."""
+    started = time.perf_counter()
     search_q = _arlong_normalize_query(q)
+    mode = mode if mode in ('instant', 'balanced', 'deep') else 'balanced'
+    max_results = max(1, min(int(max_results or 10), 20))
+    if mode == 'instant':
+        max_results = min(max_results, 8)
+        include_content = False
+    elif mode == 'deep':
+        max_results = max(max_results, 15)
     results, total_results = search_engine.search(search_q, page)
+    retrieval_ms = round((time.perf_counter() - started) * 1000, 1)
     results = _arlong_prefer_sources(results, source_type, q)
+    results = results[:max_results]
     search_stats.record()
     data_manager.increment_total_searches()
-    evaluated = [_arlong_eval_result(q, r, i) for i, r in enumerate(results, start=1)]
+    evaluation_started = time.perf_counter()
+    # Page extraction is network-bound. Evaluate concurrently while preserving
+    # deterministic input order, instead of serially waiting on every website.
+    workers = min(8, max(1, len(results)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(_arlong_eval_result, q, r, i, include_content,
+                               content_max_chars)
+                   for i, r in enumerate(results, start=1)]
+        evaluated = [future.result() for future in futures]
+    for item in evaluated:
+        item['quality_score'] = _arlong_result_quality(item)
+    evaluated.sort(key=lambda item: item.get('quality_score', 0), reverse=True)
+    for rank, item in enumerate(evaluated, start=1):
+        item['rank'] = rank
+    evaluation_ms = round((time.perf_counter() - evaluation_started) * 1000, 1)
     response = {
         "query": q,
         "interpreted_query": search_q if search_q != q else None,
         "page": page,
         "total_results": total_results,
+        "returned_results": len(evaluated),
+        "mode": mode,
         "results": evaluated,
+        "timing": {
+            "retrieval_ms": retrieval_ms,
+            "evaluation_ms": evaluation_ms,
+            "total_ms": round((time.perf_counter() - started) * 1000, 1),
+        },
+        "search_metadata": {
+            "source_preference": source_type,
+            "content_included": bool(include_content),
+            "ranking": "relevance_trust_authority_v2",
+        },
     }
-    _arlong_attach_epistemic(response, results)
+    _arlong_attach_epistemic(response, evaluated)
     return response
 
 
-def _arlong_answer_payload(q, source_type='any'):
+def _arlong_quick_payload(q, page=1, max_results=10):
+    """Low-latency retrieval with no page fetch, embeddings, or AI evaluation."""
+    started = time.perf_counter()
+    search_q = _arlong_normalize_query(q)
+    results, total_results = search_engine.search(search_q, page)
+    links = []
+    seen = set()
+    for result in results:
+        url = (result.get('url') or '').strip()
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        links.append({
+            'title': clean_snippet_text(result.get('title') or url),
+            'url': url,
+            'domain': (result.get('domain') or urlparse(url).netloc).lower(),
+        })
+        if len(links) >= max(1, min(int(max_results or 10), 20)):
+            break
+    search_stats.record()
+    data_manager.increment_total_searches()
+    return {
+        'query': q,
+        'interpreted_query': search_q if search_q != q else None,
+        'page': page,
+        'total_results': total_results,
+        'returned_results': len(links),
+        'results': links,
+        'mode': 'quick',
+        'ai_evaluation': False,
+        'content_extraction': False,
+        'timing': {'total_ms': round((time.perf_counter() - started) * 1000, 1)},
+    }
+
+
+def _arlong_answer_payload(q, source_type='any', deep=False):
     """Run the grounded answer pipeline and build the agentic response dict.
     Raises AIAllModelsFailedError on model unavailability.
     Uses a Recursive Execution Loop: if the first pass misses concrete data
@@ -11573,7 +11662,7 @@ def _arlong_answer_payload(q, source_type='any'):
     answer, sources = arlong_ai_answer(
         q, results,
         source_type=source_type,
-        deep=False,
+        deep=bool(deep),
     )
     followup = {'rounds': 0, 'disabled': True}
 
@@ -11599,6 +11688,7 @@ def _arlong_answer_payload(q, source_type='any'):
         "answer": answer,
         "sources": evaluated_sources,
         "followup": followup,
+        "mode": "deep" if deep else "standard",
         "results": evaluated_sources,
     }
     _arlong_attach_epistemic(response, evaluated_sources)
@@ -11609,28 +11699,33 @@ def _arlong_attach_epistemic(response, results):
     """Epistemic state from corroboration of the top snippets."""
     try:
         import neural_search as _neural
-        # Use SHORT claim texts (first sentence) for better clustering —
-        # full 400-char snippets from different sources about the same topic
-        # have low cosine similarity because they cover different sub-points.
+        query_terms = set(re.findall(r'[a-z0-9]{3,}', (response.get('query') or '').lower()))
         claims = []
+        seen_domains = set()
         for r in results[:8]:
             url = (r.get('url') or '').strip()
             if not url:
                 continue
-            raw = clean_snippet_text(r.get('snippet') or '')[:400]
+            domain = _registrable_domain((urlparse(url).netloc or '').lower())
+            if domain in seen_domains:
+                continue
+            seen_domains.add(domain)
+            raw = clean_snippet_text(r.get('snippet') or '')[:1000]
             if not raw:
-                raw = clean_snippet_text(r.get('content') or '')[:400]
+                raw = clean_snippet_text(r.get('content') or '')[:1000]
             if not raw:
                 continue
-            # Extract the first sentence as the core claim — it's usually the
-            # most representative statement about the page's topic.
-            first_sentence = raw
-            for sep in ('. ', '! ', '? ', '; ', ' — ', ' - '):
-                idx = raw.find(sep)
-                if 20 < idx < 300:
-                    first_sentence = raw[:idx + 1].strip()
-                    break
-            claims.append({"source_url": url, "claim_text": first_sentence})
+            sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', raw)
+                         if 35 <= len(s.strip()) <= 360]
+            if not sentences:
+                sentences = [raw[:360]]
+            def claim_score(sentence):
+                words = set(re.findall(r'[a-z0-9]{3,}', sentence.lower()))
+                overlap = len(query_terms & words)
+                has_number = 1 if re.search(r'\b\d+(?:\.\d+)?%?\b', sentence) else 0
+                return overlap * 3 + has_number + min(len(sentence), 240) / 240
+            best_claim = max(sentences, key=claim_score)
+            claims.append({"source_url": url, "claim_text": best_claim})
         if claims:
             corr = _neural.corroborate(claims)
             response["corroboration"] = corr
@@ -11661,10 +11756,16 @@ def api_arlong_search():
         q = (body.get('q') or '').strip()
         page = max(1, int(body.get('page', 1)))
         source_type = (body.get('source_type') or 'any').strip()
+        mode = (body.get('mode') or 'balanced').strip()
+        max_results = safe_int(body.get('max_results', 10), 10)
+        include_content = bool(body.get('include_content', mode != 'instant'))
     else:
         q = request.args.get('q', '').strip()
         page = max(1, safe_int(request.args.get('page', 1), 1))
         source_type = request.args.get('source_type', 'any').strip()
+        mode = request.args.get('mode', 'balanced').strip()
+        max_results = safe_int(request.args.get('max_results', 10), 10)
+        include_content = request.args.get('include_content', 'true').lower() not in ('0', 'false', 'no')
     if not q:
         return jsonify({"error": "Missing query parameter", "usage": "/api/arlong/search?q=your+query"}), 400
     gate = _arlong_api_gate(credits=1)
@@ -11675,7 +11776,8 @@ def api_arlong_search():
         msg = 'Service is under maintenance. Please try again later.' if blocked == 'maintenance' else 'Service is temporarily unavailable.'
         return jsonify({'error': msg}), 503
     try:
-        response = _arlong_search_payload(q, page, source_type=source_type)
+        response = _arlong_search_payload(q, page, source_type=source_type, mode=mode,
+                                          max_results=max_results, include_content=include_content)
     except Exception as e:
         app.logger.error(f"Arlong API search error: {e}")
         return jsonify({"error": "Search failed", "message": "An internal error occurred while searching."}), 500
@@ -11688,9 +11790,11 @@ def api_arlong_answer():
         body = request.get_json(silent=True) or {}
         q = (body.get('q') or '').strip()
         source_type = (body.get('source_type') or 'any').strip()
+        deep = body.get('mode') == 'deep' or bool(body.get('deep', False))
     else:
         q = request.args.get('q', '').strip()
         source_type = request.args.get('source_type', 'any').strip()
+        deep = request.args.get('mode') == 'deep' or request.args.get('deep', '').lower() in ('1', 'true', 'yes')
     if not q:
         return jsonify({"error": "Missing query parameter", "usage": "/api/arlong/answer?q=your+query"}), 400
     gate = _arlong_api_gate(credits=3)
@@ -11705,7 +11809,7 @@ def api_arlong_answer():
         last_error = None
         for attempt in range(3):
             try:
-                response = _arlong_answer_payload(q, source_type=source_type)
+                response = _arlong_answer_payload(q, source_type=source_type, deep=deep)
                 break
             except AIAllModelsFailedError as exc:
                 last_error = exc
@@ -11736,6 +11840,19 @@ def _arlong_status_payload():
     payload = {
         'router': {'enabled': False, 'models': [], 'order': []},
         'neural': {'embedding_backend': 'local'},
+        'mcp': {
+            'version': '1.2.0',
+            'tools': ['arlong_quick', 'arlong_search', 'arlong_deep',
+                      'arlong_extract', 'arlong_answer', 'arlong_status'],
+            'search_profiles': {
+                'arlong_quick': 'plain links; no AI evaluation',
+                'arlong_search': 'balanced semantic and trust evaluation',
+                'arlong_deep': 'parallel extraction and corroboration',
+            },
+            'max_results': 20,
+            'oauth': True,
+            'bearer_api_keys': True,
+        },
         'server_time': datetime.now(timezone.utc).isoformat(),
     }
     try:
@@ -11870,6 +11987,21 @@ def api_admin_architecture_status():
 
 MCP_TOOLS = [
     {
+        'name': 'arlong_quick',
+        'description': ('Fast, token-efficient web retrieval returning plain links only. '
+                        'No page extraction, semantic evaluation, trust scoring, or AI synthesis.'),
+        'inputSchema': {
+            'type': 'object',
+            'properties': {
+                'query': {'type': 'string', 'description': 'The search query'},
+                'page': {'type': 'integer', 'description': 'Result page (1-based)', 'default': 1},
+                'max_results': {'type': 'integer', 'minimum': 1, 'maximum': 20, 'default': 10},
+            },
+            'required': ['query'],
+        },
+        'annotations': {'readOnlyHint': True, 'destructiveHint': False, 'openWorldHint': True},
+    },
+    {
         'name': 'arlong_search',
         'description': ('Search the web and return Arlong\'s agentic result '
                         'schema: per-page relevance score, reputation/trust '
@@ -11880,6 +12012,14 @@ MCP_TOOLS = [
             'properties': {
                 'query': {'type': 'string', 'description': 'The search query'},
                 'page': {'type': 'integer', 'description': 'Result page (1-based)', 'default': 1},
+                'max_results': {
+                    'type': 'integer', 'minimum': 1, 'maximum': 20, 'default': 10,
+                    'description': 'Maximum results to return (deep mode has a minimum of 15).',
+                },
+                'include_content': {
+                    'type': 'boolean', 'default': True,
+                    'description': 'Include extracted page content when available. Instant mode always disables it.',
+                },
                 'source_type': {
                     'type': 'string',
                     'description': ('Preferred source type to prioritize: '
@@ -11892,6 +12032,42 @@ MCP_TOOLS = [
                 },
             },
             'required': ['query'],
+        },
+        'annotations': {'readOnlyHint': True, 'destructiveHint': False, 'openWorldHint': True},
+    },
+    {
+        'name': 'arlong_deep',
+        'description': ('Deep web research using parallel page extraction, semantic relevance '
+                        'analysis, trust and threat scoring, authority-aware ranking, and '
+                        'claim-level corroboration across up to 20 sources.'),
+        'inputSchema': {
+            'type': 'object',
+            'properties': {
+                'query': {'type': 'string', 'description': 'The research query'},
+                'page': {'type': 'integer', 'description': 'Result page (1-based)', 'default': 1},
+                'max_results': {'type': 'integer', 'minimum': 15, 'maximum': 20, 'default': 20},
+                'source_type': {
+                    'type': 'string',
+                    'enum': ['any', 'academic', 'official', 'news', 'discussion', 'long_form'],
+                    'default': 'any',
+                },
+            },
+            'required': ['query'],
+        },
+        'annotations': {'readOnlyHint': True, 'destructiveHint': False, 'openWorldHint': True},
+    },
+    {
+        'name': 'arlong_extract',
+        'description': ('Extract clean, model-ready text from one public webpage. '
+                        'Returns threat flags and never returns content from a blocked source.'),
+        'inputSchema': {
+            'type': 'object',
+            'properties': {
+                'url': {'type': 'string', 'description': 'Public HTTP(S) page URL to extract'},
+                'query': {'type': 'string', 'description': 'Optional query used to evaluate relevance'},
+                'max_chars': {'type': 'integer', 'minimum': 500, 'maximum': 12000, 'default': 8000},
+            },
+            'required': ['url'],
         },
         'annotations': {'readOnlyHint': True, 'destructiveHint': False, 'openWorldHint': True},
     },
@@ -11915,6 +12091,13 @@ MCP_TOOLS = [
                     'enum': ['any', 'academic', 'official', 'news', 'discussion', 'long_form'],
                     'default': 'any',
                 },
+                'mode': {
+                    'type': 'string',
+                    'description': ('"standard" uses the cost-efficient answer model; "deep" uses '
+                                    'the higher-quality deep-search model over the same grounded sources.'),
+                    'enum': ['standard', 'deep'],
+                    'default': 'standard',
+                },
             },
             'required': ['query'],
         },
@@ -11937,7 +12120,10 @@ MCP_TOOLS = [
 # arlong_status is read-only / trivial — no limit.
 _MCP_SEMAPHORES = {
     'arlong_answer': threading.BoundedSemaphore(2),
+    'arlong_quick': threading.BoundedSemaphore(12),
     'arlong_search': threading.BoundedSemaphore(4),
+    'arlong_deep': threading.BoundedSemaphore(2),
+    'arlong_extract': threading.BoundedSemaphore(6),
 }
 
 # ── MCP OAuth 2.1 (Google identity, Arlong access tokens) ───────────────────
@@ -12140,6 +12326,14 @@ def _mcp_call_tool(name, args):
     args = args or {}
     name = (name or '')
     source_type = (args.get('source_type') or 'any').strip()
+    if name == 'arlong_quick':
+        query = (args.get('query') or '').strip()
+        if not query:
+            raise ValueError('query is required')
+        with _MCP_SEMAPHORES['arlong_quick']:
+            return json.dumps(_arlong_quick_payload(
+                query, int(args.get('page') or 1), int(args.get('max_results') or 10)
+            ), indent=2)
     if name == 'arlong_search':
         query = (args.get('query') or '').strip()
         if not query:
@@ -12147,7 +12341,34 @@ def _mcp_call_tool(name, args):
         sem = _MCP_SEMAPHORES.get('arlong_search')
         ctx = sem if sem else contextlib.nullcontext()
         with ctx:
-            return json.dumps(_arlong_search_payload(query, int(args.get('page') or 1), source_type=source_type), indent=2)
+            return json.dumps(_arlong_search_payload(
+                query, int(args.get('page') or 1), source_type=source_type,
+                mode='balanced',
+                max_results=int(args.get('max_results') or 10),
+                include_content=bool(args.get('include_content', True)),
+            ), indent=2)
+    if name == 'arlong_deep':
+        query = (args.get('query') or '').strip()
+        if not query:
+            raise ValueError('query is required')
+        with _MCP_SEMAPHORES['arlong_deep']:
+            return json.dumps(_arlong_search_payload(
+                query, int(args.get('page') or 1), source_type=source_type,
+                mode='deep', max_results=int(args.get('max_results') or 20),
+                include_content=True, content_max_chars=6000,
+            ), indent=2)
+    if name == 'arlong_extract':
+        url = (args.get('url') or '').strip()
+        if not url or not _is_safe_url(url):
+            raise ValueError('a safe public HTTP(S) url is required')
+        limit = max(500, min(int(args.get('max_chars') or 8000), 12000))
+        query = (args.get('query') or urlparse(url).netloc).strip()
+        raw = {'url': url, 'title': '', 'snippet': '', 'domain': urlparse(url).netloc}
+        item = _arlong_eval_result(query, raw, 1, fetch_content=True, content_max_chars=limit)
+        return json.dumps({'url': url, 'content': item.get('content', ''),
+                           'ai_evaluation': item.get('ai_evaluation', {}),
+                           'reputation': item.get('reputation', {}),
+                           'threat_flags': item.get('threat_flags', [])}, indent=2)
     if name == 'arlong_answer':
         query = (args.get('query') or '').strip()
         if not query:
@@ -12158,7 +12379,10 @@ def _mcp_call_tool(name, args):
         for attempt in range(3):
             with ctx:
                 try:
-                    return json.dumps(_arlong_answer_payload(query, source_type=source_type), indent=2)
+                    return json.dumps(_arlong_answer_payload(
+                        query, source_type=source_type,
+                        deep=(args.get('mode') == 'deep'),
+                    ), indent=2)
                 except AIAllModelsFailedError as e:
                     last_err = e
                     if attempt < 2 and e.overloaded:
@@ -12192,8 +12416,8 @@ def mcp_endpoint():
         return jsonify({
             'protocolVersion': '2024-11-05',
             'capabilities': {'tools': {'listChanged': False}},
-            'serverInfo': {'name': 'arlong-mcp', 'version': '1.0.0'},
-            'instructions': 'Arlong agentic search. Connection, discovery, ping, and arlong_status are free. arlong_search uses 1 account credit; arlong_answer uses 3 credits.',
+            'serverInfo': {'name': 'arlong-mcp', 'version': '1.2.0'},
+            'instructions': 'Arlong search: arlong_quick returns plain links without AI evaluation; arlong_search adds semantic trust scoring; arlong_deep performs parallel extraction and corroboration. arlong_quick/search/extract use 1 credit, arlong_deep 2, arlong_answer 3; status and discovery are free.',
         })
 
     body = request.get_json(silent=True)
@@ -12215,8 +12439,8 @@ def mcp_endpoint():
             'result': {
                 'protocolVersion': params.get('protocolVersion', '2024-11-05'),
                 'capabilities': {'tools': {'listChanged': False}},
-                'serverInfo': {'name': 'arlong-mcp', 'version': '1.0.0'},
-                'instructions': 'Arlong agentic search. arlong_search = 1 credit, arlong_answer = 3 credits, arlong_status = free. OAuth connection and tool discovery never consume credits.',
+                'serverInfo': {'name': 'arlong-mcp', 'version': '1.2.0'},
+                'instructions': 'Use arlong_quick for low-token plain links, arlong_search for normal trusted retrieval, arlong_deep for broad parallel semantic research, arlong_extract for full text from one URL, and arlong_answer for a cited synthesis. Credits: quick/search/extract 1, deep 2, answer 3, status free.',
             },
         })
         resp.headers['Mcp-Session-Id'] = session_id
@@ -12237,7 +12461,9 @@ def mcp_endpoint():
             msg = 'Arlong is under maintenance. Try again later.' if _svc == 'maintenance' else 'Arlong is temporarily offline.'
             return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {'isError': True, 'content': [{'type': 'text', 'text': json.dumps({'error': msg})}]}})
         name = params.get('name')
-        tool_credits = {'arlong_status': 0, 'arlong_search': 1, 'arlong_answer': 3}.get(name, 1)
+        tool_credits = {'arlong_status': 0, 'arlong_quick': 1, 'arlong_search': 1,
+                        'arlong_extract': 1, 'arlong_deep': 2,
+                        'arlong_answer': 3}.get(name, 1)
         gate = _arlong_api_gate(credits=tool_credits)
         if not isinstance(gate, tuple):
             detail = gate.get_json(silent=True) if hasattr(gate, 'get_json') else {}
