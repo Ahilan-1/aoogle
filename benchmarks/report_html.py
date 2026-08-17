@@ -524,7 +524,7 @@ footer .f-top span{color:var(--blue)}
       <b>return top results</b> (search mode) and once to <b>synthesize an answer with citations</b> (answer mode).
       Latency and cost were captured per request. Costs use published list prices; Arlong runs locally and costs
       nothing in infrastructure. All 160 answers were then scored 1&ndash;5 by an independent LLM judge
-      (Groq <span class="mono">llama-3.1-8b-instant</span>), temperature 0, blind to which engine produced them.
+      (Groq <span class="mono">openai/gpt-oss-20b</span>), temperature 0, blind to which engine produced them.
       <div class="method-grid">
         <div class="m-item"><div class="m-title">Factoid accuracy</div>Answer must contain the expected fact (case / ascii-insensitive).</div>
         <div class="m-item"><div class="m-title">Auth links</div>Top-3 results contain an authoritative source (.gov/.edu/.mil, wikipedia.org, arxiv.org, reuters.com, &hellip;).</div>
@@ -539,7 +539,7 @@ footer .f-top span{color:var(--blue)}
 
   <footer>
     <div class="f-top">ARLONG <span>·</span> LABS — 2026</div>
-    Generated 2026-08-15 · Independent judge: Groq llama-3.1-8b-instant · Raw data: benchmarks/results/bench_output*.json
+    Generated 2026-08-15 · Independent judge: Groq openai/gpt-oss-20b · Raw data: benchmarks/results/bench_output*.json
   </footer>
 </div>
 

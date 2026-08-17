@@ -43,5 +43,5 @@ def load_config():
         "parallel_api_key": get("PARALLEL_API_KEY"),
         "linkup_api_key": get("LINKUP_API_KEY"),
         "groq_api_key": get("GROQ_API_KEY"),
-        "judge_model": get("JUDGE_MODEL", "llama-3.3-70b-versatile"),
+        "judge_model": get("JUDGE_MODEL", "openai/gpt-oss-120b"),
     }

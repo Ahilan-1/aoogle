@@ -273,7 +273,7 @@ PLACES_GEO_TTL = 90 * 24 * 3600  # geocode cache: 90 days
 # ── Arlong AI mode (arlong.org/ai) ──
 # Separate Groq key used ONLY by the /ai feature (search-result summaries use GROQ_API_KEY).
 AI_MODE_GROQ_API_KEY = os.environ.get('GROQ_AI_MODE_API_KEY', '')
-AI_MODE_GROQ_MODEL = os.environ.get('GROQ_AI_MODE_MODEL', 'llama-3.3-70b-versatile')
+AI_MODE_GROQ_MODEL = os.environ.get('GROQ_AI_MODE_MODEL', 'openai/gpt-oss-120b')
 # Model lineup with rate-limit + token budgets, used by the ModelRouter
 # middleware. When a model approaches its RPM/RPD/TPM/TPD limits the router
 # transparently routes to the next available model instead of 429ing the user.
@@ -281,20 +281,18 @@ AI_MODE_GROQ_MODEL = os.environ.get('GROQ_AI_MODE_MODEL', 'llama-3.3-70b-versati
 #   RPM = requests per minute, RPD = requests per day
 #   TPM = tokens per minute (context+completion), TPD = tokens per day
 AI_MODEL_BUDGETS = {
-    'openai/gpt-oss-20b':        {'rpm': 30, 'rpd': 1000, 'tpm': 8000,  'tpd': 200000},
-    'qwen/qwen3.6-27b':          {'rpm': 30, 'rpd': 1000, 'tpm': 8000,  'tpd': 200000},
-    'llama-3.3-70b-versatile':   {'rpm': 30, 'rpd': 1000, 'tpm': 12000, 'tpd': 100000},
-    'llama-3.1-8b-instant':      {'rpm': 30, 'rpd': 1000, 'tpm': 20000, 'tpd': 200000},
+    'openai/gpt-oss-120b':  {'rpm': 1000, 'rpd': 50000, 'tpm': 250000, 'tpd': 5000000},
+    'openai/gpt-oss-20b':   {'rpm': 1000, 'rpd': 50000, 'tpm': 250000, 'tpd': 5000000},
+    'qwen/qwen3.6-27b':     {'rpm': 1000, 'rpd': 50000, 'tpm': 250000, 'tpd': 5000000},
 }
 AI_MODEL_ORDER = [
-    os.environ.get('GROQ_AI_MODE_MODEL', 'llama-3.3-70b-versatile'),
+    os.environ.get('GROQ_AI_MODE_MODEL', 'openai/gpt-oss-120b'),
     'openai/gpt-oss-20b',
     'qwen/qwen3.6-27b',
-    'llama-3.1-8b-instant',
 ]
 AI_MODE_FALLBACK_MODELS = tuple(
     m for m in AI_MODEL_ORDER
-    if m and m not in (os.environ.get('GROQ_AI_MODE_MODEL', 'llama-3.3-70b-versatile'),)
+    if m and m not in (os.environ.get('GROQ_AI_MODE_MODEL', 'openai/gpt-oss-120b'),)
 )
 
 # ── Model routing middleware ────────────────────────────────────────────────
@@ -327,9 +325,8 @@ except Exception:
 # plain Llama models reject it with a 400, so it is only attached when the
 # router picks one of these.
 _AI_REASONING_FORMAT_MODELS = {
-    'openai/gpt-oss-20b', 'openai/gpt-oss-120b',
-    'deepseek-r1-distill-llama-70b', 'deepseek-r1-distill-llama-70b-0405',
-    'deepseek-r1-distill-qwen-32b',
+    'openai/gpt-oss-120b', 'openai/gpt-oss-20b',
+    'qwen/qwen3.6-27b',
 }
 
 
@@ -10157,7 +10154,7 @@ Question: {q}
 
 Give the most accurate answer you can in 2-3 sentences. If you are not certain, say what you know and note the uncertainty."""
 
-    summary_models = [os.environ.get('GROQ_AI_MODEL', 'llama-3.3-70b-versatile')]
+    summary_models = [os.environ.get('GROQ_AI_MODEL', 'openai/gpt-oss-120b')]
     for m in AI_MODE_FALLBACK_MODELS:
         if m and m not in summary_models:
             summary_models.append(m)
@@ -10555,7 +10552,7 @@ Question: {q}
 
 Give the most accurate answer you can in 2-3 sentences. If you are not certain, say what you know and note the uncertainty."""
 
-        summary_models = [os.environ.get('GROQ_AI_MODEL', 'llama-3.3-70b-versatile')]
+        summary_models = [os.environ.get('GROQ_AI_MODEL', 'openai/gpt-oss-120b')]
         for m in AI_MODE_FALLBACK_MODELS:
             if m and m not in summary_models:
                 summary_models.append(m)
@@ -13044,7 +13041,15 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
                 kwargs['response_format'] = response_format
             if reasoning_format and _ai_supports_reasoning(model):
                 kwargs['reasoning_format'] = reasoning_format
-            resp = client.chat.completions.create(**kwargs)
+            try:
+                resp = client.chat.completions.create(**kwargs)
+            except Exception as e:
+                if response_format and 'json_validate_failed' in str(e).lower():
+                    app.logger.warning(f"JSON validate failed on {model}, retrying without response_format")
+                    del kwargs['response_format']
+                    resp = client.chat.completions.create(**kwargs)
+                else:
+                    raise
             if router is not None:
                 router.record(model, tokens=est_tokens, success=True)
             return resp
@@ -13324,8 +13329,8 @@ def _ai_pick_sources(query, candidates, k=5):
         )
         comp = _ai_completion(
             messages=[
-                {'role': 'system', 'content': f'You pick the most useful web sources to answer a query. Reply with STRICT JSON only, shaped as {{"chosen":[1,4,2]}}: indices of the best sources, at most {k}, in priority order. NEVER include a source that is irrelevant, low-quality, spammy, or untrustworthy. When equally relevant, prefer primary sources (official docs, papers, direct announcements) over aggregators and forums. It is better to return fewer than {k} sources than to include a weak one. If none are good, return {{"chosen":[]}}.'},
-                {'role': 'user', 'content': f"Query: {query}\n\nSources:\n{listing}\n\nPick up to {k} relevant, trustworthy sources ordered best first. Exclude irrelevant or unreliable ones, even if that means fewer than {k}."},
+                {'role': 'system', 'content': f'You pick the most useful web sources to answer a query. Reply with STRICT JSON only, shaped as {{"chosen":[1,4,2]}}: indices of the best sources, at most {k}, in priority order. Prefer primary sources (official docs, papers, direct announcements) over aggregators and forums. You MUST return at least 3 sources whenever possible — the user needs multiple perspectives. Only exclude sources that are clearly spam, ads, error pages, or completely unrelated. Return {{"chosen":[]}} only if literally every source is unusable.'},
+                {'role': 'user', 'content': f"Query: {query}\n\nSources:\n{listing}\n\nPick at least 3 and up to {k} relevant, trustworthy sources ordered best first. Include sources that are reasonably on-topic even if not perfect."},
             ],
             max_tokens=120,
             temperature=0.1,
@@ -13354,8 +13359,16 @@ def _ai_pick_sources(query, candidates, k=5):
             if 1 <= i <= len(candidates) and i not in order:
                 order.append(i)
         order = order[:k]
+        app.logger.info(f"AI source pick: query='{query[:60]}', candidates={len(candidates)}, chosen_raw={chosen}, order={order}, parsed_ok={parsed_ok}")
         if not order and parsed_ok:
-            return candidates[:1]
+            return candidates[:min(5, len(candidates))]
+        if len(order) < 2 and len(candidates) > len(order):
+            for c in candidates:
+                ci = candidates.index(c) + 1
+                if ci not in order:
+                    order.append(ci)
+                if len(order) >= min(k, len(candidates)):
+                    break
         return [candidates[i - 1] for i in order[:k]]
     except Exception as e:
         app.logger.error(f"AI source pick failed: {e}")
@@ -13472,8 +13485,8 @@ def _ai_agentic_plan(q, max_tasks=3):
             max_tokens=360,
             temperature=0.1,
             response_format={'type': 'json_object'},
-            models=[os.environ.get('GROQ_AI_MODE_MODEL', 'llama-3.3-70b-versatile'),
-                    'llama-3.1-8b-instant', 'qwen/qwen3.6-27b', 'openai/gpt-oss-20b'],
+            models=[os.environ.get('GROQ_AI_MODE_MODEL', 'openai/gpt-oss-120b'),
+                    'openai/gpt-oss-20b', 'qwen/qwen3.6-27b'],
         )
         raw = comp.choices[0].message.content or '{}'
         parsed = {}

@@ -1235,7 +1235,7 @@
             var ov = md.closest('.ai-overview');
             updateReasonPanel(ov, extracted.reasoning);
         }
-        var isOpenThink = /<think>[\s\S]*$/.test(text) && !/</think>/.test(text.slice(text.lastIndexOf('<think>')));
+        var isOpenThink = /<think>[\s\S]*$/.test(text) && !/<\/think>/.test(text.slice(text.lastIndexOf('<think>')));
         if(!isOpenThink && /<\/think>/i.test(text)){
             var ovDone = md.closest('.ai-overview');
             closeReasonPanel(ovDone);

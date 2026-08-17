@@ -62,7 +62,7 @@ def build_benchmark(idx, out_file, queries_file, judge_file, raw_dir, name):
             rec["answer"] = r.get("answer")
             js = scores.get((eng, qid))
             rec["judge"] = js
-            rec["judge_model"] = qdata.get("meta", {}).get("judge_model", "llama-3.1-8b-instant")
+            rec["judge_model"] = qdata.get("meta", {}).get("judge_model", "openai/gpt-oss-20b")
         enriched.append(rec)
 
     enriched.sort(key=lambda r: (r["query_id"], r["engine"], r["mode"]))
@@ -94,7 +94,7 @@ def main():
             "engines_tested": ["arlong", "exa", "perplexity", "parallel"],
             "judge": {
                 "provider": "Groq",
-                "model": "llama-3.1-8b-instant",
+                "model": "openai/gpt-oss-20b",
                 "prompt": "Score each answer 1-5 for factual correctness, completeness, and citation quality. Blind to engine.",
                 "scale": "1 (wrong/unhelpful) to 5 (correct, complete, well-cited)",
             },
