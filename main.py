@@ -10913,18 +10913,25 @@ def _arlong_eval_result(q, r, idx):
     title = r.get('title') or ''
     snippet = clean_snippet_text(r.get('snippet') or '')
     domain = (r.get('domain') or '').lower() or _registrable_domain((urlparse(url).netloc or '').lower())
+    # Extract date from metadata or snippet if the search engine didn't provide one
+    date = r.get('date')
+    if not date:
+        date = _extract_date_from_text(snippet + ' ' + title)
     item = {
         "id": r.get('id') or f"arlong-{idx}",
         "title": title,
         "url": url,
         "domain": domain,
         "category": r.get('category') or r.get('type') or 'general',
-        "date": r.get('date'),
+        "date": date,
         "snippet": snippet[:400],
     }
     try:
         import neural_search as _neural
         content = _arlong_page_text(url)
+        # Filter out garbage content (JS loading spinners, "Try again" etc.)
+        if content and _is_junk_content(content):
+            content = None
         ev = _neural.evaluate_page(q, title=title, url=url, snippet=snippet[:200], content=(content or '')[:4000])
         item["ai_evaluation"] = {
             "relevance_score": ev.get('relevance_score', 0.0),
@@ -10941,6 +10948,81 @@ def _arlong_eval_result(q, r, idx):
     except Exception as e:
         app.logger.debug(f"Arlong eval skip {url}: {e}")
     return item
+
+
+# ── content quality filters ──────────────────────────────────────────────────
+_JUNK_CONTENT_RE = re.compile(
+    r'^(?:Loading\.\.\.|Try again|Cancel|Loading|'
+    r'Please enable JavaScript|'
+    r'Content is not available|'
+    r'Sorry, something went wrong|'
+    r'403 Forbidden|404 Not Found|'
+    r'Access Denied|Page not found|'
+    r'Just a moment\.\.\.|Checking your browser|'
+    r'Enable JavaScript|This page requires JavaScript)',
+    re.I,
+)
+
+def _is_junk_content(text):
+    """True when scraped page text is just a JS loading shell / error page."""
+    if not text:
+        return True
+    clean = text.strip()
+    if len(clean) < 40:
+        return True
+    # Check first 200 chars for common junk patterns
+    if _JUNK_CONTENT_RE.search(clean[:200]):
+        return True
+    # Facebook/Instagram loading spinners
+    stripped = re.sub(r'\s+', ' ', clean[:500])
+    if stripped.count('Loading') > 2 or stripped.count('Try again') > 1:
+        return True
+    return False
+
+
+_DATE_PATTERNS = [
+    # ISO dates: 2026-08-17, 2026/08/17
+    re.compile(r'(20\d{2})[-/](0?[1-9]|1[0-2])[-/](0?[1-9]|[12]\d|3[01])'),
+    # Written dates: August 17, 2026 / 17 August 2026 / Aug 17, 2026
+    re.compile(r'(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2}),?\s+(20\d{2})', re.I),
+    re.compile(r'(\d{1,2})\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(20\d{2})', re.I),
+    # "in 2026" / "of 2026"
+    re.compile(r'\b(?:in|of)\s+(20\d{2})\b'),
+    # Bare year: "2026"
+    re.compile(r'\b(20\d{2})\b'),
+]
+
+def _extract_date_from_text(text):
+    """Try to pull a date from snippet/title text. Returns ISO string or None."""
+    if not text:
+        return None
+    for pat in _DATE_PATTERNS:
+        m = pat.search(text)
+        if m:
+            groups = m.groups()
+            try:
+                if len(groups) == 3 and groups[0].isdigit():
+                    # ISO: 2026-08-17
+                    return f"{groups[0]}-{int(groups[1]):02d}-{int(groups[2]):02d}"
+                elif len(groups) == 3 and not groups[0].isdigit():
+                    # Written: August 17, 2026
+                    month_map = {'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
+                                 'may': '05', 'jun': '06', 'jul': '07', 'aug': '08',
+                                 'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'}
+                    mon = month_map.get(groups[0][:3].lower(), '01')
+                    return f"{groups[2]}-{mon}-{int(groups[1]):02d}"
+                elif len(groups) == 3 and groups[0].isdigit():
+                    # Written: 17 August 2026
+                    month_map = {'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
+                                 'may': '05', 'jun': '06', 'jul': '07', 'aug': '08',
+                                 'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'}
+                    mon = month_map.get(groups[1][:3].lower(), '01')
+                    return f"{groups[2]}-{mon}-{int(groups[0]):02d}"
+                elif len(groups) == 1:
+                    return f"{groups[0]}-01-01"
+            except Exception:
+                continue
+    return None
 
 
 def _arlong_search_payload(q, page=1):
@@ -11037,11 +11119,21 @@ def _arlong_attach_epistemic(response, results):
         if claims:
             corr = _neural.corroborate(claims)
             response["corroboration"] = corr
-            response["epistemic_state"] = (
-                f"{len(claims)} sources examined; {int(round(corr['agreement'] * len(claims)))} "
-                f"agree on a common claim (agreement {corr['agreement']:.0%}), "
-                f"{corr['disagreement']} cluster(s) of disagreement."
-            )
+            agreeing = int(round(corr['agreement'] * len(claims)))
+            n = len(claims)
+            if agreeing >= 2:
+                response["epistemic_state"] = (
+                    f"{n} sources examined; {agreeing} agree on a common claim "
+                    f"(agreement {corr['agreement']:.0%}), "
+                    f"{corr['disagreement']} cluster(s) of disagreement."
+                )
+            else:
+                uncl = corr.get('unclustered', 0)
+                response["epistemic_state"] = (
+                    f"{n} sources examined; no consensus found "
+                    f"({uncl} independent perspectives, "
+                    f"{corr['disagreement']} cluster(s) of partial overlap)."
+                )
     except Exception:
         pass
     return response

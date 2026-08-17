@@ -302,19 +302,20 @@ def evaluate_page(query, title='', url='', snippet='', content=''):
     rel = max(0.0, min(1.0, rel))
 
     inj = detect_injection(' '.join((snippet or '', (content or '')[:12000])))
-    if rel < 0.35:
-        status = 'BLOCKED'
-        trust = 0
-        reason = 'Low relevance to query'
-        flags = inj.flags or ['LOW_RELEVANCE']
-    elif inj.flagged:
+    if inj.flagged:
         status = 'BLOCKED'
         trust = max(0, 100 - len(inj.flags) * 35)
         reason = inj.reason
         flags = inj.flags
+    elif rel < 0.20:
+        # Truly garbage/irrelevant — not a security threat, just useless.
+        status = 'BLOCKED'
+        trust = 0
+        reason = 'Low relevance to query'
+        flags = []
     elif rel < 0.55:
         status = 'UNVERIFIED'
-        trust = 55
+        trust = _domain_trust(url)
         reason = 'Marginal relevance'
         flags = inj.flags or []
     else:
@@ -334,6 +335,51 @@ def evaluate_page(query, title='', url='', snippet='', content=''):
         'reputation': {'status': status, 'trust_score': trust},
         'threat_flags': flags,
     }
+
+
+# ── domain trust scoring ────────────────────────────────────────────────────
+# Instead of returning a static 55 for every UNVERIFIED domain, compute a
+# basic trust signal from domain characteristics.
+_TRUSTED_DOMAINS = {
+    'wikipedia.org': 90, 'github.com': 85, 'stackoverflow.com': 85,
+    'reddit.com': 70, 'medium.com': 72, 'quora.com': 65,
+    'youtube.com': 75, 'instagram.com': 65, 'twitter.com': 70, 'x.com': 70,
+    'facebook.com': 60, 'tiktok.com': 65,
+    'nytimes.com': 92, 'bbc.com': 93, 'reuters.com': 94, 'apnews.com': 94,
+    'theguardian.com': 90, 'washingtonpost.com': 90, 'cnn.com': 88,
+    'nature.com': 95, 'sciencedirect.com': 93, 'arxiv.org': 92,
+    'scholar.google.com': 90,
+    '.edu': 88, '.gov': 92, '.mil': 90,
+    'imdb.com': 80, 'rottentomatoes.com': 78, 'metacritic.com': 78,
+    'amazon.com': 75, 'apple.com': 85, 'microsoft.com': 85, 'google.com': 88,
+    'fandom.com': 62, 'wikia.com': 62,
+    'bookmyshow.com': 68,
+}
+# Patterns that indicate low-trust user-generated / aggregator content
+_LOW_TRUST_PATTERNS = [
+    (re.compile(r'facebook\.com/.+/posts/', re.I), 45),
+    (re.compile(r'loading\.\.\.', re.I), 0),
+]
+
+
+def _domain_trust(url):
+    """Return a trust score (0-100) for a URL based on domain reputation."""
+    if not url:
+        return 40
+    host = (urlparse(url).netloc or '').lower().replace('www.', '')
+    # Check exact match first
+    for d, score in _TRUSTED_DOMAINS.items():
+        if d.startswith('.'):
+            if host.endswith(d) or host == d[1:]:
+                return score
+        elif host == d or host.endswith('.' + d):
+            return score
+    # Check low-trust patterns
+    for pat, score in _LOW_TRUST_PATTERNS:
+        if pat.search(url):
+            return score
+    # Default: moderate trust for unknown domains
+    return 50
 
 
 # ── corroboration ────────────────────────────────────────────────────────────
@@ -373,13 +419,23 @@ def corroborate(claims):
         clusters.append(group)
     agreement = 0.0
     disagreement = 0
+    unclustered = 0
     if clusters:
-        largest = max(len(g) for g in clusters)
-        agreement = round(largest / len(claims), 2)
-        disagreement = len(clusters) - 1
+        multi = [g for g in clusters if len(g) > 1]
+        singletons = [g for g in clusters if len(g) == 1]
+        unclustered = len(singletons)
+        if multi:
+            largest = max(len(g) for g in multi)
+            agreement = round(largest / len(claims), 2)
+            disagreement = len(multi) - 1
+        else:
+            # No clusters with more than 1 source — no real agreement.
+            agreement = 0.0
+            disagreement = 0
     return {
         'clusters': [{'size': len(g), 'sources': [c.get('source_url') for c in g],
                       'representative': (g[0].get('claim_text') or '')[:200]} for g in clusters],
         'agreement': agreement,
         'disagreement': disagreement,
+        'unclustered': unclustered,
     }
