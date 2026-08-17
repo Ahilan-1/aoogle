@@ -3,6 +3,8 @@ import sys
 import json
 import tempfile
 
+os.environ['DISABLE_BACKGROUND_SCHEDULER'] = '1'
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import pytest

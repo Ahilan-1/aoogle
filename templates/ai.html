@@ -381,6 +381,7 @@
         .ai-widgets{grid-template-columns:1fr}
         .ai-user-bubble{max-width:92%}
     }
+    .ai-upgrade{display:block;margin-top:12px;padding:10px 12px;border-radius:8px;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;text-decoration:none;text-align:center;font-size:12px;font-weight:700}.ai-upgrade-note{margin-top:8px;color:#aaa;font-size:11px;line-height:1.4}.upgrade-modal{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px}.upgrade-modal.show{display:flex}.upgrade-card{max-width:440px;background:#18191c;border:1px solid #36383d;padding:28px;color:#fff;box-shadow:0 20px 70px #000}.upgrade-card h2{margin:0 0 8px;font-size:24px}.upgrade-card p{color:#bbb;line-height:1.6}.upgrade-actions{display:flex;gap:10px;margin-top:20px}.upgrade-actions a,.upgrade-actions button{flex:1;padding:11px;border:0;text-align:center;text-decoration:none;font-weight:700;cursor:pointer}.upgrade-actions a{background:#fff;color:#111}.upgrade-actions button{background:#292b30;color:#ddd}
 </style>
 </head>
 <body>
@@ -393,6 +394,7 @@
 </header>
 
 <div class="ai-overlay" id="ai-overlay"></div>
+<div class="upgrade-modal" id="upgrade-modal"><div class="upgrade-card"><h2 id="upgrade-title">Unlock more research</h2><p id="upgrade-copy">Upgrade for 300 standard answers, 25 deep research answers, and 2,000 API/MCP searches per billing period.</p><div class="upgrade-actions"><button type="button" id="upgrade-later">Maybe later</button><a href="/premium">View plans</a></div></div></div>
 
 <aside class="ai-sidebar" id="ai-sidebar">
     <div class="ai-sb-head">
@@ -425,10 +427,11 @@
                 <div class="ai-account-sub">Arlong account</div>
             </div>
         </div>
-        <div class="ai-limit-title"><span>Daily Limit</span><span class="ai-limit-num" id="ai-usage-text">{{ msg_remaining }} / {{ msg_limit }} remaining</span></div>
+        <div class="ai-limit-title"><span>{% if plan_usage is defined and plan_usage.plan == 'free' %}Daily standard answers{% else %}Billing-period standard answers{% endif %}</span><span class="ai-limit-num" id="ai-usage-text">{{ msg_remaining }} / {{ msg_limit }} remaining</span></div>
         <div class="ai-usage-track"><div class="ai-usage-fill" id="ai-usage-fill" style="width:{{ ((msg_limit - msg_remaining) * 100 / msg_limit) | round }}%"></div></div>
         <div class="ai-limit-title"><span>Token Budget ({{ ctx_reset_hours }}h)</span><span class="ai-limit-num" id="ai-ctx-text">{{ ctx_used }} / {{ ctx_limit }} tokens</span></div>
         <div class="ai-usage-track"><div class="ai-usage-fill" id="ai-ctx-fill" style="width:{{ ctx_pct }}%"></div></div>
+        {% if plan_usage is defined and plan_usage.plan == 'free' %}<a class="ai-upgrade" href="/premium">Upgrade your limits</a><div class="ai-upgrade-note">Free: 10 standard answers/day, 3 deep answers/month, 100 API/MCP searches/month.</div>{% else %}<div class="ai-upgrade-note">{{ plan_usage.limits.name if plan_usage is defined else 'Free' }} plan active</div>{% endif %}
         <a href="/api/dashboard" style="display:block;margin-top:14px;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;font-size:12px;color:#999;text-decoration:none;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='rgba(82,168,255,.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,.1)'">
             API Dashboard &rarr; MCP Keys, REST Docs
         </a>
@@ -574,8 +577,21 @@
             fill.classList.toggle('warn', u >= lim*0.8 && u < lim);
             fill.classList.toggle('full', u >= lim);
         }
+        maybeUpgrade(u, lim, false);
         refreshDisableState();
     }
+    var CURRENT_PLAN = {{ (plan_usage.plan if plan_usage is defined else 'free') | tojson }};
+    function maybeUpgrade(u, lim, forced){
+        if(CURRENT_PLAN !== 'free' || !lim) return;
+        var pct = u / lim;
+        if(!forced && pct < .9) return;
+        var day = new Date().toISOString().slice(0,10), key = 'arlong-upgrade-'+day;
+        if(!forced && localStorage.getItem(key)) return;
+        var modal=document.getElementById('upgrade-modal'); if(!modal)return;
+        document.getElementById('upgrade-title').textContent=forced?'Free allowance used':'You are close to today’s limit';
+        modal.classList.add('show'); localStorage.setItem(key,'1');
+    }
+    document.getElementById('upgrade-later').addEventListener('click',function(){document.getElementById('upgrade-modal').classList.remove('show');});
     function setCtxUsage(c, lim){
         ctxUsed = c; if(lim) CTX_LIMIT = lim;
         var el = document.getElementById('ai-ctx-text');
@@ -802,6 +818,7 @@
                     if(d.msg_used != null) setUsage(d.msg_used, d.msg_limit || LIMIT);
                     if(d.ctx_used != null) setCtxUsage(d.ctx_used, d.ctx_limit || CTX_LIMIT);
                     refreshDisableState();
+                    if(d.limit_type === 'plan') maybeUpgrade(d.used || d.msg_used || LIMIT, d.limit || d.msg_limit || LIMIT, true);
                     return;
                 }
                 if(d.error === 'blocked'){
@@ -1208,6 +1225,7 @@
                     if(parsed.msg_used != null) setUsage(parsed.msg_used, parsed.msg_limit || LIMIT);
                     if(parsed.ctx_used != null) setCtxUsage(parsed.ctx_used, parsed.ctx_limit || CTX_LIMIT);
                     refreshDisableState();
+                    if(parsed.limit_type === 'plan') maybeUpgrade(parsed.used || parsed.msg_used || LIMIT, parsed.limit || parsed.msg_limit || LIMIT, true);
                     failTurn(ov, parsed.limit_type === 'context'
                         ? 'Token budget for the current ' + CTX_RESET_HOURS + 'h window is used up. It refreshes automatically — start a new chat or check back later.'
                         : 'Daily message limit reached. Try again after the window refreshes.');

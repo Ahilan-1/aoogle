@@ -38,7 +38,7 @@ GET /api/search?q=your+query
 Two access tiers:
 
 - **Tokenless** — 2 requests per hour per IP address. For occasional, exploratory use.
-- **Registered** — create a free account, accept the [Terms of Service](https://aoogle-production.up.railway.app/terms-of-service), and get an API key granting **80 requests per 30 minutes** per project. Keys and live usage stats live at [`/api/dashboard`](https://aoogle-production.up.railway.app/api/dashboard).
+- **Registered** — create a free account, accept the [Terms of Service](https://arlong.org/terms-of-service), and get an API key with a burst limit of **80 requests per 30 minutes** and a Free allowance of **100 API/MCP requests per month**. Founder and Pro include 2,000 per billing period. Keys and usage live at [`/api/dashboard`](https://arlong.org/api/dashboard).
 
 Pass your key via the `Authorization` header (`Authorization: Bearer al_...`) or the `key` query parameter.
 

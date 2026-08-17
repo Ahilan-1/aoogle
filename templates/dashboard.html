@@ -48,10 +48,11 @@
   <div class="d-section">
     <h2>Plan &amp; billing</h2>
     <div class="billing-grid">
-      <div class="billing-metric"><div class="billing-label">Current plan</div><div class="billing-value">{{ 'Arlong Pro' if billing.get('status') == 'active' else 'Free' }}</div></div>
+      <div class="billing-metric"><div class="billing-label">Current plan</div><div class="billing-value">{{ plan_usage.limits.name }}</div></div>
       <div class="billing-metric"><div class="billing-label">Status</div><div class="billing-value">{{ billing.get('status', 'Active')|replace('_',' ')|title }}</div></div>
       <div class="billing-metric"><div class="billing-label">Next billing date</div><div class="billing-value">{{ billing.get('current_period_end', '—')[:10] if billing.get('current_period_end') else '—' }}</div></div>
     </div>
+    <table style="margin:4px 0 18px"><tr><th>Allowance</th><th>Used</th><th>Remaining</th></tr>{% for key,label in [('standard','Standard AI'),('deep','Deep research'),('api','API & MCP')] %}{% set item=plan_usage.usage[key] %}<tr><td>{{ label }}</td><td>{{ item.used }} / {{ item.limit }}</td><td>{{ [item.limit-item.used,0]|max }}</td></tr>{% endfor %}</table>
     {% if billing.get('customer_id') %}<button id="manage-billing" class="d-btn">Manage subscription &amp; invoices</button>{% else %}<a class="d-btn" href="/premium">View Pro plans</a>{% endif %}
     <span id="billing-error" style="font-size:12px;color:#b42318;margin-left:10px"></span>
   </div>

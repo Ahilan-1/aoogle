@@ -90,7 +90,7 @@ def _secret_bytes(secret):
     # Standard Webhooks secrets are commonly prefixed with whsec_.
     raw = secret[6:] if secret.startswith("whsec_") else secret
     try:
-        return base64.b64decode(raw, validate=True)
+        return base64.b64decode(raw + ("=" * (-len(raw) % 4)), validate=True)
     except Exception:
         return raw.encode("utf-8")
 

@@ -469,6 +469,23 @@ AI_MESSAGE_LIMIT = int(os.environ.get('AI_MESSAGE_LIMIT', 40))
 AI_MESSAGE_WINDOW_HOURS = int(os.environ.get('AI_MESSAGE_WINDOW_HOURS', 12))
 AI_CTX_LIMIT_TOKENS = int(os.environ.get('AI_CTX_LIMIT_TOKENS', 15000))
 AI_CTX_WINDOW_HOURS = int(os.environ.get('AI_CTX_WINDOW_HOURS', 6))
+
+# Customer-facing entitlements. Short rolling limits still protect the service
+# from bursts; these period limits are the billable allowance shown in-product.
+PLAN_LIMITS = {
+    'free': {'name': 'Free', 'standard': 10, 'standard_period': 'day', 'deep': 3, 'api': 100, 'ctx': 15000},
+    'founder': {'name': 'Founder', 'standard': 300, 'standard_period': 'billing period', 'deep': 25, 'api': 2000, 'ctx': 150000},
+    'pro': {'name': 'Pro', 'standard': 300, 'standard_period': 'billing period', 'deep': 25, 'api': 2000, 'ctx': 150000},
+}
+
+
+def _parse_iso_datetime(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace('Z', '+00:00')).astimezone(timezone.utc)
+    except (ValueError, TypeError):
+        return None
 # Clarification gate: how many clarifying question rounds may be asked before
 # the assistant answers with what it has. Each round counts toward the user's
 # message and token budgets. Within a round, the AI decides how many questions
@@ -1088,7 +1105,8 @@ def start_news_updater(app):
     t.start()
 
 # Start background news updater
-start_news_updater(app)
+if os.environ.get('DISABLE_BACKGROUND_SCHEDULER', '').lower() not in ('1', 'true', 'yes'):
+    start_news_updater(app)
 
 
 def _score_blog_for_newsstand(blog):
@@ -3411,7 +3429,7 @@ class DataManager:
             _save_json(self.data)
             return True
 
-    def accept_tos(self, user_id, version='2026-08-04'):
+    def accept_tos(self, user_id, version='2026-08-17'):
         with self._lock:
             loaded = _load_json()
             if loaded:
@@ -3449,13 +3467,18 @@ class DataManager:
                     times = [t for t in k.get('requests_30m', []) if now - t < window]
                     if len(times) >= limit:
                         return {'allowed': False, 'remaining': 0,
-                                'retry_after': int(window - (now - times[0]))}
+                                'retry_after': int(window - (now - times[0])), 'limit_type': 'burst'}
+                    allowance = self._consume_plan_usage_locked(k.get('user_id'), 'api')
+                    if not allowance['allowed']:
+                        return {**allowance, 'retry_after': 0, 'remaining': 0, 'limit_type': 'plan'}
                     times.append(now)
                     k['requests_30m'] = times
                     k['requests_total'] = k.get('requests_total', 0) + 1
                     k['last_used_at'] = now
                     _save_json(self.data)
-                    return {'allowed': True, 'remaining': limit - len(times), 'retry_after': 0}
+                    return {'allowed': True, 'remaining': limit - len(times), 'retry_after': 0,
+                            'plan': allowance['plan'], 'plan_used': allowance['used'],
+                            'plan_limit': allowance['limit'], 'plan_remaining': allowance['remaining']}
             return {'allowed': False, 'remaining': 0, 'retry_after': 0, 'error': 'invalid_key'}
 
     def report_domain(self, user_id, domain, reason):
@@ -4335,6 +4358,106 @@ class DataManager:
             record = self.data.setdefault('billing_subscriptions', {}).get(str(user_id), {})
             return dict(record)
 
+    @staticmethod
+    def _plan_from_billing(record):
+        status = str(record.get('status', '')).lower()
+        period_end = _parse_iso_datetime(record.get('current_period_end'))
+        still_entitled = status in {'active', 'trialing'}
+        if status == 'cancelled' and period_end and period_end > datetime.now(timezone.utc):
+            still_entitled = True
+        if not still_entitled:
+            return 'free'
+        plan = str(record.get('plan', '')).lower()
+        return 'founder' if 'founder' in plan else 'pro'
+
+    def _entitlement_locked(self, user_id):
+        billing = self.data.setdefault('billing_subscriptions', {}).get(str(user_id), {})
+        plan = self._plan_from_billing(billing)
+        limits = dict(PLAN_LIMITS[plan])
+        return {'plan': plan, 'limits': limits, 'billing': dict(billing)}
+
+    def get_entitlement(self, user_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            return self._entitlement_locked(user_id)
+
+    @staticmethod
+    def _usage_period(entitlement, now):
+        billing = entitlement.get('billing') or {}
+        start = _parse_iso_datetime(billing.get('current_period_start'))
+        end = _parse_iso_datetime(billing.get('current_period_end'))
+        if entitlement.get('plan') != 'free' and start and end and end > start:
+            return start.isoformat(), end.isoformat()
+        start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+        if now.month == 12:
+            end = datetime(now.year + 1, 1, 1, tzinfo=timezone.utc)
+        else:
+            end = datetime(now.year, now.month + 1, 1, tzinfo=timezone.utc)
+        return start.isoformat(), end.isoformat()
+
+    def _plan_usage_locked(self, user_id):
+        now = datetime.now(timezone.utc)
+        entitlement = self._entitlement_locked(user_id)
+        period_start, period_end = self._usage_period(entitlement, now)
+        records = self.data.setdefault('plan_usage', {})
+        record = records.get(str(user_id)) or {}
+        if record.get('period_start') != period_start or record.get('plan') != entitlement['plan']:
+            record = {
+                'plan': entitlement['plan'], 'period_start': period_start, 'period_end': period_end,
+                'standard': 0, 'deep': 0, 'api': 0, 'day': now.date().isoformat(), 'standard_today': 0,
+            }
+        if record.get('day') != now.date().isoformat():
+            record['day'] = now.date().isoformat()
+            record['standard_today'] = 0
+        records[str(user_id)] = record
+        limits = entitlement['limits']
+        standard_used = record.get('standard_today', 0) if limits['standard_period'] == 'day' else record.get('standard', 0)
+        return entitlement, record, {
+            'standard': {'used': int(standard_used), 'limit': limits['standard']},
+            'deep': {'used': int(record.get('deep', 0)), 'limit': limits['deep']},
+            'api': {'used': int(record.get('api', 0)), 'limit': limits['api']},
+        }
+
+    def get_plan_usage(self, user_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            entitlement, record, usage = self._plan_usage_locked(user_id)
+            return {**entitlement, 'usage': usage, 'period_start': record['period_start'],
+                    'period_end': record['period_end'], 'day': record['day']}
+
+    def _consume_plan_usage_locked(self, user_id, kind):
+        entitlement, record, usage = self._plan_usage_locked(user_id)
+        metric = usage[kind]
+        if metric['used'] >= metric['limit']:
+            return {'allowed': False, 'plan': entitlement['plan'], 'kind': kind,
+                    'used': metric['used'], 'limit': metric['limit'], 'remaining': 0,
+                    'upgrade_url': '/premium'}
+        if kind == 'standard':
+            record['standard'] = int(record.get('standard', 0)) + 1
+            record['standard_today'] = int(record.get('standard_today', 0)) + 1
+        else:
+            record[kind] = int(record.get(kind, 0)) + 1
+        used = metric['used'] + 1
+        return {'allowed': True, 'plan': entitlement['plan'], 'kind': kind,
+                'used': used, 'limit': metric['limit'], 'remaining': max(0, metric['limit'] - used),
+                'upgrade_url': '/premium'}
+
+    def consume_plan_usage(self, user_id, kind):
+        if kind not in {'standard', 'deep', 'api'}:
+            raise ValueError('Unknown plan usage kind')
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            result = self._consume_plan_usage_locked(user_id, kind)
+            if result['allowed']:
+                _save_json(self.data)
+            return result
+
     def record_checkout(self, user_id, plan, session_id, product_id):
         with self._lock:
             loaded = _load_json()
@@ -4403,6 +4526,8 @@ class DataManager:
                 'subscription.failed': 'past_due',
                 'subscription.cancelled': 'cancelled',
                 'subscription.expired': 'expired',
+                'refund.succeeded': 'refunded',
+                'dispute.opened': 'disputed',
             }
             if event_type in status_map:
                 record['status'] = status_map[event_type]
@@ -4452,7 +4577,7 @@ class DataManager:
             rec['ctx_window_start'] = _ai_ctx_bucket_start(bucket)
         return rec
 
-    def increment_ai_usage(self, user_id):
+    def increment_ai_usage(self, user_id, limit=None):
         """Increment the rolling 12h message count. Returns (allowed, remaining, used)."""
         with self._lock:
             loaded = _load_json()
@@ -4469,10 +4594,11 @@ class DataManager:
             rec['msg_count'] = int(rec.get('msg_count', 0)) + 1
             self.data['ai_usage'][key] = rec
             _save_json(self.data)
-            allowed = rec['msg_count'] <= AI_MESSAGE_LIMIT
-            return allowed, max(0, AI_MESSAGE_LIMIT - rec['msg_count']), rec['msg_count']
+            effective_limit = int(limit or AI_MESSAGE_LIMIT)
+            allowed = rec['msg_count'] <= effective_limit
+            return allowed, max(0, effective_limit - rec['msg_count']), rec['msg_count']
 
-    def add_ai_context_tokens(self, user_id, tokens):
+    def add_ai_context_tokens(self, user_id, tokens, limit=None):
         """Add estimated input tokens to the fixed 6h token budget.
 
         The budget resets on a fixed 6-hour clock cycle. Only adds when the new
@@ -4491,12 +4617,13 @@ class DataManager:
                 rec['ctx_tokens'] = 0
                 rec['ctx_window_start'] = _ai_ctx_bucket_start(bucket)
             used = int(rec.get('ctx_tokens', 0))
-            if used + int(tokens) > AI_CTX_LIMIT_TOKENS:
-                return False, used, max(0, AI_CTX_LIMIT_TOKENS - used)
+            effective_limit = int(limit or AI_CTX_LIMIT_TOKENS)
+            if used + int(tokens) > effective_limit:
+                return False, used, max(0, effective_limit - used)
             rec['ctx_tokens'] = used + int(tokens)
             self.data['ai_usage'][key] = rec
             _save_json(self.data)
-            return True, rec['ctx_tokens'], max(0, AI_CTX_LIMIT_TOKENS - rec['ctx_tokens'])
+            return True, rec['ctx_tokens'], max(0, effective_limit - rec['ctx_tokens'])
 
     def get_user_profile(self, username):
         with self._lock:
@@ -11002,7 +11129,13 @@ def api_search():
         rate = anon_api_limiter.check(ip)
 
     if not rate["allowed"]:
-        if tier == 'token':
+        if rate.get('limit_type') == 'plan':
+            resp = jsonify({
+                'error': 'Plan allowance exhausted', 'code': 'UPGRADE_REQUIRED',
+                'message': f"Your {str(rate.get('plan', 'free')).title()} plan API allowance is exhausted.",
+                'used': rate.get('used'), 'limit': rate.get('limit'), 'upgrade_url': '/premium',
+            })
+        elif tier == 'token':
             resp = jsonify({
                 "error": "Rate limit exceeded",
                 "message": "Get a API KEY",
@@ -11022,6 +11155,8 @@ def api_search():
         resp.status_code = 429
         resp.headers['X-RateLimit-Remaining'] = '0'
         resp.headers['X-RateLimit-Reset'] = str(rate['retry_after'])
+        if rate.get('limit_type') == 'plan':
+            resp.headers['X-Arlong-Upgrade'] = '/premium'
         return resp
 
     blocked = _service_blocked()
@@ -11119,6 +11254,13 @@ def _arlong_api_gate():
             return _mcp_oauth_challenge('invalid_token')
         tier = 'oauth'
         rate = oauth_api_limiter.check('oauth:' + oauth_identity.get('sub', 'unknown'))
+        if rate['allowed']:
+            oauth_user = data_manager.get_user_by_email(oauth_identity.get('email', ''))
+            if not oauth_user:
+                return _mcp_oauth_challenge('account_required')
+            allowance = data_manager.consume_plan_usage(oauth_user['user_id'], 'api')
+            if not allowance['allowed']:
+                rate = {**allowance, 'retry_after': 0, 'limit_type': 'plan'}
     elif api_key:
         key_rec = data_manager.get_api_key_by_value(api_key)
         if not key_rec or key_rec.get('status') != 'active':
@@ -11135,6 +11277,15 @@ def _arlong_api_gate():
     else:
         rate = anon_api_limiter.check(ip)
     if not rate["allowed"]:
+        if rate.get('limit_type') == 'plan':
+            resp = jsonify({
+                'error': 'Plan allowance exhausted', 'code': 'UPGRADE_REQUIRED',
+                'message': f"Your {str(rate.get('plan', 'free')).title()} plan API/MCP allowance is exhausted.",
+                'used': rate.get('used'), 'limit': rate.get('limit'), 'upgrade_url': '/premium',
+            })
+            resp.status_code = 429
+            resp.headers['X-Arlong-Upgrade'] = '/premium'
+            return resp
         if tier == 'token':
             resp = jsonify({
                 "error": "Rate limit exceeded",
@@ -12193,6 +12344,7 @@ def api_dashboard():
     accepted = data_manager.user_accepted_tos(user_id)
 
     usage = None
+    plan_usage = data_manager.get_plan_usage(user_id)
     if keys and accepted:
         now = time.time()
         k = keys[0]
@@ -12218,6 +12370,7 @@ def api_dashboard():
         anon_limit=ANON_API_LIMIT,
         error=error,
         success=success,
+        plan_usage=plan_usage,
     )
 
 @app.route('/change-log')
@@ -12624,9 +12777,11 @@ def dashboard():
         return redirect(url_for('signup', mode='login', redirect='/dashboard'))
     user = data_manager.get_user_by_id(session['user_id'])
     billing = data_manager.get_billing_record(session['user_id'])
+    plan_usage = data_manager.get_plan_usage(session['user_id'])
     return render_template('dashboard.html',
         user=user,
         billing=billing,
+        plan_usage=plan_usage,
         verified_sites=[s for s in data_manager.get_verified_sites() if s.get('submitted_by') == session['user_id']],
         submitted_sites=[s for s in data_manager.get_submitted_sites() if s.get('submitted_by') == session['user_id']],
         announcement=data_manager.get_announcement()
@@ -12662,9 +12817,11 @@ def premium():
     return render_template('premium.html',
         country=country,
         regional_price='₹399' if country == 'IN' else '$4.99',
+        founder_price='₹299' if country == 'IN' else '$3.49',
         annual_price='₹3,990' if country == 'IN' else '$49.99',
         billing=billing,
         billing_ready=bool(_dodo_product_id('monthly')),
+        founder_ready=bool(_dodo_product_id('founder')),
         billing_environment=dodo_billing.environment(),
     )
 
@@ -12704,7 +12861,8 @@ def billing_checkout():
 def billing_status():
     if not session.get('user_id'):
         return jsonify({'error': 'Unauthorized'}), 401
-    return jsonify({'billing': data_manager.get_billing_record(session['user_id'])})
+    return jsonify({'billing': data_manager.get_billing_record(session['user_id']),
+                    'entitlement': data_manager.get_plan_usage(session['user_id'])})
 
 
 @app.route('/api/billing/portal', methods=['POST'])
@@ -15073,10 +15231,14 @@ def ai_page():
         greeting = 'Good evening'
     chats = data_manager.get_ai_chats(session['user_id'])
     usage = data_manager.get_ai_usage(session['user_id'])
-    msg_used = int(usage.get('msg_count', 0))
-    msg_remaining = max(0, AI_MESSAGE_LIMIT - msg_used)
+    plan_usage = data_manager.get_plan_usage(session['user_id'])
+    standard_usage = plan_usage['usage']['standard']
+    msg_used = standard_usage['used']
+    msg_limit = standard_usage['limit']
+    msg_remaining = max(0, msg_limit - msg_used)
+    ctx_limit = int(plan_usage['limits']['ctx'])
     ctx_used = int(usage.get('ctx_tokens', 0))
-    ctx_pct = round(min(100.0, ctx_used * 100.0 / AI_CTX_LIMIT_TOKENS)) if AI_CTX_LIMIT_TOKENS else 0
+    ctx_pct = round(min(100.0, ctx_used * 100.0 / ctx_limit)) if ctx_limit else 0
     weather_city = ''
     if user:
         weather_city = (user.get('weather_location') or '').strip() or (user.get('preferences') or {}).get('weather_city', '')
@@ -15093,16 +15255,17 @@ def ai_page():
         load_chat=load_chat,
         msg_used=msg_used,
         msg_remaining=msg_remaining,
-        msg_limit=AI_MESSAGE_LIMIT,
+        msg_limit=msg_limit,
         msg_reset_hours=AI_MESSAGE_WINDOW_HOURS,
         ctx_used=ctx_used,
-        ctx_limit=AI_CTX_LIMIT_TOKENS,
+        ctx_limit=ctx_limit,
         ctx_pct=ctx_pct,
         ctx_reset_hours=AI_CTX_WINDOW_HOURS,
         weather_city=weather_city,
         ai_key_set=bool(AI_MODE_GROQ_API_KEY),
         ai_approved=True,
         user=user,
+        plan_usage=plan_usage,
     )
 
 
@@ -15332,23 +15495,29 @@ def api_ai_search():
     skip = bool(data.get('skip'))
     user_id = session['user_id']
     usage = data_manager.get_ai_usage(user_id)
-    msg_used = int(usage.get('msg_count', 0))
     ctx_used = int(usage.get('ctx_tokens', 0))
-    if msg_used >= AI_MESSAGE_LIMIT:
-        return jsonify({
-            'ok': False, 'error': 'limit', 'limit_type': 'messages',
-            'msg_used': msg_used, 'msg_remaining': 0, 'msg_limit': AI_MESSAGE_LIMIT,
-            'ctx_used': ctx_used, 'ctx_remaining': max(0, AI_CTX_LIMIT_TOKENS - ctx_used), 'ctx_limit': AI_CTX_LIMIT_TOKENS,
-        }), 429
-    allowed, remaining, used = data_manager.increment_ai_usage(user_id)
-    if not allowed:
-        return jsonify({
-            'ok': False, 'error': 'limit', 'limit_type': 'messages',
-            'msg_used': AI_MESSAGE_LIMIT, 'msg_remaining': 0, 'msg_limit': AI_MESSAGE_LIMIT,
-            'ctx_used': ctx_used, 'ctx_remaining': max(0, AI_CTX_LIMIT_TOKENS - ctx_used), 'ctx_limit': AI_CTX_LIMIT_TOKENS,
-        }), 429
+    plan_before = data_manager.get_plan_usage(user_id)
+    ctx_limit = int(plan_before['limits']['ctx'])
+    usage_kind = 'deep' if deep else 'standard'
     chat_id = data.get('chat_id') or ''
     chat = data_manager.get_ai_chat(user_id, chat_id) if chat_id else None
+    is_clarification_answer = bool(chat and (chat.get('clarify') or {}).get('pending'))
+    if is_clarification_answer:
+        metric = plan_before['usage'][usage_kind]
+        allowance = {'allowed': True, 'plan': plan_before['plan'], 'kind': usage_kind,
+                     'used': metric['used'], 'limit': metric['limit'],
+                     'remaining': max(0, metric['limit'] - metric['used'])}
+    else:
+        allowance = data_manager.consume_plan_usage(user_id, usage_kind)
+    if not allowance['allowed']:
+        return jsonify({
+            'ok': False, 'error': 'limit', 'limit_type': 'plan', 'usage_kind': allowance['kind'],
+            'plan': allowance['plan'], 'used': allowance['used'], 'limit': allowance['limit'],
+            'remaining': 0, 'upgrade_url': '/premium',
+            'msg_used': allowance['used'], 'msg_remaining': 0, 'msg_limit': allowance['limit'],
+            'ctx_used': ctx_used, 'ctx_remaining': max(0, ctx_limit - ctx_used), 'ctx_limit': ctx_limit,
+        }), 429
+    remaining, used, msg_limit = allowance['remaining'], allowance['used'], allowance['limit']
     now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     if not chat:
         chat = {
@@ -15395,13 +15564,13 @@ def api_ai_search():
         clarify['pending'] = True
         question_texts = [_ai_question_text(x) for x in questions]
         clarify_tokens = gate_tokens + _ai_est_tokens(answered_text + ' ' + ' '.join(question_texts)) + 40
-        ctx_ok, ctx_used, ctx_remaining = data_manager.add_ai_context_tokens(user_id, clarify_tokens)
+        ctx_ok, ctx_used, ctx_remaining = data_manager.add_ai_context_tokens(user_id, clarify_tokens, ctx_limit)
         if not ctx_ok:
             return jsonify({
                 'ok': False, 'error': 'limit', 'limit_type': 'context',
-                'msg_used': min(AI_MESSAGE_LIMIT, used),
-                'msg_remaining': remaining, 'msg_limit': AI_MESSAGE_LIMIT,
-                'ctx_used': ctx_used, 'ctx_remaining': ctx_remaining, 'ctx_limit': AI_CTX_LIMIT_TOKENS,
+                'msg_used': min(msg_limit, used),
+                'msg_remaining': remaining, 'msg_limit': msg_limit,
+                'ctx_used': ctx_used, 'ctx_remaining': ctx_remaining, 'ctx_limit': ctx_limit,
                 'ctx_reset_hours': AI_CTX_WINDOW_HOURS,
             }), 429
         _ai_append_message(chat, 'assistant',
@@ -15417,12 +15586,12 @@ def api_ai_search():
             'results': [],
             'clarify': {'questions': questions, 'round': clarify['rounds'], 'max_rounds': AI_CLARIFY_MAX_ROUNDS},
             'remaining': remaining,
-            'msg_used': min(AI_MESSAGE_LIMIT, used),
+            'msg_used': min(msg_limit, used),
             'msg_remaining': remaining,
-            'msg_limit': AI_MESSAGE_LIMIT,
+            'msg_limit': msg_limit,
             'ctx_used': ctx_used,
             'ctx_remaining': ctx_remaining,
-            'ctx_limit': AI_CTX_LIMIT_TOKENS,
+            'ctx_limit': ctx_limit,
         })
 
     # ── let the AI plan the search(es), then run them (single or multi-task).
@@ -15479,12 +15648,15 @@ def api_ai_search():
         'title': chat['title'],
         'results': flat,
         'remaining': remaining,
-        'msg_used': min(AI_MESSAGE_LIMIT, used),
+        'msg_used': min(msg_limit, used),
         'msg_remaining': remaining,
-        'msg_limit': AI_MESSAGE_LIMIT,
+        'msg_limit': msg_limit,
         'ctx_used': ctx_used,
-        'ctx_remaining': max(0, AI_CTX_LIMIT_TOKENS - ctx_used),
-        'ctx_limit': AI_CTX_LIMIT_TOKENS,
+        'ctx_remaining': max(0, ctx_limit - ctx_used),
+        'ctx_limit': ctx_limit,
+        'plan': allowance['plan'],
+        'usage_kind': allowance['kind'],
+        'upgrade_url': '/premium',
     }
     if groups:
         resp['groups'] = groups
@@ -15623,16 +15795,19 @@ def api_ai_stream():
                 history.append({'role': m.get('role'), 'content': m.get('content', '')})
     messages, compressed = _ai_compress_history(_ai_build_messages(history, results, report=report))
     request_tokens = _ai_est_tokens('\n'.join(m.get('content', '') for m in messages))
-    ctx_allowed, ctx_used, ctx_remaining = data_manager.add_ai_context_tokens(user_id, request_tokens)
+    plan_usage = data_manager.get_plan_usage(user_id)
+    ctx_limit = int(plan_usage['limits']['ctx'])
+    ctx_allowed, ctx_used, ctx_remaining = data_manager.add_ai_context_tokens(user_id, request_tokens, ctx_limit)
     if not ctx_allowed:
         msg_usage = data_manager.get_ai_usage(user_id)
         return jsonify({
             'ok': False, 'error': 'limit', 'limit_type': 'context',
             'msg_used': int(msg_usage.get('msg_count', 0)),
-            'msg_remaining': max(0, AI_MESSAGE_LIMIT - int(msg_usage.get('msg_count', 0))),
-            'msg_limit': AI_MESSAGE_LIMIT,
-            'ctx_used': ctx_used, 'ctx_remaining': ctx_remaining, 'ctx_limit': AI_CTX_LIMIT_TOKENS,
+            'msg_remaining': max(0, plan_usage['usage']['standard']['limit'] - plan_usage['usage']['standard']['used']),
+            'msg_limit': plan_usage['usage']['standard']['limit'],
+            'ctx_used': ctx_used, 'ctx_remaining': ctx_remaining, 'ctx_limit': ctx_limit,
             'ctx_reset_hours': AI_CTX_WINDOW_HOURS,
+            'upgrade_url': '/premium',
         }), 429
     if compressed:
         app.logger.info(f"AI context compressed for chat {chat_id}")
@@ -15792,11 +15967,12 @@ def api_ai_stream():
         stream_with_context(generate()),
         mimetype='text/plain',
         headers={
-            'X-AI-Msg-Used': str(int(msg_usage.get('msg_count', 0))),
-            'X-AI-Msg-Limit': str(AI_MESSAGE_LIMIT),
+            'X-AI-Msg-Used': str(plan_usage['usage']['standard']['used']),
+            'X-AI-Msg-Limit': str(plan_usage['usage']['standard']['limit']),
             'X-AI-Ctx-Used': str(ctx_used),
-            'X-AI-Ctx-Limit': str(AI_CTX_LIMIT_TOKENS),
-            'X-AI-Ctx-Remaining': str(max(0, AI_CTX_LIMIT_TOKENS - ctx_used)),
+            'X-AI-Ctx-Limit': str(ctx_limit),
+            'X-AI-Ctx-Remaining': str(max(0, ctx_limit - ctx_used)),
+            'X-Arlong-Plan': plan_usage['plan'],
             'X-AI-Ctx-Reset-Hours': str(AI_CTX_WINDOW_HOURS),
         },
     )
@@ -15804,7 +15980,7 @@ def api_ai_stream():
 
 # ── Premium ──
 
-if scheduler_available:
+if scheduler_available and os.environ.get('DISABLE_BACKGROUND_SCHEDULER', '').lower() not in ('1', 'true', 'yes'):
     scheduler = BackgroundScheduler()
     scheduler.add_job(
         _create_backup,
