@@ -134,8 +134,12 @@ function switchTab(tab){
     document.getElementById('form-signup').classList.add('active');
   }
 }
-{% if login_error or error %}
+{% if initial_mode == 'signup' %}
+switchTab('signup');
+{% elif login_error or error %}
 switchTab('signin');
+{% endif %}
+{% if login_error or error %}
 document.getElementById('error-global').classList.add('show');
 {% endif %}
 </script>

@@ -467,9 +467,14 @@ def _google_login_redirect_uri():
     """Use a fixed OAuth callback, never the post-login destination."""
     configured = GOOGLE_REDIRECT_URI.rstrip('/')
     if configured.endswith('/auth/google/callback'):
-        return configured
-    base = os.environ.get('PUBLIC_BASE_URL', '').strip().rstrip('/')
-    return (base + '/auth/google/callback') if base else url_for('google_auth_callback', _external=True)
+        callback = configured
+    else:
+        base = os.environ.get('PUBLIC_BASE_URL', '').strip().rstrip('/')
+        callback = (base + '/auth/google/callback') if base else url_for('google_auth_callback', _external=True)
+    # Guard against a TLS-terminating proxy exposing its internal HTTP scheme.
+    if urlparse(callback).hostname == 'arlong.org' and callback.startswith('http://'):
+        callback = 'https://' + callback[len('http://'):]
+    return callback
 
 # ── AI Beta Waitlist ────────────────────────────────────────────────────────
 AI_WAITLIST_LIMIT = int(os.environ.get('AI_WAITLIST_LIMIT', 50))
@@ -12998,9 +13003,15 @@ def _get_redirect_param():
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     redirect_target = _get_redirect_param()
+    if request.method == 'GET':
+        params = {'mode': 'signup'}
+        if redirect_target:
+            params['redirect'] = redirect_target
+        return redirect(url_for('login', **params), code=302)
     if request.method == 'POST':
         if not validate_csrf():
-            return render_template('signup.html', error='Invalid form submission. Please try again.', redirect=redirect_target)
+            return render_template('ai_auth.html', error='Invalid form submission. Please try again.',
+                                   redirect=redirect_target, initial_mode='signup')
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
         email = request.form.get('email', '').strip()
@@ -13008,22 +13019,29 @@ def signup():
         sa = request.form.get('security_answer', '').strip()
         weather_loc = request.form.get('weather_location', '').strip()
         if not username or not password or not sq or not sa:
-            return render_template('signup.html', error='All fields required', redirect=redirect_target)
+            return render_template('ai_auth.html', error='All fields required', redirect=redirect_target,
+                                   initial_mode='signup')
         if len(username) < 3 or len(username) > 24:
-            return render_template('signup.html', error='Username 3-24 characters', redirect=redirect_target)
+            return render_template('ai_auth.html', error='Username 3-24 characters', redirect=redirect_target,
+                                   initial_mode='signup')
         if len(password) < 8:
-            return render_template('signup.html', error='Password must be at least 8 characters', redirect=redirect_target)
+            return render_template('ai_auth.html', error='Password must be at least 8 characters',
+                                   redirect=redirect_target, initial_mode='signup')
         if not re.search(r'[A-Za-z]', password) or not re.search(r'[0-9]', password):
-            return render_template('signup.html', error='Password must contain both letters and numbers', redirect=redirect_target)
+            return render_template('ai_auth.html', error='Password must contain both letters and numbers',
+                                   redirect=redirect_target, initial_mode='signup')
         if email and '@' not in email:
-            return render_template('signup.html', error='Invalid email address', email=email, redirect=redirect_target)
+            return render_template('ai_auth.html', error='Invalid email address', email=email,
+                                   redirect=redirect_target, initial_mode='signup')
         ip = request.remote_addr or '127.0.0.1'
         accept_terms = request.form.get('accept_terms', '')
         if accept_terms != '1':
-            return render_template('signup.html', error='You must accept the Terms of Service to create an account.', email=email, redirect=redirect_target)
+            return render_template('ai_auth.html', error='You must accept the Terms of Service to create an account.',
+                                   email=email, redirect=redirect_target, initial_mode='signup')
         user, err = data_manager.create_user(username, password, sq, sa, ip, email, weather_loc)
         if err:
-            return render_template('signup.html', error=err, email=email, redirect=redirect_target)
+            return render_template('ai_auth.html', error=err, email=email, redirect=redirect_target,
+                                   initial_mode='signup')
         _regenerate_session()
         session.permanent = True
         session['user_id'] = user['user_id']
@@ -13040,7 +13058,7 @@ def signup():
         if redirect_target:
             return redirect(redirect_target)
         return redirect(url_for('home'))
-    return render_template('signup.html', redirect=redirect_target)
+    return render_template('ai_auth.html', redirect=redirect_target, initial_mode='signup')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -13073,7 +13091,8 @@ def login():
         if redirect_target:
             return redirect(redirect_target)
         return redirect(url_for('home'))
-    return render_template('ai_auth.html', redirect=redirect_target)
+    initial_mode = 'signup' if request.args.get('mode') == 'signup' else 'signin'
+    return render_template('ai_auth.html', redirect=redirect_target, initial_mode=initial_mode)
 
 @app.route('/logout')
 def logout():
