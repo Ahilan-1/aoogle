@@ -6121,39 +6121,14 @@ class ImprovedSearch:
     def _search_ddg_with_site(self, query, site_filter):
         try:
             q = query + ' ' + site_filter
-            r = self.session.post('https://html.duckduckgo.com/html/', data={'q': q}, headers=self._get_headers(), timeout=2.5)
-            if r.status_code != 200:
-                return []
-            soup = BeautifulSoup(r.text, 'html.parser')
             results = []
             seen = set()
-            for result in soup.find_all('div', class_='result') or soup.find_all('div', class_='result__body'):
+            category = 'discussion' if 'site:reddit.com' in site_filter else 'video'
+
+            # Primary: DDGS library (handles bot detection)
+            if self.ddgs:
                 try:
-                    a = result.find('a', class_='result__a') or result.find('a', href=True)
-                    if not a or not a.get('href'):
-                        continue
-                    href = a['href']
-                    if not href.startswith('http') or href in seen:
-                        continue
-                    seen.add(href)
-                    title = a.get_text().strip()
-                    if not title:
-                        continue
-                    snippet_el = result.find('a', class_='result__snippet') or result.find('div', class_='result__snippet')
-                    snippet = snippet_el.get_text().strip()[:300] if snippet_el else ''
-                    parsed = urlparse(href)
-                    category = 'discussion' if 'site:reddit.com' in site_filter else 'video'
-                    results.append(SearchResult(
-                        title=title, url=href, snippet=snippet,
-                        category=category, date=None, domain=parsed.netloc
-                    ))
-                except Exception:
-                    continue
-                if len(results) >= 5:
-                    break
-            if not results and self.ddgs:
-                try:
-                    raw = self.ddgs.text(query + ' ' + site_filter, max_results=10, backend='auto', safesearch='off')
+                    raw = self.ddgs.text(q, max_results=10, backend='auto', safesearch='off')
                     for r in raw:
                         href = r.get('href', '')
                         title = r.get('title', '')
@@ -6161,7 +6136,6 @@ class ImprovedSearch:
                             continue
                         seen.add(href)
                         parsed = urlparse(href)
-                        category = 'discussion' if 'site:reddit.com' in site_filter else 'video'
                         results.append(SearchResult(
                             title=title, url=href, snippet=(r.get('body', '') or '')[:300],
                             category=category, date=None, domain=parsed.netloc
@@ -6169,7 +6143,40 @@ class ImprovedSearch:
                         if len(results) >= 5:
                             break
                 except Exception as e:
-                    app.logger.error(f"DDGS site fallback ({site_filter[:20]}) error: {e}")
+                    app.logger.error(f"DDGS site primary ({site_filter[:20]}) error: {e}")
+
+            # Fallback: direct HTML scrape
+            if len(results) < 3:
+                try:
+                    r = self.session.post('https://html.duckduckgo.com/html/', data={'q': q}, headers=self._get_headers(), timeout=5)
+                    if r.status_code == 200:
+                        soup = BeautifulSoup(r.text, 'html.parser')
+                        for result in soup.find_all('div', class_='result') or soup.find_all('div', class_='result__body'):
+                            try:
+                                a = result.find('a', class_='result__a') or result.find('a', href=True)
+                                if not a or not a.get('href'):
+                                    continue
+                                href = a['href']
+                                if not href.startswith('http') or href in seen:
+                                    continue
+                                seen.add(href)
+                                title = a.get_text().strip()
+                                if not title:
+                                    continue
+                                snippet_el = result.find('a', class_='result__snippet') or result.find('div', class_='result__snippet')
+                                snippet = snippet_el.get_text().strip()[:300] if snippet_el else ''
+                                parsed = urlparse(href)
+                                results.append(SearchResult(
+                                    title=title, url=href, snippet=snippet,
+                                    category=category, date=None, domain=parsed.netloc
+                                ))
+                            except Exception:
+                                continue
+                            if len(results) >= 5:
+                                break
+                except Exception as e:
+                    app.logger.error(f"DDG site fallback ({site_filter[:20]}) error: {e}")
+
             return results
         except Exception as e:
             app.logger.error(f"DDG site search ({site_filter[:20]}) error: {e}")
@@ -6177,43 +6184,11 @@ class ImprovedSearch:
 
     def _search_duckduckgo_html(self, query):
         try:
-            url = 'https://html.duckduckgo.com/html/'
-            params = {'q': query}
-            headers = self._get_headers()
-            r = self.session.post(url, data=params, headers=headers, timeout=5)
-            if r.status_code != 200:
-                return []
-            soup = BeautifulSoup(r.text, 'html.parser')
             results = []
             seen = set()
-            for result in soup.find_all('div', class_='result') or soup.find_all('div', class_='result__body'):
-                try:
-                    a = result.find('a', class_='result__a') or result.find('a', href=True)
-                    if not a or not a.get('href'):
-                        continue
-                    href = a['href']
-                    if not href.startswith('http'):
-                        continue
-                    if href in seen:
-                        continue
-                    seen.add(href)
-                    title = a.get_text().strip()
-                    if not title:
-                        continue
-                    snippet_el = result.find('a', class_='result__snippet') or result.find('div', class_='result__snippet')
-                    snippet = snippet_el.get_text().strip()[:300] if snippet_el else ''
-                    parsed = urlparse(href)
-                    date = self._extract_date(snippet)
-                    category = self._categorize_result(href, title, snippet)
-                    results.append(SearchResult(
-                        title=title, url=href, snippet=snippet,
-                        category=category, date=date, domain=parsed.netloc
-                    ))
-                except Exception:
-                    continue
-                if len(results) >= 15:
-                    break
-            if not results and self.ddgs:
+
+            # Primary: DDGS library (multi-backend, handles bot detection)
+            if self.ddgs:
                 try:
                     raw = self.ddgs.text(query=query, max_results=15, backend='auto', safesearch='off')
                     for r in raw:
@@ -6232,11 +6207,49 @@ class ImprovedSearch:
                         if len(results) >= 15:
                             break
                 except Exception as e:
-                    app.logger.error(f"DDGS HTML fallback error: {e}")
+                    app.logger.error(f"DDGS HTML primary error: {e}")
                     try:
-                        data_manager.record_engine_error('ddg', f'HTML fallback: {e}')
+                        data_manager.record_engine_error('ddg', f'DDGS: {e}')
                     except Exception:
                         pass
+
+            # Fallback: direct HTML scrape (may be bot-blocked by DDG)
+            if len(results) < 3:
+                try:
+                    url = 'https://html.duckduckgo.com/html/'
+                    params = {'q': query}
+                    headers = self._get_headers()
+                    r = self.session.post(url, data=params, headers=headers, timeout=5)
+                    if r.status_code == 200:
+                        soup = BeautifulSoup(r.text, 'html.parser')
+                        for result in soup.find_all('div', class_='result') or soup.find_all('div', class_='result__body'):
+                            try:
+                                a = result.find('a', class_='result__a') or result.find('a', href=True)
+                                if not a or not a.get('href'):
+                                    continue
+                                href = a['href']
+                                if not href.startswith('http') or href in seen:
+                                    continue
+                                seen.add(href)
+                                title = a.get_text().strip()
+                                if not title:
+                                    continue
+                                snippet_el = result.find('a', class_='result__snippet') or result.find('div', class_='result__snippet')
+                                snippet = snippet_el.get_text().strip()[:300] if snippet_el else ''
+                                parsed = urlparse(href)
+                                date = self._extract_date(snippet)
+                                category = self._categorize_result(href, title, snippet)
+                                results.append(SearchResult(
+                                    title=title, url=href, snippet=snippet,
+                                    category=category, date=date, domain=parsed.netloc
+                                ))
+                            except Exception:
+                                continue
+                            if len(results) >= 15:
+                                break
+                except Exception as e:
+                    app.logger.error(f"DDG HTML fallback scrape error: {e}")
+
             return results
         except Exception as e:
             app.logger.error(f"DDG HTML search error: {e}")
@@ -6336,7 +6349,7 @@ class ImprovedSearch:
                 if not self.ddgs:
                     return []
                 try:
-                    ddgs_kwargs = dict(query=query, max_results=10, backend='html', safesearch='off')
+                    ddgs_kwargs = dict(query=query, max_results=10, backend='auto', safesearch='off')
                     if region:
                         ddgs_kwargs['region'] = region
                     raw = self.ddgs.text(**ddgs_kwargs)

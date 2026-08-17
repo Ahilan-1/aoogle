@@ -187,7 +187,10 @@ class TestAIHelpers:
         m.data_manager.save_ai_chat('u1', chat)
         with client.session_transaction() as sess:
             sess['user_id'] = 'u1'
-        resp = client.post('/api/ai/report-decline', json={'chat_id': 'abc123'})
+            sess['_csrf_token'] = 'test-csrf-token'
+        resp = client.post('/api/ai/report-decline', json={
+            'chat_id': 'abc123', '_csrf_token': 'test-csrf-token'
+        })
         assert resp.status_code == 200
         saved = m.data_manager.get_ai_chat('u1', 'abc123')
         last = saved['messages'][-1]
