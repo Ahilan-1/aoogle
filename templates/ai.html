@@ -369,7 +369,7 @@
         </button>
     </div>
     <nav class="ai-nav">
-        <a class="ai-nav-item" href="/ai" onclick="return navHome(event)">
+        <a class="ai-nav-item" href="/ai/chat" onclick="return navHome(event)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>
             Home
         </a>
@@ -392,11 +392,24 @@
         <div class="ai-usage-track"><div class="ai-usage-fill" id="ai-usage-fill" style="width:{{ ((msg_limit - msg_remaining) * 100 / msg_limit) | round }}%"></div></div>
         <div class="ai-limit-title"><span>Token Budget ({{ ctx_reset_hours }}h)</span><span class="ai-limit-num" id="ai-ctx-text">{{ ctx_used }} / {{ ctx_limit }} tokens</span></div>
         <div class="ai-usage-track"><div class="ai-usage-fill" id="ai-ctx-fill" style="width:{{ ctx_pct }}%"></div></div>
+        <a href="/api/dashboard" style="display:block;margin-top:14px;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;font-size:12px;color:#999;text-decoration:none;transition:border-color .15s;text-align:center" onmouseover="this.style.borderColor='rgba(82,168,255,.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,.1)'">
+            API Dashboard &rarr; MCP Keys, REST Docs
+        </a>
     </div>
 </aside>
 
 <main class="ai-main">
     <div class="ai-workspace" id="ai-workspace">
+        {% if ai_approved is defined and not ai_approved %}
+        <div style="display:flex;align-items:center;justify-content:center;min-height:80vh;padding:40px">
+            <div style="text-align:center;max-width:480px">
+                <div style="font-family:var(--font-mono);font-size:48px;margin-bottom:16px;color:var(--accent)">/</div>
+                <h2 style="font-size:24px;font-weight:600;margin-bottom:8px;color:#fff">Access Pending</h2>
+                <p style="font-size:14px;color:#999;line-height:1.6;margin-bottom:24px">You're on the Arlong AI beta waitlist. We'll grant access as slots open up. Check back soon.</p>
+                <a href="/ai" style="display:inline-block;padding:10px 20px;background:#fff;color:#111;border:none;border-radius:0;font-size:14px;font-weight:500;cursor:pointer;text-decoration:none">Back to Arlong AI</a>
+            </div>
+        </div>
+        {% else %}
         <div class="ai-inner">
             <div id="ai-landing" class="ai-landing">
                 <div>
@@ -457,6 +470,7 @@
                 </div>
             </div>
         </div>
+        {% endif %}
 </main>
 
 {% if not ai_key_set %}
@@ -600,7 +614,7 @@
             if(!buckets[b].length) return;
             html += '<div class="ai-hgroup-label">'+labels[b]+'</div>';
             buckets[b].forEach(function(c){
-                html += '<a class="ai-hitem" href="/ai?chat='+encodeURIComponent(c.chat_id)+'" onclick="return openChat(\''+c.chat_id+'\')">'
+                html += '<a class="ai-hitem" href="/ai/chat?chat='+encodeURIComponent(c.chat_id)+'" onclick="return openChat(\''+c.chat_id+'\')">'
                     + '<span class="ai-h-title" title="'+esc(c.title)+'">'+esc(c.title)+'</span>'
                     + '<button class="ai-h-del" onclick="event.preventDefault();event.stopPropagation();deleteChat(\''+c.chat_id+'\')" aria-label="Delete">'
                     + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg></button></a>';

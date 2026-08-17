@@ -320,6 +320,17 @@ _AI_REASONING_FORMAT_MODELS = {
 def _ai_supports_reasoning(model):
     return model in _AI_REASONING_FORMAT_MODELS
 
+# ── Google OAuth (for /ai landing page sign-in) ────────────────────────────
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '').strip()
+GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '').strip()
+GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI', 'https://arlong.org/auth/google/callback')
+GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
+GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
+GOOGLE_USERINFO_ENDPOINT = 'https://www.googleapis.com/oauth2/v3/userinfo'
+
+# ── AI Beta Waitlist ────────────────────────────────────────────────────────
+AI_WAITLIST_LIMIT = int(os.environ.get('AI_WAITLIST_LIMIT', 50))
+
 # Per-user limits: message count resets 12h after the user's first message in
 # the window; the token budget is 15k per user and refreshes every 6 hours on a
 # fixed clock cycle.
@@ -681,7 +692,7 @@ PUBLIC_PATHS = {'/', '/search', '/login', '/signup', '/land', '/logout',
     '/premium', '/explore', '/docs', '/stats', '/settings',
     '/privacy-policy', '/terms-of-service', '/refund-policy', '/faq',
     '/about', '/blog', '/redeem', '/changelogs', '/policy', '/submit',
-    '/privacy'}
+    '/privacy', '/ai', '/ai/chat', '/auth/google', '/auth/google/callback'}
 
 @app.before_request
 def validate_session():
@@ -2925,6 +2936,9 @@ class DataManager:
                 'ip_hashes': [self.hash_ip(ip)],
                 'created_at': datetime.now().isoformat(),
                 'last_action_at': None,
+                'ai_access': None,
+                'ai_access_granted_at': None,
+                'auth_provider': None,
             }
             self.data['users'].append(user)
             _save_json(self.data)
@@ -2973,6 +2987,111 @@ class DataManager:
             self.data['users'] = [u for u in users if u['user_id'] != user_id]
             _save_json(self.data)
             self._invalidate_user_cache()
+
+    # ── AI Beta Waitlist ──────────────────────────────────────────────────
+
+    def create_user_google(self, email, name, google_id):
+        """Create a minimal user from Google OAuth. No password needed."""
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('users', [])
+            # Derive a username from the Google name
+            base = re.sub(r'[^a-z0-9]', '', (name or '').lower().split()[0] if name else '') or 'user'
+            username = base
+            suffix = 1
+            while any(u['username'].lower() == username.lower() for u in self.data['users']):
+                username = f"{base}{suffix}"
+                suffix += 1
+            user = {
+                'user_id': str(uuid.uuid4()),
+                'username': username,
+                'email': email.strip().lower(),
+                'weather_location': '',
+                'password_hash': '',
+                'security_question': '',
+                'security_answer_hash': '',
+                'ip_hashes': [],
+                'created_at': datetime.now().isoformat(),
+                'last_action_at': None,
+                'ai_access': None,
+                'ai_access_granted_at': None,
+                'auth_provider': 'google',
+                'google_id': google_id,
+            }
+            self.data['users'].append(user)
+            _save_json(self.data)
+            self._invalidate_user_cache()
+            return user
+
+    def get_user_by_email(self, email):
+        if not email:
+            return None
+        email_lower = email.strip().lower()
+        for u in self.data.get('users', []):
+            if u.get('email', '').lower() == email_lower:
+                return u
+        return None
+
+    def join_ai_waitlist(self, user_id, email, username):
+        """Add a user to the AI beta waitlist. First AI_WAITLIST_LIMIT users
+        are auto-approved; the rest are waitlisted.
+        Returns (status, position) where status is 'approved' or 'waitlisted'."""
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data.setdefault('ai_waitlist', [])
+            # Check if already in waitlist
+            for entry in self.data['ai_waitlist']:
+                if entry.get('user_id') == user_id:
+                    return entry.get('status', 'waitlisted'), entry.get('position', 0)
+            position = len(self.data['ai_waitlist']) + 1
+            approved = position <= AI_WAITLIST_LIMIT
+            status = 'approved' if approved else 'waitlisted'
+            entry = {
+                'user_id': user_id,
+                'email': email,
+                'username': username,
+                'joined_at': datetime.now().isoformat(),
+                'status': status,
+                'position': position,
+            }
+            self.data['ai_waitlist'].append(entry)
+            # Update user record
+            user = self.get_user_by_id(user_id)
+            if user:
+                user['ai_access'] = status
+                user['ai_access_granted_at'] = datetime.now().isoformat() if approved else None
+            _save_json(self.data)
+            self._invalidate_user_cache()
+            return status, position
+
+    def is_ai_approved(self, user_id):
+        """Check if a user has AI access approved."""
+        user = self.get_user_by_id(user_id)
+        if not user:
+            return False
+        if user.get('ai_access') == 'approved':
+            return True
+        # Legacy users (pre-waitlist) are auto-approved
+        return False
+
+    def get_ai_waitlist_count(self):
+        loaded = _load_json()
+        if loaded:
+            self.data = loaded
+        return len(self.data.get('ai_waitlist', []))
+
+    def get_ai_waitlist_position(self, user_id):
+        loaded = _load_json()
+        if loaded:
+            self.data = loaded
+        for entry in self.data.get('ai_waitlist', []):
+            if entry.get('user_id') == user_id:
+                return entry.get('position', 0), entry.get('status', 'waitlisted')
+        return 0, 'not_joined'
 
     # ── API keys (token-based access to /api/search) ──
 
@@ -11495,12 +11614,12 @@ def login():
     redirect_target = _get_redirect_param()
     if request.method == 'POST':
         if not validate_csrf():
-            return render_template('signup.html', login_error='Invalid form submission. Please try again.', redirect=redirect_target)
+            return render_template('ai_auth.html', error='Invalid form submission. Please try again.', redirect=redirect_target)
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
         user = data_manager.authenticate_user(username, password)
         if not user:
-            return render_template('signup.html', login_error='Invalid credentials', redirect=redirect_target)
+            return render_template('ai_auth.html', login_error='Invalid credentials', redirect=redirect_target)
         session.clear()
         session.permanent = True
         session['user_id'] = user['user_id']
@@ -11515,9 +11634,7 @@ def login():
         if redirect_target:
             return redirect(redirect_target)
         return redirect(url_for('home'))
-    if redirect_target:
-        return redirect(url_for('signup', mode='login', redirect=redirect_target))
-    return redirect(url_for('signup', mode='login'))
+    return render_template('ai_auth.html', redirect=redirect_target)
 
 @app.route('/logout')
 def logout():
@@ -13494,10 +13611,36 @@ def _ai_build_messages(history, results, report=False):
 
 
 @app.route('/ai')
+def ai_landing():
+    """Public landing page for the Arlong AI beta."""
+    user_id = session.get('user_id')
+    user = data_manager.get_user_by_id(user_id) if user_id else None
+    approved = data_manager.is_ai_approved(user_id) if user_id else False
+    waitlist_count = data_manager.get_ai_waitlist_count()
+    return render_template(
+        'ai_landing.html',
+        user=user,
+        approved=approved,
+        waitlist_count=waitlist_count,
+        waitlist_limit=AI_WAITLIST_LIMIT,
+        google_client_id=GOOGLE_CLIENT_ID,
+    )
+
+
+@app.route('/ai/chat')
 def ai_page():
     if not session.get('user_id'):
-        return redirect(url_for('login') + '?redirect=/ai')
+        return redirect('/login?redirect=/ai/chat')
     user = data_manager.get_user_by_id(session['user_id'])
+    ai_approved = data_manager.is_ai_approved(session['user_id'])
+    if not ai_approved:
+        return render_template('ai.html',
+            username=(user or {}).get('username', session.get('username', '')),
+            first_name=((user or {}).get('username', session.get('username', '')).split(' ')[0]).capitalize() if user else 'there',
+            greeting='Good morning', chats=[], msg_used=0, msg_remaining=AI_MESSAGE_LIMIT, msg_limit=AI_MESSAGE_LIMIT,
+            msg_reset_hours=AI_MESSAGE_WINDOW_HOURS,
+            ctx_used=0, ctx_limit=AI_CTX_LIMIT_TOKENS, ctx_pct=0, ctx_reset_hours=AI_CTX_WINDOW_HOURS,
+            weather_city='', load_chat=None, ai_approved=False, ai_key_set=bool(AI_MODE_GROQ_API_KEY), user=user)
     username = (user or {}).get('username', session.get('username', ''))
     first_name = username.split(' ')[0].capitalize() if username else 'there'
     hour = datetime.now().hour
@@ -13537,7 +13680,147 @@ def ai_page():
         ctx_reset_hours=AI_CTX_WINDOW_HOURS,
         weather_city=weather_city,
         ai_key_set=bool(AI_MODE_GROQ_API_KEY),
+        ai_approved=True,
+        user=user,
     )
+
+
+# ── Google OAuth ────────────────────────────────────────────────────────────
+
+@app.route('/auth/google')
+def google_auth():
+    """Redirect to Google's OAuth consent screen."""
+    import secrets as _secrets
+    state = _secrets.token_urlsafe(32)
+    session['google_oauth_state'] = state
+    params = {
+        'client_id': GOOGLE_CLIENT_ID,
+        'redirect_uri': GOOGLE_REDIRECT_URI,
+        'response_type': 'code',
+        'scope': 'openid email profile',
+        'state': state,
+        'access_type': 'online',
+        'prompt': 'consent',
+    }
+    qs = '&'.join(f'{k}={requests.utils.quote(str(v))}' for k, v in params.items())
+    return redirect(f'{GOOGLE_AUTH_ENDPOINT}?{qs}')
+
+
+@app.route('/auth/google/callback')
+def google_auth_callback():
+    """Handle Google OAuth callback: exchange code for tokens, find/create user, join waitlist."""
+    error = request.args.get('error')
+    if error:
+        return redirect(url_for('ai_landing') + '?error=google_denied')
+    code = request.args.get('code')
+    state = request.args.get('state')
+    saved_state = session.pop('google_oauth_state', None)
+    if not code or not state or state != saved_state:
+        return redirect(url_for('ai_landing') + '?error=invalid_state')
+    # Exchange authorization code for tokens
+    try:
+        token_resp = httpx.post(GOOGLE_TOKEN_ENDPOINT, data={
+            'code': code,
+            'client_id': GOOGLE_CLIENT_ID,
+            'client_secret': GOOGLE_CLIENT_SECRET,
+            'redirect_uri': GOOGLE_REDIRECT_URI,
+            'grant_type': 'authorization_code',
+        }, timeout=10)
+        token_data = token_resp.json()
+        access_token = token_data.get('access_token')
+        if not access_token:
+            return redirect(url_for('ai_landing') + '?error=token_failed')
+        # Fetch user info
+        userinfo_resp = httpx.get(GOOGLE_USERINFO_ENDPOINT, headers={
+            'Authorization': f'Bearer {access_token}',
+        }, timeout=10)
+        userinfo = userinfo_resp.json()
+        email = userinfo.get('email', '')
+        name = userinfo.get('name', '')
+        google_id = userinfo.get('sub', '')
+        if not email:
+            return redirect(url_for('ai_landing') + '?error=no_email')
+        # Find or create user
+        existing = data_manager.get_user_by_email(email)
+        if existing:
+            user = existing
+        else:
+            user = data_manager.create_user_google(email, name, google_id)
+            if not user:
+                return redirect(url_for('ai_landing') + '?error=create_failed')
+            # Auto-join waitlist for new users
+            data_manager.join_ai_waitlist(user['user_id'], email, user['username'])
+            # Refresh user data
+            user = data_manager.get_user_by_id(user['user_id'])
+        # Set session
+        session['user_id'] = user['user_id']
+        session['username'] = user.get('username', '')
+        session.permanent = True
+        # Redirect to AI chat
+        return redirect('/ai/chat')
+    except Exception as e:
+        app.logger.error(f"Google OAuth error: {e}")
+        return redirect(url_for('ai_landing') + '?error=auth_failed')
+
+
+# ── AI Beta Waitlist API ────────────────────────────────────────────────────
+
+@app.route('/api/ai/waitlist/join', methods=['POST'])
+def api_ai_waitlist_join():
+    """Join the AI beta waitlist. Accepts email+password (new user) or uses existing session."""
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip()
+    password = data.get('password') or ''
+    username = (data.get('username') or '').strip()
+    user_id = session.get('user_id')
+    # If already logged in, join with existing user
+    if user_id:
+        user = data_manager.get_user_by_id(user_id)
+        if user:
+            status, position = data_manager.join_ai_waitlist(user_id, user.get('email', ''), user.get('username', ''))
+            return jsonify({'ok': True, 'status': status, 'position': position,
+                            'message': f'Welcome! You are #{position}. Access granted.' if status == 'approved' else f'You are #{position} on the waitlist. We\'ll notify you when it\'s your turn.'})
+    # Create new user with email + password
+    if not email or not password:
+        return jsonify({'ok': False, 'error': 'Email and password required'}), 400
+    if len(password) < 8:
+        return jsonify({'ok': False, 'error': 'Password must be at least 8 characters'}), 400
+    # Check if user already exists
+    existing = data_manager.get_user_by_email(email)
+    if existing:
+        user_id = existing['user_id']
+        session['user_id'] = user_id
+        session['username'] = existing.get('username', '')
+        session.permanent = True
+        status, position = data_manager.join_ai_waitlist(user_id, email, existing.get('username', ''))
+        return jsonify({'ok': True, 'status': status, 'position': position,
+                        'message': f'Welcome! You are #{position}. Access granted.' if status == 'approved' else f'You are #{position} on the waitlist.'})
+    # Create new user
+    if not username:
+        username = email.split('@')[0]
+    if not re.match(r'^[a-zA-Z0-9_]{3,24}$', username):
+        username = re.sub(r'[^a-zA-Z0-9_]', '', username)[:24] or 'user'
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()
+    user, err = data_manager.create_user(username, password, 'ai_beta', 'joined', ip, email)
+    if err:
+        return jsonify({'ok': False, 'error': err}), 400
+    session['user_id'] = user['user_id']
+    session['username'] = user['username']
+    session.permanent = True
+    status, position = data_manager.join_ai_waitlist(user['user_id'], email, username)
+    return jsonify({'ok': True, 'status': status, 'position': position,
+                    'message': f'Welcome! You are #{position}. Access granted.' if status == 'approved' else f'You are #{position} on the waitlist.'})
+
+
+@app.route('/api/ai/waitlist/status')
+def api_ai_waitlist_status():
+    """Check current user's waitlist status."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'ok': True, 'status': 'not_joined'})
+    position, status = data_manager.get_ai_waitlist_position(user_id)
+    approved = data_manager.is_ai_approved(user_id)
+    return jsonify({'ok': True, 'status': 'approved' if approved else status, 'position': position})
 
 
 @app.route('/api/ai/chats')
