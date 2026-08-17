@@ -31,6 +31,7 @@ class ModelRouter:
         self._cooldown_until = {}      # model -> wall time it may be used again
         self._fail_streak = {}         # model -> consecutive failures
         self._last_used = {}           # model -> ts
+        self._last_error = {}          # model -> latest safe provider error
         self._counters = {             # model -> cumulative stats
             m: {'requests': 0, 'tokens': 0, 'failures': 0, 'successes': 0}
             for m in self.budgets
@@ -96,7 +97,7 @@ class ModelRouter:
             self.created_ts = data['created_ts']
 
     # ── public API ───────────────────────────────────────────────────────────
-    def pick(self, est_tokens=0, prefer=None):
+    def pick(self, est_tokens=0, prefer=None, allowed=None):
         """Return the best model for est_tokens, or None if all are exhausted.
 
         A model is only returned when it has real headroom right now
@@ -110,7 +111,8 @@ class ModelRouter:
         """
         now = self._now()
         with self._lock:
-            order = list(self.order)
+            allowed = set(allowed) if allowed is not None else None
+            order = [m for m in self.order if allowed is None or m in allowed]
             if prefer and prefer in order:
                 order.remove(prefer)
                 order.insert(0, prefer)
@@ -169,7 +171,7 @@ class ModelRouter:
             tpm <= budget.get('tpm', 1 << 30) and \
             tpd <= budget.get('tpd', 1 << 30)
 
-    def pick_best_available(self, est_tokens=0, prefer=None):
+    def pick_best_available(self, est_tokens=0, prefer=None, allowed=None):
         """Last-resort fallback for when `pick()` finds zero models with full
         headroom. Instead of failing the request, smartly transfer to the model
         CLOSEST to usable right now: not in hard cooldown, shortest recovery
@@ -184,7 +186,10 @@ class ModelRouter:
         with self._lock:
             best = None
             best_key = None
+            allowed = set(allowed) if allowed is not None else None
             for model in self.order:
+                if allowed is not None and model not in allowed:
+                    continue
                 if model not in self.budgets:
                     continue
                 if self._cooldown_until.get(model, 0) > now:
@@ -230,8 +235,13 @@ class ModelRouter:
             c = self._counters.setdefault(model, {'requests': 0, 'tokens': 0,
                                                    'failures': 0, 'successes': 0})
             c['failures'] += 1
+            self._last_error[model] = str(error or '')[:500]
             # exponential backoff: 15s, 60s, 4m, 16m ... capped at 30m
-            backoff = min(1800, 15 * (4 ** (streak - 1)))
+            permanent_quota = any(k in str(error).lower() for k in (
+                'prepayment credits are depleted', 'billing account',
+                'billing is disabled', 'daily quota',
+            ))
+            backoff = 3600 if permanent_quota else min(1800, 15 * (4 ** (streak - 1)))
             self._cooldown_until[model] = now + backoff
         self._fire_change()
         return backoff
@@ -296,6 +306,7 @@ class ModelRouter:
                 'tpd_limit': b.get('tpd'),
                 'cooldown_s': round(self.cooldown(model), 1),
                 'fail_streak': self._fail_streak.get(model, 0),
+                'last_error': self._last_error.get(model, ''),
                 'counters': dict(self._counters.get(model, {})),
             }
 
@@ -304,9 +315,12 @@ class ModelRouter:
         return {
             'created_ts': self.created_ts,
             'models': [self.usage(m) for m in self.order if m in self.budgets],
+            # "Healthy" means selectable now, including a fresh model that has
+            # not handled its first request yet. Requiring recent usage made the
+            # dashboard incorrectly report unused providers as unhealthy.
             'healthy': [m for m in self.order
                         if m in self.budgets and self.cooldown(m) == 0
-                        and self._window(self._usage.get(m, []), 60, self._now())],
+                        and self._fits(m, self.budgets[m], 0, self._now())],
         }
 
 

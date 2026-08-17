@@ -33,13 +33,23 @@ import re
 import string
 import threading
 import contextlib
+from collections import deque
 import os
+import sys
 import shutil
 import ssl
 import httpx
 
+# Windows consoles often default to cp1252; make application logs Unicode-safe.
+for _console_stream in (sys.stdout, sys.stderr):
+    try:
+        _console_stream.reconfigure(encoding='utf-8', errors='backslashreplace')
+    except (AttributeError, OSError):
+        pass
+
 import resend
 from werkzeug.security import generate_password_hash, check_password_hash
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from dotenv import load_dotenv
 load_dotenv()
 try:
@@ -54,6 +64,7 @@ try:
 except ImportError:
     ddgs_available = False
 import pg_db
+import dodo_billing
 
 # ── Encryption layer (AES-256-GCM) ──
 _ENCRYPTION_KEY_HEX = os.environ.get('ENCRYPTION_KEY', '')
@@ -296,6 +307,28 @@ def _search_brave(query, max_results=5):
         return []
 
 app = Flask(__name__)
+_PROCESS_STARTED_AT = time.time()
+_REQUEST_METRICS = deque(maxlen=1200)
+_REQUEST_METRICS_LOCK = threading.Lock()
+
+
+@app.before_request
+def _metrics_request_start():
+    request._arlong_started_at = time.perf_counter()
+
+
+@app.after_request
+def _metrics_request_finish(response):
+    started = getattr(request, '_arlong_started_at', None)
+    if started is not None:
+        elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
+        with _REQUEST_METRICS_LOCK:
+            _REQUEST_METRICS.append({
+                'ts': time.time(), 'path': request.path,
+                'status': response.status_code, 'latency_ms': elapsed_ms,
+            })
+        response.headers['Server-Timing'] = f'app;dur={elapsed_ms}'
+    return response
 
 # Load .env file manually
 env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
@@ -351,6 +384,11 @@ PLACES_GEO_TTL = 90 * 24 * 3600  # geocode cache: 90 days
 # Separate Groq key used ONLY by the /ai feature (search-result summaries use GROQ_API_KEY).
 AI_MODE_GROQ_API_KEY = os.environ.get('GROQ_AI_MODE_API_KEY', '')
 AI_MODE_GROQ_MODEL = os.environ.get('GROQ_AI_MODE_MODEL', 'openai/gpt-oss-120b')
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '') or os.environ.get('GOOGLE_API_KEY', '')
+GEMINI_MODELS = tuple(m.strip() for m in os.environ.get(
+    'GEMINI_MODELS',
+    'gemini-2.5-flash,gemini-2.5-flash-lite',
+).split(',') if m.strip())
 # Model lineup with rate-limit + token budgets, used by the ModelRouter
 # middleware. When a model approaches its RPM/RPD/TPM/TPD limits the router
 # transparently routes to the next available model instead of 429ing the user.
@@ -358,11 +396,14 @@ AI_MODE_GROQ_MODEL = os.environ.get('GROQ_AI_MODE_MODEL', 'openai/gpt-oss-120b')
 #   RPM = requests per minute, RPD = requests per day
 #   TPM = tokens per minute (context+completion), TPD = tokens per day
 AI_MODEL_BUDGETS = {
+    'gemini-2.5-flash':       {'rpm': 1000, 'rpd': 50000, 'tpm': 1000000, 'tpd': 10000000},
+    'gemini-2.5-flash-lite':  {'rpm': 1000, 'rpd': 50000, 'tpm': 1000000, 'tpd': 10000000},
     'openai/gpt-oss-120b':  {'rpm': 1000, 'rpd': 50000, 'tpm': 250000, 'tpd': 5000000},
     'openai/gpt-oss-20b':   {'rpm': 1000, 'rpd': 50000, 'tpm': 250000, 'tpd': 5000000},
     'qwen/qwen3.6-27b':     {'rpm': 1000, 'rpd': 50000, 'tpm': 250000, 'tpd': 5000000},
 }
 AI_MODEL_ORDER = [
+    *GEMINI_MODELS,
     os.environ.get('GROQ_AI_MODE_MODEL', 'openai/gpt-oss-120b'),
     'openai/gpt-oss-20b',
     'qwen/qwen3.6-27b',
@@ -434,6 +475,7 @@ AI_CTX_WINDOW_HOURS = int(os.environ.get('AI_CTX_WINDOW_HOURS', 6))
 # to ask (capped by AI_CLARIFY_MAX_QUESTIONS) and which ones.
 AI_CLARIFY_MAX_ROUNDS = int(os.environ.get('AI_CLARIFY_MAX_ROUNDS', 2))
 AI_CLARIFY_MAX_QUESTIONS = int(os.environ.get('AI_CLARIFY_MAX_QUESTIONS', 5))
+AI_AUTO_FOLLOWUPS = False
 PLACES_RADIUS_KM = 40  # drop places farther than this from the requested location
 PLACES_MAX_RESULTS = 4  # cap shown results (also caps Place Details billing)
 PLACES_GL_DEFAULT = 'in'
@@ -4282,6 +4324,103 @@ class DataManager:
                 self.data = loaded
             self.data['router_stats'] = stats
             _save_json(self.data)
+
+    # ── Billing / Dodo Payments ──────────────────────────────────────────
+
+    def get_billing_record(self, user_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            record = self.data.setdefault('billing_subscriptions', {}).get(str(user_id), {})
+            return dict(record)
+
+    def record_checkout(self, user_id, plan, session_id, product_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            records = self.data.setdefault('billing_subscriptions', {})
+            record = records.setdefault(str(user_id), {})
+            record.update({
+                'provider': 'dodo',
+                'plan': plan,
+                'product_id': product_id,
+                'checkout_session_id': session_id,
+                'status': record.get('status', 'checkout_pending'),
+                'updated_at': datetime.now(timezone.utc).isoformat(),
+            })
+            _save_json(self.data)
+            return dict(record)
+
+    def process_dodo_webhook(self, webhook_id, payload):
+        """Idempotently apply a Dodo event. Returns (processed, user_id)."""
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            processed = self.data.setdefault('billing_webhook_events', [])
+            if webhook_id in processed:
+                return False, None
+
+            event_type = str(payload.get('type', '')).lower()
+            event = payload.get('data') or {}
+            metadata = event.get('metadata') or {}
+            user_id = str(metadata.get('arlong_user_id') or '')
+            records = self.data.setdefault('billing_subscriptions', {})
+
+            subscription_id = str(event.get('subscription_id') or event.get('id') or '')
+            customer = event.get('customer') or {}
+            customer_id = str(event.get('customer_id') or customer.get('customer_id') or customer.get('id') or '')
+            if not user_id:
+                for candidate_user_id, candidate in records.items():
+                    if ((subscription_id and candidate.get('subscription_id') == subscription_id) or
+                            (customer_id and candidate.get('customer_id') == customer_id)):
+                        user_id = candidate_user_id
+                        break
+
+            # Record the delivery even if it cannot yet be reconciled. Dodo may
+            # send payment events without a product ID; subscription events carry
+            # the identifiers needed to grant access.
+            processed.append(webhook_id)
+            if len(processed) > 5000:
+                del processed[:-5000]
+            if not user_id:
+                self.data.setdefault('billing_unmatched_events', []).append({
+                    'webhook_id': webhook_id, 'type': event_type,
+                    'received_at': datetime.now(timezone.utc).isoformat(),
+                })
+                self.data['billing_unmatched_events'] = self.data['billing_unmatched_events'][-200:]
+                _save_json(self.data)
+                return True, None
+
+            record = records.setdefault(user_id, {})
+            status_map = {
+                'subscription.active': 'active',
+                'subscription.renewed': 'active',
+                'subscription.updated': str(event.get('status') or record.get('status') or 'active').lower(),
+                'subscription.on_hold': 'on_hold',
+                'subscription.failed': 'past_due',
+                'subscription.cancelled': 'cancelled',
+                'subscription.expired': 'expired',
+            }
+            if event_type in status_map:
+                record['status'] = status_map[event_type]
+            record.update({
+                'provider': 'dodo',
+                'subscription_id': subscription_id or record.get('subscription_id', ''),
+                'customer_id': customer_id or record.get('customer_id', ''),
+                'product_id': str(event.get('product_id') or record.get('product_id', '')),
+                'plan': str(metadata.get('arlong_plan') or record.get('plan', 'pro_monthly')),
+                'current_period_start': event.get('previous_billing_date') or event.get('current_period_start') or record.get('current_period_start'),
+                'current_period_end': event.get('next_billing_date') or event.get('current_period_end') or record.get('current_period_end'),
+                'cancel_at_period_end': bool(event.get('cancel_at_next_billing_date', record.get('cancel_at_period_end', False))),
+                'last_webhook_id': webhook_id,
+                'last_event_type': event_type,
+                'updated_at': datetime.now(timezone.utc).isoformat(),
+            })
+            _save_json(self.data)
+            return True, user_id
 
     def load_router_stats(self):
         """Load persisted router stats from data.json."""
@@ -8920,6 +9059,7 @@ KEY_API_WINDOW = 1800
 EXTENSION_CLIENT_TOKEN = os.environ.get('ARLONG_EXTENSION_TOKEN') or None
 
 anon_api_limiter = RateLimiter(limit=ANON_API_LIMIT, window=ANON_API_WINDOW)
+oauth_api_limiter = RateLimiter(limit=400, window=30 * 60)
 
 # Feedback portal: a light anti-spam throttle (5 submissions/hour/IP).
 feedback_limiter = RateLimiter(limit=5, window=3600)
@@ -10029,7 +10169,8 @@ def search():
     return Response(stream_with_context(_stream()), mimetype='text/html')
 
 
-def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None, followup_round=None):
+def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None,
+                     followup_round=None, source_type='any', deep=False):
     """Generate Arlong's final AI answer for a query from internal functions.
 
     Pipeline (understand → search → evaluate → synthesize):
@@ -10071,7 +10212,7 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None, fo
     def _fetch_one(r_url, r_title):
         """Fetch + clean one page; returns (url, title, text) or None."""
         try:
-            resp = _httpx.get(r_url, timeout=6, follow_redirects=True, headers={'User-Agent': _UA})
+            resp = _httpx.get(r_url, timeout=10, follow_redirects=True, headers={'User-Agent': _UA})
             if resp.status_code == 200:
                 text = _clean_page(resp.text)
                 if len(text) > 100:
@@ -10080,15 +10221,15 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None, fo
             pass
         return None
 
-    def _fetch_pages(urls_titles, limit=4):
-        """Concurrent page fetch with a shared wall-clock budget (~6s)."""
+    def _fetch_pages(urls_titles, limit=6):
+        """Concurrent page fetch with a shared wall-clock budget (~10s)."""
         fetched = []
         if not urls_titles:
             return fetched
-        deadline = time.monotonic() + 6.0
-        with ThreadPoolExecutor(max_workers=min(4, len(urls_titles))) as pool:
+        deadline = time.monotonic() + 10.0
+        with ThreadPoolExecutor(max_workers=min(6, len(urls_titles))) as pool:
             futs = {pool.submit(_fetch_one, u, t): (u, t) for u, t in urls_titles[:limit]}
-            for fut in as_completed(futs, timeout=6):
+            for fut in as_completed(futs, timeout=10):
                 if time.monotonic() > deadline:
                     break
                 try:
@@ -10107,7 +10248,7 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None, fo
         for u, t, text in items:
             try:
                 ev = _neural.evaluate_page(q, title=t, url=u, snippet=text[:200], content=text[:4000])
-                if ev['reputation']['status'] in ('SAFE', 'UNVERIFIED') and ev['relevance_score'] >= 0.35:
+                if ev['reputation']['status'] in ('SAFE', 'RELEVANT', 'UNVERIFIED') and ev['relevance_score'] >= 0.30:
                     out.append((u, t, text, ev))
                 else:
                     app.logger.info(f"AI dropped page {u} ({ev['reputation']['status']}, rel={ev['relevance_score']})")
@@ -10132,21 +10273,36 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None, fo
         try:
             news_items = [r for r in provided if r.get('category') == 'news']
             wiki_items = [r for r in provided if 'wikipedia.org' in (r.get('url') or '').lower()]
-            rest_items = [r for r in provided if r not in news_items and r not in wiki_items]
+            academic_items = [r for r in provided if any(d in (r.get('url') or '').lower() for d in ('.edu', 'arxiv.org', 'scholar.google', 'pubmed', 'ncbi.nlm', 'nature.com', 'springer.com', 'ieee.org', 'acm.org'))]
+            official_items = [r for r in provided if any(d in (r.get('url') or '').lower() for d in ('.gov', '.mil', '.int', 'who.int', 'un.org', 'worldbank.org', 'imf.org', 'sec.gov', 'ec.europa.eu'))]
+            rest_items = [r for r in provided if r not in news_items and r not in wiki_items and r not in academic_items and r not in official_items]
             q_lower = q.lower()
-            if any(kw in q_lower for kw in AI_FACTUAL_QUERY_KEYWORDS):
-                sorted_provided = wiki_items + news_items + rest_items
+            # Source type preference: prioritize the requested content type
+            if source_type == 'academic':
+                sorted_provided = academic_items + wiki_items + official_items + news_items + rest_items
+            elif source_type == 'official':
+                sorted_provided = official_items + academic_items + wiki_items + news_items + rest_items
+            elif source_type == 'news':
+                sorted_provided = news_items + official_items + wiki_items + academic_items + rest_items
+            elif source_type == 'discussion':
+                disc_items = [r for r in rest_items if any(d in (r.get('url') or '').lower() for d in ('reddit.com', 'stackoverflow.com', 'quora.com', 'discourse', 'forum'))]
+                other_rest = [r for r in rest_items if r not in disc_items]
+                sorted_provided = disc_items + wiki_items + news_items + academic_items + official_items + other_rest
+            elif source_type == 'long_form':
+                sorted_provided = rest_items + wiki_items + academic_items + official_items + news_items
+            elif any(kw in q_lower for kw in AI_FACTUAL_QUERY_KEYWORDS):
+                sorted_provided = wiki_items + official_items + academic_items + news_items + rest_items
             else:
-                sorted_provided = news_items + wiki_items + rest_items
+                sorted_provided = news_items + wiki_items + official_items + academic_items + rest_items
             snippet_context = ''
-            for r in sorted_provided[:5]:
+            for r in sorted_provided[:8]:
                 r_snip = clean_snippet_text(r.get('snippet') or '')
                 r_url = (r.get('url') or '').strip()
                 if r_snip and r_url:
                     snippet_context += f"\n[Snippet] {r.get('title', '')}: {r_snip} ({r_url})"
             if snippet_context:
                 web_context += snippet_context
-            for r in sorted_provided[:5]:
+            for r in sorted_provided[:8]:
                 r_url = (r.get('url') or '').strip()
                 r_title = (r.get('title') or '').strip()
                 if not r_url or not r_url.startswith('http'):
@@ -10198,7 +10354,7 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None, fo
 
     # ── 3. Fetch pages concurrently, filter by relevance + injection ─────
     if candidate_pages:
-        fetched = _fetch_pages(candidate_pages, limit=4)
+        fetched = _fetch_pages(candidate_pages, limit=6)
         filtered = _filter_relevant(fetched)
         for item in filtered:
             u, t, text, _ev = item
@@ -10238,7 +10394,7 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None, fo
             idx = len(sources) + 1
             sources.append({'url': u, 'title': s.get('title') or ''})
             web_context += (f"\n\n[Source {idx}]\nURL: {u}\nTitle: {s.get('title') or ''}"
-                            f"\nContent: {s.get('content') or (s.get('snippet') or '')[:800]}")
+                            f"\nContent: {s.get('content') or (s.get('snippet') or '')[:1200]}")
     if extra_context and not extra_sources:
         web_context += '\n\n' + str(extra_context).strip()
 
@@ -10254,13 +10410,23 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None, fo
         )
 
     system_msg = (
-        "You are a world-class search assistant. "
+        "You are a world-class research assistant. "
         "Answer search queries with direct, specific, factual answers — like Google's featured snippet. "
         "Lead with the answer itself, not preamble like \"Based on\" or \"According to\". "
         "Use numbers, dates, names, and concrete details — not vague generalities. "
         "CRITICAL: NEVER fabricate or infer dates, numbers, or facts that do not appear in the sources below. "
+        "Resolve likely product-name typos from context before answering (for example, Google/Gemini quota questions "
+        "about 'Vortex AI' almost certainly mean Google Cloud Vertex AI). Explicitly state the interpretation once. "
+        "Reject sources about unrelated products that merely share a keyword. Prefer official documentation and "
+        "regulators over forums, social posts, SEO pages, and similarly named domains. "
         "If a source provides a date, use it exactly as written. If no source provides a specific date, "
         "say the information is not dated rather than guessing. Hallucinated specifics are worse than admitting uncertainty. "
+        "DOMAIN-SPECIFIC SYNTHESIS: When sources contain domain-specific details (regulations, policies, "
+        "legal requirements, financial figures, technical specifications, eligibility criteria), synthesize "
+        "those details directly into your answer. Do not summarize generically — extract the exact "
+        "figures, clause numbers, thresholds, agency names, and procedural steps the user needs. "
+        "If the query asks about a specific process (immigration, filing, registration), outline the "
+        "actual steps, required documents, deadlines, and fees mentioned in the sources. "
         "MATCH THE QUESTION TYPE: "
         "If the question asks for a specific detail (email, phone, address, price, date, etc.), give ONLY that detail — not a biography. "
         "If the query asks \"what is X\", define X in one crisp sentence first, then add 1-2 key facts. "
@@ -10270,7 +10436,8 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None, fo
         "Never tell users to visit websites. Never use phrases like \"you can find\" or \"for more details\". "
         "Cite sources inline as [1], [2] ONLY for facts you can trace to a specific source below. "
         "Never cite a source you cannot point to a specific sentence in. "
-        "Keep total length to 2-4 sentences unless the question clearly requires more. "
+        "Use enough detail to fully answer the question; do not force a complex research answer into a generic overview. "
+        "If the output limit is reached, end with: 'Output limit reached — reply continue, or choose a section to continue.' "
         "Write in clean prose: no extra spaces before punctuation, no bullet symbols unless the user sees a list format."
         + round_note
     )
@@ -10293,17 +10460,14 @@ Question: {q}
 
 Give the most accurate answer you can in 2-3 sentences. If you are not certain, say what you know and note the uncertainty."""
 
-    summary_models = [os.environ.get('GROQ_AI_MODEL', 'openai/gpt-oss-120b')]
-    for m in AI_MODE_FALLBACK_MODELS:
-        if m and m not in summary_models:
-            summary_models.append(m)
     completion = _ai_completion(
         messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": prompt}],
-        max_tokens=900,
+        max_tokens=1100,
         temperature=0.15,
         api_key=os.environ.get('GROQ_API_KEY'),
-        models=summary_models,
+        models=_ai_writer_models(deep=deep),
         reasoning_format='hidden',
+        timeout=120,
     )
     answer = polish_ai_summary_text(completion.choices[0].message.content.strip())
 
@@ -10547,21 +10711,8 @@ def api_ai_summary():
         extra_context = ''
         import re as _re
         if not (url and snippet):
-            # ── Planner LLM decides single vs multi-hop and emits the sub-search
-            #    "tools". Multi-hop bypasses the front-end snippets (which come
-            #    from one keyword search of the whole sentence and are usually
-            #    garbage for chained reasoning): planner → parallel fan-out →
-            #    full-page grounding → synthesis. ──
-            _plan = _ai_agentic_plan(q, max_tasks=3)
-            if _plan.get('mode') == 'multi' and _plan.get('tasks'):
-                _flat, _groups = _ai_agentic_gather(q, _plan['tasks'], per_query=5)
-                if _flat:
-                    _ai_ground_results(q, _flat, per_fetch=4, max_fetch=8)
-                    _extra, _ctx = _ai_agentic_context(_flat)
-                    web_context += _ctx
-                    extra_sources = list(_extra)
-                    extra_context = _ctx
-                    sources.extend({'url': s['url'], 'title': s['title']} for s in _extra)
+            # One retrieval query only. Automatic planner fan-out and follow-up
+            # searches are intentionally disabled to control tokens and RPM.
             if not web_context:
                 import httpx as _httpx
                 from urllib.parse import urlparse as _urlparse
@@ -10677,13 +10828,14 @@ Give the answer directly in 2-3 sentences. Include the key fact or definition up
             prompt = f"""Answer this question using ONLY the web content below.
 
 CRITICAL: If the question asks for a specific piece of information (email, phone number, address, date, price, website, etc.), extract ONLY that specific information. Do NOT give a general biography or overview.
+For regulatory, legal, financial, or procedural questions: extract exact figures, clause numbers, thresholds, agency names, deadlines, fees, and step-by-step processes from the sources. Do not summarize generically.
 
 Question: {q}
 
 Web sources:
 {web_context}
 
-Start with the direct answer to the specific question. Extract the exact information requested (e.g., if asked for email, give the email address). If the question asks "what is X's email/phone/address", answer with just the contact detail and source, not a biography. Cite sources as [1], [2] when citing different sources. Keep it to 1-4 sentences."""
+Start with the direct answer to the specific question. Extract the exact information requested (e.g., if asked for email, give the email address). If the question asks "what is X's email/phone/address", answer with just the contact detail and source, not a biography. For complex queries, include all specific details, numbers, and requirements found in the sources. Cite sources as [1], [2] when citing different sources. Keep it to 2-6 sentences depending on complexity."""
         else:
             prompt = f"""Answer this question directly and concisely.
 
@@ -10691,38 +10843,16 @@ Question: {q}
 
 Give the most accurate answer you can in 2-3 sentences. If you are not certain, say what you know and note the uncertainty."""
 
-        summary_models = [os.environ.get('GROQ_AI_MODEL', 'openai/gpt-oss-120b')]
-        for m in AI_MODE_FALLBACK_MODELS:
-            if m and m not in summary_models:
-                summary_models.append(m)
         completion = _ai_completion(
             messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": prompt}],
             max_tokens=650,
             temperature=0.15,
             api_key=os.environ.get('GROQ_API_KEY'),
-            models=summary_models,
+            models=_ai_writer_models(deep=False),
         )
         answer = polish_ai_summary_text(completion.choices[0].message.content.strip())
 
-        # ── Recursive Execution Loop ──
-        # Gap-check the draft: if concrete data points are still missing (e.g.
-        # the GDP figure), spawn targeted searches, MERGE the new grounded
-        # context with everything from round 1, and re-answer until complete or
-        # 3 rounds. Every round reads full page bodies so raw numbers actually
-        # reach the synthesis model.
-        _followed = {'ran': False, 'queries': [], 'rounds': 1}
-        try:
-            answer, sources, _followed = _arlong_recursive_followup(
-                q, answer, sources, extra_sources, extra_context, max_rounds=3,
-            )
-        except Exception as _e:
-            app.logger.warning(f"AI summary recursive follow-up failed: {_e}")
-
         # Post-process: replace hallucinated URLs with real source URLs.
-        # When the recursive loop re-answered, arlong_ai_answer already
-        # formatted the citations, so skip round-1's markdown rewrite.
-        if _followed.get('ran'):
-            return jsonify({'ok': True, 'summary': answer, 'sources': sources})
         if url and snippet:
             safe_url = url.replace(')', '%29')
             answer = _re.sub(r'\[([^\]]+)\]\([^)]+\)', lambda m: f'[{m.group(1)}]({safe_url})', answer)
@@ -10983,6 +11113,12 @@ def _arlong_api_gate():
     if whitelisted:
         tier = 'extension'
         rate = {"allowed": True, "remaining": -1, "retry_after": 0}
+    elif api_key and api_key.startswith('mcp_oauth_'):
+        oauth_identity = _mcp_oauth_verify_token(api_key)
+        if not oauth_identity:
+            return _mcp_oauth_challenge('invalid_token')
+        tier = 'oauth'
+        rate = oauth_api_limiter.check('oauth:' + oauth_identity.get('sub', 'unknown'))
     elif api_key:
         key_rec = data_manager.get_api_key_by_value(api_key)
         if not key_rec or key_rec.get('status') != 'active':
@@ -11060,7 +11196,7 @@ def _arlong_eval_result(q, r, idx):
         "domain": domain,
         "category": r.get('category') or r.get('type') or 'general',
         "date": date,
-        "snippet": snippet[:400],
+        "snippet": snippet[:1000],
     }
     try:
         import neural_search as _neural
@@ -11071,7 +11207,7 @@ def _arlong_eval_result(q, r, idx):
         ev = _neural.evaluate_page(q, title=title, url=url, snippet=snippet[:200], content=(content or '')[:4000])
         item["ai_evaluation"] = {
             "relevance_score": ev.get('relevance_score', 0.0),
-            "summary": ev.get('ai_evaluation', {}).get('summary') or snippet[:140],
+            "summary": ev.get('ai_evaluation', {}).get('summary') or snippet[:200],
             "fact_check_status": ev.get('ai_evaluation', {}).get('fact_check_status', 'UNKNOWN'),
         }
         item["reputation"] = {
@@ -11083,8 +11219,10 @@ def _arlong_eval_result(q, r, idx):
         # if the synthesis model still sees the raw text. Blocked content
         # should never reach the answer prompt or the API response body.
         _block_st = ev.get('reputation', {}).get('status', 'UNVERIFIED')
-        if content and _block_st != 'BLOCKED':
-            item["content"] = content[:1500]
+        if content and _block_st not in ('BLOCKED',):
+            item["content"] = content[:4000]
+            if len(item["snippet"]) < 500:
+                item["snippet"] = clean_snippet_text(content)[:1000]
     except Exception as e:
         app.logger.debug(f"Arlong eval skip {url}: {e}")
     return item
@@ -11165,15 +11303,59 @@ def _extract_date_from_text(text):
     return None
 
 
-def _arlong_search_payload(q, page=1):
+def _arlong_normalize_query(q):
+    """Correct high-confidence product-name ambiguity before web retrieval."""
+    text = (q or '').strip()
+    low = text.lower()
+    google_context = any(term in low for term in (
+        'google cloud', 'gemini', 'vertex', 'rpm', 'rpd', 'tpm', 'tpd',
+        'quota', 'rate limit', 'generative ai',
+    ))
+    if google_context and re.search(r'\bvortex\s+(?:ai|api)\b', text, re.I):
+        text = re.sub(r'\bvortex\s+(?:ai|api)\b', 'Google Cloud Vertex AI', text, flags=re.I)
+    return text
+
+
+def _arlong_prefer_sources(results, source_type='any', q=''):
+    """Stable source-type weighting without discarding useful alternatives."""
+    source_type = (source_type or 'any').lower()
+    low_q = (q or '').lower()
+    research_query = any(k in low_q for k in (
+        'google cloud', 'vertex ai', 'gemini', 'regulation', 'law', 'policy',
+        'fema', 'rbi', 'government', 'official', 'quota', 'documentation',
+    ))
+    def weight(r):
+        url = (r.get('url') or '').lower()
+        category = (r.get('category') or '').lower()
+        official = any(d in url for d in ('.gov', '.edu', 'cloud.google.com',
+                       'ai.google.dev', 'developers.google.com', 'rbi.org.in',
+                       'who.int', 'worldbank.org', 'sec.gov'))
+        academic = any(d in url for d in ('arxiv.org', 'pubmed', 'nature.com', '.edu'))
+        discussion = any(d in url for d in ('reddit.com', 'quora.com', 'forum', 'discuss.'))
+        long_form = category in ('blog', 'article') or len(r.get('snippet') or '') > 350
+        score = 100 if (research_query and official) else 0
+        score += 80 if source_type == 'official' and official else 0
+        score += 80 if source_type == 'academic' and academic else 0
+        score += 80 if source_type == 'discussion' and discussion else 0
+        score += 80 if source_type == 'news' and category == 'news' else 0
+        score += 80 if source_type == 'long_form' and long_form else 0
+        score -= 35 if research_query and discussion else 0
+        return score
+    return sorted(results or [], key=weight, reverse=True)
+
+
+def _arlong_search_payload(q, page=1, source_type='any'):
     """Run a search and build the full agentic response dict (shared by the
     REST endpoints and the /mcp MCP tools). Raises on engine failure."""
-    results, total_results = search_engine.search(q, page)
+    search_q = _arlong_normalize_query(q)
+    results, total_results = search_engine.search(search_q, page)
+    results = _arlong_prefer_sources(results, source_type, q)
     search_stats.record()
     data_manager.increment_total_searches()
     evaluated = [_arlong_eval_result(q, r, i) for i, r in enumerate(results, start=1)]
     response = {
         "query": q,
+        "interpreted_query": search_q if search_q != q else None,
         "page": page,
         "total_results": total_results,
         "results": evaluated,
@@ -11182,7 +11364,7 @@ def _arlong_search_payload(q, page=1):
     return response
 
 
-def _arlong_answer_payload(q):
+def _arlong_answer_payload(q, source_type='any'):
     """Run the grounded answer pipeline and build the agentic response dict.
     Raises AIAllModelsFailedError on model unavailability.
     Uses a Recursive Execution Loop: if the first pass misses concrete data
@@ -11190,54 +11372,22 @@ def _arlong_answer_payload(q):
     re-answers until complete (max 3 rounds).
     """
     try:
-        results, _total = search_engine.search(q, 1)
+        search_q = _arlong_normalize_query(q)
+        results, _total = search_engine.search(search_q, 1)
+        results = _arlong_prefer_sources(results, source_type, q)
     except Exception as e:
         app.logger.error(f"Arlong API answer search error: {e}")
         results = []
 
-    # ── Gen-2 agentic first pass ─────────────────────────────────────────────
-    # Planner LLM decides single vs multi-hop and, when multi-hop, emits the
-    # sub-search "tools"; those run in parallel and their pages are grounded so
-    # the synthesis model reads full content instead of one keyword search of
-    # the whole sentence. Falls back to grounding the primary results when the
-    # question is single-hop or the planner produced nothing useful.
-    extra_sources, extra_context = [], ''
-    plan_note = None
-    _plan = _ai_agentic_plan(q, max_tasks=3)
-    if _plan.get('mode') == 'multi' and _plan.get('tasks'):
-        try:
-            _flat, _groups = _ai_agentic_gather(q, _plan['tasks'], per_query=5)
-            if _flat:
-                _ai_ground_results(q, _flat, per_fetch=4, max_fetch=8)
-                extra_sources, extra_context = _ai_agentic_context(_flat)
-                plan_note = [t['query'] for t in _plan['tasks']]
-        except Exception as e:
-            app.logger.warning(f"Arlong answer agentic plan failed: {e}")
-    if not extra_sources:
-        try:
-            _top = _ai_top_results(_plan.get('query') or q, 6)
-            if _top:
-                _ai_ground_results(q, _top, per_fetch=4, max_fetch=8)
-                extra_sources, extra_context = _ai_agentic_context(_top)
-        except Exception as e:
-            app.logger.warning(f"Arlong answer grounding failed: {e}")
-
+    # Cost-controlled pipeline: exactly one web query. The complete result set
+    # is sent as one batch to the evaluation path, while only the final overview
+    # is written by Gemini Flash-Lite. Automatic gap searches are disabled.
     answer, sources = arlong_ai_answer(
-        q, [],
-        extra_sources=extra_sources or None,
-        extra_context=(extra_context if extra_sources else None),
+        q, results,
+        source_type=source_type,
+        deep=False,
     )
-    # ── Recursive Execution Loop ──
-    # Gap-check the round-1 answer: if concrete data points are still missing
-    # (e.g. the GDP figure), spawn targeted searches, MERGE the grounded
-    # context with everything seen so far, and re-answer until complete or
-    # max_rounds. Unlike the old single follow-up, every round reads full
-    # page bodies, so raw numbers actually reach the synthesis model.
-    answer, sources, followup = _arlong_recursive_followup(
-        q, answer, sources, extra_sources, extra_context, max_rounds=3,
-    )
-    if plan_note:
-        followup['plan'] = plan_note
+    followup = {'rounds': 0, 'disabled': True}
 
     # ── Evaluate the sources that actually back the answer ──────────────────
     # The `sources` list from arlong_ai_answer() contains the pages that were
@@ -11271,20 +11421,28 @@ def _arlong_attach_epistemic(response, results):
     """Epistemic state from corroboration of the top snippets."""
     try:
         import neural_search as _neural
-        # Use snippet as the claim text; fall back to first 400 chars of
-        # content when snippet is empty — otherwise corroboration silently
-        # drops sources that have content but no snippet, producing a
-        # misleading "N sources examined" count.
+        # Use SHORT claim texts (first sentence) for better clustering —
+        # full 400-char snippets from different sources about the same topic
+        # have low cosine similarity because they cover different sub-points.
         claims = []
         for r in results[:8]:
             url = (r.get('url') or '').strip()
             if not url:
                 continue
-            claim_text = clean_snippet_text(r.get('snippet') or '')[:400]
-            if not claim_text:
-                claim_text = clean_snippet_text(r.get('content') or '')[:400]
-            if claim_text:
-                claims.append({"source_url": url, "claim_text": claim_text})
+            raw = clean_snippet_text(r.get('snippet') or '')[:400]
+            if not raw:
+                raw = clean_snippet_text(r.get('content') or '')[:400]
+            if not raw:
+                continue
+            # Extract the first sentence as the core claim — it's usually the
+            # most representative statement about the page's topic.
+            first_sentence = raw
+            for sep in ('. ', '! ', '? ', '; ', ' — ', ' - '):
+                idx = raw.find(sep)
+                if 20 < idx < 300:
+                    first_sentence = raw[:idx + 1].strip()
+                    break
+            claims.append({"source_url": url, "claim_text": first_sentence})
         if claims:
             corr = _neural.corroborate(claims)
             response["corroboration"] = corr
@@ -11314,9 +11472,11 @@ def api_arlong_search():
         body = request.get_json(silent=True) or {}
         q = (body.get('q') or '').strip()
         page = max(1, int(body.get('page', 1)))
+        source_type = (body.get('source_type') or 'any').strip()
     else:
         q = request.args.get('q', '').strip()
         page = max(1, safe_int(request.args.get('page', 1), 1))
+        source_type = request.args.get('source_type', 'any').strip()
     if not q:
         return jsonify({"error": "Missing query parameter", "usage": "/api/arlong/search?q=your+query"}), 400
     gate = _arlong_api_gate()
@@ -11327,7 +11487,7 @@ def api_arlong_search():
         msg = 'Service is under maintenance. Please try again later.' if blocked == 'maintenance' else 'Service is temporarily unavailable.'
         return jsonify({'error': msg}), 503
     try:
-        response = _arlong_search_payload(q, page)
+        response = _arlong_search_payload(q, page, source_type=source_type)
     except Exception as e:
         app.logger.error(f"Arlong API search error: {e}")
         return jsonify({"error": "Search failed", "message": "An internal error occurred while searching."}), 500
@@ -11339,8 +11499,10 @@ def api_arlong_answer():
     if request.method == 'POST':
         body = request.get_json(silent=True) or {}
         q = (body.get('q') or '').strip()
+        source_type = (body.get('source_type') or 'any').strip()
     else:
         q = request.args.get('q', '').strip()
+        source_type = request.args.get('source_type', 'any').strip()
     if not q:
         return jsonify({"error": "Missing query parameter", "usage": "/api/arlong/answer?q=your+query"}), 400
     gate = _arlong_api_gate()
@@ -11351,7 +11513,26 @@ def api_arlong_answer():
         msg = 'Service is under maintenance. Please try again later.' if blocked == 'maintenance' else 'Service is temporarily unavailable.'
         return jsonify({'error': msg}), 503
     try:
-        response = _arlong_answer_payload(q)
+        response = None
+        last_error = None
+        for attempt in range(3):
+            try:
+                response = _arlong_answer_payload(q, source_type=source_type)
+                break
+            except AIAllModelsFailedError as exc:
+                last_error = exc
+                if attempt < 2 and exc.overloaded:
+                    time.sleep(1.5 * (attempt + 1))
+                    continue
+                raise
+            except (requests.Timeout, httpx.TimeoutException) as exc:
+                last_error = exc
+                if attempt < 2:
+                    time.sleep(1.5 * (attempt + 1))
+                    continue
+                raise
+        if response is None:
+            raise last_error or RuntimeError('answer retries exhausted')
     except AIAllModelsFailedError as e:
         wait = _ai_busy_hint()
         msg = f'Arlong AI is busy right now. Try again in about {max(5, wait)} seconds.' if (e.overloaded and wait > 0) else 'AI is busy right now. Please try again in a moment.'
@@ -11404,6 +11585,7 @@ def api_arlong_status():
 @app.route('/api/admin/architecture/status')
 def api_admin_architecture_status():
     """Comprehensive real-time system health for the admin architecture graph."""
+    status_started = time.perf_counter()
     if not session.get('admin_logged_in'):
         return jsonify({'error': 'Unauthorized'}), 401
     service = data_manager.get_service_status()
@@ -11421,9 +11603,37 @@ def api_admin_architecture_status():
                 'enabled': True,
                 'models': rs.get('models', []),
                 'healthy': rs.get('healthy', []),
+                'order': list(getattr(router, 'order', [])),
+                'created_ts': rs.get('created_ts'),
             }
     except Exception:
         pass
+    now_ts = time.time()
+    with _REQUEST_METRICS_LOCK:
+        recent = list(_REQUEST_METRICS)
+    five_min = [m for m in recent if now_ts - m['ts'] <= 300]
+    one_min = [m for m in recent if now_ts - m['ts'] <= 60]
+    latencies = sorted(m['latency_ms'] for m in five_min)
+
+    def _pct(values, percentile):
+        if not values:
+            return 0
+        return round(values[min(len(values) - 1, int((len(values) - 1) * percentile))], 1)
+
+    errors_5m = sum(1 for m in five_min if m['status'] >= 500)
+    error_rate = round(errors_5m / max(1, len(five_min)) * 100, 2)
+    service_blocked = bool(service.get('kill_switch') or service.get('maintenance'))
+    heartbeat_status = 'degraded' if service_blocked or error_rate >= 5 else 'healthy'
+    model_counters = [m.get('counters', {}) for m in router_payload.get('models', [])]
+    model_successes = sum(int(c.get('successes', 0)) for c in model_counters)
+    model_failures = sum(int(c.get('failures', 0)) for c in model_counters)
+    router_payload['metrics'] = {
+        'requests': sum(int(c.get('requests', 0)) for c in model_counters),
+        'successes': model_successes,
+        'failures': model_failures,
+        'success_rate': round(model_successes / max(1, model_successes + model_failures) * 100, 2),
+        'available_models': len(router_payload.get('healthy', [])),
+    }
     error_series, error_total, error_latest, error_peak = _read_error_log(24)
     api_stats = api_error_stats()
     waitlist_count = data_manager.get_ai_waitlist_count()
@@ -11453,6 +11663,19 @@ def api_admin_architecture_status():
             'waitlist_count': waitlist_count,
             'total_users': total_users,
         },
+        'heartbeat': {
+            'status': heartbeat_status,
+            'uptime_s': int(now_ts - _PROCESS_STARTED_AT),
+            'checked_at': datetime.now(timezone.utc).isoformat(),
+            'endpoint_latency_ms': round((time.perf_counter() - status_started) * 1000, 1),
+            'requests_1m': len(one_min),
+            'requests_5m': len(five_min),
+            'rpm': len(one_min),
+            'error_rate_5m': error_rate,
+            'p50_latency_ms': _pct(latencies, .50),
+            'p95_latency_ms': _pct(latencies, .95),
+            'recent': recent[-60:],
+        },
         'server_time': datetime.now(timezone.utc).isoformat(),
     })
 
@@ -11469,6 +11692,16 @@ MCP_TOOLS = [
             'properties': {
                 'query': {'type': 'string', 'description': 'The search query'},
                 'page': {'type': 'integer', 'description': 'Result page (1-based)', 'default': 1},
+                'source_type': {
+                    'type': 'string',
+                    'description': ('Preferred source type to prioritize: '
+                                    '"academic" (papers, .edu, arxiv), "official" '
+                                    '(government, .gov, official docs), "news" '
+                                    '(news outlets), "discussion" (forums, Reddit), '
+                                    '"long_form" (blogs, articles), or "any" (default).'),
+                    'enum': ['any', 'academic', 'official', 'news', 'discussion', 'long_form'],
+                    'default': 'any',
+                },
             },
             'required': ['query'],
         },
@@ -11483,6 +11716,16 @@ MCP_TOOLS = [
             'type': 'object',
             'properties': {
                 'query': {'type': 'string', 'description': 'The question to answer'},
+                'source_type': {
+                    'type': 'string',
+                    'description': ('Preferred source type to prioritize: '
+                                    '"academic" (papers, .edu, arxiv), "official" '
+                                    '(government, .gov, official docs), "news" '
+                                    '(news outlets), "discussion" (forums, Reddit), '
+                                    '"long_form" (blogs, articles), or "any" (default).'),
+                    'enum': ['any', 'academic', 'official', 'news', 'discussion', 'long_form'],
+                    'default': 'any',
+                },
             },
             'required': ['query'],
         },
@@ -11502,15 +11745,182 @@ MCP_TOOLS = [
 # arlong_search is cheaper (search + neural eval) so allow a small pool.
 # arlong_status is read-only / trivial — no limit.
 _MCP_SEMAPHORES = {
-    'arlong_answer': threading.BoundedSemaphore(1),
-    'arlong_search': threading.BoundedSemaphore(3),
+    'arlong_answer': threading.BoundedSemaphore(2),
+    'arlong_search': threading.BoundedSemaphore(4),
 }
+
+# ── MCP OAuth 2.1 (Google identity, Arlong access tokens) ───────────────────
+_MCP_OAUTH_CLIENTS = {}
+_MCP_OAUTH_CODES = {}
+_MCP_OAUTH_LOCK = threading.RLock()
+
+
+def _mcp_oauth_issuer():
+    configured = os.environ.get('MCP_OAUTH_ISSUER', '').strip().rstrip('/')
+    return configured or request.url_root.rstrip('/')
+
+
+def _mcp_oauth_resource():
+    return _mcp_oauth_issuer() + '/mcp'
+
+
+def _mcp_oauth_serializer():
+    return URLSafeTimedSerializer(app.secret_key, salt='arlong-mcp-oauth-v1')
+
+
+def _mcp_oauth_issue_token(identity):
+    payload = {
+        'sub': identity.get('sub') or identity.get('email'),
+        'email': identity.get('email', ''),
+        'aud': _mcp_oauth_resource(),
+        'scope': 'mcp:tools',
+    }
+    return 'mcp_oauth_' + _mcp_oauth_serializer().dumps(payload)
+
+
+def _mcp_oauth_verify_token(token):
+    if not token or not token.startswith('mcp_oauth_'):
+        return None
+    try:
+        payload = _mcp_oauth_serializer().loads(token[len('mcp_oauth_'):], max_age=12 * 3600)
+        if payload.get('aud') != _mcp_oauth_resource() or payload.get('scope') != 'mcp:tools':
+            return None
+        return payload
+    except (BadSignature, SignatureExpired):
+        return None
+
+
+def _mcp_oauth_challenge(error='invalid_token'):
+    resp = jsonify({'error': error, 'message': 'OAuth login or an Arlong API key is required.'})
+    resp.status_code = 401
+    metadata = _mcp_oauth_issuer() + '/.well-known/oauth-protected-resource'
+    resp.headers['WWW-Authenticate'] = f'Bearer resource_metadata="{metadata}", scope="mcp:tools"'
+    return resp
+
+
+@app.route('/.well-known/oauth-protected-resource')
+@app.route('/.well-known/oauth-protected-resource/mcp')
+def mcp_oauth_resource_metadata():
+    issuer = _mcp_oauth_issuer()
+    return jsonify({
+        'resource': issuer + '/mcp',
+        'authorization_servers': [issuer],
+        'scopes_supported': ['mcp:tools'],
+        'bearer_methods_supported': ['header'],
+    })
+
+
+@app.route('/.well-known/oauth-authorization-server')
+def mcp_oauth_server_metadata():
+    issuer = _mcp_oauth_issuer()
+    return jsonify({
+        'issuer': issuer,
+        'authorization_endpoint': issuer + '/oauth/authorize',
+        'token_endpoint': issuer + '/oauth/token',
+        'registration_endpoint': issuer + '/oauth/register',
+        'response_types_supported': ['code'],
+        'grant_types_supported': ['authorization_code'],
+        'code_challenge_methods_supported': ['S256'],
+        'token_endpoint_auth_methods_supported': ['none'],
+        'scopes_supported': ['mcp:tools'],
+    })
+
+
+@app.route('/oauth/register', methods=['POST'])
+def mcp_oauth_register():
+    body = request.get_json(silent=True) or {}
+    redirects = body.get('redirect_uris') or []
+    if not redirects or not all(isinstance(u, str) and (u.startswith('https://') or u.startswith('http://localhost')) for u in redirects):
+        return jsonify({'error': 'invalid_redirect_uri'}), 400
+    client_id = 'mcp_client_' + secrets.token_urlsafe(18)
+    with _MCP_OAUTH_LOCK:
+        _MCP_OAUTH_CLIENTS[client_id] = {'redirect_uris': redirects, 'client_name': body.get('client_name', 'MCP client')}
+    return jsonify({'client_id': client_id, 'client_id_issued_at': int(time.time()),
+                    'redirect_uris': redirects, 'token_endpoint_auth_method': 'none'}), 201
+
+
+@app.route('/oauth/authorize')
+def mcp_oauth_authorize():
+    client_id = request.args.get('client_id', '')
+    redirect_uri = request.args.get('redirect_uri', '')
+    state = request.args.get('state', '')
+    challenge = request.args.get('code_challenge', '')
+    resource = request.args.get('resource', '') or _mcp_oauth_resource()
+    with _MCP_OAUTH_LOCK:
+        client = _MCP_OAUTH_CLIENTS.get(client_id)
+    if not client or redirect_uri not in client.get('redirect_uris', []):
+        return jsonify({'error': 'invalid_client'}), 400
+    if request.args.get('response_type') != 'code' or not challenge or request.args.get('code_challenge_method') != 'S256':
+        return jsonify({'error': 'invalid_request', 'error_description': 'authorization code + PKCE S256 required'}), 400
+    if resource != _mcp_oauth_resource():
+        return jsonify({'error': 'invalid_target'}), 400
+    oauth_state = secrets.token_urlsafe(24)
+    session['mcp_oauth_pending'] = {
+        'state': oauth_state, 'client_id': client_id, 'redirect_uri': redirect_uri,
+        'client_state': state, 'challenge': challenge, 'resource': resource,
+    }
+    google_redirect = os.environ.get('MCP_OAUTH_GOOGLE_REDIRECT_URI', '').strip() or url_for('mcp_oauth_google_callback', _external=True)
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        return jsonify({'error': 'oauth_not_configured', 'message': 'Google OAuth client credentials are missing.'}), 503
+    params = {
+        'client_id': GOOGLE_CLIENT_ID, 'redirect_uri': google_redirect,
+        'response_type': 'code', 'scope': 'openid email profile',
+        'state': oauth_state, 'prompt': 'select_account',
+    }
+    from urllib.parse import urlencode
+    return redirect(GOOGLE_AUTH_ENDPOINT + '?' + urlencode(params))
+
+
+@app.route('/oauth/google/callback')
+def mcp_oauth_google_callback():
+    pending = session.pop('mcp_oauth_pending', None) or {}
+    if not pending or request.args.get('state') != pending.get('state'):
+        return jsonify({'error': 'invalid_state'}), 400
+    google_redirect = os.environ.get('MCP_OAUTH_GOOGLE_REDIRECT_URI', '').strip() or url_for('mcp_oauth_google_callback', _external=True)
+    token_resp = requests.post(GOOGLE_TOKEN_ENDPOINT, data={
+        'code': request.args.get('code', ''), 'client_id': GOOGLE_CLIENT_ID,
+        'client_secret': GOOGLE_CLIENT_SECRET, 'redirect_uri': google_redirect,
+        'grant_type': 'authorization_code',
+    }, timeout=15)
+    token_resp.raise_for_status()
+    google_token = token_resp.json().get('access_token', '')
+    user_resp = requests.get(GOOGLE_USERINFO_ENDPOINT,
+                             headers={'Authorization': 'Bearer ' + google_token}, timeout=15)
+    user_resp.raise_for_status()
+    identity = user_resp.json()
+    code = secrets.token_urlsafe(32)
+    with _MCP_OAUTH_LOCK:
+        _MCP_OAUTH_CODES[code] = {**pending, 'identity': identity, 'created': time.time()}
+    from urllib.parse import urlencode
+    return redirect(pending['redirect_uri'] + ('&' if '?' in pending['redirect_uri'] else '?') + urlencode({
+        'code': code, 'state': pending.get('client_state', ''),
+    }))
+
+
+@app.route('/oauth/token', methods=['POST'])
+def mcp_oauth_token():
+    code = request.form.get('code', '')
+    verifier = request.form.get('code_verifier', '')
+    client_id = request.form.get('client_id', '')
+    resource = request.form.get('resource', '')
+    with _MCP_OAUTH_LOCK:
+        rec = _MCP_OAUTH_CODES.pop(code, None)
+    if not rec or time.time() - rec.get('created', 0) > 300:
+        return jsonify({'error': 'invalid_grant'}), 400
+    if client_id != rec.get('client_id') or resource != rec.get('resource'):
+        return jsonify({'error': 'invalid_grant'}), 400
+    digest = _b64mod.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip('=')
+    if not secrets.compare_digest(digest, rec.get('challenge', '')):
+        return jsonify({'error': 'invalid_grant'}), 400
+    return jsonify({'access_token': _mcp_oauth_issue_token(rec['identity']),
+                    'token_type': 'Bearer', 'expires_in': 12 * 3600, 'scope': 'mcp:tools'})
 
 
 def _mcp_call_tool(name, args):
     """Execute one MCP tool. Returns JSON-serializable text."""
     args = args or {}
     name = (name or '')
+    source_type = (args.get('source_type') or 'any').strip()
     if name == 'arlong_search':
         query = (args.get('query') or '').strip()
         if not query:
@@ -11518,15 +11928,33 @@ def _mcp_call_tool(name, args):
         sem = _MCP_SEMAPHORES.get('arlong_search')
         ctx = sem if sem else contextlib.nullcontext()
         with ctx:
-            return json.dumps(_arlong_search_payload(query, int(args.get('page') or 1)), indent=2)
+            return json.dumps(_arlong_search_payload(query, int(args.get('page') or 1), source_type=source_type), indent=2)
     if name == 'arlong_answer':
         query = (args.get('query') or '').strip()
         if not query:
             raise ValueError('query is required')
         sem = _MCP_SEMAPHORES.get('arlong_answer')
         ctx = sem if sem else contextlib.nullcontext()
-        with ctx:
-            return json.dumps(_arlong_answer_payload(query), indent=2)
+        last_err = None
+        for attempt in range(3):
+            with ctx:
+                try:
+                    return json.dumps(_arlong_answer_payload(query, source_type=source_type), indent=2)
+                except AIAllModelsFailedError as e:
+                    last_err = e
+                    if attempt < 2 and e.overloaded:
+                        import time as _t
+                        _t.sleep(min(3 * (attempt + 1), 8))
+                        continue
+                    raise
+                except Exception as e:
+                    last_err = e
+                    if attempt < 2:
+                        import time as _t
+                        _t.sleep(2 * (attempt + 1))
+                        continue
+                    raise
+        raise last_err or AIAllModelsFailedError(['retry exhausted'])
     if name == 'arlong_status':
         return json.dumps(_arlong_status_payload(), indent=2)
     raise ValueError(f'Unknown tool: {name}')
@@ -11538,8 +11966,8 @@ def mcp_endpoint():
 
     Serves the Arlong agentic tools at https://arlong.org/mcp for Claude
     Desktop, Cursor, and any MCP client over HTTP — no local Python needed.
-    Authentication uses the same API-key tiers as /api/arlong (Bearer header,
-    ?key= param, or anonymous IP limit).
+    Authentication accepts an Arlong API key or an MCP OAuth access token in
+    the Bearer header, with limited anonymous access retained for discovery.
     """
     if request.method == 'GET':
         return jsonify({
@@ -12192,11 +12620,123 @@ def submit_site():
 
 @app.route('/dashboard')
 def dashboard():
+    if not session.get('user_id'):
+        return redirect(url_for('signup', mode='login', redirect='/dashboard'))
+    user = data_manager.get_user_by_id(session['user_id'])
+    billing = data_manager.get_billing_record(session['user_id'])
     return render_template('dashboard.html',
-        verified_sites=data_manager.get_verified_sites(),
-        submitted_sites=data_manager.get_submitted_sites(),
+        user=user,
+        billing=billing,
+        verified_sites=[s for s in data_manager.get_verified_sites() if s.get('submitted_by') == session['user_id']],
+        submitted_sites=[s for s in data_manager.get_submitted_sites() if s.get('submitted_by') == session['user_id']],
         announcement=data_manager.get_announcement()
     )
+
+
+def _billing_country():
+    """Best-effort display locale. Dodo billing address remains authoritative."""
+    for header in ('CF-IPCountry', 'X-Vercel-IP-Country', 'CloudFront-Viewer-Country'):
+        value = request.headers.get(header, '').strip().upper()
+        if re.fullmatch(r'[A-Z]{2}', value) and value not in {'XX', 'T1'}:
+            return value
+    language = request.headers.get('Accept-Language', '').lower()
+    return 'IN' if re.search(r'(^|[,; -])(hi|bn|ta|te|mr|gu|kn|ml|pa)(-|[,;]|$)', language) else 'US'
+
+
+def _public_base_url():
+    configured_base = os.environ.get('PUBLIC_BASE_URL', '').strip().rstrip('/')
+    return configured_base or request.url_root.rstrip('/')
+
+
+def _dodo_product_id(plan):
+    suffix = {'monthly': 'MONTHLY', 'annual': 'ANNUAL', 'founder': 'FOUNDER'}[plan]
+    prefix = 'DODO_PAYMENTS_LIVE_PRODUCT_ID_' if dodo_billing.environment() == 'live_mode' else 'DODO_PAYMENTS_PRODUCT_ID_'
+    return os.environ.get(prefix + suffix, '').strip()
+
+
+@app.route('/premium')
+def premium():
+    country = _billing_country()
+    user_id = session.get('user_id')
+    billing = data_manager.get_billing_record(user_id) if user_id else {}
+    return render_template('premium.html',
+        country=country,
+        regional_price='₹399' if country == 'IN' else '$4.99',
+        annual_price='₹3,990' if country == 'IN' else '$49.99',
+        billing=billing,
+        billing_ready=bool(_dodo_product_id('monthly')),
+        billing_environment=dodo_billing.environment(),
+    )
+
+
+@app.route('/api/billing/checkout', methods=['POST'])
+def billing_checkout():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Sign in to subscribe'}), 401
+    user = data_manager.get_user_by_id(user_id)
+    if not user or not user.get('email'):
+        return jsonify({'error': 'Add an email address to your account before subscribing'}), 400
+    body = request.get_json(silent=True) or request.form
+    plan = str(body.get('plan', 'monthly')).lower()
+    if plan not in {'monthly', 'annual', 'founder'}:
+        return jsonify({'error': 'Invalid billing plan'}), 400
+    product_id = _dodo_product_id(plan)
+    base = _public_base_url()
+    try:
+        checkout = dodo_billing.create_checkout(
+            product_id=product_id,
+            user_id=user_id,
+            email=user['email'],
+            name=user.get('username') or user['email'].split('@')[0],
+            return_url=f'{base}/billing/success',
+            cancel_url=f'{base}/premium?checkout=cancelled',
+            plan=f'pro_{plan}',
+        )
+        data_manager.record_checkout(user_id, f'pro_{plan}', checkout.get('session_id', ''), product_id)
+        return jsonify({'checkout_url': checkout['checkout_url']})
+    except dodo_billing.DodoBillingError as exc:
+        app.logger.warning('Dodo checkout error: %s', exc)
+        return jsonify({'error': str(exc)}), 502
+
+
+@app.route('/api/billing/status')
+def billing_status():
+    if not session.get('user_id'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    return jsonify({'billing': data_manager.get_billing_record(session['user_id'])})
+
+
+@app.route('/api/billing/portal', methods=['POST'])
+def billing_portal():
+    if not session.get('user_id'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    billing = data_manager.get_billing_record(session['user_id'])
+    try:
+        link = dodo_billing.create_customer_portal(billing.get('customer_id'), f'{_public_base_url()}/dashboard')
+        return jsonify({'portal_url': link})
+    except dodo_billing.DodoBillingError as exc:
+        return jsonify({'error': str(exc)}), 502
+
+
+@app.route('/billing/success')
+def billing_success():
+    if not session.get('user_id'):
+        return redirect(url_for('signup', mode='login', redirect='/billing/success'))
+    return render_template('billing_success.html')
+
+
+@app.route('/webhooks/dodo', methods=['POST'])
+def dodo_webhook():
+    raw_body = request.get_data(cache=True)
+    try:
+        payload = dodo_billing.verify_webhook(raw_body, request.headers)
+        processed, user_id = data_manager.process_dodo_webhook(request.headers.get('webhook-id', ''), payload)
+        app.logger.info('Dodo webhook processed=%s type=%s user=%s', processed, payload.get('type'), user_id or 'unmatched')
+        return jsonify({'received': True})
+    except dodo_billing.DodoBillingError as exc:
+        app.logger.warning('Rejected Dodo webhook: %s', exc)
+        return jsonify({'error': 'Invalid webhook'}), 401
 
 @app.route('/claim')
 def claim_site():
@@ -13204,6 +13744,105 @@ def _ai_groq(api_key=None):
     return Groq(api_key=api_key or AI_MODE_GROQ_API_KEY)
 
 
+def _ai_is_gemini(model):
+    return (model or '').startswith('gemini-')
+
+
+class GeminiAPIError(RuntimeError):
+    """Provider error that preserves a safe Google status/message for routing."""
+    def __init__(self, status_code, provider_status, message):
+        self.status_code = status_code
+        self.provider_status = provider_status or 'UNKNOWN'
+        self.provider_message = (message or 'Gemini request failed')[:500]
+        super().__init__(f'Gemini {status_code} {self.provider_status}: {self.provider_message}')
+
+
+def _ai_gemini_completion(model, messages, max_tokens=700, temperature=0.2,
+                          timeout=90, response_format=None, stream=False):
+    """Gemini REST adapter with the small OpenAI-compatible surface used here.
+
+    The API key stays server-side. A one-chunk iterator is returned for stream
+    callers so provider failover remains reliable even when streaming transport
+    behavior varies between Gemini model versions.
+    """
+    if not GEMINI_API_KEY:
+        raise RuntimeError('missing GEMINI_API_KEY')
+    from types import SimpleNamespace
+    system_parts, contents = [], []
+    for msg in messages:
+        role = msg.get('role', 'user')
+        text = str(msg.get('content') or '')
+        if role == 'system':
+            system_parts.append(text)
+        else:
+            contents.append({
+                'role': 'model' if role == 'assistant' else 'user',
+                'parts': [{'text': text}],
+            })
+    payload = {
+        'contents': contents or [{'role': 'user', 'parts': [{'text': ''}]}],
+        'generationConfig': {
+            'temperature': temperature,
+            'maxOutputTokens': max_tokens,
+        },
+    }
+    if system_parts:
+        payload['systemInstruction'] = {'parts': [{'text': '\n\n'.join(system_parts)}]}
+    if response_format:
+        payload['generationConfig']['responseMimeType'] = 'application/json'
+    resp = requests.post(
+        f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
+        headers={'x-goog-api-key': GEMINI_API_KEY, 'Content-Type': 'application/json'},
+        json=payload, timeout=timeout,
+    )
+    try:
+        raw = resp.json()
+    except Exception:
+        raw = {}
+    if not resp.ok:
+        error = raw.get('error') or {}
+        raise GeminiAPIError(resp.status_code, error.get('status'), error.get('message'))
+    candidates = raw.get('candidates') or []
+    if not candidates:
+        feedback = raw.get('promptFeedback') or {}
+        raise RuntimeError(f'Gemini returned no candidate: {feedback}')
+    candidate = candidates[0]
+    parts = (candidate.get('content') or {}).get('parts') or []
+    text = ''.join(str(p.get('text') or '') for p in parts).strip()
+    if not text:
+        raise RuntimeError('Gemini returned an empty answer')
+    if candidate.get('finishReason') == 'MAX_TOKENS':
+        text += ('\n\n_Output limit reached. Reply **continue** to resume, or ask me to '
+                 'continue with a specific section._')
+    usage = raw.get('usageMetadata') or {}
+    choice = SimpleNamespace(message=SimpleNamespace(content=text),
+                             delta=SimpleNamespace(content=text))
+    result = SimpleNamespace(
+        choices=[choice],
+        usage=SimpleNamespace(total_tokens=int(usage.get('totalTokenCount') or 0)),
+        model=model,
+    )
+    return iter([result]) if stream else result
+
+
+def _ai_provider_call(model, messages, max_tokens, temperature, timeout,
+                      response_format=None, reasoning_format=None, stream=False,
+                      api_key=None):
+    if _ai_is_gemini(model):
+        return _ai_gemini_completion(
+            model, messages, max_tokens=max_tokens, temperature=temperature,
+            timeout=timeout, response_format=response_format, stream=stream,
+        )
+    client = _ai_groq(api_key)
+    kwargs = dict(model=model, messages=messages, max_tokens=max_tokens,
+                  temperature=temperature, timeout=timeout, stream=stream)
+    if response_format:
+        kwargs['response_format'] = response_format
+    if reasoning_format and _ai_supports_reasoning(model):
+        kwargs['reasoning_format'] = reasoning_format
+    return client.chat.completions.create(**kwargs)
+
+
 class AIAllModelsFailedError(Exception):
     """Raised when every configured model fails. `overloaded` is True when the
     failures look like rate limits or capacity pressure (429/5xx/busy)."""
@@ -13215,11 +13854,33 @@ class AIAllModelsFailedError(Exception):
 
 
 def _ai_model_list():
-    models = [AI_MODE_GROQ_MODEL]
+    models = list(GEMINI_MODELS) if GEMINI_API_KEY else []
+    models.append(AI_MODE_GROQ_MODEL)
     for m in AI_MODE_FALLBACK_MODELS:
         m = m.strip()
         if m and m not in models:
             models.append(m)
+    return models
+
+
+def _ai_groq_models():
+    """Cheap helper/evaluation lane: Groq only, deduplicated in router order."""
+    models = [AI_MODE_GROQ_MODEL]
+    for model in AI_MODE_FALLBACK_MODELS:
+        model = model.strip()
+        if model and not _ai_is_gemini(model) and model not in models:
+            models.append(model)
+    return models
+
+
+def _ai_writer_models(deep=False):
+    """Overview lane: Flash-Lite normally, full Flash for deep research."""
+    preferred = 'gemini-2.5-flash' if deep else 'gemini-2.5-flash-lite'
+    models = [preferred] if GEMINI_API_KEY and preferred in GEMINI_MODELS else []
+    # Groq is reliability fallback, never an extra pre-writing call.
+    for model in _ai_groq_models():
+        if model not in models:
+            models.append(model)
     return models
 
 
@@ -13267,19 +13928,19 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
     tried. Returns the completion object of the first model that answers.
     Raises AIAllModelsFailedError when every model fails.
     """
-    if not AI_MODE_GROQ_API_KEY and not api_key:
-        raise AIAllModelsFailedError(['Arlong AI is not configured (missing GROQ_AI_MODE_API_KEY)'])
-    client = _ai_groq(api_key)
+    if not GEMINI_API_KEY and not AI_MODE_GROQ_API_KEY and not api_key:
+        raise AIAllModelsFailedError(['Arlong AI is not configured (missing Gemini and Groq credentials)'])
     errors = []
     overloaded = False
     est_tokens = _ai_est_tokens(json.dumps(messages, default=str)) + max_tokens
-    model_list = list(models) if models else _ai_model_list()
+    model_list = list(models) if models else _ai_groq_models()
     tried = set()
     router = _ai_router_module.get_router()
     for _ in range(len(model_list) + 2):
         model = None
         if router is not None:
-            model = router.pick(est_tokens=est_tokens, prefer=model_list[0] if model_list else None)
+            model = router.pick(est_tokens=est_tokens, prefer=model_list[0] if model_list else None,
+                                allowed=model_list)
             if model is None:
                 # Smart transfer: every model is at/near its rolling budget.
                 # Rather than failing the user, transfer to the model closest
@@ -13287,7 +13948,7 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
                 # fewest recent failures). The API is the final arbiter — a 429
                 # there escalates that model's cooldown and the loop naturally
                 # moves on to the next-closest model.
-                model = router.pick_best_available(est_tokens=est_tokens)
+                model = router.pick_best_available(est_tokens=est_tokens, allowed=model_list)
                 if model is None and not tried:
                     # Even the closest model is in hard cooldown — genuinely busy.
                     overloaded = True
@@ -13304,24 +13965,19 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
             break
         tried.add(model)
         try:
-            kwargs = {
-                'model': model,
-                'messages': messages,
-                'max_tokens': max_tokens,
-                'temperature': temperature,
-                'timeout': timeout,
-            }
-            if response_format:
-                kwargs['response_format'] = response_format
-            if reasoning_format and _ai_supports_reasoning(model):
-                kwargs['reasoning_format'] = reasoning_format
             try:
-                resp = client.chat.completions.create(**kwargs)
+                resp = _ai_provider_call(
+                    model, messages, max_tokens, temperature, timeout,
+                    response_format=response_format, reasoning_format=reasoning_format,
+                    api_key=api_key,
+                )
             except Exception as e:
                 if response_format and 'json_validate_failed' in str(e).lower():
                     app.logger.warning(f"JSON validate failed on {model}, retrying without response_format")
-                    del kwargs['response_format']
-                    resp = client.chat.completions.create(**kwargs)
+                    resp = _ai_provider_call(
+                        model, messages, max_tokens, temperature, timeout,
+                        reasoning_format=reasoning_format, api_key=api_key,
+                    )
                 else:
                     raise
             if router is not None:
@@ -13338,30 +13994,33 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
     raise AIAllModelsFailedError(errors, overloaded=overloaded)
 
 
-def _ai_open_stream(messages, max_tokens=1600, temperature=0.4, timeout=120, reasoning_format=None):
+def _ai_open_stream(messages, max_tokens=1600, temperature=0.4, timeout=120,
+                    reasoning_format=None, models=None):
     """Open a streaming chat completion through the model router.
 
     Skips models in rate-limit cooldown; on an overload/429 the failing model
     goes into exponential cooldown and the next model is tried. Returns
     (model, stream). Raises AIAllModelsFailedError if every model fails.
     """
-    client = _ai_groq()
+    if not GEMINI_API_KEY and not AI_MODE_GROQ_API_KEY:
+        raise AIAllModelsFailedError(['Arlong AI is not configured'])
     errors = []
     overloaded = False
     est_tokens = _ai_est_tokens(json.dumps(messages, default=str)) + max_tokens
-    model_list = _ai_model_list()
+    model_list = list(models) if models else _ai_writer_models(deep=False)
     tried = set()
     router = _ai_router_module.get_router()
     for _ in range(len(model_list) + 2):
         model = None
         if router is not None:
-            model = router.pick(est_tokens=est_tokens, prefer=model_list[0] if model_list else None)
+            model = router.pick(est_tokens=est_tokens, prefer=model_list[0] if model_list else None,
+                                allowed=model_list)
             if model is None:
                 # Smart transfer: every model is at/near its rolling budget.
                 # Transfer to the model closest to usable instead of failing
                 # the user; a 429 there escalates its cooldown via mark_failure
                 # and the loop tries the next-closest model.
-                model = router.pick_best_available(est_tokens=est_tokens)
+                model = router.pick_best_available(est_tokens=est_tokens, allowed=model_list)
                 if model is None and not tried:
                     overloaded = True
                     errors.append('all models busy (rate limited or in cooldown)')
@@ -13377,17 +14036,10 @@ def _ai_open_stream(messages, max_tokens=1600, temperature=0.4, timeout=120, rea
             break
         tried.add(model)
         try:
-            kwargs = {
-                'model': model,
-                'messages': messages,
-                'max_tokens': max_tokens,
-                'temperature': temperature,
-                'timeout': timeout,
-                'stream': True,
-            }
-            if reasoning_format and _ai_supports_reasoning(model):
-                kwargs['reasoning_format'] = reasoning_format
-            stream = client.chat.completions.create(**kwargs)
+            stream = _ai_provider_call(
+                model, messages, max_tokens, temperature, timeout,
+                reasoning_format=reasoning_format, stream=True,
+            )
             if router is not None:
                 router.record(model, tokens=est_tokens, success=True)
             return model, stream
@@ -14156,7 +14808,7 @@ def _ai_dedupe_task_queries(tasks, fallback_q):
     return kept
 
 
-def _ai_link_evaluations(query, results, max_links=5):
+def _ai_link_evaluations(query, results, max_links=20):
     """One Groq call producing per-link relevance evaluations AND quality tags.
 
     Returns (evaluations, tags, err) where evaluations maps 1-based source index
@@ -14171,15 +14823,15 @@ def _ai_link_evaluations(query, results, max_links=5):
         return {}, {}, None
     try:
         links = '\n'.join(
-            f"{i+1}. {r['title']} | {r['url']} | {(r.get('snippet') or '')[:160]}"
+            f"{i+1}. {r['title']} | {r['url']} | {(r.get('snippet') or '')[:120]}"
             for i, r in enumerate(results[:max_links])
         )
         comp = _ai_completion(
             messages=[
                 {'role': 'system', 'content': 'You evaluate web search results for a query. Reply with STRICT JSON only, shaped as {"evaluations":[{"idx":1,"eval":"one positive sentence"}],"tags":[{"idx":1,"tag":"primary"}]}. Valid tags are exactly: "primary" (official documentation, research papers, direct announcements), "community" (Reddit, forums, expert commentary), "trusted" (established reputable news/reference outlet).'},
-                {'role': 'user', 'content': f"Query: {query}\n\nSources:\n{links}\n\nFor each source:\n- \"eval\": ONE concise positive sentence (under 200 chars) on what the source contributes to answering the query (e.g. 'Contains the official release date and pricing'). Frame it positively. Do NOT criticize the source, mention limitations, or qualify its usefulness. If a source is not useful, set its eval to \"\".\n- \"tag\": classify the source into exactly one of primary, community, or trusted."},
+                {'role': 'user', 'content': f"Query: {query}\n\nSources:\n{links}\n\nEvaluate every source in this single response. For each source return one useful sentence under 120 characters and one tag: primary, community, or trusted. Use an empty evaluation for irrelevant sources."},
             ],
-            max_tokens=max(900, 150 * max_links),
+            max_tokens=max(600, 60 * min(max_links, len(results))),
             temperature=0.2,
             response_format={'type': 'json_object'},
         )
@@ -14797,18 +15449,9 @@ def api_ai_search():
         else:
             flat = _ai_top_results(plan.get('query') or base_q, 5)
     else:
-        # Planner LLM decides single vs multi-hop and emits the search "tools";
-        # multi-hop runs them in parallel fan-out, single uses the fast path.
-        plan = _ai_agentic_plan(base_q, max_tasks=3)
-        if plan.get('mode') == 'multi' and plan.get('tasks'):
-            multi_hop = True
-            flat, groups = _ai_agentic_gather(
-                base_q,
-                [{'label': t['label'], 'query': t['query']} for t in plan['tasks']],
-                per_query=5,
-            )
-        else:
-            flat = _ai_top_results(plan.get('query') or base_q, 5)
+        # Normal mode performs exactly one search and one batched Groq link
+        # evaluation. Only an explicitly requested deep search may fan out.
+        flat = _ai_top_results(base_q, 8)
 
     # Ground the strongest results with real page bodies so the synthesis LLM
     # reads actual content — the difference between a wrong multi-hop answer and
@@ -14867,9 +15510,23 @@ def api_ai_links():
         offset = 0
     evals, tags, err = _ai_link_evaluations(query, results)
     if err:
-        wait = _ai_busy_hint() if err == 'busy' else 0
-        return jsonify({'ok': False, 'error': 'busy' if err == 'busy' else 'failed',
-                        'retry_after': wait}), 503 if err == 'busy' else 200
+        # Evaluation metadata must survive provider outages. Fall back to the
+        # deterministic neural/domain signals and persist those immediately.
+        evals, tags = {}, {}
+        for idx, result in enumerate(results[:8], 1):
+            try:
+                import neural_search as _neural
+                ev = _neural.evaluate_page(query, title=result.get('title', ''),
+                                           url=result.get('url', ''),
+                                           snippet=result.get('snippet', ''))
+                score = float(ev.get('relevance_score') or 0)
+                label = 'highly relevant' if score >= .60 else ('relevant' if score >= .38 else 'limited relevance')
+                evals[idx] = f"{label.capitalize()} ({score:.0%}); verify important claims against the source."
+                url = (result.get('url') or '').lower()
+                tags[idx] = ('primary' if any(d in url for d in ('.gov', '.edu', 'cloud.google.com', 'ai.google.dev'))
+                             else ('community' if any(d in url for d in ('reddit.com', 'forum', 'discuss.')) else 'trusted'))
+            except Exception:
+                continue
     evals = {int(k) + offset: v for k, v in evals.items()}
     tags = {int(k) + offset: v for k, v in tags.items()}
     # Persist evaluations into the chat so reloads show them without another
@@ -14939,9 +15596,9 @@ def api_ai_stream():
     _svc = _service_blocked()
     if _svc:
         return jsonify({'ok': False, 'error': 'blocked', 'mode': _svc}), 503
-    if not AI_MODE_GROQ_API_KEY:
+    if not GEMINI_API_KEY and not AI_MODE_GROQ_API_KEY:
         def _no_key():
-            yield 'Arlong AI is not configured yet (missing GROQ_AI_MODE_API_KEY).'
+            yield 'Arlong AI is not configured yet (missing Gemini and Groq credentials).'
         return Response(_no_key(), mimetype='text/plain')
     data = request.get_json(silent=True) or {}
     query = (data.get('query') or '').strip()
@@ -14983,7 +15640,10 @@ def api_ai_stream():
     def generate():
         full = ''
         try:
-            _model, stream = _ai_open_stream(messages, max_tokens=(2600 if report else 1600), temperature=0.4, reasoning_format='hidden')
+            _model, stream = _ai_open_stream(
+                messages, max_tokens=(2600 if report else 1600), temperature=0.4,
+                reasoning_format='hidden', models=_ai_writer_models(deep=report),
+            )
             for chunk in stream:
                 if not chunk.choices:
                     continue
@@ -14995,7 +15655,7 @@ def api_ai_stream():
             # If the first pass left out concrete data points the user asked
             # for, run a targeted follow-up search and stream a round-2 pass
             # right after. Errors here are swallowed — round 1 stands alone.
-            if full.strip() and not report:
+            if AI_AUTO_FOLLOWUPS and full.strip() and not report:
                 try:
                     missing_queries = _arlong_completeness_check(query, full, [], max_followups=2)
                     if missing_queries:
@@ -15003,7 +15663,7 @@ def api_ai_stream():
                         if extra_sources or extra_context:
                             app.logger.info(
                                 f"AI stream follow-up: {len(missing_queries)} queries "
-                                f"→ {len(extra_sources)} extra sources"
+                                f"-> {len(extra_sources)} extra sources"
                             )
                             follow_messages = list(messages)
                             follow_messages.append({

@@ -29,6 +29,7 @@
   .d-links a{color:#1a73e8;font-size:13px;text-decoration:none}
   .d-links a:hover{text-decoration:underline}
   .d-phone{font-size:12px;color:#555}
+  .billing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0}.billing-metric{background:#fff;border:1px solid #e0e0e0;border-radius:9px;padding:13px}.billing-label{font-size:11px;color:#667085;text-transform:uppercase;letter-spacing:.04em}.billing-value{font-size:15px;font-weight:600;margin-top:5px}.d-btn{display:inline-block;border:0;border-radius:7px;background:#1a73e8;color:#fff;padding:10px 15px;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none}.d-btn.secondary{background:#fff;color:#1a73e8;border:1px solid #aecbfa}@media(max-width:620px){.billing-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -43,6 +44,17 @@
   </div>
 
   <h1>Dashboard</h1>
+
+  <div class="d-section">
+    <h2>Plan &amp; billing</h2>
+    <div class="billing-grid">
+      <div class="billing-metric"><div class="billing-label">Current plan</div><div class="billing-value">{{ 'Arlong Pro' if billing.get('status') == 'active' else 'Free' }}</div></div>
+      <div class="billing-metric"><div class="billing-label">Status</div><div class="billing-value">{{ billing.get('status', 'Active')|replace('_',' ')|title }}</div></div>
+      <div class="billing-metric"><div class="billing-label">Next billing date</div><div class="billing-value">{{ billing.get('current_period_end', '—')[:10] if billing.get('current_period_end') else '—' }}</div></div>
+    </div>
+    {% if billing.get('customer_id') %}<button id="manage-billing" class="d-btn">Manage subscription &amp; invoices</button>{% else %}<a class="d-btn" href="/premium">View Pro plans</a>{% endif %}
+    <span id="billing-error" style="font-size:12px;color:#b42318;margin-left:10px"></span>
+  </div>
 
   <div class="d-section" style="background:#e8f0fe;border-color:#aecbfa">
     <h2 style="margin-bottom:6px">Arlong AI</h2>
@@ -100,5 +112,8 @@
     <a href="/claim">+ Claim verification</a>
   </div>
 </div>
+<script>
+const manage=document.getElementById('manage-billing');if(manage)manage.addEventListener('click',async()=>{manage.disabled=true;const csrf={{ csrf_token()|tojson }};try{const r=await fetch('/api/billing/portal',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({_csrf_token:csrf})});const d=await r.json();if(!r.ok)throw new Error(d.error||'Could not open billing');location.href=d.portal_url}catch(e){document.getElementById('billing-error').textContent=e.message;manage.disabled=false}});
+</script>
 </body>
 </html>

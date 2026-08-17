@@ -16,14 +16,13 @@
       "url": "https://paddlehq.mcp.kapa.ai",
       "enabled": true
     },
-        "arlong": {
-          "type": "remote",
-          "url": "https://arlong.org/mcp",
-          "headers": {
-            "Authorization": "Bearer al_QmtDK6Q-6iE0xGudailWj-jCPBo6KNJeVTMfH9dBpRA"
-          }
-        }
-      }
+    "arlong": {
+      "type": "remote",
+      "url": "https://arlong.org/mcp",
+      "headers": {
+        "Authorization": "Bearer al_QmtDK6Q-6iE0xGudailWj-jCPBo6KNJeVTMfH9dBpRA"
+      },
+      "enabled": true
     }
   }
 }

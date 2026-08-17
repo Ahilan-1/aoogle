@@ -27,6 +27,13 @@ a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
 .sysbar .sep{width:1px;height:18px;background:var(--border)}
 .sysbar .ts{font-size:11px;color:var(--text3)}
 .wrap{max-width:1400px;margin:0 auto;padding:20px 24px}
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(130px,1fr));gap:10px;margin-bottom:16px}
+.kpi{background:linear-gradient(145deg,var(--bg2),var(--bg3));border:1px solid var(--border);border-radius:10px;padding:12px 14px;min-height:78px}
+.kpi .kl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em}
+.kpi .kv{font:600 22px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;margin-top:7px;color:var(--text)}
+.kpi .ks{font-size:10px;color:var(--text3);margin-top:3px}
+@media(max-width:1000px){.kpis{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:600px){.kpis{grid-template-columns:repeat(2,1fr)}}
 .grid2{display:grid;grid-template-columns:1fr 380px;gap:20px}
 @media(max-width:900px){.grid2{grid-template-columns:1fr}}
 
@@ -40,7 +47,8 @@ a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
 .graph-area svg{width:100%;height:100%;position:absolute;top:0;left:0}
 
 /* ── Nodes ── */
-.node{position:absolute;cursor:pointer;transition:box-shadow .2s,transform .1s;border-radius:10px;border:1.5px solid var(--border);background:var(--bg3);padding:0;min-width:160px;z-index:2}
+.node{position:absolute;cursor:grab;touch-action:none;user-select:none;transition:box-shadow .2s,transform .1s;border-radius:10px;border:1.5px solid var(--border);background:var(--bg3);padding:0;width:160px;z-index:2}
+.node.dragging{cursor:grabbing;transition:none;z-index:30;box-shadow:0 0 0 2px var(--link),0 12px 35px rgba(0,0,0,.55)}
 .node:hover{z-index:10;transform:scale(1.03);box-shadow:0 0 20px rgba(91,141,239,.15)}
 .node.selected{box-shadow:0 0 0 2px var(--link),0 0 24px rgba(91,141,239,.2);z-index:11}
 .node-head{padding:8px 12px 6px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)}
@@ -119,6 +127,15 @@ a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
 .tog-row{display:flex;gap:12px;padding:8px 16px;border-top:1px solid var(--border);flex-wrap:wrap}
 .tog{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);cursor:pointer}
 .tog input{accent-color:var(--link)}
+.mini-btn{border:1px solid var(--border);background:var(--bg3);color:var(--text2);font-size:10px;border-radius:6px;padding:4px 9px;cursor:pointer}
+.mini-btn:hover{color:var(--text);border-color:var(--link)}
+.heartbeat-line{fill:none;stroke:var(--green);stroke-width:2;vector-effect:non-scaling-stroke}
+.heartbeat-line.down{stroke:var(--red)}
+.heartbeat-grid{stroke:var(--border);stroke-width:1}
+.hb-big{display:flex;align-items:center;gap:9px;font-size:18px;font-weight:650;margin-bottom:8px}
+.hb-pulse{width:12px;height:12px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(52,208,88,.5);animation:hb 1.5s infinite}
+.hb-pulse.down{background:var(--red);animation:none}.hb-pulse.degraded{background:var(--orange)}
+@keyframes hb{70%{box-shadow:0 0 0 8px rgba(52,208,88,0)}100%{box-shadow:0 0 0 0 rgba(52,208,88,0)}}
 </style>
 </head>
 <body>
@@ -140,10 +157,20 @@ a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
   <span class="sep"></span>
   <span class="pill g" id="sb-router"><span class="dot g"></span> Router OK</span>
   <span class="sep"></span>
+  <span class="pill g" id="sb-heartbeat"><span class="dot g"></span> Heartbeat Live</span>
+  <span class="sep"></span>
   <span class="ts" id="sb-time">--</span>
 </div>
 
 <div class="wrap">
+  <div class="kpis">
+    <div class="kpi"><div class="kl">Availability</div><div class="kv" id="k-availability">--</div><div class="ks">browser heartbeat</div></div>
+    <div class="kpi"><div class="kl">P95 latency</div><div class="kv" id="k-p95">--</div><div class="ks">rolling 5 minutes</div></div>
+    <div class="kpi"><div class="kl">Traffic</div><div class="kv" id="k-rpm">--</div><div class="ks">requests / minute</div></div>
+    <div class="kpi"><div class="kl">Error rate</div><div class="kv" id="k-errors">--</div><div class="ks">HTTP 5xx · 5 minutes</div></div>
+    <div class="kpi"><div class="kl">AI success</div><div class="kv" id="k-ai-success">--</div><div class="ks">all providers</div></div>
+    <div class="kpi"><div class="kl">Uptime</div><div class="kv" id="k-uptime">--</div><div class="ks">current process</div></div>
+  </div>
   <div class="grid2">
     <div>
       <div class="graph-card" id="graph-card">
@@ -163,11 +190,21 @@ a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
         <div class="tog-row">
           <label class="tog"><input type="checkbox" id="tog-threat" checked> Threat nodes</label>
           <label class="tog"><input type="checkbox" id="tog-cache" checked> Cache nodes</label>
+          <button class="mini-btn" id="reset-layout" type="button">Reset layout</button>
+          <span style="font-size:10px;color:var(--text3);margin-left:auto">Drag nodes · positions save locally</span>
         </div>
       </div>
     </div>
 
     <div class="side">
+      <div class="panel">
+        <div class="panel-title">Website Heartbeat <span class="cnt" id="hb-age">checking…</span></div>
+        <div class="panel-body">
+          <div class="hb-big"><span class="hb-pulse" id="hb-pulse"></span><span id="hb-state">Connecting</span></div>
+          <svg id="hb-chart" viewBox="0 0 340 70" width="100%" height="70" aria-label="Heartbeat response time"></svg>
+          <div class="ms" id="hb-detail">Probing /health every 5 seconds</div>
+        </div>
+      </div>
       <div class="panel">
         <div class="panel-title">Model Router <span class="cnt" id="router-cnt">--</span></div>
         <div class="panel-body" id="router-box"><div style="color:var(--text3);font-size:11px">Loading...</div></div>
@@ -197,6 +234,8 @@ a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
 <script>
 var DATA = null;
 var SELECTED_NODE = null;
+var GRAPH_W = 960, GRAPH_H = 700;
+var CLIENT_HEARTBEAT = {status:'unknown', samples:[], failures:0, lastOk:0};
 
 var NODES = [
   {id:'query',     label:'Query Input',       x:40,  y:30,  layer:'input',   color:'var(--link)',   sub:'Natural language + voice',     metric_key:null},
@@ -209,9 +248,11 @@ var NODES = [
   {id:'inject',    label:'Injection Detector',  x:520, y:160, layer:'eval',     color:'var(--orange)', sub:'Heuristics + LLM fallback',    metric_key:null, toggle:'threat'},
   {id:'blocked',   label:'Blocked Pages',      x:760, y:290, layer:'blocked',  color:'var(--red)',    sub:'Dropped from context',         metric_key:null, toggle:'threat'},
   {id:'corrobor',  label:'Corroboration',      x:280, y:420, layer:'synthesis',color:'var(--purple)', sub:'Claim clusters >= 0.78',       metric_key:null},
-  {id:'router',    label:'Model Router',       x:520, y:420, layer:'synthesis',color:'var(--purple)', sub:'Llama > GPT-oss > Qwen',      metric_key:'router', live:true},
+  {id:'router',    label:'Model Router',       x:520, y:420, layer:'synthesis',color:'var(--purple)', sub:'Gemini 2.5 → Groq failover',  metric_key:'router', live:true},
   {id:'output',    label:'Answer + Citations', x:760, y:420, layer:'output',   color:'var(--cyan)',   sub:'Epistemic state + sources',    metric_key:null},
-  {id:'api',       label:'API Gateway',        x:760, y:160, layer:'output',   color:'var(--cyan)',   sub:'REST + MCP + ucurl',           metric_key:null},
+  {id:'api',       label:'API Gateway',        x:760, y:160, layer:'output',   color:'var(--cyan)',   sub:'REST + MCP · key or OAuth',    metric_key:null},
+  {id:'auth',      label:'Auth Boundary',      x:40,  y:550, layer:'input',    color:'var(--link)',   sub:'API keys + OAuth 2.1 PKCE',    metric_key:null},
+  {id:'heartbeat', label:'Website Heartbeat',  x:760, y:30,  layer:'output',   color:'var(--cyan)',   sub:'/health availability probe',   metric_key:null, live:true},
 ];
 
 var EDGES = [
@@ -221,8 +262,14 @@ var EDGES = [
   ['relevance','inject'],['inject','blocked'],['relevance','blocked'],
   ['inject','corrobor'],['relevance','corrobor'],
   ['corrobor','router'],['inject','router'],['router','output'],
-  ['blocked','api'],['router','api'],['output','api'],
+  ['blocked','api'],['router','api'],['output','api'],['auth','api'],['heartbeat','api'],
 ];
+
+var DEFAULT_LAYOUT = NODES.reduce(function(o,n){o[n.id]={x:n.x,y:n.y};return o;},{});
+try{
+  var savedLayout = JSON.parse(localStorage.getItem('arlong-architecture-layout-v2')||'{}');
+  NODES.forEach(function(n){if(savedLayout[n.id]){n.x=savedLayout[n.id].x;n.y=savedLayout[n.id].y;}});
+}catch(e){}
 
 var EDGE_PARTICLES = [];
 
@@ -242,6 +289,7 @@ function getNodeStatus(node){
   if(!DATA) return 'unknown';
   var ks = DATA.service && (DATA.service.kill_switch || DATA.service.maintenance);
   if(ks) return 'offline';
+  if(node.id==='heartbeat') return CLIENT_HEARTBEAT.status;
   if(node.metric_key && DATA.engine_health && DATA.engine_health[node.metric_key]){
     return DATA.engine_health[node.metric_key].status || 'healthy';
   }
@@ -265,7 +313,7 @@ function getNodeStatus(node){
 function renderGraph(){
   var area = document.getElementById('graph-area');
   area.innerHTML = '';
-  var W = 960, H = 560;
+  var W = GRAPH_W, H = GRAPH_H;
   area.style.height = H + 'px';
 
   var svgNS = 'http://www.w3.org/2000/svg';
@@ -331,7 +379,8 @@ function renderGraph(){
     div.style.left = (n.x / W * 100) + '%';
     div.style.top = (n.y / H * 100) + '%';
     div.style.borderColor = st==='down'?stColor:(st==='degraded'?stColor+'40':'');
-    div.onclick = function(){ showDetail(n); };
+    div.onclick = function(){ if(!div.dataset.dragged) showDetail(n); div.dataset.dragged=''; };
+    enableNodeDrag(div, n, area);
 
     var head = document.createElement('div');
     head.className = 'node-head';
@@ -371,6 +420,41 @@ function renderGraph(){
   });
 }
 
+function saveLayout(){
+  var layout={};NODES.forEach(function(n){layout[n.id]={x:Math.round(n.x),y:Math.round(n.y)};});
+  try{localStorage.setItem('arlong-architecture-layout-v2',JSON.stringify(layout));}catch(e){}
+}
+function updateEdgePositions(){
+  document.querySelectorAll('.edge-line').forEach(function(line){
+    var a=NODES.find(function(n){return n.id===line.dataset.from;});
+    var b=NODES.find(function(n){return n.id===line.dataset.to;});
+    if(!a||!b)return;
+    line.setAttribute('x1',a.x+80);line.setAttribute('y1',a.y+50);
+    line.setAttribute('x2',b.x+80);line.setAttribute('y2',b.y);
+  });
+}
+function enableNodeDrag(el,node,area){
+  el.addEventListener('pointerdown',function(ev){
+    if(ev.button!==0)return;
+    var rect=area.getBoundingClientRect(), sx=ev.clientX, sy=ev.clientY, ox=node.x, oy=node.y, moved=false;
+    el.setPointerCapture(ev.pointerId);el.classList.add('dragging');
+    function move(e){
+      var dx=(e.clientX-sx)*GRAPH_W/rect.width,dy=(e.clientY-sy)*GRAPH_H/rect.height;
+      if(Math.abs(dx)+Math.abs(dy)>4)moved=true;
+      node.x=Math.max(0,Math.min(GRAPH_W-165,ox+dx));
+      node.y=Math.max(0,Math.min(GRAPH_H-85,oy+dy));
+      el.style.left=(node.x/GRAPH_W*100)+'%';el.style.top=(node.y/GRAPH_H*100)+'%';
+      updateEdgePositions();
+    }
+    function up(e){
+      el.releasePointerCapture(e.pointerId);el.classList.remove('dragging');
+      el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',up);
+      if(moved){el.dataset.dragged='1';saveLayout();}
+    }
+    el.addEventListener('pointermove',move);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
+  });
+}
+
 function renderRouter(){
   var box = document.getElementById('router-box');
   var cnt = document.getElementById('router-cnt');
@@ -383,14 +467,16 @@ function renderRouter(){
   cnt.textContent = m.length + ' models';
   var html = '';
   m.forEach(function(md){
-    var st = md.cooldown_s > 0 ? 'r' : (md.fail_streak > 1 ? 'o' : 'ok');
+    var st = md.cooldown_s > 0 ? 'err' : (md.fail_streak > 1 ? 'warn' : 'ok');
     var stLabel = md.cooldown_s > 0 ? 'cooldown ' + Math.ceil(md.cooldown_s) + 's' : (md.fail_streak > 1 ? 'failing' : 'ready');
-    html += '<div class="mcard"><div class="mt"><div class="mn">'+md.model+'</div><span class="node-tag '+st+'">'+stLabel+'</span></div>';
+    var provider = md.model.indexOf('gemini-')===0?'Google Gemini':'Groq';
+    html += '<div class="mcard"><div class="mt"><div><div class="mn">'+md.model+'</div><div class="ms">'+provider+'</div></div><span class="node-tag '+st+'">'+stLabel+'</span></div>';
     html += '<div class="ms">reqs '+(md.counters.requests||0)+' · ok '+(md.counters.successes||0)+' · fail '+(md.counters.failures||0)+'</div>';
+    if(md.last_error) html += '<div class="ms" style="color:var(--orange);margin-top:5px;word-break:break-word">'+escapeHtml(md.last_error)+'</div>';
     html += bar('RPM', md.rpm, md.rpm_limit);
     html += bar('RPD', md.rpd, md.rpd_limit);
     html += bar('TPM', md.tpm, md.tpm_limit);
-    html += bar('TPD', md.tpd, md.tpm_limit);
+    html += bar('TPD', md.tpd, md.tpd_limit);
     html += '</div>';
   });
   box.innerHTML = html;
@@ -402,6 +488,8 @@ function bar(label, used, limit){
   var cls = pct>=90?'d':(pct>=70?'w':'ok');
   return '<div class="bar-wrap"><div class="bar-label"><span>'+label+'</span><span style="color:'+(pct>=90?'var(--red)':pct>=70?'var(--orange)':'var(--text3)')+'">'+pct+'%</span></div><div class="bar"><div class="'+cls+'" style="width:'+pct+'%"></div></div></div>';
 }
+
+function escapeHtml(v){var d=document.createElement('div');d.textContent=String(v||'');return d.innerHTML;}
 
 function renderErrors(){
   var box = document.getElementById('err-box');
@@ -447,6 +535,7 @@ function updateSysbar(){
   var dg = document.getElementById('sb-ddg');
   var rt = document.getElementById('sb-router');
   var tm = document.getElementById('sb-time');
+  var hb = document.getElementById('sb-heartbeat');
   if(DATA && DATA.service){
     var s = DATA.service;
     if(s.kill_switch){
@@ -475,6 +564,50 @@ function updateSysbar(){
     var d = new Date(DATA.server_time);
     tm.textContent = d.toLocaleString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   }
+  if(CLIENT_HEARTBEAT.status==='down'){hb.className='pill r';hb.innerHTML='<span class="dot r"></span> Heartbeat Down';}
+  else if(CLIENT_HEARTBEAT.status==='degraded'){hb.className='pill o';hb.innerHTML='<span class="dot o"></span> Heartbeat Degraded';}
+  else if(CLIENT_HEARTBEAT.status==='healthy'){hb.className='pill g';hb.innerHTML='<span class="dot g"></span> Heartbeat Live';}
+}
+
+function fmtUptime(s){
+  s=Math.max(0,Number(s)||0);var d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);
+  return d?d+'d '+h+'h':h?h+'h '+m+'m':m+'m';
+}
+function renderKPIs(){
+  var h=(DATA&&DATA.heartbeat)||{},rm=(DATA&&DATA.router&&DATA.router.metrics)||{};
+  var samples=CLIENT_HEARTBEAT.samples,ok=samples.filter(function(x){return x.ok;}).length;
+  var availability=samples.length?ok/samples.length*100:0;
+  document.getElementById('k-availability').textContent=samples.length?availability.toFixed(availability===100?0:1)+'%':'--';
+  document.getElementById('k-p95').textContent=(h.p95_latency_ms||0)+' ms';
+  document.getElementById('k-rpm').textContent=h.rpm||0;
+  document.getElementById('k-errors').textContent=(h.error_rate_5m||0)+'%';
+  document.getElementById('k-ai-success').textContent=(rm.success_rate||0)+'%';
+  document.getElementById('k-uptime').textContent=fmtUptime(h.uptime_s);
+}
+
+function renderHeartbeat(){
+  var samples=CLIENT_HEARTBEAT.samples.slice(-40),svg=document.getElementById('hb-chart');
+  var max=Math.max(100,Math.max.apply(null,samples.map(function(x){return x.ms||0;})));
+  var pts=samples.map(function(x,i){var px=samples.length<2?0:i*340/(samples.length-1);var py=x.ok?65-Math.min(60,(x.ms||0)/max*60):67;return px.toFixed(1)+','+py.toFixed(1);}).join(' ');
+  svg.innerHTML='<line class="heartbeat-grid" x1="0" y1="65" x2="340" y2="65"></line><line class="heartbeat-grid" x1="0" y1="35" x2="340" y2="35"></line><polyline class="heartbeat-line '+(CLIENT_HEARTBEAT.status==='down'?'down':'')+'" points="'+pts+'"></polyline>';
+  var pulse=document.getElementById('hb-pulse');pulse.className='hb-pulse '+(CLIENT_HEARTBEAT.status==='healthy'?'':CLIENT_HEARTBEAT.status);
+  document.getElementById('hb-state').textContent=CLIENT_HEARTBEAT.status==='healthy'?'Operational':CLIENT_HEARTBEAT.status==='degraded'?'Degraded':'Unreachable';
+  var last=samples[samples.length-1];
+  document.getElementById('hb-detail').textContent=last&&last.ok?('Latest '+Math.round(last.ms)+' ms · '+CLIENT_HEARTBEAT.failures+' consecutive failures'):('Health probe failed · '+CLIENT_HEARTBEAT.failures+' consecutive failures');
+  document.getElementById('hb-age').textContent=CLIENT_HEARTBEAT.lastOk?'last OK '+Math.round((Date.now()-CLIENT_HEARTBEAT.lastOk)/1000)+'s ago':'no successful probe';
+  updateSysbar();renderKPIs();
+  var node=NODES.find(function(n){return n.id==='heartbeat';});if(node){var el=document.getElementById('node-heartbeat');if(el)renderGraph();}
+}
+
+function probeHeartbeat(){
+  var started=performance.now(),controller=new AbortController(),timer=setTimeout(function(){controller.abort();},4000);
+  fetch('/health?heartbeat='+Date.now(),{cache:'no-store',signal:controller.signal}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();}).then(function(){
+    clearTimeout(timer);var ms=performance.now()-started;CLIENT_HEARTBEAT.failures=0;CLIENT_HEARTBEAT.lastOk=Date.now();CLIENT_HEARTBEAT.status=ms>1500?'degraded':'healthy';CLIENT_HEARTBEAT.samples.push({ok:true,ms:ms,ts:Date.now()});
+    if(CLIENT_HEARTBEAT.samples.length>60)CLIENT_HEARTBEAT.samples.shift();renderHeartbeat();
+  }).catch(function(){
+    clearTimeout(timer);CLIENT_HEARTBEAT.failures++;CLIENT_HEARTBEAT.status=CLIENT_HEARTBEAT.failures>=2?'down':'degraded';CLIENT_HEARTBEAT.samples.push({ok:false,ms:4000,ts:Date.now()});
+    if(CLIENT_HEARTBEAT.samples.length>60)CLIENT_HEARTBEAT.samples.shift();renderHeartbeat();
+  });
 }
 
 function showDetail(node){
@@ -530,14 +663,21 @@ function fetchData(){
     renderErrors();
     renderEngines();
     updateSysbar();
+    renderKPIs();
   }).catch(function(){});
 }
 
 document.getElementById('tog-threat').addEventListener('change', renderGraph);
 document.getElementById('tog-cache').addEventListener('change', renderGraph);
+document.getElementById('reset-layout').addEventListener('click',function(){
+  NODES.forEach(function(n){n.x=DEFAULT_LAYOUT[n.id].x;n.y=DEFAULT_LAYOUT[n.id].y;});
+  try{localStorage.removeItem('arlong-architecture-layout-v2');}catch(e){}renderGraph();
+});
 
 fetchData();
-setInterval(fetchData, 60000);
+probeHeartbeat();
+setInterval(probeHeartbeat, 5000);
+setInterval(fetchData, 10000);
 </script>
 </body>
 </html>

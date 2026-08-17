@@ -42,6 +42,10 @@ Two access tiers:
 
 Pass your key via the `Authorization` header (`Authorization: Bearer al_...`) or the `key` query parameter.
 
+The hosted MCP endpoint at `/mcp` also supports OAuth 2.1 with Google sign-in.
+Compatible MCP clients discover authorization through
+`/.well-known/oauth-protected-resource`; API-key authentication remains supported.
+
 - Returns clean JSON with title, url, snippet, category, score, and more
 - Supports pagination (`&page=N`) and pretty-print (`&pretty=1`)
 - Respects crisis detection and content moderation

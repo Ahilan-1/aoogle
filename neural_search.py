@@ -297,9 +297,17 @@ def evaluate_page(query, title='', url='', snippet='', content=''):
       reputation.status, reputation.trust_score, threat_flags
     """
     qe = get_embedding(query)
-    combined = ' '.join(x for x in (title, snippet, (content or '')[:4000]) if x)
+    combined = ' '.join(x for x in (title, url, snippet, (content or '')[:4000]) if x)
     pe = get_embedding(combined)
-    rel = round(cosine(qe, pe), 3)
+    semantic_rel = max(0.0, cosine(qe, pe))
+    # Hash embeddings understate exact topical matches. Blend in lexical
+    # coverage so good official pages do not all appear "marginal".
+    q_terms = {t for t in re.findall(r'[a-z0-9]{2,}', (query or '').lower())
+               if t not in {'the', 'and', 'for', 'what', 'with', 'from', 'this', 'that'}}
+    page_low = combined.lower()
+    coverage = (sum(1 for t in q_terms if t in page_low) / len(q_terms)) if q_terms else 0.0
+    phrase_bonus = 0.12 if (query or '').lower() in page_low else 0.0
+    rel = round(min(1.0, semantic_rel * 0.30 + coverage * 0.70 + phrase_bonus), 3)
     # floor tiny negatives
     rel = max(0.0, min(1.0, rel))
 
@@ -310,16 +318,21 @@ def evaluate_page(query, title='', url='', snippet='', content=''):
         trust = max(0, 30 - len(inj.flags) * 15)
         reason = inj.reason
         flags = inj.flags
-    elif rel < 0.20:
+    elif rel < 0.15:
         # Truly garbage/irrelevant — not a security threat, just useless.
         status = 'BLOCKED'
         trust = 0
         reason = 'Low relevance to query'
         flags = []
-    elif rel < 0.55:
+    elif rel < 0.30:
         status = 'UNVERIFIED'
         trust = _domain_trust(url)
-        reason = 'Marginal relevance'
+        reason = 'Low relevance'
+        flags = inj.flags or []
+    elif rel < 0.42:
+        status = 'RELEVANT'
+        trust = _domain_trust(url)
+        reason = ''
         flags = inj.flags or []
     else:
         status = 'SAFE'
@@ -327,7 +340,7 @@ def evaluate_page(query, title='', url='', snippet='', content=''):
         reason = ''
         flags = inj.flags or []
 
-    fact_check = 'UNVERIFIED' if status == 'SAFE' else ('FAILED' if status == 'BLOCKED' else 'UNKNOWN')
+    fact_check = 'UNVERIFIED' if status in ('SAFE', 'RELEVANT') else ('FAILED' if status == 'BLOCKED' else 'UNKNOWN')
     return {
         'relevance_score': rel,
         'ai_evaluation': {
@@ -389,7 +402,7 @@ def _domain_trust(url):
 # Local 512-dim hashing embeddings are less precise than remote API embeddings,
 # so we use a lower threshold for them. 0.78 works well for 768-dim remote,
 # 0.55 works better for local 512-dim.
-_CORROBORATION_THRESHOLD = 0.55 if EMBED_DIM <= 512 else 0.78
+_CORROBORATION_THRESHOLD = 0.32 if EMBED_DIM <= 512 else 0.58
 
 
 def corroborate(claims):
@@ -412,12 +425,18 @@ def corroborate(claims):
             continue
         group = [c]
         assigned[i] = True
+        group_vecs = [v]
         for j in range(i + 1, len(vecs)):
             if assigned[j]:
                 continue
             vj = vecs[j][1]
-            if vj and cosine(v, vj) >= _CORROBORATION_THRESHOLD:
+            centroid = [sum(vals) / len(vals) for vals in zip(*group_vecs)]
+            left_terms = set(re.findall(r'[a-z0-9]{3,}', ' '.join(x.get('claim_text', '') for x in group).lower()))
+            right_terms = set(re.findall(r'[a-z0-9]{3,}', (vecs[j][0].get('claim_text') or '').lower()))
+            overlap = len(left_terms & right_terms) / max(1, min(len(left_terms), len(right_terms)))
+            if vj and (cosine(centroid, vj) >= _CORROBORATION_THRESHOLD or overlap >= 0.35):
                 group.append(vecs[j][0])
+                group_vecs.append(vj)
                 assigned[j] = True
         clusters.append(group)
     agreement = 0.0
