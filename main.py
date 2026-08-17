@@ -11098,15 +11098,32 @@ def _arlong_answer_payload(q):
     )
     if plan_note:
         followup['plan'] = plan_note
-    evaluated = [_arlong_eval_result(q, r, i) for i, r in enumerate(results[:5], start=1)]
+
+    # ── Evaluate the sources that actually back the answer ──────────────────
+    # The `sources` list from arlong_ai_answer() contains the pages that were
+    # injected into the LLM prompt as [Source N] blocks. These are the only
+    # sources that matter for trust/relevance — evaluate them so the response
+    # carries evaluation metadata on the same sources the answer cites.
+    evaluated_sources = []
+    for i, src in enumerate(sources[:8]):
+        evaluated_sources.append(_arlong_eval_result(q, src, i + 1))
+
+    # Merge: use evaluated_sources as the primary `results` (they back the
+    # answer), and keep the raw search hits only if they add unique URLs.
+    seen_urls = {s.get('url') for s in evaluated_sources}
+    for r in results[:5]:
+        if (r.get('url') or '') not in seen_urls:
+            evaluated_sources.append(_arlong_eval_result(q, r, len(evaluated_sources) + 1))
+            seen_urls.add(r.get('url', ''))
+
     response = {
         "query": q,
         "answer": answer,
         "sources": sources,
         "followup": followup,
-        "results": evaluated,
+        "results": evaluated_sources,
     }
-    _arlong_attach_epistemic(response, results)
+    _arlong_attach_epistemic(response, evaluated_sources)
     return response
 
 
