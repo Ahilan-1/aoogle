@@ -49,6 +49,7 @@ for _console_stream in (sys.stdout, sys.stderr):
 
 import resend
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.middleware.proxy_fix import ProxyFix
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from dotenv import load_dotenv
 load_dotenv()
@@ -307,6 +308,9 @@ def _search_brave(query, max_results=5):
         return []
 
 app = Flask(__name__)
+# Railway terminates TLS before forwarding requests to Flask. Trust its nearest
+# proxy hop so externally generated URLs retain the original HTTPS scheme.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 _PROCESS_STARTED_AT = time.time()
 _REQUEST_METRICS = deque(maxlen=1200)
 _REQUEST_METRICS_LOCK = threading.Lock()
@@ -11934,7 +11938,14 @@ _MCP_SEMAPHORES = {
 # ── MCP OAuth 2.1 (Google identity, Arlong access tokens) ───────────────────
 def _mcp_oauth_issuer():
     configured = os.environ.get('MCP_OAUTH_ISSUER', '').strip().rstrip('/')
-    return configured or request.url_root.rstrip('/')
+    public_base = os.environ.get('PUBLIC_BASE_URL', '').strip().rstrip('/')
+    issuer = configured or public_base or request.url_root.rstrip('/')
+    # Never advertise an insecure production MCP resource when a deployment
+    # proxy fails to forward its original scheme. Local HTTP remains supported.
+    parsed = urlparse(issuer)
+    if parsed.hostname == 'arlong.org' and parsed.scheme != 'https':
+        issuer = 'https://' + issuer.split('://', 1)[-1]
+    return issuer
 
 
 def _mcp_oauth_resource():
