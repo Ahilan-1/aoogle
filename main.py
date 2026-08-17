@@ -323,7 +323,7 @@ def _ai_supports_reasoning(model):
 # ── Google OAuth (for /ai landing page sign-in) ────────────────────────────
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '').strip()
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '').strip()
-GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI', 'https://arlong.org/auth/google/callback')
+GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI', '').strip()
 GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 GOOGLE_USERINFO_ENDPOINT = 'https://www.googleapis.com/oauth2/v3/userinfo'
@@ -3972,6 +3972,99 @@ class DataManager:
             _save_json(self.data)
         return self.get_service_status()
 
+    # ── Architecture health tracking (persisted in data.json) ─────────────
+    def record_engine_event(self, engine, success):
+        """Record a success or failure for a search/subsystem engine.
+        Consecutive failures >= 5 auto-mark the engine as 'down'."""
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            health = self.data.setdefault('engine_health', {})
+            rec = health.setdefault(engine, {
+                'status': 'healthy', 'consecutive_failures': 0,
+                'total_errors': 0, 'total_successes': 0,
+                'last_error': '', 'last_check': '',
+            })
+            rec['last_check'] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+            if success:
+                rec['consecutive_failures'] = 0
+                rec['total_successes'] = rec.get('total_successes', 0) + 1
+                rec['status'] = 'healthy'
+            else:
+                rec['consecutive_failures'] = rec.get('consecutive_failures', 0) + 1
+                rec['total_errors'] = rec.get('total_errors', 0) + 1
+                if rec['consecutive_failures'] >= 5:
+                    rec['status'] = 'down'
+                elif rec['consecutive_failures'] >= 3:
+                    rec['status'] = 'degraded'
+            self.data['engine_health'] = health
+            _save_json(self.data)
+        return self.get_engine_health()
+
+    def record_engine_error(self, engine, error_msg):
+        """Record an error string for a specific engine."""
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            health = self.data.setdefault('engine_health', {})
+            rec = health.setdefault(engine, {
+                'status': 'healthy', 'consecutive_failures': 0,
+                'total_errors': 0, 'total_successes': 0,
+                'last_error': '', 'last_check': '',
+            })
+            rec['last_error'] = str(error_msg)[:300]
+            rec['last_check'] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+            rec['consecutive_failures'] = rec.get('consecutive_failures', 0) + 1
+            rec['total_errors'] = rec.get('total_errors', 0) + 1
+            if rec['consecutive_failures'] >= 5:
+                rec['status'] = 'down'
+            elif rec['consecutive_failures'] >= 3:
+                rec['status'] = 'degraded'
+            self.data['engine_health'] = health
+            _save_json(self.data)
+
+    def get_engine_health(self):
+        """Return the full engine health map."""
+        loaded = _load_json()
+        if loaded:
+            self.data = loaded
+        return dict(self.data.get('engine_health', {}))
+
+    def record_architecture_event(self, node_id, status, detail=''):
+        """Record a node-level event (e.g. 'internal_search', 'page_fetch')."""
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            arch = self.data.setdefault('architecture_events', {})
+            rec = arch.setdefault(node_id, {
+                'status': status, 'detail': detail,
+                'last_update': '', 'events_1h': 0, 'events_window_start': '',
+            })
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            rec['status'] = status
+            rec['detail'] = detail[:200]
+            rec['last_update'] = now.isoformat()
+            window_start = rec.get('events_window_start', '')
+            if not window_start:
+                rec['events_window_start'] = now.isoformat()
+                rec['events_1h'] = 1
+            else:
+                try:
+                    ws = datetime.fromisoformat(window_start)
+                    if (now - ws).total_seconds() > 3600:
+                        rec['events_window_start'] = now.isoformat()
+                        rec['events_1h'] = 1
+                    else:
+                        rec['events_1h'] = rec.get('events_1h', 0) + 1
+                except Exception:
+                    rec['events_window_start'] = now.isoformat()
+                    rec['events_1h'] = 1
+            self.data['architecture_events'] = arch
+            _save_json(self.data)
+
     def get_ai_usage(self, user_id):
         """Return window usage for a user (msg 12h rolling, ctx fixed 6h budget).
 
@@ -5913,9 +6006,18 @@ class ImprovedSearch:
                             break
                 except Exception as e:
                     app.logger.error(f"DDGS HTML fallback error: {e}")
+                    try:
+                        data_manager.record_engine_error('ddg', f'HTML fallback: {e}')
+                    except Exception:
+                        pass
             return results
         except Exception as e:
             app.logger.error(f"DDG HTML search error: {e}")
+            try:
+                data_manager.record_engine_error('ddg', f'HTML: {e}')
+                data_manager.record_engine_event('ddg', False)
+            except Exception:
+                pass
             return []
 
     def _search_reddit_scrape(self, query):
@@ -6026,6 +6128,11 @@ class ImprovedSearch:
                     return results
                 except Exception as e:
                     app.logger.error(f"DDGS search error: {e}")
+                    try:
+                        data_manager.record_engine_error('ddg', f'DDGS: {e}')
+                        data_manager.record_engine_event('ddg', False)
+                    except Exception:
+                        pass
                     return []
             elif search_url == 'ddg_reddit://text':
                 return self._search_ddg_with_site(query, 'site:reddit.com')
@@ -6209,16 +6316,35 @@ class ImprovedSearch:
 
             if not results:
                 app.logger.warning("Primary search returned no results, trying fallback")
+                try:
+                    data_manager.record_engine_event('ddg', False)
+                    data_manager.record_engine_error('ddg', 'All DDG engines returned 0 results')
+                except Exception:
+                    pass
                 results = self._search_fallback(query, region)
 
             if not results:
                 app.logger.warning("All primary engines failed, trying Serper fallback")
+                try:
+                    data_manager.record_engine_event('internal_search', False)
+                    data_manager.record_engine_error('internal_search', 'All internal engines + fallback failed')
+                except Exception:
+                    pass
                 serper_results = _search_serper(query, region)
                 if serper_results:
                     results = serper_results
                     self._serper_fallback_used = True
+                    try:
+                        data_manager.record_engine_event('serper_fallback', True)
+                    except Exception:
+                        pass
 
             if results:
+                try:
+                    data_manager.record_engine_event('ddg', True)
+                    data_manager.record_engine_event('internal_search', True)
+                except Exception:
+                    pass
                 ranked_results = self._rank_results(query, results)
                 ranked_results = self._rerank_with_content(query, ranked_results)
                 all_results = [result.to_dict() for result in ranked_results]
@@ -10859,6 +10985,62 @@ def api_arlong_status():
     return jsonify(_arlong_status_payload())
 
 
+@app.route('/api/admin/architecture/status')
+def api_admin_architecture_status():
+    """Comprehensive real-time system health for the admin architecture graph."""
+    if not session.get('admin_logged_in'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    service = data_manager.get_service_status()
+    engine_health = data_manager.get_engine_health()
+    arch_events = {}
+    loaded = _load_json()
+    if loaded:
+        arch_events = dict(loaded.get('architecture_events', {}))
+    router_payload = {'enabled': False, 'models': [], 'healthy': []}
+    try:
+        router = _ai_router_module.get_router()
+        if router is not None:
+            rs = router.status()
+            router_payload = {
+                'enabled': True,
+                'models': rs.get('models', []),
+                'healthy': rs.get('healthy', []),
+            }
+    except Exception:
+        pass
+    error_series, error_total, error_latest, error_peak = _read_error_log(24)
+    api_stats = api_error_stats()
+    waitlist_count = data_manager.get_ai_waitlist_count()
+    total_users = len(data_manager.get_all_users() if hasattr(data_manager, 'get_all_users') else [])
+    total_searches = data_manager.get_total_searches()
+    neural_backend = 'local'
+    try:
+        import neural_search as _neural
+        neural_backend = 'remote' if _neural.EMBED_API_KEY else 'local'
+    except Exception:
+        pass
+    return jsonify({
+        'service': service,
+        'engine_health': engine_health,
+        'arch_events': arch_events,
+        'router': router_payload,
+        'errors': {
+            'series': error_series,
+            'total_24h': error_total,
+            'latest': error_latest,
+            'peak_hour': error_peak,
+        },
+        'api_error_stats': api_stats,
+        'neural': {'embedding_backend': neural_backend},
+        'stats': {
+            'total_searches': total_searches,
+            'waitlist_count': waitlist_count,
+            'total_users': total_users,
+        },
+        'server_time': datetime.now(timezone.utc).isoformat(),
+    })
+
+
 MCP_TOOLS = [
     {
         'name': 'arlong_search',
@@ -11354,7 +11536,13 @@ def admin_architecture():
     if not session.get('admin_logged_in'):
         return redirect(url_for('admin_login'))
     router = _ai_router_module.get_router()
-    return render_template('admin_architecture.html', router_enabled=router is not None)
+    service = data_manager.get_service_status()
+    engine_health = data_manager.get_engine_health()
+    return render_template('admin_architecture.html',
+        router_enabled=router is not None,
+        service_status=service,
+        engine_health=engine_health,
+    )
 
 @app.route('/api/admin/feedback', methods=['POST'])
 def admin_feedback():
@@ -11601,6 +11789,10 @@ def signup():
         session['username'] = user['username']
         data_manager.accept_tos(user['user_id'])
         data_manager.create_api_key(user['user_id'], username)
+        try:
+            data_manager.join_ai_waitlist(user['user_id'], email, username)
+        except Exception:
+            pass
         session['onboarding'] = True
         if email:
             send_welcome_email(email, username)
@@ -11624,6 +11816,12 @@ def login():
         session.permanent = True
         session['user_id'] = user['user_id']
         session['username'] = user['username']
+        try:
+            pos, status = data_manager.get_ai_waitlist_position(user['user_id'])
+            if status == 'not_joined':
+                data_manager.join_ai_waitlist(user['user_id'], user.get('email', ''), user['username'])
+        except Exception:
+            pass
         user_email = user.get('email', '')
         if user_email and RESEND_API_KEY:
             try:
@@ -13695,7 +13893,7 @@ def google_auth():
     session['google_oauth_state'] = state
     params = {
         'client_id': GOOGLE_CLIENT_ID,
-        'redirect_uri': GOOGLE_REDIRECT_URI,
+        'redirect_uri': GOOGLE_REDIRECT_URI or (request.host_url.rstrip('/') + '/auth/google/callback'),
         'response_type': 'code',
         'scope': 'openid email profile',
         'state': state,
@@ -13723,7 +13921,7 @@ def google_auth_callback():
             'code': code,
             'client_id': GOOGLE_CLIENT_ID,
             'client_secret': GOOGLE_CLIENT_SECRET,
-            'redirect_uri': GOOGLE_REDIRECT_URI,
+            'redirect_uri': GOOGLE_REDIRECT_URI or (request.host_url.rstrip('/') + '/auth/google/callback'),
             'grant_type': 'authorization_code',
         }, timeout=10)
         token_data = token_resp.json()

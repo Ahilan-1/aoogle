@@ -1,219 +1,543 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>Arlong Architecture — Admin</title>
-    <style>
-        :root{--a-bg:#0a0d13;--a-bg2:#11151d;--a-bg3:#171c26;--a-border:#232a37;--a-text:#e7eaf0;--a-text2:#b9c1cf;--a-text3:#8b95a5;--a-link:#7fa6f5;--a-link-strong:#8ab4f8;--a-primary:#5b8def;--a-red:#f28b82;--a-green:#7dd98b;--a-orange:#f9ab00;--a-blue-bg:#16233f;}
-        *{box-sizing:border-box}
-        body{margin:0;padding:20px;font-family:arial,sans-serif;background:var(--a-bg);color:var(--a-text);font-size:14px}
-        a{color:var(--a-link);text-decoration:none}
-        a:hover{text-decoration:underline}
-        .header{display:flex;align-items:center;justify-content:space-between;max-width:1200px;margin:0 auto 18px;flex-wrap:wrap;gap:10px}
-        .header h1{font-size:20px;margin:0;color:var(--a-link-strong)}
-        .header .links{display:flex;gap:10px;flex-wrap:wrap}
-        .header .links a{font-size:13px;color:var(--a-text3);padding:6px 12px;border:1px solid var(--a-border);border-radius:6px}
-        .header .links a:hover{background:var(--a-bg3);text-decoration:none}
-        .header .links a.hot{color:var(--a-link-strong);border-color:var(--a-primary)}
-        .wrap{max-width:1200px;margin:0 auto}
-        .card{background:var(--a-bg2);border:1px solid var(--a-border);border-radius:12px;margin-bottom:18px;overflow:hidden}
-        .card-title{padding:12px 18px;font-size:14px;font-weight:600;border-bottom:1px solid var(--a-border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
-        .card-title .badge{background:var(--a-blue-bg);color:var(--a-link-strong);font-size:11px;padding:2px 8px;border-radius:10px;font-weight:500}
-        #graph{width:100%;height:auto;display:block}
-        .statstrip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;padding:16px 18px}
-        .stat{background:var(--a-bg3);border:1px solid var(--a-border);border-radius:10px;padding:12px 14px}
-        .stat .num{font-size:22px;font-weight:600;color:var(--a-link-strong);line-height:1.1}
-        .stat .label{font-size:11px;color:var(--a-text3);text-transform:uppercase;letter-spacing:.3px;margin-top:3px}
-        .legend{display:flex;gap:16px;flex-wrap:wrap;padding:0 18px 16px;font-size:12px;color:var(--a-text3)}
-        .legend span{display:inline-flex;align-items:center;gap:6px}
-        .legend .dot{width:10px;height:10px;border-radius:3px;display:inline-block}
-        .model-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;padding:16px 18px}
-        .mcard{background:var(--a-bg3);border:1px solid var(--a-border);border-radius:10px;padding:14px}
-        .mcard .mtop{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap}
-        .mcard .mname{font-family:monospace;font-size:12.5px;font-weight:600;word-break:break-all}
-        .pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
-        .pill.ok{background:#0d2214;color:var(--a-green)}
-        .pill.warn{background:#2b2112;color:var(--a-orange)}
-        .pill.danger{background:#2d1517;color:var(--a-red)}
-        .gbar{height:7px;background:#0a0d13;border:1px solid var(--a-border);border-radius:5px;overflow:hidden}
-        .gbar>div{height:100%;background:var(--a-primary);border-radius:5px}
-        .gbar.g-warn>div{background:var(--a-orange)}
-        .gbar.g-danger>div{background:#d93025}
-        .msub{font-family:monospace;font-size:11px;color:var(--a-text3);margin-top:6px}
-        .empty{padding:20px;color:var(--a-text3);font-size:13px;text-align:center}
-        .pane-noise{display:flex;gap:16px;flex-wrap:wrap;padding:0 18px 18px;align-items:center}
-        .tog{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--a-text2);cursor:pointer}
-        .tog input{accent-color:var(--a-primary)}
-        @media(max-width:700px){body{padding:12px}.card-title{flex-direction:column;align-items:flex-start}}
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Arlong Architecture — Admin</title>
+<style>
+:root{--bg:#06090f;--bg2:#0c1018;--bg3:#121822;--bg4:#1a2230;--border:#1e2a3a;--text:#d8dde6;--text2:#9aa3b4;--text3:#636d80;--link:#5b8def;--green:#34d058;--green-bg:#0d2214;--orange:#f0a830;--orange-bg:#2b2112;--red:#f85149;--red-bg:#2d1517;--purple:#a371f7;--cyan:#39d0d8;--pulse:#5b8def30}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:13px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;overflow-x:hidden}
+a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);background:var(--bg2)}
+.hdr h1{font-size:16px;font-weight:600;color:var(--text)}
+.hdr .links{display:flex;gap:6px}
+.hdr .links a{padding:5px 12px;border:1px solid var(--border);border-radius:6px;font-size:12px;color:var(--text2);transition:all .15s}
+.hdr .links a:hover{background:var(--bg3);text-decoration:none}
+.hdr .links a.on{color:var(--link);border-color:var(--link);background:var(--bg3)}
+.sysbar{display:flex;gap:12px;padding:10px 24px;border-bottom:1px solid var(--border);background:var(--bg2);flex-wrap:wrap;align-items:center}
+.sysbar .pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600}
+.sysbar .pill.g{background:var(--green-bg);color:var(--green)}
+.sysbar .pill.o{background:var(--orange-bg);color:var(--orange)}
+.sysbar .pill.r{background:var(--red-bg);color:var(--red)}
+.sysbar .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+.sysbar .dot.g{background:var(--green)}
+.sysbar .dot.o{background:var(--orange)}
+.sysbar .dot.r{background:var(--red)}
+.sysbar .sep{width:1px;height:18px;background:var(--border)}
+.sysbar .ts{font-size:11px;color:var(--text3)}
+.wrap{max-width:1400px;margin:0 auto;padding:20px 24px}
+.grid2{display:grid;grid-template-columns:1fr 380px;gap:20px}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+
+/* ── Graph ── */
+.graph-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.graph-title{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.graph-title h2{font-size:13px;font-weight:600}
+.graph-title .badge{font-size:10px;padding:2px 8px;border-radius:10px;background:var(--bg4);color:var(--text2)}
+.graph-area{position:relative;min-height:600px;overflow:hidden;cursor:grab}
+.graph-area:active{cursor:grabbing}
+.graph-area svg{width:100%;height:100%;position:absolute;top:0;left:0}
+
+/* ── Nodes ── */
+.node{position:absolute;cursor:pointer;transition:box-shadow .2s,transform .1s;border-radius:10px;border:1.5px solid var(--border);background:var(--bg3);padding:0;min-width:160px;z-index:2}
+.node:hover{z-index:10;transform:scale(1.03);box-shadow:0 0 20px rgba(91,141,239,.15)}
+.node.selected{box-shadow:0 0 0 2px var(--link),0 0 24px rgba(91,141,239,.2);z-index:11}
+.node-head{padding:8px 12px 6px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)}
+.node-status{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.node-status.healthy{background:var(--green);box-shadow:0 0 6px var(--green)}
+.node-status.degraded{background:var(--orange);box-shadow:0 0 6px var(--orange);animation:pulse-o 2s infinite}
+.node-status.down{background:var(--red);box-shadow:0 0 8px var(--red);animation:blink 1s infinite}
+.node-status.offline{background:var(--text3);opacity:.5}
+@keyframes pulse-o{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.node-name{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.node-body{padding:8px 12px 10px}
+.node-sub{font-size:10px;color:var(--text3);line-height:1.4}
+.node-metric{display:flex;justify-content:space-between;font-size:10px;color:var(--text2);margin-top:4px}
+.node-metric .val{font-weight:600;font-family:monospace}
+.node-tag{display:inline-block;font-size:9px;padding:1px 6px;border-radius:8px;margin-top:4px;font-weight:600}
+.node-tag.warn{background:var(--orange-bg);color:var(--orange)}
+.node-tag.err{background:var(--red-bg);color:var(--red)}
+.node-tag.ok{background:var(--green-bg);color:var(--green)}
+
+/* kill overlay */
+.kill-overlay{position:absolute;inset:0;background:rgba(6,9,15,.85);z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:12px;pointer-events:none}
+.kill-overlay .icon{font-size:48px;margin-bottom:12px;opacity:.6}
+.kill-overlay .txt{font-size:16px;font-weight:600;color:var(--red);letter-spacing:.5px}
+.kill-overlay .sub{font-size:12px;color:var(--text3);margin-top:4px}
+
+/* ── Sidebar ── */
+.side{display:flex;flex-direction:column;gap:16px}
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.panel-title{padding:10px 14px;border-bottom:1px solid var(--border);font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:space-between}
+.panel-title .cnt{font-size:10px;color:var(--text3);font-weight:400}
+.panel-body{padding:12px 14px}
+
+/* model cards */
+.mcard{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px}
+.mcard:last-child{margin-bottom:0}
+.mcard .mt{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.mcard .mn{font-family:monospace;font-size:11px;font-weight:600;word-break:break-all}
+.mcard .ms{font-size:10px;color:var(--text3)}
+.bar-wrap{margin-top:5px}
+.bar-label{display:flex;justify-content:space-between;font-size:9px;color:var(--text3);margin-bottom:1px}
+.bar{height:5px;background:var(--bg);border-radius:4px;overflow:hidden}
+.bar>div{height:100%;border-radius:4px;transition:width .4s}
+.bar>div.ok{background:var(--green)}
+.bar>div.w{background:var(--orange)}
+.bar>div.d{background:var(--red)}
+
+/* errors log */
+.err-item{padding:8px 0;border-bottom:1px solid var(--border);font-size:11px}
+.err-item:last-child{border-bottom:none}
+.err-item .etime{color:var(--text3);font-family:monospace;margin-right:6px}
+.err-item .emsg{color:var(--text2);word-break:break-word}
+.err-item .eapi{color:var(--orange);font-weight:600;margin-right:4px}
+
+/* detail panel */
+.detail-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;display:none;align-items:center;justify-content:center}
+.detail-overlay.open{display:flex}
+.detail-box{background:var(--bg2);border:1px solid var(--border);border-radius:14px;width:480px;max-width:95vw;max-height:80vh;overflow:auto}
+.detail-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.detail-head h3{font-size:14px;font-weight:600}
+.detail-close{background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px 8px}
+.detail-close:hover{color:var(--text)}
+.detail-body{padding:16px 20px}
+.detail-row{display:flex;justify-content:space-between;padding:6px 0;font-size:12px;border-bottom:1px solid var(--border)}
+.detail-row:last-child{border-bottom:none}
+.detail-row .dk{color:var(--text3)}
+.detail-row .dv{color:var(--text);font-weight:500;font-family:monospace}
+.detail-row .dv.g{color:var(--green)}.detail-row .dv.o{color:var(--orange)}.detail-row .dv.r{color:var(--red)}
+
+/* mini graph legend */
+.legend{display:flex;gap:14px;flex-wrap:wrap;padding:8px 16px;font-size:10px;color:var(--text3)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend .ldot{width:8px;height:8px;border-radius:3px}
+
+/* toggle */
+.tog-row{display:flex;gap:12px;padding:8px 16px;border-top:1px solid var(--border);flex-wrap:wrap}
+.tog{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);cursor:pointer}
+.tog input{accent-color:var(--link)}
+</style>
 </head>
 <body>
-<div class="header">
-    <h1>Arlong Architecture</h1>
-    <div class="links">
-        <a href="/admin/dashboard">Dashboard</a>
-        <a href="/admin/accounts">Accounts</a>
-        <a href="/admin/keys">Keys</a>
-        <a href="/admin/architecture" class="hot">Architecture</a>
-        <a href="/admin/logout">Sign out</a>
-    </div>
+
+<div class="hdr">
+  <h1>Arlong Architecture</h1>
+  <div class="links">
+    <a href="/admin/dashboard">Dashboard</a>
+    <a href="/admin/accounts">Accounts</a>
+    <a href="/admin/architecture" class="on">Architecture</a>
+    <a href="/admin/logout">Sign out</a>
+  </div>
+</div>
+
+<div class="sysbar" id="sysbar">
+  <span class="pill g" id="sb-ks"><span class="dot g"></span> Service OK</span>
+  <span class="sep"></span>
+  <span class="pill g" id="sb-ddg"><span class="dot g"></span> DDG Online</span>
+  <span class="sep"></span>
+  <span class="pill g" id="sb-router"><span class="dot g"></span> Router OK</span>
+  <span class="sep"></span>
+  <span class="ts" id="sb-time">--</span>
 </div>
 
 <div class="wrap">
-    <div class="card">
-        <div class="card-title">
-            Neural query → search → evaluation → routing pipeline
-            <span class="badge" id="status-badge">loading…</span>
+  <div class="grid2">
+    <div>
+      <div class="graph-card" id="graph-card">
+        <div class="graph-title">
+          <h2>System Node Graph</h2>
+          <span class="badge" id="refresh-badge">live 3s</span>
         </div>
-        <div class="pane-noise">
-            <label class="tog"><input type="checkbox" id="toggle-threat" checked> Show threat/injection nodes</label>
-            <label class="tog"><input type="checkbox" id="toggle-cache" checked> Show URL cache</label>
-            <span style="color:var(--a-text3);font-size:12px">Live from <code style="font-size:11px">/api/arlong/status</code> · refreshes every 5&nbsp;s</span>
-        </div>
-        <svg id="graph" viewBox="0 0 1200 700" role="img" aria-label="Arlong architecture node graph"></svg>
+        <div class="graph-area" id="graph-area"></div>
         <div class="legend">
-            <span><i class="dot" style="background:#5b8def"></i> Query &amp; understanding</span>
-            <span><i class="dot" style="background:#2e7d32"></i> Retrieval</span>
-            <span><i class="dot" style="background:#e37400"></i> Neural evaluation</span>
-            <span><i class="dot" style="background:#7b1fa2"></i> Synthesis (model router)</span>
-            <span><i class="dot" style="background:#c5221f"></i> Threats / blocked</span>
+          <span><i class="ldot" style="background:var(--link)"></i> Input</span>
+          <span><i class="ldot" style="background:var(--green)"></i> Retrieval</span>
+          <span><i class="ldot" style="background:var(--orange)"></i> Evaluation</span>
+          <span><i class="ldot" style="background:var(--purple)"></i> Synthesis</span>
+          <span><i class="ldot" style="background:var(--red)"></i> Blocked</span>
+          <span><i class="ldot" style="background:var(--cyan)"></i> Output</span>
         </div>
+        <div class="tog-row">
+          <label class="tog"><input type="checkbox" id="tog-threat" checked> Threat nodes</label>
+          <label class="tog"><input type="checkbox" id="tog-cache" checked> Cache nodes</label>
+        </div>
+      </div>
     </div>
 
-    <div class="card">
-        <div class="card-title">Live model router <span class="badge" id="router-count">— models</span></div>
-        <div class="model-grid" id="router-models"><div class="empty">Loading…</div></div>
+    <div class="side">
+      <div class="panel">
+        <div class="panel-title">Model Router <span class="cnt" id="router-cnt">--</span></div>
+        <div class="panel-body" id="router-box"><div style="color:var(--text3);font-size:11px">Loading...</div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Error Log <span class="cnt" id="err-cnt">0 in 24h</span></div>
+        <div class="panel-body" id="err-box" style="max-height:300px;overflow:auto"><div style="color:var(--text3);font-size:11px">Loading...</div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Engine Health</div>
+        <div class="panel-body" id="engine-box"><div style="color:var(--text3);font-size:11px">Loading...</div></div>
+      </div>
     </div>
+  </div>
+</div>
+
+<div class="detail-overlay" id="detail-overlay">
+  <div class="detail-box">
+    <div class="detail-head">
+      <h3 id="detail-title">--</h3>
+      <button class="detail-close" onclick="closeDetail()">&times;</button>
+    </div>
+    <div class="detail-body" id="detail-body"></div>
+  </div>
 </div>
 
 <script>
-var GRAPH_NS = 'http://www.w3.org/2000/svg';
-
-function el(tag, attrs, text){
-    var n = document.createElementNS(GRAPH_NS, tag);
-    for(var k in attrs){ n.setAttribute(k, attrs[k]); }
-    if(text !== undefined) n.textContent = text;
-    return n;
-}
+var DATA = null;
+var SELECTED_NODE = null;
 
 var NODES = [
-    {id:'query',  label:'Query', x:80, y:70, w:150, color:'#5b8def', sub:'natural language input'},
-    {id:'und',    label:'Neural understanding', x:80, y:180, w:170, color:'#5b8def', sub:'terms · phrase · polysemy hints'},
-    {id:'emb',    label:'Embedding cache', x:80, y:300, w:170, color:'#5b8def', sub:'512-d local · LRU', toggle:'cache'},
-    {id:'int',    label:'Internal search', x:380, y:120, w:160, color:'#2e7d32', sub:'DDG engines · news/wiki intents'},
-    {id:'serp',   label:'Serper.dev fallback', x:620, y:120, w:170, color:'#2e7d32', sub:'key rotation on 429'},
-    {id:'fetch',  label:'Concurrent page fetch', x:470, y:250, w:180, color:'#2e7d32', sub:'ThreadPool · 6s budget · URL cache', toggle:'cache'},
-    {id:'rel',    label:'Relevance gate', x:380, y:380, w:160, color:'#e37400', sub:'cosine ≥ 0.35'},
-    {id:'inj',    label:'Injection detector', x:620, y:300, w:180, color:'#e37400', sub:'heuristics → LLM only if ambiguous', toggle:'threat'},
-    {id:'block',  label:'Blocked pages', x:860, y:380, w:170, color:'#c5221f', sub:'drop from context', toggle:'threat'},
-    {id:'corr',   label:'Corroboration', x:380, y:500, w:160, color:'#e37400', sub:'claim clusters ≥ 0.78'},
-    {id:'router', label:'Model router', x:620, y:500, w:190, color:'#7b1fa2', sub:'llama-3.3 > gpt-oss > qwen', live:true},
-    {id:'out',    label:'Answer + epistemic state', x:870, y:500, w:220, color:'#7b1fa2', sub:'citations + source list'},
+  {id:'query',     label:'Query Input',       x:40,  y:30,  layer:'input',   color:'var(--link)',   sub:'Natural language + voice',     metric_key:null},
+  {id:'understand',label:'Neural Understanding',x:40,  y:160, layer:'input',   color:'var(--link)',   sub:'Terms, polysemy, intent',      metric_key:null},
+  {id:'embed',     label:'Embedding Cache',    x:40,  y:290, layer:'input',   color:'var(--link)',   sub:'512-d local LRU',              metric_key:null, toggle:'cache'},
+  {id:'ddg',       label:'DDG Engine',         x:280, y:30,  layer:'retrieval',color:'var(--green)',  sub:'HTML + ddgs + site search',    metric_key:'internal_search'},
+  {id:'serper',    label:'Serper Fallback',    x:520, y:30,  layer:'retrieval',color:'var(--green)',  sub:'Google API · key rotation',    metric_key:'serper_fallback'},
+  {id:'fetch',     label:'Page Fetch',         x:280, y:160, layer:'retrieval',color:'var(--green)',  sub:'ThreadPool · 6s budget',       metric_key:'page_fetch', toggle:'cache'},
+  {id:'relevance', label:'Relevance Gate',     x:280, y:290, layer:'eval',     color:'var(--orange)', sub:'Cosine sim >= 0.35',           metric_key:null},
+  {id:'inject',    label:'Injection Detector',  x:520, y:160, layer:'eval',     color:'var(--orange)', sub:'Heuristics + LLM fallback',    metric_key:null, toggle:'threat'},
+  {id:'blocked',   label:'Blocked Pages',      x:760, y:290, layer:'blocked',  color:'var(--red)',    sub:'Dropped from context',         metric_key:null, toggle:'threat'},
+  {id:'corrobor',  label:'Corroboration',      x:280, y:420, layer:'synthesis',color:'var(--purple)', sub:'Claim clusters >= 0.78',       metric_key:null},
+  {id:'router',    label:'Model Router',       x:520, y:420, layer:'synthesis',color:'var(--purple)', sub:'Llama > GPT-oss > Qwen',      metric_key:'router', live:true},
+  {id:'output',    label:'Answer + Citations', x:760, y:420, layer:'output',   color:'var(--cyan)',   sub:'Epistemic state + sources',    metric_key:null},
+  {id:'api',       label:'API Gateway',        x:760, y:160, layer:'output',   color:'var(--cyan)',   sub:'REST + MCP + ucurl',           metric_key:null},
 ];
 
 var EDGES = [
-    ['query','und'], ['und','int'],
-    ['und','emb'], ['int','serp'], ['und','serp'],
-    ['int','fetch'], ['serp','fetch'],
-    ['emb','rel'], ['fetch','rel'],
-    ['rel','inj'], ['inj','block'], ['rel','block'],
-    ['inj','corr'], ['rel','corr'],
-    ['corr','router'], ['inj','router'], ['block','out'], ['router','out'],
+  ['query','understand'],['understand','ddg'],['understand','embed'],
+  ['ddg','fetch'],['serper','fetch'],['understand','serper'],
+  ['embed','relevance'],['fetch','relevance'],
+  ['relevance','inject'],['inject','blocked'],['relevance','blocked'],
+  ['inject','corrobor'],['relevance','corrobor'],
+  ['corrobor','router'],['inject','router'],['router','output'],
+  ['blocked','api'],['router','api'],['output','api'],
 ];
 
-function drawGraph(){
-    var svg = document.getElementById('graph');
-    svg.innerHTML = '';
+var EDGE_PARTICLES = [];
 
-    var defs = el('defs', {});
-    var m = el('marker', {id:'arrow', viewBox:'0 0 10 10', refX:'9', refY:'5', markerWidth:'7', markerHeight:'7', orient:'auto'});
-    m.appendChild(el('path', {d:'M 0 0 L 10 5 L 0 10 z', fill:'#3a4556'}));
-    defs.appendChild(m);
-    svg.appendChild(defs);
-
-    var showThreat = document.getElementById('toggle-threat').checked;
-    var showCache = document.getElementById('toggle-cache').checked;
-
-    EDGES.forEach(function(e){
-        var a = NODES.filter(function(n){ return n.id === e[0]; })[0];
-        var b = NODES.filter(function(n){ return n.id === e[1]; })[0];
-        if(!a || !b) return;
-        if(a.toggle && !(a.toggle === 'threat' ? showThreat : showCache)) return;
-        if(b.toggle && !(b.toggle === 'threat' ? showThreat : showCache)) return;
-        var ax = a.x + a.w / 2, ay = a.y + 44, bx = b.x + b.w / 2, by = b.y;
-        svg.appendChild(el('line', {
-            x1:ax, y1:ay, x2:bx, y2:by, stroke:'#3a4556', 'stroke-width':2, 'marker-end':'url(#arrow)'
-        }));
-    });
-
-    NODES.forEach(function(n){
-        if(n.toggle === 'threat' && !showThreat) return;
-        if(n.toggle === 'cache' && !showCache) return;
-        var g = el('g', {}, null);
-        g.appendChild(el('rect', {
-            x:n.x, y:n.y, width:n.w, height:44, rx:10, fill:n.color, opacity:.16,
-            stroke:n.color, 'stroke-width':1.6
-        }));
-        g.appendChild(el('text', {x:n.x + n.w / 2, y:n.y + 20, 'text-anchor':'middle', fill:'#e7eaf0', 'font-size':13, 'font-weight':600}, n.label));
-        g.appendChild(el('text', {x:n.x + n.w / 2, y:n.y + 34, 'text-anchor':'middle', fill:'#8b95a5', 'font-size':9.5}, n.sub));
-        svg.appendChild(g);
-    });
+function getStatusColor(st){
+  if(st==='healthy') return 'var(--green)';
+  if(st==='degraded') return 'var(--orange)';
+  if(st==='down') return 'var(--red)';
+  return 'var(--text3)';
+}
+function getStatusLabel(st){
+  if(st==='healthy') return 'Healthy';
+  if(st==='degraded') return 'Degraded';
+  if(st==='down') return 'DOWN';
+  return 'Unknown';
+}
+function getNodeStatus(node){
+  if(!DATA) return 'unknown';
+  var ks = DATA.service && (DATA.service.kill_switch || DATA.service.maintenance);
+  if(ks) return 'offline';
+  if(node.metric_key && DATA.engine_health && DATA.engine_health[node.metric_key]){
+    return DATA.engine_health[node.metric_key].status || 'healthy';
+  }
+  if(node.id==='router'){
+    if(!DATA.router || !DATA.router.enabled) return 'offline';
+    var m = DATA.router.models || [];
+    var down = m.filter(function(x){return x.cooldown_s > 0 || x.fail_streak > 2});
+    if(down.length === m.length && m.length > 0) return 'down';
+    if(down.length > 0) return 'degraded';
+    return 'healthy';
+  }
+  if(node.id==='ddg'){
+    if(DATA.engine_health && DATA.engine_health.internal_search){
+      return DATA.engine_health.internal_search.status || 'healthy';
+    }
+    return 'healthy';
+  }
+  return 'healthy';
 }
 
-function bar(label, used, limit, unit){
-    if(!limit) return '';
-    var pct = Math.min(100, Math.round(used / limit * 100));
-    var cls = pct >= 90 ? 'g-danger' : (pct >= 70 ? 'g-warn' : '');
-    var pill = pct >= 90 ? '<span class="pill danger">' + pct + '%</span>'
-              : (pct >= 70 ? '<span class="pill warn">' + pct + '%</span>'
-              : '<span class="pill ok">' + pct + '%</span>');
-    return '<div style="margin-top:7px"><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--a-text3);margin-bottom:2px">' +
-           '<span>' + label + '</span>' + pill + '</div>' +
-           '<div class="gbar ' + cls + '"><div style="width:' + pct + '%"></div></div></div>';
+function renderGraph(){
+  var area = document.getElementById('graph-area');
+  area.innerHTML = '';
+  var W = 960, H = 560;
+  area.style.height = H + 'px';
+
+  var svgNS = 'http://www.w3.org/2000/svg';
+  var svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.style.width = '100%';
+  svg.style.height = '100%';
+
+  var defs = document.createElementNS(svgNS, 'defs');
+  var marker = document.createElementNS(svgNS, 'marker');
+  marker.setAttribute('id','arr');
+  marker.setAttribute('viewBox','0 0 10 10');
+  marker.setAttribute('refX','9');marker.setAttribute('refY','5');
+  marker.setAttribute('markerWidth','6');marker.setAttribute('markerHeight','6');
+  marker.setAttribute('orient','auto');
+  var path = document.createElementNS(svgNS,'path');
+  path.setAttribute('d','M 0 0 L 10 5 L 0 10 z');
+  path.setAttribute('fill','#2a3548');
+  marker.appendChild(path);
+  defs.appendChild(marker);
+
+  var markerRed = marker.cloneNode(true);
+  markerRed.setAttribute('id','arr-red');
+  markerRed.querySelector('path').setAttribute('fill','#5a2020');
+  defs.appendChild(markerRed);
+  svg.appendChild(defs);
+
+  var showThreat = document.getElementById('tog-threat').checked;
+  var showCache = document.getElementById('tog-cache').checked;
+
+  EDGES.forEach(function(e){
+    var a = NODES.find(function(n){return n.id===e[0]});
+    var b = NODES.find(function(n){return n.id===e[1]});
+    if(!a||!b) return;
+    if(a.toggle==='threat'&&!showThreat) return;
+    if(a.toggle==='cache'&&!showCache) return;
+    if(b.toggle==='threat'&&!showThreat) return;
+    if(b.toggle==='cache'&&!showCache) return;
+    var sa = getNodeStatus(a), sb = getNodeStatus(b);
+    var down = (sa==='offline'||sa==='down'||sb==='offline'||sb==='down');
+    var line = document.createElementNS(svgNS,'line');
+    line.setAttribute('x1', a.x+80); line.setAttribute('y1', a.y+50);
+    line.setAttribute('x2', b.x+80); line.setAttribute('y2', b.y);
+    line.setAttribute('stroke', down?'#3a1515':'#1e2a3a');
+    line.setAttribute('stroke-width', down?'1':'1.5');
+    line.setAttribute('stroke-dasharray', down?'4,4':'');
+    line.setAttribute('marker-end', down?'url(#arr-red)':'url(#arr)');
+    line.setAttribute('class','edge-line');
+    line.dataset.from = e[0]; line.dataset.to = e[1];
+    svg.appendChild(line);
+  });
+
+  area.appendChild(svg);
+
+  NODES.forEach(function(n){
+    if(n.toggle==='threat'&&!showThreat) return;
+    if(n.toggle==='cache'&&!showCache) return;
+    var st = getNodeStatus(n);
+    var stColor = getStatusColor(st);
+    var div = document.createElement('div');
+    div.className = 'node' + (SELECTED_NODE===n.id?' selected':'');
+    div.id = 'node-' + n.id;
+    div.style.left = (n.x / W * 100) + '%';
+    div.style.top = (n.y / H * 100) + '%';
+    div.style.borderColor = st==='down'?stColor:(st==='degraded'?stColor+'40':'');
+    div.onclick = function(){ showDetail(n); };
+
+    var head = document.createElement('div');
+    head.className = 'node-head';
+    head.innerHTML = '<span class="node-status '+st+'" style="background:'+stColor+'"></span><span class="node-name">'+n.label+'</span>';
+    div.appendChild(head);
+
+    var body = document.createElement('div');
+    body.className = 'node-body';
+    var subText = n.sub;
+    if(n.metric_key && DATA && DATA.engine_health && DATA.engine_health[n.metric_key]){
+      var eh = DATA.engine_health[n.metric_key];
+      if(eh.consecutive_failures > 0) subText += ' · '+eh.consecutive_failures+' consecutive failures';
+      if(eh.last_error) subText += '';
+    }
+    body.innerHTML = '<div class="node-sub">'+subText+'</div>';
+    if(st==='down'){
+      body.innerHTML += '<div class="node-tag err">ACTION NEEDED</div>';
+    } else if(st==='degraded'){
+      body.innerHTML += '<div class="node-tag warn">DEGRADED</div>';
+    } else if(st==='healthy' && n.metric_key){
+      body.innerHTML += '<div class="node-tag ok">ONLINE</div>';
+    }
+    if(n.id==='router' && DATA && DATA.router && DATA.router.models){
+      var total = DATA.router.models.length;
+      var healthy = (DATA.router.healthy||[]).length;
+      body.innerHTML += '<div class="node-metric"><span>models</span><span class="val" style="color:'+(healthy===total?'var(--green)':'var(--orange)')+'">'+healthy+'/'+total+'</span></div>';
+    }
+    if(n.id==='ddg' && DATA && DATA.engine_health && (DATA.engine_health.ddg || DATA.engine_health.internal_search)){
+      var ddg = DATA.engine_health.ddg || DATA.engine_health.internal_search || {};
+      body.innerHTML += '<div class="node-metric"><span>errors</span><span class="val" style="color:'+(ddg.total_errors>5?'var(--red)':'var(--text2)')+'">'+(ddg.total_errors||0)+'</span></div>';
+    }
+    if(DATA && DATA.service && (DATA.service.kill_switch || DATA.service.maintenance)){
+      body.innerHTML = '<div class="node-sub" style="color:var(--red)">DISCONNECTED</div>';
+    }
+    div.appendChild(body);
+    area.appendChild(div);
+  });
 }
 
-function loadRouter(){
-    fetch('/api/arlong/status').then(function(r){ return r.json(); }).then(function(d){
-        var badge = document.getElementById('status-badge');
-        badge.textContent = d.neural.embedding_backend === 'remote' ? 'remote embeddings' : 'local embeddings';
-        var box = document.getElementById('router-models');
-        var rcrumb = document.getElementById('router-count');
-        if(!d.router || !d.router.enabled || !d.router.models.length){
-            box.innerHTML = '<div class="empty">Router budgets not configured on this deployment.</div>';
-            rcrumb.textContent = '— models';
-            badge.textContent += ' · router off';
-            return;
-        }
-        rcrumb.textContent = d.router.models.length + ' models';
-        var html = '';
-        d.router.models.forEach(function(m){
-            var state = m.cooldown_s > 0 ? '<span class="pill danger">cooldown ' + Math.ceil(m.cooldown_s) + 's</span>'
-                        : '<span class="pill ok">ready</span>';
-            html += '<div class="mcard"><div class="mtop"><div class="mname">' + m.model + '</div>' + state + '</div>' +
-                    '<div class="msub">reqs ' + (m.counters.requests || 0) +
-                    ' · ok ' + (m.counters.successes || 0) +
-                    ' · fail ' + (m.counters.failures || 0) + '</div>';
-            html += bar('RPM', m.rpm, m.rpm_limit, 'req');
-            html += bar('RPD', m.rpd, m.rpd_limit, 'req');
-            html += bar('TPM', m.tpm, m.tpm_limit, 'tok');
-            html += bar('TPD', m.tpd, m.tpd_limit, 'tok');
-            if(m.cooldown_s > 0){ html += '<div class="msub">fail-streak ' + (m.fail_streak || 0) + ' → backoff active</div>'; }
-            html += '</div>';
-        });
-        box.innerHTML = html;
-    }).catch(function(){
-        document.getElementById('status-badge').textContent = 'status unavailable';
-        document.getElementById('router-models').innerHTML = '<div class="empty">Router status unavailable.</div>';
+function renderRouter(){
+  var box = document.getElementById('router-box');
+  var cnt = document.getElementById('router-cnt');
+  if(!DATA || !DATA.router || !DATA.router.enabled || !DATA.router.models.length){
+    box.innerHTML = '<div style="color:var(--text3);font-size:11px">Router not active</div>';
+    cnt.textContent = '0 models';
+    return;
+  }
+  var m = DATA.router.models;
+  cnt.textContent = m.length + ' models';
+  var html = '';
+  m.forEach(function(md){
+    var st = md.cooldown_s > 0 ? 'r' : (md.fail_streak > 1 ? 'o' : 'ok');
+    var stLabel = md.cooldown_s > 0 ? 'cooldown ' + Math.ceil(md.cooldown_s) + 's' : (md.fail_streak > 1 ? 'failing' : 'ready');
+    html += '<div class="mcard"><div class="mt"><div class="mn">'+md.model+'</div><span class="node-tag '+st+'">'+stLabel+'</span></div>';
+    html += '<div class="ms">reqs '+(md.counters.requests||0)+' · ok '+(md.counters.successes||0)+' · fail '+(md.counters.failures||0)+'</div>';
+    html += bar('RPM', md.rpm, md.rpm_limit);
+    html += bar('RPD', md.rpd, md.rpd_limit);
+    html += bar('TPM', md.tpm, md.tpm_limit);
+    html += bar('TPD', md.tpd, md.tpm_limit);
+    html += '</div>';
+  });
+  box.innerHTML = html;
+}
+
+function bar(label, used, limit){
+  if(!limit) return '';
+  var pct = Math.min(100, Math.round(used/limit*100));
+  var cls = pct>=90?'d':(pct>=70?'w':'ok');
+  return '<div class="bar-wrap"><div class="bar-label"><span>'+label+'</span><span style="color:'+(pct>=90?'var(--red)':pct>=70?'var(--orange)':'var(--text3)')+'">'+pct+'%</span></div><div class="bar"><div class="'+cls+'" style="width:'+pct+'%"></div></div></div>';
+}
+
+function renderErrors(){
+  var box = document.getElementById('err-box');
+  var cnt = document.getElementById('err-cnt');
+  if(!DATA || !DATA.errors){box.innerHTML='<div style="color:var(--text3);font-size:11px">No data</div>';return;}
+  var total = DATA.errors.total_24h||0;
+  cnt.textContent = total + ' in 24h';
+  var latest = DATA.errors.latest||[];
+  if(!latest.length){box.innerHTML='<div style="color:var(--text3);font-size:11px">No recent errors</div>';return;}
+  var html = '';
+  latest.forEach(function(e){
+    var t = '';
+    if(e.time_str) t = e.time_str;
+    else if(e.ts) t = new Date(e.ts*1000).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+    html += '<div class="err-item"><span class="etime">'+t+'</span><span class="eapi">'+(e.api||'')+'</span><span class="emsg">'+(e.message||'')+'</span></div>';
+  });
+  box.innerHTML = html;
+}
+
+function renderEngines(){
+  var box = document.getElementById('engine-box');
+  if(!DATA || !DATA.engine_health || !Object.keys(DATA.engine_health).length){
+    box.innerHTML='<div style="color:var(--text3);font-size:11px">No engine data yet</div>';
+    return;
+  }
+  var html = '';
+  var engines = DATA.engine_health;
+  for(var k in engines){
+    var e = engines[k];
+    var stColor = e.status==='healthy'?'var(--green)':(e.status==='degraded'?'var(--orange)':'var(--red)');
+    html += '<div class="mcard"><div class="mt"><div class="mn">'+k+'</div><span class="node-tag '+(e.status==='healthy'?'ok':e.status==='degraded'?'warn':'err')+'">'+getStatusLabel(e.status)+'</span></div>';
+    html += '<div class="ms">errors: '+(e.total_errors||0)+' · successes: '+(e.total_successes||0)+'</div>';
+    html += '<div class="ms">consecutive: '+(e.consecutive_failures||0)+'</div>';
+    if(e.last_error) html += '<div class="ms" style="color:var(--orange);margin-top:4px;word-break:break-word">last: '+e.last_error+'</div>';
+    if(e.last_check) html += '<div class="ms">checked: '+e.last_check+'</div>';
+    html += '</div>';
+  }
+  box.innerHTML = html;
+}
+
+function updateSysbar(){
+  var ks = document.getElementById('sb-ks');
+  var dg = document.getElementById('sb-ddg');
+  var rt = document.getElementById('sb-router');
+  var tm = document.getElementById('sb-time');
+  if(DATA && DATA.service){
+    var s = DATA.service;
+    if(s.kill_switch){
+      ks.className='pill r'; ks.innerHTML='<span class="dot r"></span> KILL SWITCH ON';
+    } else if(s.maintenance){
+      ks.className='pill o'; ks.innerHTML='<span class="dot o"></span> Maintenance Mode';
+    } else {
+      ks.className='pill g'; ks.innerHTML='<span class="dot g"></span> Service OK';
+    }
+  }
+  if(DATA && DATA.engine_health){
+    var ddgSt = (DATA.engine_health.ddg||DATA.engine_health.internal_search||{}).status||'healthy';
+    if(ddgSt==='down'){dg.className='pill r';dg.innerHTML='<span class="dot r"></span> DDG DOWN';}
+    else if(ddgSt==='degraded'){dg.className='pill o';dg.innerHTML='<span class="dot o"></span> DDG Degraded';}
+    else{dg.className='pill g';dg.innerHTML='<span class="dot g"></span> DDG Online';}
+  }
+  if(DATA && DATA.router){
+    var m = DATA.router.models||[];
+    var down = m.filter(function(x){return x.cooldown_s>0||x.fail_streak>2});
+    if(!DATA.router.enabled){rt.className='pill o';rt.innerHTML='<span class="dot o"></span> Router Off';}
+    else if(down.length===m.length&&m.length>0){rt.className='pill r';rt.innerHTML='<span class="dot r"></span> Router Down';}
+    else if(down.length>0){rt.className='pill o';rt.innerHTML='<span class="dot o"></span> Router Degraded';}
+    else{rt.className='pill g';rt.innerHTML='<span class="dot g"></span> Router OK';}
+  }
+  if(DATA && DATA.server_time){
+    var d = new Date(DATA.server_time);
+    tm.textContent = d.toLocaleString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  }
+}
+
+function showDetail(node){
+  SELECTED_NODE = node.id;
+  document.getElementById('detail-title').textContent = node.label;
+  var body = '';
+  var st = getNodeStatus(node);
+  body += row('Status', '<span style="color:'+getStatusColor(st)+'">'+getStatusLabel(st)+'</span>');
+  body += row('Layer', node.layer);
+  body += row('Description', node.sub);
+  if(node.metric_key && DATA && DATA.engine_health && DATA.engine_health[node.metric_key]){
+    var e = DATA.engine_health[node.metric_key];
+    body += row('Total Errors', e.total_errors||0, (e.total_errors>5?'r':''));
+    body += row('Total Successes', e.total_successes||0, 'g');
+    body += row('Consecutive Failures', e.consecutive_failures||0, (e.consecutive_failures>=5?'r':e.consecutive_failures>=3?'o':''));
+    if(e.last_error) body += row('Last Error', e.last_error);
+    if(e.last_check) body += row('Last Check', e.last_check);
+  }
+  if(node.id==='router' && DATA && DATA.router){
+    var r = DATA.router;
+    body += row('Router Enabled', r.enabled?'Yes':'No');
+    body += row('Models', (r.models||[]).length);
+    body += row('Healthy Models', (r.healthy||[]).length);
+    (r.models||[]).forEach(function(m){
+      body += row(m.model, 'reqs:'+m.counters.requests+' ok:'+m.counters.successes+' fail:'+m.counters.failures+(m.cooldown_s>0?' COOLDOWN:'+Math.ceil(m.cooldown_s)+'s':''));
     });
+  }
+  if(DATA && DATA.service){
+    body += row('Kill Switch', DATA.service.kill_switch?'ON':'OFF', DATA.service.kill_switch?'r':'g');
+    body += row('Maintenance', DATA.service.maintenance?'ON':'OFF', DATA.service.maintenance?'o':'g');
+  }
+  if(DATA && DATA.stats){
+    body += row('Total Searches', DATA.stats.total_searches||0);
+    body += row('Total Users', DATA.stats.total_users||0);
+    body += row('Waitlist', DATA.stats.waitlist_count||0);
+  }
+  if(node.id==='api' && DATA && DATA.errors){
+    body += row('API Errors (24h)', DATA.errors.total_24h||0, (DATA.errors.total_24h>20?'r':''));
+  }
+  document.getElementById('detail-body').innerHTML = body;
+  document.getElementById('detail-overlay').classList.add('open');
+  renderGraph();
+}
+function row(k,v,c){return '<div class="detail-row"><span class="dk">'+k+'</span><span class="dv'+(c?' '+c:'')+'">'+v+'</span></div>';}
+function closeDetail(){document.getElementById('detail-overlay').classList.remove('open');SELECTED_NODE=null;renderGraph();}
+document.getElementById('detail-overlay').addEventListener('click',function(e){if(e.target===this)closeDetail();});
+
+function fetchData(){
+  fetch('/api/admin/architecture/status').then(function(r){return r.json();}).then(function(d){
+    DATA = d;
+    renderGraph();
+    renderRouter();
+    renderErrors();
+    renderEngines();
+    updateSysbar();
+  }).catch(function(){});
 }
 
-document.getElementById('toggle-threat').addEventListener('change', drawGraph);
-document.getElementById('toggle-cache').addEventListener('change', drawGraph);
+document.getElementById('tog-threat').addEventListener('change', renderGraph);
+document.getElementById('tog-cache').addEventListener('change', renderGraph);
 
-drawGraph();
-loadRouter();
-setInterval(loadRouter, 5000);
+fetchData();
+setInterval(fetchData, 3000);
 </script>
 </body>
 </html>
