@@ -36,6 +36,7 @@
             <a href="/admin/dashboard" style="font-size:13px;color:#5f6368;padding:6px 12px;border:1px solid #dadce0;border-radius:6px;text-decoration:none">Dashboard</a>
             <a href="/admin/collections" style="font-size:13px;color:#5f6368;padding:6px 12px;border:1px solid #dadce0;border-radius:6px;text-decoration:none">Collections</a>
             <strong style="font-size:13px;padding:6px 12px">Accounts</strong>
+            <a href="/admin/waitlist" style="font-size:13px;color:#5f6368;padding:6px 12px;border:1px solid #dadce0;border-radius:6px;text-decoration:none">Waitlist</a>
             <a href="/admin/keys" style="font-size:13px;color:#5f6368;padding:6px 12px;border:1px solid #dadce0;border-radius:6px;text-decoration:none">Keys</a>
             <a href="/admin/logout" style="font-size:13px;color:#5f6368;padding:6px 12px;border:1px solid #dadce0;border-radius:6px;text-decoration:none">Sign out</a>
         </div>
@@ -62,6 +63,7 @@
                 <td class="num">{{ u.last_active }}</td>
                 <td>
                     <form method="POST" action="/admin/delete-user" onsubmit="return confirm('Delete user {{ u.username }}? This cannot be undone.')">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="user_id" value="{{ u.user_id }}">
                         <button type="submit" class="btn btn-remove">Wipe</button>
                     </form>

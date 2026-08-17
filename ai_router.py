@@ -36,6 +36,8 @@ class ModelRouter:
             for m in self.budgets
         }
         self.created_ts = self._now()
+        self._on_change = None         # optional callback after record/mark_failure
+        self._persist_ts = 0           # last persist timestamp (rate-limit saves)
 
     # ── window math ──────────────────────────────────────────────────────────
     @staticmethod
@@ -54,6 +56,44 @@ class ModelRouter:
 
     def _tpd(self, model, now):
         return sum(t for _, t in self._window(self._usage.get(model, []), 86400, now))
+
+    # ── persistence ───────────────────────────────────────────────────────
+    def set_on_change(self, callback):
+        self._on_change = callback
+
+    def _fire_change(self):
+        if self._on_change:
+            now = self._now()
+            if now - self._persist_ts > 5:
+                self._persist_ts = now
+                try:
+                    self._on_change(self.export_stats())
+                except Exception:
+                    pass
+
+    def export_stats(self):
+        """Snapshot cumulative counters + fail streaks for persisting to disk."""
+        return {
+            'counters': {m: dict(c) for m, c in self._counters.items()},
+            'fail_streak': dict(self._fail_streak),
+            'created_ts': self.created_ts,
+        }
+
+    def import_stats(self, data):
+        """Restore cumulative counters from a previously saved snapshot."""
+        if not data:
+            return
+        saved_counters = data.get('counters', {})
+        for m in self.order:
+            if m in saved_counters and m in self._counters:
+                for k in ('requests', 'tokens', 'failures', 'successes'):
+                    self._counters[m][k] = int(saved_counters[m].get(k, 0))
+        saved_streaks = data.get('fail_streak', {})
+        for m, v in saved_streaks.items():
+            if m in self._fail_streak or m in self.budgets:
+                self._fail_streak[m] = int(v)
+        if data.get('created_ts'):
+            self.created_ts = data['created_ts']
 
     # ── public API ───────────────────────────────────────────────────────────
     def pick(self, est_tokens=0, prefer=None):
@@ -170,7 +210,7 @@ class ModelRouter:
                 self._usage[model] = [h for h in self._usage[model] if h[0] >= cutoff]
             self._last_used[model] = now
             c = self._counters.setdefault(model, {'requests': 0, 'tokens': 0,
-                                                  'failures': 0, 'successes': 0})
+                                                   'failures': 0, 'successes': 0})
             c['requests'] += 1
             c['tokens'] += max(0, int(tokens))
             if success:
@@ -179,6 +219,7 @@ class ModelRouter:
             else:
                 c['failures'] += 1
                 self._fail_streak[model] = self._fail_streak.get(model, 0) + 1
+        self._fire_change()
 
     def mark_failure(self, model, error=''):
         """Cooldown a model after a 429/overload/5xx so it is skipped a while."""
@@ -187,12 +228,13 @@ class ModelRouter:
             streak = self._fail_streak.get(model, 0) + 1
             self._fail_streak[model] = streak
             c = self._counters.setdefault(model, {'requests': 0, 'tokens': 0,
-                                                  'failures': 0, 'successes': 0})
+                                                   'failures': 0, 'successes': 0})
             c['failures'] += 1
             # exponential backoff: 15s, 60s, 4m, 16m ... capped at 30m
             backoff = min(1800, 15 * (4 ** (streak - 1)))
             self._cooldown_until[model] = now + backoff
-            return backoff
+        self._fire_change()
+        return backoff
 
     def clear_failure(self, model):
         with self._lock:

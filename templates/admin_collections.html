@@ -34,6 +34,7 @@
         <a href="/admin/reports">Reports</a> &middot;
         <strong style="color:var(--text)">Collections</strong> &middot;
         <a href="/admin/accounts">Accounts</a> &middot;
+        <a href="/admin/waitlist">Waitlist</a> &middot;
         <a href="/admin/keys">Keys</a> &middot;
         <a href="/admin/logout">Sign out</a>
     </div>
@@ -54,9 +55,11 @@
                 <td>{{ c.websites|length }}</td>
                 <td>
                     <form method="POST" action="/admin/collections/{{ c.id }}/approve" style="display:inline">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                         <button class="btn approve">Approve &amp; List</button>
                     </form>
                     <form method="POST" action="/admin/collections/{{ c.id }}/reject" style="display:inline">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                         <button class="btn reject">Reject</button>
                     </form>
                 </td>
@@ -81,6 +84,7 @@
             <td>
                 {% if not c.is_approved %}
                 <form method="POST" action="/admin/collections/{{ c.id }}/approve" style="display:inline">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <button class="btn approve">Approve</button>
                 </form>
                 {% endif %}

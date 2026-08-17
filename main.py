@@ -245,7 +245,7 @@ if not app.secret_key:
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
-    SESSION_COOKIE_SECURE=False,
+    SESSION_COOKIE_SECURE=bool(os.environ.get('PRODUCTION')),
     PERMANENT_SESSION_LIFETIME=timedelta(days=7),
     MAX_CONTENT_LENGTH=5 * 1024 * 1024,
     UPLOAD_FOLDER=os.path.join(os.path.dirname(__file__), 'static', 'uploads'),
@@ -306,6 +306,22 @@ _ai_router = _ai_router_module.ModelRouter(
     order=AI_MODEL_ORDER,
 )
 _ai_router_module.set_router(_ai_router)
+
+# Persist cumulative router counters to data.json so they survive restarts.
+def _persist_router_stats(stats):
+    try:
+        data_manager.save_router_stats(stats)
+    except Exception:
+        pass
+_ai_router.set_on_change(_persist_router_stats)
+
+# Restore saved counters on startup.
+try:
+    _saved = data_manager.load_router_stats()
+    if _saved:
+        _ai_router.import_stats(_saved)
+except Exception:
+    pass
 
 # Groq models that accept `reasoning_format` (hidden/tracked thinking). The
 # plain Llama models reject it with a 400, so it is only attached when the
@@ -1099,6 +1115,13 @@ BLOG_NEWSTAND_POSITIONS = [1, 3, 5]
 UNLIMITED = 999999
 
 # ── CSRF Protection ──
+def safe_int(val, default=0):
+    """Safe integer cast that never raises ValueError."""
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return default
+
 def generate_csrf_token():
     if '_csrf_token' not in session:
         session['_csrf_token'] = secrets.token_hex(32)
@@ -1110,6 +1133,24 @@ def validate_csrf():
     if not token or not secrets.compare_digest(expected, token):
         return False
     return True
+
+def validate_csrf_or_json():
+    """Validate CSRF for both form submissions and JSON POST requests."""
+    if request.is_json:
+        token = (request.get_json(silent=True) or {}).get('_csrf_token', '')
+    else:
+        token = request.form.get('_csrf_token', '')
+    expected = session.get('_csrf_token', '')
+    if not token or not secrets.compare_digest(expected, token):
+        return False
+    return True
+
+def _regenerate_session():
+    """Regenerate session ID to prevent session fixation attacks."""
+    session_id = session.get('_id')
+    session.clear()
+    if session_id:
+        session['_id'] = session_id
 
 app.jinja_env.globals['csrf_token'] = generate_csrf_token
 app.jinja_env.globals['enc_key'] = _ENCRYPTION_KEY_HEX
@@ -1172,6 +1213,37 @@ def add_security_headers(response):
     # User-specific HTML and API pages must not be cached by shared proxies;
     # individual routes opt into public caching by overriding this header.
     response.headers.setdefault('Cache-Control', 'no-store')
+    ct = response.content_type or ''
+    if 'text/html' in ct and response.status_code == 200:
+        try:
+            announcement = data_manager.get_announcement()
+            if announcement:
+                import html as _htmlmod
+                safe_ann = _htmlmod.escape(announcement, quote=False)
+                safe_ann = re.sub(r'&lt;a\s', '<a ', safe_ann)
+                safe_ann = re.sub(r'&lt;/a&gt;', '</a>', safe_ann)
+                safe_ann = re.sub(r'href="([^"]*)"', r'href="\1" rel="noopener noreferrer" target="_blank"', safe_ann)
+                banner = (
+                    '<div id="arlong-urgent-banner" style="background:linear-gradient(90deg,#c5221f,#b71c1c);'
+                    'color:#fff;text-align:center;padding:10px 40px 10px 20px;font-size:13px;font-weight:500;'
+                    'position:sticky;top:0;z-index:9999;box-shadow:0 2px 12px rgba(197,34,31,.4);'
+                    'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Helvetica,Arial,sans-serif">'
+                    '<span style="margin-right:8px">&#x26A0;</span>' + safe_ann +
+                    '<button onclick="this.parentElement.remove()" style="position:absolute;right:12px;top:50%;'
+                    'transform:translateY(-50%);background:none;border:none;color:#fff;font-size:18px;cursor:pointer;'
+                    'padding:2px 6px;opacity:.7" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.7">&times;</button>'
+                    '</div>'
+                )
+                data = response.get_data(as_text=True)
+                if '<body' in data:
+                    idx = data.index('<body') + 5
+                    body_close = data.rfind('</body>')
+                    if body_close > idx:
+                        data = data[:idx] + banner + data[idx:]
+                        response.set_data(data)
+                        response.headers['Content-Length'] = str(len(response.get_data()))
+        except Exception:
+            pass
     return response
 
 # Initialize S3 for persistent storage (Railway Storage Buckets)
@@ -3093,6 +3165,46 @@ class DataManager:
                 return entry.get('position', 0), entry.get('status', 'waitlisted')
         return 0, 'not_joined'
 
+    def get_all_ai_waitlist(self):
+        """Return the full waitlist for admin management."""
+        loaded = _load_json()
+        if loaded:
+            self.data = loaded
+        return list(self.data.get('ai_waitlist', []))
+
+    def approve_ai_users(self, user_ids):
+        """Bulk-approve one or more waitlisted users. Returns count approved."""
+        approved = 0
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            wl = self.data.setdefault('ai_waitlist', [])
+            for entry in wl:
+                if entry.get('user_id') in user_ids and entry.get('status') != 'approved':
+                    entry['status'] = 'approved'
+                    entry['approved_at'] = datetime.now().isoformat()
+                    approved += 1
+                    user = self.get_user_by_id(entry['user_id'])
+                    if user:
+                        user['ai_access'] = 'approved'
+                        user['ai_access_granted_at'] = datetime.now().isoformat()
+            _save_json(self.data)
+            self._invalidate_user_cache()
+        return approved
+
+    def remove_from_waitlist(self, user_ids):
+        """Remove users from the waitlist entirely."""
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data['ai_waitlist'] = [
+                e for e in self.data.get('ai_waitlist', [])
+                if e.get('user_id') not in user_ids
+            ]
+            _save_json(self.data)
+
     # ── API keys (token-based access to /api/search) ──
 
     def get_api_keys_for_user(self, user_id):
@@ -4064,6 +4176,22 @@ class DataManager:
                     rec['events_1h'] = 1
             self.data['architecture_events'] = arch
             _save_json(self.data)
+
+    def save_router_stats(self, stats):
+        """Persist model router cumulative counters to data.json."""
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            self.data['router_stats'] = stats
+            _save_json(self.data)
+
+    def load_router_stats(self):
+        """Load persisted router stats from data.json."""
+        loaded = _load_json()
+        if loaded:
+            self.data = loaded
+        return self.data.get('router_stats', {})
 
     def get_ai_usage(self, user_id):
         """Return window usage for a user (msg 12h rolling, ctx fixed 6h budget).
@@ -8684,6 +8812,9 @@ anon_api_limiter = RateLimiter(limit=ANON_API_LIMIT, window=ANON_API_WINDOW)
 # Feedback portal: a light anti-spam throttle (5 submissions/hour/IP).
 feedback_limiter = RateLimiter(limit=5, window=3600)
 
+# Admin login brute-force protection: 5 attempts per 5 minutes per IP.
+admin_login_limiter = RateLimiter(limit=5, window=300)
+
 class SearchStats:
     def __init__(self):
         self._buckets = {}
@@ -9355,7 +9486,7 @@ def opensearch_xml():
 def search():
     _search_start = time.time()
     query = request.args.get('q', '').strip()
-    page = max(1, int(request.args.get('page', 1)))
+    page = max(1, safe_int(request.args.get('page', 1), 1))
     filter_type = 'general'
     region = request.args.get('region', session.get('region', ''))
 
@@ -10254,6 +10385,10 @@ def _serper_web_search(q, understood=None):
 
 @app.route('/api/ai-summary', methods=['GET', 'POST'])
 def api_ai_summary():
+    blocked = _service_blocked()
+    if blocked:
+        msg = 'Service is under maintenance. Please try again later.' if blocked == 'maintenance' else 'Service is temporarily unavailable.'
+        return jsonify({'error': msg}), 503
     try:
         if request.method == 'GET':
             q = (request.args.get('q') or '').strip()
@@ -10483,6 +10618,10 @@ Give the most accurate answer you can in 2-3 sentences. If you are not certain, 
 
 @app.route('/api/search-supplement')
 def api_search_supplement():
+    blocked = _service_blocked()
+    if blocked:
+        msg = 'Service is under maintenance. Please try again later.' if blocked == 'maintenance' else 'Service is temporarily unavailable.'
+        return jsonify({'error': msg}), 503
     query = request.args.get('q', '').strip()
     if not query:
         return jsonify({'ok': False, 'error': 'Query required'}), 400
@@ -10534,6 +10673,10 @@ def api_search_supplement():
 
 @app.route('/api/search-images')
 def api_search_images():
+    blocked = _service_blocked()
+    if blocked:
+        msg = 'Service is under maintenance. Please try again later.' if blocked == 'maintenance' else 'Service is temporarily unavailable.'
+        return jsonify({'error': msg}), 503
     query = request.args.get('q', '').strip()
     if not query:
         return jsonify({'ok': False, 'error': 'Query required'}), 400
@@ -10548,7 +10691,7 @@ def api_search_images():
 @app.route('/api/search')
 def api_search():
     query = request.args.get('q', '').strip()
-    page = max(1, int(request.args.get('page', 1)))
+    page = max(1, safe_int(request.args.get('page', 1), 1))
     pretty = request.args.get('pretty', '').lower() in ('1', 'true', 'yes')
 
     if not query:
@@ -10614,6 +10757,11 @@ def api_search():
         resp.headers['X-RateLimit-Remaining'] = '0'
         resp.headers['X-RateLimit-Reset'] = str(rate['retry_after'])
         return resp
+
+    blocked = _service_blocked()
+    if blocked:
+        msg = 'Service is under maintenance. Please try again later.' if blocked == 'maintenance' else 'Service is temporarily unavailable.'
+        return jsonify({'error': msg}), 503
 
     crisis = detect_crisis(query)
 
@@ -10908,12 +11056,16 @@ def api_arlong_search():
         page = max(1, int(body.get('page', 1)))
     else:
         q = request.args.get('q', '').strip()
-        page = max(1, int(request.args.get('page', 1)))
+        page = max(1, safe_int(request.args.get('page', 1), 1))
     if not q:
         return jsonify({"error": "Missing query parameter", "usage": "/api/arlong/search?q=your+query"}), 400
     gate = _arlong_api_gate()
     if not isinstance(gate, tuple):
         return gate
+    blocked = _service_blocked()
+    if blocked:
+        msg = 'Service is under maintenance. Please try again later.' if blocked == 'maintenance' else 'Service is temporarily unavailable.'
+        return jsonify({'error': msg}), 503
     try:
         response = _arlong_search_payload(q, page)
     except Exception as e:
@@ -10934,6 +11086,10 @@ def api_arlong_answer():
     gate = _arlong_api_gate()
     if not isinstance(gate, tuple):
         return gate
+    blocked = _service_blocked()
+    if blocked:
+        msg = 'Service is under maintenance. Please try again later.' if blocked == 'maintenance' else 'Service is temporarily unavailable.'
+        return jsonify({'error': msg}), 503
     try:
         response = _arlong_answer_payload(q)
     except AIAllModelsFailedError as e:
@@ -11175,6 +11331,10 @@ def mcp_endpoint():
 
 @app.route('/api/enc-search', methods=['POST'])
 def enc_search():
+    blocked = _service_blocked()
+    if blocked:
+        msg = 'Service is under maintenance. Please try again later.' if blocked == 'maintenance' else 'Service is temporarily unavailable.'
+        return jsonify({'error': msg}), 503
     try:
         body = request.get_json()
         query = _dec(body['iv'], body['data']).strip()
@@ -11212,6 +11372,10 @@ def enc_search():
 
 @app.route('/api/enc-images', methods=['POST'])
 def enc_images():
+    blocked = _service_blocked()
+    if blocked:
+        msg = 'Service is under maintenance. Please try again later.' if blocked == 'maintenance' else 'Service is temporarily unavailable.'
+        return jsonify({'error': msg}), 503
     try:
         body = request.get_json()
         query = _dec(body['iv'], body['data']).strip()
@@ -11226,6 +11390,10 @@ def enc_images():
 
 @app.route('/api/enc-videos', methods=['POST'])
 def enc_videos():
+    blocked = _service_blocked()
+    if blocked:
+        msg = 'Service is under maintenance. Please try again later.' if blocked == 'maintenance' else 'Service is temporarily unavailable.'
+        return jsonify({'error': msg}), 503
     try:
         body = request.get_json()
         query = _dec(body['iv'], body['data']).strip()
@@ -11240,6 +11408,9 @@ def enc_videos():
 
 @app.route('/images')
 def images():
+    blocked = _service_blocked()
+    if blocked:
+        return render_template('service_down.html', mode=blocked), 503
     query = request.args.get('q', '').strip()
     if not query:
         return render_template('images.html')
@@ -11257,6 +11428,9 @@ def images():
 
 @app.route('/videos')
 def videos():
+    blocked = _service_blocked()
+    if blocked:
+        return render_template('service_down.html', mode=blocked), 503
     query = request.args.get('q', '').strip()
     if not query:
         return render_template('videos.html')
@@ -11347,13 +11521,17 @@ def stats():
 
 @app.route('/api/stats')
 def api_stats():
-    hours = min(int(request.args.get('hours', 48)), 168)
+    hours = min(safe_int(request.args.get('hours', 48), 48), 168)
     hourly = search_stats.get_hourly(hours)
     per_minute = search_stats.get_recent_per_minute(30)
     return jsonify({"hourly": hourly, "per_minute": per_minute})
 
 @app.route('/suggest')
 def suggest():
+    blocked = _service_blocked()
+    if blocked:
+        msg = 'Service is under maintenance. Please try again later.' if blocked == 'maintenance' else 'Service is temporarily unavailable.'
+        return jsonify({'error': msg}), 503
     query = request.args.get('q', '').strip()
     try:
         suggestions = search_engine.get_suggestions(query)
@@ -11494,15 +11672,24 @@ def admin_login():
         return redirect(url_for('admin_dashboard'))
     error = ''
     if request.method == 'POST':
-        if not validate_csrf():
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()
+        if not admin_login_limiter.check(ip).get('allowed', False):
+            error = 'Too many attempts. Wait 5 minutes.'
+        elif not validate_csrf():
             error = 'Invalid form submission. Please try again.'
         else:
             password = request.form.get('password', '')
             if secrets.compare_digest(password, ADMIN_PASSWORD):
+                old_sid = session.get('_id')
                 session.clear()
+                session.permanent = True
+                if old_sid:
+                    session['_id'] = old_sid
                 session['admin_logged_in'] = True
+                app.logger.warning(f"Admin login success from {ip}")
                 return redirect(url_for('admin_dashboard'))
             else:
+                app.logger.warning(f"Admin login failed from {ip}")
                 error = 'Incorrect password'
     return render_template('admin.html', login=True, error=error)
 
@@ -11574,6 +11761,7 @@ def admin_feedback():
 def admin_feedback_read(feedback_id):
     if not session.get('admin_logged_in'):
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+    if not validate_csrf(): return jsonify({"error": "CSRF"}), 403
     data_manager.mark_feedback_read(feedback_id)
     return jsonify({'ok': True})
 
@@ -11581,6 +11769,7 @@ def admin_feedback_read(feedback_id):
 def admin_feedback_delete(feedback_id):
     if not session.get('admin_logged_in'):
         return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+    if not validate_csrf(): return jsonify({"error": "CSRF"}), 403
     data_manager.delete_feedback(feedback_id)
     return jsonify({'ok': True})
 
@@ -11615,7 +11804,8 @@ def admin_service():
 def admin_approve_report(report_id):
     if not session.get('admin_logged_in'):
         return jsonify({"error": "Unauthorized"}), 401
-    penalty = int(request.form.get('penalty', -30))
+    if not validate_csrf(): return jsonify({"error": "CSRF"}), 403
+    penalty = safe_int(request.form.get('penalty', -30), -30)
     data_manager.approve_report(report_id, penalty)
     return redirect(url_for('admin_dashboard'))
 
@@ -11623,6 +11813,7 @@ def admin_approve_report(report_id):
 def admin_deny_report(report_id):
     if not session.get('admin_logged_in'):
         return jsonify({"error": "Unauthorized"}), 401
+    if not validate_csrf(): return jsonify({"error": "CSRF"}), 403
     data_manager.deny_report(report_id)
     return redirect(url_for('admin_dashboard'))
 
@@ -11630,6 +11821,7 @@ def admin_deny_report(report_id):
 def admin_remove_blacklist():
     if not session.get('admin_logged_in'):
         return jsonify({"error": "Unauthorized"}), 401
+    if not validate_csrf(): return jsonify({"error": "CSRF"}), 403
     domain = request.form.get('domain', '')
     if domain:
         data_manager.remove_from_blacklist(domain)
@@ -11639,6 +11831,7 @@ def admin_remove_blacklist():
 def admin_celebration():
     if not session.get('admin_logged_in'):
         return redirect(url_for('admin_login'))
+    if not validate_csrf(): return redirect(url_for('admin_dashboard'))
     values = request.form.getlist('celebration')
     text = values[-1].strip() if values else ''
     data_manager.set_celebration(text)
@@ -11648,6 +11841,7 @@ def admin_celebration():
 def admin_add_verified():
     if not session.get('admin_logged_in'):
         return redirect(url_for('admin_login'))
+    if not validate_csrf(): return redirect(url_for('admin_dashboard'))
     domain = request.form.get('domain', '').strip().lower().replace('www.', '')
     name = request.form.get('name', '').strip()
     email = request.form.get('email', '').strip()
@@ -11666,6 +11860,7 @@ def admin_add_verified():
 def admin_remove_verified():
     if not session.get('admin_logged_in'):
         return redirect(url_for('admin_login'))
+    if not validate_csrf(): return redirect(url_for('admin_dashboard'))
     domain = request.form.get('domain', '')
     if domain:
         data_manager.remove_verified_site(domain)
@@ -11675,6 +11870,7 @@ def admin_remove_verified():
 def admin_announcement():
     if not session.get('admin_logged_in'):
         return jsonify({"error": "Unauthorized"}), 401
+    if not validate_csrf(): return jsonify({"error": "CSRF"}), 403
     values = request.form.getlist('announcement')
     text = values[-1].strip() if values else ''
     data_manager.set_announcement(text)
@@ -11783,8 +11979,11 @@ def signup():
         user, err = data_manager.create_user(username, password, sq, sa, ip, email, weather_loc)
         if err:
             return render_template('signup.html', error=err, email=email, redirect=redirect_target)
+        old_sid = session.get('_id')
         session.clear()
         session.permanent = True
+        if old_sid:
+            session['_id'] = old_sid
         session['user_id'] = user['user_id']
         session['username'] = user['username']
         data_manager.accept_tos(user['user_id'])
@@ -11812,8 +12011,11 @@ def login():
         user = data_manager.authenticate_user(username, password)
         if not user:
             return render_template('ai_auth.html', login_error='Invalid credentials', redirect=redirect_target)
+        old_sid = session.get('_id')
         session.clear()
         session.permanent = True
+        if old_sid:
+            session['_id'] = old_sid
         session['user_id'] = user['user_id']
         session['username'] = user['username']
         try:
@@ -12173,6 +12375,7 @@ def admin_reports():
 def admin_resolve_report():
     if not session.get('admin_logged_in'):
         return redirect(url_for('admin_login'))
+    if not validate_csrf(): return redirect(url_for('admin_reports'))
     domain = request.form.get('domain', '').strip()
     action = request.form.get('action', '').strip()
     if domain and action in ('approved', 'dismissed'):
@@ -12184,6 +12387,7 @@ def admin_resolve_report():
 def admin_approve_submission():
     if not session.get('admin_logged_in'):
         return redirect(url_for('admin_login'))
+    if not validate_csrf(): return redirect(url_for('admin_reports'))
     domain = request.form.get('domain', '').strip()
     data_manager.approve_submission(domain)
     return redirect(url_for('admin_reports'))
@@ -12205,10 +12409,48 @@ def admin_accounts():
         })
     return render_template('admin_accounts.html', users=user_list)
 
+
+@app.route('/admin/waitlist')
+def admin_waitlist():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    entries = data_manager.get_all_ai_waitlist()
+    approved_count = sum(1 for e in entries if e.get('status') == 'approved')
+    waitlisted_count = sum(1 for e in entries if e.get('status') == 'waitlisted')
+    return render_template('admin_waitlist.html',
+        entries=entries, approved_count=approved_count,
+        waitlisted_count=waitlisted_count, limit=AI_WAITLIST_LIMIT)
+
+
+@app.route('/admin/waitlist/approve', methods=['POST'])
+def admin_waitlist_approve():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    if not validate_csrf():
+        return redirect(url_for('admin_waitlist'))
+    user_ids = request.form.getlist('user_ids')
+    if user_ids:
+        data_manager.approve_ai_users(user_ids)
+    return redirect(url_for('admin_waitlist'))
+
+
+@app.route('/admin/waitlist/remove', methods=['POST'])
+def admin_waitlist_remove():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    if not validate_csrf():
+        return redirect(url_for('admin_waitlist'))
+    user_ids = request.form.getlist('user_ids')
+    if user_ids:
+        data_manager.remove_from_waitlist(user_ids)
+    return redirect(url_for('admin_waitlist'))
+
+
 @app.route('/admin/delete-user', methods=['POST'])
 def admin_delete_user():
     if not session.get('admin_logged_in'):
         return jsonify({'error': 'Unauthorized'}), 401
+    if not validate_csrf(): return jsonify({"error": "CSRF"}), 403
     user_id = request.form.get('user_id', '').strip()
     if user_id:
         data_manager.delete_user(user_id)
@@ -12228,6 +12470,7 @@ def admin_collections():
 def admin_approve_collection(collection_id):
     if not session.get('admin_logged_in'):
         return jsonify({'error': 'Unauthorized'}), 401
+    if not validate_csrf(): return jsonify({"error": "CSRF"}), 403
     data_manager.approve_collection(collection_id, True)
     return redirect(url_for('admin_collections'))
 
@@ -12236,6 +12479,7 @@ def admin_approve_collection(collection_id):
 def admin_reject_collection(collection_id):
     if not session.get('admin_logged_in'):
         return jsonify({'error': 'Unauthorized'}), 401
+    if not validate_csrf(): return jsonify({"error": "CSRF"}), 403
     data_manager.approve_collection(collection_id, False)
     return redirect(url_for('admin_collections'))
 
@@ -12269,7 +12513,7 @@ def strip_markdown(text):
 @app.route('/explore')
 def explore():
     sort = request.args.get('sort', 'new')
-    page = int(request.args.get('page', 1))
+    page = safe_int(request.args.get('page', 1), 1)
     threshold = data_manager.QUALITY_THRESHOLD
     all_cols, _ = data_manager.get_collections(sort='new', page=1, per_page=9999)
     quality_cols = [c for c in all_cols if c.get('quality_score', 0) >= threshold or (c.get('is_listed') and c.get('is_approved'))]
@@ -12302,6 +12546,11 @@ def explore_collection(collection_id):
     content_md = collection.get('content', '')
     content_html = markdown.markdown(content_md, extensions=['fenced_code', 'codehilite', 'tables'])
     content_html = re.sub(r'@([a-zA-Z0-9_-]+)', r'<a href="/u/\1">@\1</a>', content_html)
+    try:
+        import bleach
+        content_html = bleach.clean(content_html, tags=['p','br','strong','em','a','code','pre','blockquote','ul','ol','li','h1','h2','h3','h4','h5','h6','table','thead','tbody','tr','th','td','span','div','hr','img'], attributes={'a': ['href','title'], 'img': ['src','alt','title'], 'span': ['class'], 'div': ['class']}, strip=True)
+    except ImportError:
+        pass
     return render_template('collection_detail.html', collection=collection, is_owner=is_owner, content_html=content_html)
 
 
@@ -12339,6 +12588,17 @@ def api_link_meta():
     if not url:
         return jsonify({'ok': False, 'error': 'URL required'}), 400
     try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https'):
+            return jsonify({'ok': False, 'error': 'Only http/https URLs allowed'}), 400
+        host = parsed.hostname or ''
+        if host in ('localhost', '127.0.0.1', '0.0.0.0', '::1', ''):
+            return jsonify({'ok': False, 'error': 'Internal URLs not allowed'}), 400
+        if host.startswith('10.') or host.startswith('192.168.') or host.startswith('172.'):
+            return jsonify({'ok': False, 'error': 'Internal URLs not allowed'}), 400
+        if host.endswith('.local') or host.endswith('.internal') or host.endswith('.localhost'):
+            return jsonify({'ok': False, 'error': 'Internal URLs not allowed'}), 400
         import httpx
         resp = httpx.get(url, follow_redirects=True, timeout=8,
                          headers={'User-Agent': 'Mozilla/5.0 (compatible; arlong-bot/1.0)'})

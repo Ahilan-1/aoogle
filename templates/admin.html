@@ -160,6 +160,7 @@
             <a href="/admin/architecture" style="font-size:13px;color:var(--a-text3);padding:6px 12px;border:1px solid var(--a-border);border-radius:6px">Architecture</a>
             <a href="/admin/collections" style="font-size:13px;color:var(--a-text3);padding:6px 12px;border:1px solid var(--a-border);border-radius:6px">Collections</a>
             <a href="/admin/accounts" style="font-size:13px;color:var(--a-text3);padding:6px 12px;border:1px solid var(--a-border);border-radius:6px">Accounts</a>
+            <a href="/admin/waitlist" style="font-size:13px;color:var(--a-text3);padding:6px 12px;border:1px solid var(--a-border);border-radius:6px">Waitlist</a>
             <a href="/admin/keys" style="font-size:13px;color:var(--a-text3);padding:6px 12px;border:1px solid var(--a-border);border-radius:6px">Keys</a>
             <a href="/admin/logout" style="font-size:13px;color:var(--a-text3);padding:6px 12px;border:1px solid var(--a-border);border-radius:6px">Sign out</a>
         </div>
@@ -435,10 +436,12 @@
                         <td>
                             <div class="btn-group">
                                 <form method="POST" action="/admin/reports/{{ r.id }}/approve" style="display:flex;align-items:center;gap:4px">
+                                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                                     <input type="number" name="penalty" value="-30" class="penalty-input" title="Penalty score">
                                     <button type="submit" class="btn btn-approve">Approve</button>
                                 </form>
                                 <form method="POST" action="/admin/reports/{{ r.id }}/deny">
+                                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                                     <button type="submit" class="btn btn-deny">Deny</button>
                                 </form>
                             </div>
@@ -497,6 +500,7 @@
                     <span>{{ domain }}</span>
                     <span class="bl-penalty">({{ penalty }})</span>
                     <form method="POST" action="/admin/blacklist/remove">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="domain" value="{{ domain }}">
                         <button type="submit" class="btn btn-remove" style="padding:1px 6px;font-size:10px">x</button>
                     </form>
@@ -515,6 +519,7 @@
             </div>
             <div style="padding:16px 20px;border-bottom:1px solid var(--a-border)">
                 <form method="POST" action="/admin/verified/add" style="display:flex;gap:8px;flex-wrap:wrap">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <input type="text" name="domain" placeholder="Domain (e.g., example.com)" required style="flex:1;min-width:120px;padding:8px 12px;border:1px solid var(--a-border);border-radius:6px;font-size:13px">
                     <input type="text" name="name" placeholder="Business name" required style="flex:1;min-width:120px;padding:8px 12px;border:1px solid var(--a-border);border-radius:6px;font-size:13px">
                     <input type="email" name="email" placeholder="Contact email" style="flex:1;min-width:120px;padding:8px 12px;border:1px solid var(--a-border);border-radius:6px;font-size:13px">
@@ -559,6 +564,7 @@
                     <td class="date-cell">{{ s.verified_at[:10] }}</td>
                     <td>
                         <form method="POST" action="/admin/verified/remove">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="domain" value="{{ s.domain }}">
                             <button type="submit" class="btn btn-remove">Remove</button>
                         </form>
@@ -588,6 +594,7 @@
                     <td>
                         <div class="btn-group">
                             <form method="POST" action="/admin/submission/approve" style="display:inline">
+                                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="domain" value="{{ s.domain }}">
                                 <button type="submit" class="btn btn-approve" style="background:var(--a-green-btn)">Approve</button>
                             </form>
@@ -617,11 +624,13 @@
                     <td class="date-cell">{{ r.created_at[:10] }}</td>
                     <td>
                         <form method="POST" action="/admin/report/resolve" style="display:inline">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="domain" value="{{ r.domain }}">
                             <input type="hidden" name="action" value="approved">
                             <button type="submit" class="btn btn-approve" style="padding:4px 10px;font-size:12px">Block</button>
                         </form>
                         <form method="POST" action="/admin/report/resolve" style="display:inline">
+                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="domain" value="{{ r.domain }}">
                             <input type="hidden" name="action" value="dismissed">
                             <button type="submit" class="btn btn-remove" style="padding:4px 10px;font-size:12px">Dismiss</button>
