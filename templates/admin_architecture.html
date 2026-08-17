@@ -149,7 +149,7 @@ a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
       <div class="graph-card" id="graph-card">
         <div class="graph-title">
           <h2>System Node Graph</h2>
-          <span class="badge" id="refresh-badge">live 3s</span>
+          <span class="badge" id="refresh-badge">live 60s</span>
         </div>
         <div class="graph-area" id="graph-area"></div>
         <div class="legend">
@@ -537,7 +537,7 @@ document.getElementById('tog-threat').addEventListener('change', renderGraph);
 document.getElementById('tog-cache').addEventListener('change', renderGraph);
 
 fetchData();
-setInterval(fetchData, 3000);
+setInterval(fetchData, 60000);
 </script>
 </body>
 </html>

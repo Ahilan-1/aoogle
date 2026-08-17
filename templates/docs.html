@@ -3,391 +3,534 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>API Docs - arlong</title>
+    <title>API &amp; Integrations - Arlong</title>
     <style>
-        :root {
-            --bg:#fff; --text:#202124; --text2:#5f6368; --text3:#70757a;
-            --link:#1a0dab; --link-v:#609; --border:#dadce0; --cm:#4285f4;
-            --cr:#ea4335; --cy:#fbbc05; --cg:#34a853; --code-bg:#1e1e1e;
+        :root{
+            --bg:#08090d;--bg2:#0e1017;--bg3:#161821;--bg4:#1c1e2a;
+            --border:rgba(255,255,255,.08);--border2:rgba(255,255,255,.14);
+            --text:#e5e5ea;--text2:#9999a0;--text3:#6b6b73;
+            --accent:#3b82f6;--accent2:#60a5fa;
+            --green:#34d399;--red:#f87171;--yellow:#fbbf24;--purple:#a78bfa;
         }
         *,*::before,*::after{box-sizing:border-box}
-        body{margin:0;padding:0;font-family:arial,sans-serif;color:var(--text);background:var(--bg)}
-        a{text-decoration:none;color:var(--link)}
+        body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--text);background:var(--bg)}
+        a{color:var(--accent2);text-decoration:none}
         a:hover{text-decoration:underline}
-        a:visited{color:var(--link-v)}
 
-        .top{position:sticky;top:0;z-index:100;background:var(--bg);border-bottom:1px solid var(--border)}
-        .top-inner{display:flex;align-items:center;gap:12px;max-width:820px;margin:0 auto;padding:10px 16px}
-        .ml{font-size:24px;font-family:'Product Sans',Arial,sans-serif;letter-spacing:-1px;line-height:1;flex-shrink:0}
-        .ml span {
-            background: linear-gradient(to top, #0066cc, #3399ff 50%, var(--text) 50%);
-            background-size: 100% 200%;
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            animation: arlong-wave 4s ease-in-out infinite;
-        }
-        .ml span:nth-child(1) { animation-delay: 0s; }
-        .ml span:nth-child(2) { animation-delay: 0.15s; }
-        .ml span:nth-child(3) { animation-delay: 0.3s; }
-        .ml span:nth-child(4) { animation-delay: 0.45s; }
-        .ml span:nth-child(5) { animation-delay: 0.6s; }
-        .ml span:nth-child(6) { animation-delay: 0.75s; }
-        @keyframes arlong-wave {
-            0%, 100% { background-position: 0 45%; }
-            50% { background-position: 0 55%; }
-        }
-        .nav{display:flex;overflow-x:auto;margin-left:8px}
-        .nav a{padding:10px 14px 8px;font-size:13px;color:var(--text3);border-bottom:3px solid transparent;white-space:nowrap}
-        .nav a.active{color:var(--cm);border-bottom-color:var(--cm)}
+        .top{position:sticky;top:0;z-index:100;background:rgba(8,9,13,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+        .top-inner{display:flex;align-items:center;gap:12px;max-width:1200px;margin:0 auto;padding:10px 20px}
+        .ml{font-size:22px;font-weight:700;letter-spacing:-.5px;flex-shrink:0}
+        .ml span{background:linear-gradient(135deg,#3b82f6,#60a5fa);-webkit-background-clip:text;background-clip:text;color:transparent}
+        .nav{display:flex;overflow-x:auto;margin-left:8px;gap:2px}
+        .nav a{padding:8px 12px;font-size:13px;color:var(--text3);border-radius:6px;white-space:nowrap;transition:color .15s,background .15s}
+        .nav a.active{color:#fff;background:rgba(255,255,255,.08)}
         .nav a:hover{color:var(--text);text-decoration:none}
 
-        .container{max-width:820px;margin:0 auto;padding:28px 20px 60px}
+        .layout{display:flex;max-width:1200px;margin:0 auto;min-height:calc(100vh - 48px)}
+        .sidebar{width:220px;flex-shrink:0;padding:24px 0 24px 20px;position:sticky;top:48px;height:calc(100vh - 48px);overflow-y:auto;border-right:1px solid var(--border)}
+        .sidebar-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);margin:18px 0 8px;padding-left:12px}
+        .sidebar-label:first-child{margin-top:0}
+        .sidebar a{display:block;padding:6px 12px;font-size:13px;color:var(--text2);border-radius:6px;transition:all .15s}
+        .sidebar a:hover,.sidebar a.active{color:#fff;background:rgba(255,255,255,.06);text-decoration:none}
+        .main{flex:1;min-width:0;padding:28px 32px 60px 32px}
 
-        h1{font-size:28px;font-weight:400;margin:0 0 6px}
-        p.subtitle{color:var(--text2);font-size:14px;margin:0 0 32px;line-height:1.5}
-
-        h2{font-size:20px;font-weight:500;margin:36px 0 12px}
-        h3{font-size:15px;font-weight:500;margin:24px 0 8px;color:var(--text)}
-
+        h1{font-size:30px;font-weight:700;margin:0 0 6px;letter-spacing:-.3px}
+        .subtitle{color:var(--text2);font-size:15px;margin:0 0 32px;line-height:1.5}
+        h2{font-size:20px;font-weight:700;margin:36px 0 12px;letter-spacing:-.1px}
+        h3{font-size:15px;font-weight:600;margin:24px 0 8px;color:var(--text)}
         p,li,td,th{font-size:14px;line-height:1.6;color:var(--text2)}
-        ul{padding-left:20px}
-        li{margin-bottom:4px}
-        strong{color:var(--text);font-weight:500}
+        ul{padding-left:20px}li{margin-bottom:4px}
+        strong{color:var(--text);font-weight:600}
+        code{color:var(--red);font-size:13px;font-family:'SFMono-Regular',Consolas,monospace;background:rgba(255,255,255,.05);padding:1px 5px;border-radius:4px}
+        pre{background:var(--bg3);color:#d4d4d4;padding:14px 18px;border-radius:10px;border:1px solid var(--border);overflow-x:auto;font-size:13px;line-height:1.55;margin:8px 0 16px;font-family:'SFMono-Regular',Consolas,monospace}
+        pre .c{color:#6b7280}pre .k{color:#60a5fa}pre .s{color:#34d399}pre .n{color:#e5e5ea}pre .fn{color:#fbbf24}
+        table{width:100%;border-collapse:collapse;margin:8px 0 16px;font-size:13px}
+        th{text-align:left;padding:8px 12px;font-weight:600;color:var(--text);font-size:12px;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border2);background:var(--bg3)}
+        td{padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text2)}
+        tr:last-child td{border-bottom:none}
 
-        code{color:var(--cr);font-size:13px;font-family:'Consolas','Menlo',monospace}
-        pre{background:var(--code-bg);color:#d4d4d4;padding:14px 18px;border-radius:8px;overflow-x:auto;font-size:13px;line-height:1.55;margin:8px 0 16px;font-family:'Consolas','Menlo',monospace}
-        pre .c1{color:#6a9955}
-        pre .k{color:#569cd6}
-        pre .kc{color:#569cd6}
-        pre .kn{color:#569cd6}
-        pre .s{color:#ce9178}
-        pre .s2{color:#ce9178}
-        pre .nf{color:#dcdcaa}
-        pre .bp{color:#569cd6}
-        pre .mi{color:#b5cea8}
-        pre .o{color:#d4d4d4}
-        pre .nb{color:#d4d4d4}
-        pre .err{color:#f44747}
-        pre .nd{color:#c586c0}
-        pre .nl{color:#9cdcfe}
-        pre .nn{color:#4ec9b0}
-        pre .sa{color:#ce9178}
-        pre .na{color:#9cdcfe}
+        .method{display:inline-block;padding:2px 8px;font-size:11px;font-weight:700;letter-spacing:.3px;border-radius:4px;margin-right:6px;vertical-align:middle}
+        .method.get{background:rgba(59,130,246,.15);color:var(--accent2)}
+        .method.post{background:rgba(52,211,153,.15);color:var(--green)}
 
-        table{width:100%;border-collapse:collapse;margin:8px 0 16px}
-        th{text-align:left;padding:8px 12px;font-weight:500;color:var(--text2);font-size:13px;border-bottom:1px solid var(--border)}
-        td{padding:8px 12px;border-bottom:1px solid #f1f3f4;color:var(--text2);font-size:13px}
-        tr:last-child td{border-bottom:1px solid var(--border)}
-        table code{font-size:12px}
+        .ep{font-family:'SFMono-Regular',Consolas,monospace;font-size:14px;color:var(--text);margin:8px 0 16px;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px}
 
-        .method{display:inline-block;padding:2px 8px;font-size:11px;font-weight:600;letter-spacing:0.3px;border-radius:3px;background:#e8f0fe;color:var(--cm);margin-right:8px;vertical-align:middle}
-        .method.post{background:#e6f4ea;color:var(--cg)}
+        .badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.3px;vertical-align:middle}
+        .badge-soon{background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.3);color:var(--purple)}
+        .badge-live{background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.3);color:var(--green)}
+        .badge-beta{background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);color:var(--yellow)}
 
-        .ep{font-family:'Consolas','Menlo',monospace;font-size:14px;color:var(--text);margin:8px 0 16px;padding:10px 0;border-bottom:1px solid #f1f3f4}
+        .tabs{display:flex;gap:2px;margin-bottom:-1px;position:relative;z-index:1}
+        .tab-btn{padding:8px 16px;font-size:12.5px;font-weight:600;color:var(--text3);background:transparent;border:1px solid transparent;border-bottom:none;border-radius:8px 8px 0 0;cursor:pointer;transition:all .15s}
+        .tab-btn:hover{color:var(--text)}
+        .tab-btn.active{color:var(--text);background:var(--bg3);border-color:var(--border)}
+        .tab-panel{display:none}
+        .tab-panel.active{display:block}
 
-        .try-section{margin:8px 0 16px}
-        .try-section input{border:1px solid var(--border);border-radius:20px;padding:8px 14px;font-size:14px;outline:none;width:280px;max-width:100%;font-family:arial,sans-serif;vertical-align:middle}
-        .try-section input:focus{border-color:var(--cm)}
-        .try-section button{background:var(--cm);color:#fff;border:none;border-radius:20px;padding:8px 18px;font-size:13px;cursor:pointer;font-family:arial,sans-serif;vertical-align:middle;margin-left:6px}
-        .try-section button:hover{opacity:.9}
-        .try-section button:active{transform:scale(.97)}
-        .response-box{background:var(--code-bg);color:#d4d4d4;border-radius:8px;padding:12px 14px;font-size:12px;line-height:1.5;max-height:300px;overflow-y:auto;font-family:'Consolas','Menlo',monospace;white-space:pre-wrap;word-break:break-all;margin-top:10px}
+        .card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin:12px 0}
+        .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin:12px 0}
+        .plugin-card{background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:20px;position:relative;overflow:hidden;opacity:.6}
+        .plugin-card .badge{position:absolute;top:14px;right:14px}
+        .plugin-card h3{margin:0 0 6px;font-size:15px;color:var(--text)}
+        .plugin-card p{margin:0;font-size:13px;color:var(--text3)}
 
-        .hr{border:none;border-top:1px solid #f1f3f4;margin:36px 0}
+        .hr{border:none;border-top:1px solid var(--border);margin:36px 0}
 
-        .footer-links{margin-top:36px;padding-top:16px;border-top:1px solid #f1f3f4;font-size:13px}
-        .footer-links a{color:var(--link);margin-right:12px}
+        .try-box{display:flex;gap:8px;margin:8px 0 16px}
+        .try-input{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 14px;color:#fff;font-size:14px;outline:none;font-family:inherit}
+        .try-input:focus{border-color:var(--accent)}
+        .try-btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+        .try-btn:hover{opacity:.9}
+        .try-response{background:var(--bg3);color:#d4d4d4;border-radius:8px;padding:12px 14px;font-size:12px;line-height:1.5;max-height:300px;overflow-y:auto;font-family:'SFMono-Regular',Consolas,monospace;white-space:pre-wrap;word-break:break-all;margin-top:10px;border:1px solid var(--border)}
 
-        @media(max-width:640px){
-            .container{padding:16px 16px 40px}
-            h1{font-size:22px}
-            .try-section input{width:100%;margin-bottom:8px}
-            .try-section button{width:100%;margin-left:0}
+        .footer{margin-top:36px;padding-top:16px;border-top:1px solid var(--border);font-size:13px;color:var(--text3)}
+        .footer a{color:var(--text2);margin-right:12px}
+
+        @media(max-width:768px){
+            .sidebar{display:none}
+            .main{padding:20px 16px 40px}
+            h1{font-size:24px}
+            .card-grid{grid-template-columns:1fr}
+            .try-box{flex-direction:column}
         }
     </style>
 </head>
 <body>
 <div class="top">
     <div class="top-inner">
-        <a href="/" class="ml"><span>a</span><span>r</span><span>l</span><span>o</span><span>n</span><span>g</span></a>
+        <a href="/" class="ml"><span>Arlong</span></a>
         <div class="nav">
-            <a href="/">Search</a>
-            <a href="/images">Images</a>
-            <a href="/about">About</a>
-            <a href="/docs" class="active">API</a>
+            <a href="/ai">AI Chat</a>
+            <a href="/api/dashboard">Dashboard</a>
+            <a href="/docs" class="active">Docs</a>
         </div>
     </div>
 </div>
 
-<div class="container">
-    <h1>API</h1>
-    <p class="subtitle">Search API for agents, CLI tools, and LLM integrations. Try it tokenless with a small allowance, or sign up for a free API key with higher limits.</p>
+<div class="layout">
+<aside class="sidebar">
+    <div class="sidebar-label">REST API</div>
+    <a href="#overview">Overview</a>
+    <a href="#auth">Authentication</a>
+    <a href="#search">Search</a>
+    <a href="#answer">Answer</a>
+    <a href="#status">Status</a>
+    <a href="#errors">Errors</a>
+    <div class="sidebar-label">MCP Server</div>
+    <a href="#mcp">Overview</a>
+    <a href="#mcp-remote">Remote Setup</a>
+    <a href="#mcp-local">Local Setup</a>
+    <a href="#mcp-tools">Tools</a>
+    <div class="sidebar-label">Integrations</div>
+    <a href="#quickstart">Quickstart</a>
+    <a href="#plugins">Plugins</a>
+    <a href="#best-practices">Best Practices</a>
+</aside>
 
-    <p style="font-size:13px;color:var(--text3);margin-bottom:28px"><strong>Rate limits:</strong> 2 requests per hour per IP without a key, or 80 requests per 30 minutes with a free API key. Get your key at <a href="/api/dashboard">/api/dashboard</a>. This is a free shared resource — please cache results and use responsibly.</p>
+<main class="main">
+    <h1 id="overview">API &amp; Integrations</h1>
+    <p class="subtitle">Search API, MCP server, and plugin ecosystem for agents, CLI tools, and LLM integrations. Tokenless access with a small allowance, or sign up for a free API key with higher limits.</p>
 
-    <h2>Base URL</h2>
-    <pre><span class="s">https://aoogle-production.up.railway.app</span></pre>
-
-    <h2>Endpoint</h2>
-    <p class="ep"><span class="method">GET</span> <span>/api/search?q={query}</span></p>
-
-    <h2>Parameters</h2>
-    <table>
-        <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
-        <tr><td><code>q</code></td><td>string</td><td>—</td><td><strong>Required.</strong> Your search query.</td></tr>
-        <tr><td><code>page</code></td><td>integer</td><td>1</td><td>Page number for pagination.</td></tr>
-        <tr><td><code>key</code></td><td>string</td><td>—</td><td>Your API key (alternative to the <code>Authorization</code> header).</td></tr>
-        <tr><td><code>pretty</code></td><td>boolean</td><td>0</td><td>Set to <code>1</code> for pretty-printed JSON output.</td></tr>
-    </table>
-
-    <h2>Authentication</h2>
-    <p>An API key raises your rate limit from <strong>2 requests/hour</strong> to <strong>80 requests/30 minutes</strong>. Create your free key at <a href="/api/dashboard">/api/dashboard</a> (requires an account and accepting the Terms of Service).</p>
-    <p>Pass the key in the <code>Authorization</code> header:</p>
-    <pre>curl <span class="s2">"https://aoogle-production.up.railway.app/api/search?q=python+programming"</span> \
-    <span class="o">-H</span> <span class="s2">"Authorization: Bearer al_xxxx"</span></pre>
-    <p>Or as a query parameter:</p>
-    <pre>curl <span class="s2">"https://aoogle-production.up.railway.app/api/search?q=python+programming&amp;key=al_xxxx"</span></pre>
-
-    <h2>Try it</h2>
-    <div class="try-section">
-        <input type="text" id="try-input" value="python programming" placeholder="Enter a search query...">
-        <button onclick="tryApi()">Send request</button>
-        <div class="response-box" id="try-response">Click <strong>Send request</strong> to see a live JSON response.</div>
+    <div class="card" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+        <div><strong>Base URL</strong><br><code>https://arlong.org</code></div>
+        <div><strong>Rate Limits</strong><br>2 req/hour (tokenless) &middot; 80 req/30min (with key)</div>
+        <div><strong>MCP Endpoint</strong><br><code>https://arlong.org/mcp</code></div>
     </div>
 
-    <h2>Response</h2>
-    <p>A successful search returns JSON with the following structure:</p>
+    <hr class="hr">
 
-    <pre>{
-  <span class="nl">"query"</span>: <span class="s2">"python programming"</span>,
-  <span class="nl">"page"</span>: <span class="mi">1</span>,
-  <span class="nl">"total_results"</span>: <span class="mi">50</span>,
+    <h2 id="auth">Authentication</h2>
+    <p>An API key raises your rate limit from <strong>2 requests/hour</strong> to <strong>80 requests/30 minutes</strong>. Create your free key at <a href="/api/dashboard">/api/dashboard</a>.</p>
 
-  <span class="c1">// Knowledge panel (present for known entities)</span>
-  <span class="nl">"info_box"</span>: {
-    <span class="nl">"title"</span>: <span class="s2">"Python (programming language)"</span>,
-    <span class="nl">"type"</span>: <span class="s2">"Programming language"</span>,
-    <span class="nl">"description"</span>: <span class="s2">"Python is a high-level..."</span>,
-    <span class="nl">"image"</span>: <span class="s2">"https://python.org/logo.png"</span>,
-    <span class="nl">"facts"</span>: [
-      [<span class="s2">"Designed by"</span>, <span class="s2">"Guido van Rossum"</span>]
-    ]
-  },
+    <div class="tabs" data-group="auth">
+        <button class="tab-btn active" onclick="switchTab('auth','curl')">cURL</button>
+        <button class="tab-btn" onclick="switchTab('auth','python')">Python</button>
+        <button class="tab-btn" onclick="switchTab('auth','js')">JavaScript</button>
+    </div>
+    <div class="tab-panel active" data-group="auth" data-tab="curl">
+<pre><span class="c"># Header auth (recommended)</span>
+curl <span class="s">"https://arlong.org/api/arlong/search?q=python"</span> \
+    <span class="k">-H</span> <span class="s">"Authorization: Bearer al_xxxx"</span>
 
-  <span class="c1">// Array of search results</span>
-  <span class="nl">"results"</span>: [
-    {
-      <span class="nl">"title"</span>:       <span class="s2">"Welcome to Python.org"</span>,
-      <span class="nl">"url"</span>:         <span class="s2">"https://www.python.org/"</span>,
-      <span class="nl">"display_url"</span>: <span class="s2">"https://www.python.org/"</span>,
-      <span class="nl">"snippet"</span>:     <span class="s2">"The official home of Python."</span>,
-      <span class="nl">"favicon"</span>:     <span class="s2">"https://icons.duckduckgo.com/ip3/..."</span>,
-      <span class="nl">"category"</span>:    <span class="s2">"official"</span>,
-      <span class="nl">"date"</span>:        <span class="kc">null</span>,
-      <span class="nl">"score"</span>:       <span class="mi">42.15</span>
-    }
-  ]
-}</pre>
+<span class="c"># Query param auth</span>
+curl <span class="s">"https://arlong.org/api/arlong/search?q=python&amp;key=al_xxxx"</span></pre>
+    </div>
+    <div class="tab-panel" data-group="auth" data-tab="python">
+<pre><span class="k">import</span> <span class="n">requests</span>
+
+<span class="n">r</span> = requests.<span class="fn">get</span>(
+    <span class="s">"https://arlong.org/api/arlong/search"</span>,
+    <span class="n">params</span>={<span class="s">"q"</span>: <span class="s">"python programming"</span>},
+    <span class="n">headers</span>={<span class="s">"Authorization"</span>: <span class="s">"Bearer al_xxxx"</span>}
+)
+<span class="n">data</span> = r.<span class="fn">json</span>()</pre>
+    </div>
+    <div class="tab-panel" data-group="auth" data-tab="js">
+<pre><span class="k">const</span> <span class="n">res</span> = <span class="k">await</span> <span class="fn">fetch</span>(
+    <span class="s">"https://arlong.org/api/arlong/search?q=javascript"</span>,
+    { <span class="n">headers</span>: { <span class="s">"Authorization"</span>: <span class="s">"Bearer al_xxxx"</span> } }
+);
+<span class="k">const</span> <span class="n">data</span> = <span class="k">await</span> res.<span class="fn">json</span>();</pre>
+    </div>
+
+    <hr class="hr">
+
+    <h2 id="search">Search <span class="badge badge-live">Live</span></h2>
+    <p>Search the web and return structured results with relevance scores, domain reputation, and corroboration metadata.</p>
+    <div class="ep"><span class="method get">GET</span> /api/arlong/search?q={query}&amp;page={page}</div>
+    <div class="ep"><span class="method post">POST</span> /api/arlong/search &nbsp; <span style="color:var(--text3)">{"q": "...", "page": 1}</span></div>
+
+    <h3>Parameters</h3>
+    <table>
+        <tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        <tr><td><code>q</code></td><td>string</td><td>&mdash;</td><td><strong>Required.</strong> Search query.</td></tr>
+        <tr><td><code>page</code></td><td>integer</td><td>1</td><td>Result page (1-based).</td></tr>
+        <tr><td><code>key</code></td><td>string</td><td>&mdash;</td><td>API key (alt to Authorization header).</td></tr>
+    </table>
+
+    <h3>Response</h3>
+    <div class="tabs" data-group="search-resp">
+        <button class="tab-btn active" onclick="switchTab('search-resp','curl')">cURL</button>
+        <button class="tab-btn" onclick="switchTab('search-resp','python')">Python</button>
+        <button class="tab-btn" onclick="switchTab('search-resp','js')">JavaScript</button>
+    </div>
+    <div class="tab-panel active" data-group="search-resp" data-tab="curl">
+<pre>curl <span class="s">"https://arlong.org/api/arlong/search?q=quantum+computing&amp;pretty=1"</span></pre>
+    </div>
+    <div class="tab-panel" data-group="search-resp" data-tab="python">
+<pre><span class="n">r</span> = requests.<span class="fn">get</span>(<span class="s">"https://arlong.org/api/arlong/search"</span>,
+    <span class="n">params</span>={<span class="s">"q"</span>: <span class="s">"quantum computing"</span>})
+<span class="n">results</span> = r.<span class="fn">json</span>()[<span class="s">"results"</span>]
+<span class="k">for</span> <span class="n">r</span> <span class="k">in</span> results[:<span class="n">3</span>]:
+    <span class="fn">print</span>(f<span class="s">"{r['title']} — {r['url']}"</span>)</pre>
+    </div>
+    <div class="tab-panel" data-group="search-resp" data-tab="js">
+<pre><span class="k">const</span> { <span class="n">results</span> } = <span class="k">await</span> <span class="fn">fetch</span>(
+    <span class="s">"https://arlong.org/api/arlong/search?q=quantum+computing"</span>
+).<span class="fn">then</span>(<span class="n">r</span> => r.<span class="fn">json</span>());
+results.<span class="fn">slice</span>(<span class="n">0</span>, <span class="n">3</span>).<span class="fn">forEach</span>(<span class="n">r</span> =>
+    console.<span class="fn">log</span>(r.title, r.url)
+);</pre>
+    </div>
 
     <h3>Result fields</h3>
     <table>
         <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-        <tr><td><code>title</code></td><td>string</td><td>Title of the search result.</td></tr>
-        <tr><td><code>url</code></td><td>string</td><td>Full URL to the result page.</td></tr>
-        <tr><td><code>display_url</code></td><td>string</td><td>Truncated URL for display (max 60 chars).</td></tr>
+        <tr><td><code>title</code></td><td>string</td><td>Page title.</td></tr>
+        <tr><td><code>url</code></td><td>string</td><td>Full URL.</td></tr>
         <tr><td><code>snippet</code></td><td>string</td><td>Contextual excerpt from the page.</td></tr>
-        <tr><td><code>favicon</code></td><td>string</td><td>Favicon URL via DuckDuckGo's icons service.</td></tr>
-        <tr><td><code>category</code></td><td>string</td><td>Result category e.g. <code>general</code>, <code>news</code>, <code>official</code>, <code>tech</code>.</td></tr>
-        <tr><td><code>date</code></td><td>string|null</td><td>Extracted date from snippet e.g. <code>"Jun 15, 2026"</code>.</td></tr>
-        <tr><td><code>score</code></td><td>float</td><td>Relevance score from 0–100+. Higher = more relevant.</td></tr>
+        <tr><td><code>domain</code></td><td>string</td><td>Root domain.</td></tr>
+        <tr><td><code>favicon</code></td><td>string</td><td>Favicon URL.</td></tr>
+        <tr><td><code>score</code></td><td>float</td><td>Relevance score (0&ndash;100+). Higher = more relevant.</td></tr>
+        <tr><td><code>category</code></td><td>string</td><td>Result category: <code>general</code>, <code>news</code>, <code>official</code>, <code>tech</code>.</td></tr>
+        <tr><td><code>date</code></td><td>string|null</td><td>Extracted date if available.</td></tr>
     </table>
 
-    <h2>Response headers</h2>
+    <hr class="hr">
+
+    <h2 id="answer">Answer <span class="badge badge-live">Live</span></h2>
+    <p>Ask a question and get a grounded AI answer with cited sources. The response includes the answer text, source list, and epistemic state.</p>
+    <div class="ep"><span class="method get">GET</span> /api/arlong/answer?q={query}</div>
+    <div class="ep"><span class="method post">POST</span> /api/arlong/answer &nbsp; <span style="color:var(--text3)">{"q": "..."}</span></div>
+
+    <h3>Try it</h3>
+    <div class="try-box">
+        <input class="try-input" type="text" id="try-answer" value="What is retrieval-augmented generation?" placeholder="Ask a question...">
+        <button class="try-btn" onclick="tryAnswer()">Ask</button>
+    </div>
+    <div class="try-response" id="try-answer-resp">Click <strong>Ask</strong> to see a live AI-generated answer.</div>
+
+    <h3>Response</h3>
+    <pre>{
+  <span class="n">"answer"</span>: <span class="s">"Retrieval-augmented generation (RAG) is a technique that..."</span>,
+  <span class="n">"sources"</span>: [
+    {<span class="n">"title"</span>: <span class="s">"..."</span>, <span class="n">"url"</span>: <span class="s">"https://..."</span>, <span class="n">"snippet"</span>: <span class="s">"..."</span>}
+  ],
+  <span class="n">"epistemic_state"</span>: <span class="s">"4 sources examined; 3 agree on a common claim"</span>
+}</pre>
+
+    <hr class="hr">
+
+    <h2 id="status">Status <span class="badge badge-live">Live</span></h2>
+    <p>Live health snapshot of the model router and neural module.</p>
+    <div class="ep"><span class="method get">GET</span> /api/arlong/status</div>
+
+    <h3>Try it</h3>
+    <div class="try-box">
+        <button class="try-btn" onclick="tryStatus()">Check Status</button>
+    </div>
+    <div class="try-response" id="try-status-resp">Click <strong>Check Status</strong> to see live router status.</div>
+
+    <hr class="hr">
+
+    <h2 id="errors">Error Responses</h2>
     <table>
-        <tr><th>Header</th><th>Description</th></tr>
-        <tr><td><code>X-RateLimit-Remaining</code></td><td>Requests remaining in the current window (1 hour tokenless, 30 minutes with a key).</td></tr>
-        <tr><td><code>X-RateLimit-Reset</code></td><td>Seconds until the rate limit resets (present on 429 responses).</td></tr>
+        <tr><th>Code</th><th>Meaning</th><th>Retry?</th></tr>
+        <tr><td><code>400</code></td><td>Missing query parameter.</td><td>Fix the request.</td></tr>
+        <tr><td><code>401</code></td><td>Invalid or revoked API key.</td><td>Get a new key at <a href="/api/dashboard">/api/dashboard</a>.</td></tr>
+        <tr><td><code>429</code></td><td>Rate limit exceeded. Response includes <code>retry_after</code>.</td><td>Wait for <code>retry_after</code> seconds.</td></tr>
+        <tr><td><code>500</code></td><td>Internal server error.</td><td>Retry after a short delay.</td></tr>
+        <tr><td><code>503</code></td><td>AI busy or service under maintenance.</td><td>Wait for <code>retry_after</code> seconds.</td></tr>
     </table>
 
-    <h2>Error responses</h2>
+    <hr class="hr" id="mcp">
 
-    <h3>400 — Bad request</h3>
-    <p>Returned when <code>q</code> parameter is missing.</p>
-    <pre>{
-  <span class="nl">"error"</span>: <span class="s2">"Missing query parameter"</span>,
-  <span class="nl">"usage"</span>: <span class="s2">"/api/search?q=your+query"</span>
+    <h2>MCP Server <span class="badge badge-live">Live</span></h2>
+    <p>Arlong exposes a full <strong>Model Context Protocol</strong> server, giving Claude Desktop, Cursor, and any MCP-compatible client access to web search, grounded AI answers, and live system status.</p>
+
+    <div class="card">
+        <strong>Remote MCP endpoint (recommended)</strong><br>
+        <code>https://arlong.org/mcp</code><br>
+        <span style="font-size:13px;color:var(--text3)">No local Python required. Add your API key in the MCP client's Authorization header.</span>
+    </div>
+
+    <h3 id="mcp-remote">Remote Setup (Claude Desktop / Cursor)</h3>
+    <p>Add to your MCP client config:</p>
+    <div class="tabs" data-group="mcp-setup">
+        <button class="tab-btn active" onclick="switchTab('mcp-setup','claude')">Claude Desktop</button>
+        <button class="tab-btn" onclick="switchTab('mcp-setup','cursor')">Cursor</button>
+    </div>
+    <div class="tab-panel active" data-group="mcp-setup" data-tab="claude">
+<pre>{
+  <span class="n">"mcpServers"</span>: {
+    <span class="n">"arlong"</span>: {
+      <span class="n">"url"</span>: <span class="s">"https://arlong.org/mcp"</span>,
+      <span class="n">"headers"</span>: {
+        <span class="n">"Authorization"</span>: <span class="s">"Bearer al_xxxx"</span>
+      }
+    }
+  }
+}</pre>
+    </div>
+    <div class="tab-panel" data-group="mcp-setup" data-tab="cursor">
+<pre>{
+  <span class="n">"mcpServers"</span>: {
+    <span class="n">"arlong"</span>: {
+      <span class="n">"command"</span>: <span class="s">"npx"</span>,
+      <span class="n">"args"</span>: [<span class="s">"mcp-remote"</span>, <span class="s">"https://arlong.org/mcp"</span>],
+      <span class="n">"env"</span>: {
+        <span class="n">"ARLONG_API_KEY"</span>: <span class="s">"al_xxxx"</span>
+      }
+    }
+  }
+}</pre>
+    </div>
+
+    <h3 id="mcp-local">Local Setup (stdio transport)</h3>
+    <p>Run the MCP server as a local stdio process:</p>
+<pre>ARLONG_BASE_URL=https://arlong.org ARLONG_API_KEY=al_xxxx python mcp_arlong.py</pre>
+    <p>Then point your MCP client at the script path:</p>
+<pre>{
+  <span class="n">"mcpServers"</span>: {
+    <span class="n">"arlong"</span>: {
+      <span class="n">"command"</span>: <span class="s">"python"</span>,
+      <span class="n">"args"</span>: [<span class="s">"/path/to/mcp_arlong.py"</span>]
+    }
+  }
 }</pre>
 
-    <h3>401 — Invalid API key</h3>
-    <p>Returned when the key provided in the <code>Authorization</code> header or <code>key</code> parameter is invalid or revoked.</p>
-    <pre>{
-  <span class="nl">"error"</span>: <span class="s2">"Invalid API key"</span>,
-  <span class="nl">"message"</span>: <span class="s2">"The API key provided is invalid or has been revoked. Get a new key at /api/dashboard."</span>
-}</pre>
+    <h3 id="mcp-tools">Available Tools</h3>
+    <table>
+        <tr><th>Tool</th><th>Description</th></tr>
+        <tr>
+            <td><code>arlong_search</code></td>
+            <td>Web search with relevance scores, reputation/trust status, threat flags, and corroboration report showing how many independent sources agree.</td>
+        </tr>
+        <tr>
+            <td><code>arlong_answer</code></td>
+            <td>Grounded AI answer with cited sources and epistemic state (e.g. "4 sources examined; 3 agree on a common claim").</td>
+        </tr>
+        <tr>
+            <td><code>arlong_status</code></td>
+            <td>Live health snapshot of the model router (RPM/RPD/TPM/TPD usage + cooldowns) and neural module (local vs remote embeddings).</td>
+        </tr>
+    </table>
 
-    <h3>429 — Rate limit exceeded</h3>
-    <p>Tokenless calls are limited to <strong>2 requests per hour</strong>. Exceed that and the API asks you to sign up for a key. The <code>retry_after</code> field tells you when to retry.</p>
-    <pre>{
-  <span class="nl">"error"</span>: <span class="s2">"Rate limit exceeded"</span>,
-  <span class="nl">"message"</span>: <span class="s2">"Get a API KEY"</span>,
-  <span class="nl">"code"</span>: <span class="s2">"API_KEY_REQUIRED"</span>,
-  <span class="nl">"retry_after"</span>: <span class="mi">1234</span>,
-  <span class="nl">"signup"</span>: <span class="s2">"/signup"</span>,
-  <span class="nl">"dashboard"</span>: <span class="s2">"/api/dashboard"</span>
+    <h3>Tool schemas</h3>
+    <div class="tabs" data-group="mcp-tools">
+        <button class="tab-btn active" onclick="switchTab('mcp-tools','search')">arlong_search</button>
+        <button class="tab-btn" onclick="switchTab('mcp-tools','answer')">arlong_answer</button>
+        <button class="tab-btn" onclick="switchTab('mcp-tools','status')">arlong_status</button>
+    </div>
+    <div class="tab-panel active" data-group="mcp-tools" data-tab="search">
+<pre>{
+  <span class="n">"name"</span>: <span class="s">"arlong_search"</span>,
+  <span class="n">"description"</span>: <span class="s">"Search the web..."</span>,
+  <span class="n">"inputSchema"</span>: {
+    <span class="n">"type"</span>: <span class="s">"object"</span>,
+    <span class="n">"properties"</span>: {
+      <span class="n">"query"</span>: { <span class="n">"type"</span>: <span class="s">"string"</span>, <span class="n">"description"</span>: <span class="s">"The search query"</span> },
+      <span class="n">"page"</span>:  { <span class="n">"type"</span>: <span class="s">"integer"</span>, <span class="n">"default"</span>: <span class="n">1</span> }
+    },
+    <span class="n">"required"</span>: [<span class="s">"query"</span>]
+  }
 }</pre>
-    <p>With an API key, the limit is <strong>80 requests per 30 minutes</strong>. Exceeding it returns a <code>429</code> with <code>retry_after</code> until your window resets.</p>
-
-    <h3>500 — Internal error</h3>
-    <p>The search backend encountered an unexpected error. Retry after a short delay.</p>
-    <pre>{
-  <span class="nl">"error"</span>: <span class="s2">"Search failed"</span>,
-  <span class="nl">"message"</span>: <span class="s2">"An internal error occurred while searching."</span>
+    </div>
+    <div class="tab-panel" data-group="mcp-tools" data-tab="answer">
+<pre>{
+  <span class="n">"name"</span>: <span class="s">"arlong_answer"</span>,
+  <span class="n">"description"</span>: <span class="s">"Ask a question and get a grounded AI answer..."</span>,
+  <span class="n">"inputSchema"</span>: {
+    <span class="n">"type"</span>: <span class="s">"object"</span>,
+    <span class="n">"properties"</span>: {
+      <span class="n">"query"</span>: { <span class="n">"type"</span>: <span class="s">"string"</span>, <span class="n">"description"</span>: <span class="s">"The question to answer"</span> }
+    },
+    <span class="n">"required"</span>: [<span class="s">"query"</span>]
+  }
 }</pre>
+    </div>
+    <div class="tab-panel" data-group="mcp-tools" data-tab="status">
+<pre>{
+  <span class="n">"name"</span>: <span class="s">"arlong_status"</span>,
+  <span class="n">"description"</span>: <span class="s">"Live health snapshot of the model router..."</span>,
+  <span class="n">"inputSchema"</span>: { <span class="n">"type"</span>: <span class="s">"object"</span>, <span class="n">"properties"</span>: {} }
+}</pre>
+    </div>
 
-    <div class="hr"></div>
+    <hr class="hr" id="quickstart">
 
     <h2>Quickstart</h2>
 
     <h3>cURL</h3>
-    <pre>curl <span class="s2">"https://aoogle-production.up.railway.app/api/search?q=weather+forecast&amp;pretty=1"</span></pre>
+<pre>curl <span class="s">"https://arlong.org/api/arlong/search?q=weather+forecast&amp;pretty=1"</span></pre>
 
     <h3>Python</h3>
-    <pre><span class="kn">import</span> <span class="nn">requests</span>
+<pre><span class="k">import</span> <span class="n">requests</span>
 
-<span class="n">r</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="nf">get</span><span class="p">(</span>
-    <span class="s2">"https://aoogle-production.up.railway.app/api/search"</span><span class="p">,</span>
-    <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"q"</span><span class="p">:</span> <span class="s2">"python programming"</span><span class="p">}</span><span class="s2">,</span>
-    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">"Authorization"</span><span class="p">:</span> <span class="s2">"Bearer al_xxxx"</span><span class="p">}</span>  <span class="c1"># optional: raises limit to 80/30min</span>
-<span class="p">)</span>
-<span class="n">data</span> <span class="o">=</span> <span class="n">r</span><span class="o">.</span><span class="nf">json</span><span class="p">()</span>
-<span class="k">for</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">data</span><span class="p">[</span><span class="s2">"results"</span><span class="p">][:</span><span class="mi">3</span><span class="p">]:</span>
-    <span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">res</span><span class="p">[</span><span class="s1">'title'</span><span class="p">]</span><span class="si">}</span><span class="s2"> — </span><span class="si">{</span><span class="n">res</span><span class="p">[</span><span class="s1">'url'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span></pre>
+<span class="n">r</span> = requests.<span class="fn">get</span>(
+    <span class="s">"https://arlong.org/api/arlong/search"</span>,
+    <span class="n">params</span>={<span class="s">"q"</span>: <span class="s">"python programming"</span>},
+    <span class="n">headers</span>={<span class="s">"Authorization"</span>: <span class="s">"Bearer al_xxxx"</span>}
+)
+<span class="k">for</span> <span class="n">res</span> <span class="k">in</span> r.<span class="fn">json</span>()[<span class="s">"results"</span>][:<span class="n">3</span>]:
+    <span class="fn">print</span>(f<span class="s">"{res['title']} — {res['url']}"</span>)</pre>
 
     <h3>JavaScript</h3>
-    <pre><span class="k">const</span> <span class="n">res</span> <span class="o">=</span> <span class="k">await</span> <span class="nf">fetch</span><span class="p">(</span>
-    <span class="s2">"https://aoogle-production.up.railway.app/api/search?q=javascript+fetch"</span>
-<span class="p">);</span>
-<span class="k">const</span> <span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">res</span><span class="o">.</span><span class="nf">json</span><span class="p">();</span>
-<span class="n">console</span><span class="o">.</span><span class="nf">log</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">results</span><span class="p">);</span></pre>
+<pre><span class="k">const</span> <span class="n">res</span> = <span class="k">await</span> <span class="fn">fetch</span>(
+    <span class="s">"https://arlong.org/api/arlong/search?q=javascript+fetch"</span>
+);
+<span class="k">const</span> { <span class="n">results</span> } = <span class="k">await</span> res.<span class="fn">json</span>();
+console.<span class="fn">log</span>(results);</pre>
 
     <h3>LLM function tool definition</h3>
-    <pre><span class="k">arlong_search_tool</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"function"</span><span class="p">,</span>
-    <span class="s2">"function"</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"web_search"</span><span class="p">,</span>
-        <span class="s2">"description"</span><span class="p">:</span> <span class="s2">"Search the web. Tokenless use is limited; add an API key via the key parameter for higher limits (see /docs)."</span><span class="p">,</span>
-        <span class="s2">"parameters"</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"object"</span><span class="p">,</span>
-            <span class="s2">"properties"</span><span class="p">:</span> <span class="p">{</span>
-                <span class="s2">"q"</span><span class="p">:</span> <span class="p">{</span>
-                    <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"string"</span><span class="p">,</span>
-                    <span class="s2">"description"</span><span class="p">:</span> <span class="s2">"Search query"</span>
-                <span class="p">}</span>
-            <span class="p">},</span>
-            <span class="s2">"required"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"q"</span><span class="p">]</span>
-        <span class="p">}</span>
-    <span class="p">}</span>
-<span class="p">}</span></pre>
+<pre>{
+  <span class="n">"type"</span>: <span class="s">"function"</span>,
+  <span class="n">"function"</span>: {
+    <span class="n">"name"</span>: <span class="s">"web_search"</span>,
+    <span class="n">"description"</span>: <span class="s">"Search the web via Arlong. Add API key for higher limits."</span>,
+    <span class="n">"parameters"</span>: {
+      <span class="n">"type"</span>: <span class="s">"object"</span>,
+      <span class="n">"properties"</span>: {
+        <span class="n">"q"</span>: { <span class="n">"type"</span>: <span class="s">"string"</span>, <span class="n">"description"</span>: <span class="s">"Search query"</span> }
+      },
+      <span class="n">"required"</span>: [<span class="s">"q"</span>]
+    }
+  }
+}</pre>
 
-    <h3>Python CLI tool</h3>
-    <pre><span class="c1">#!/usr/bin/env python3</span>
-<span class="c1">"""arlong-cli — terminal search client"""</span>
-<span class="kn">import</span> <span class="nn">sys</span><span class="o">,</span> <span class="nn">requests</span>
+    <hr class="hr" id="plugins">
 
-<span class="k">BASE</span> <span class="o">=</span> <span class="s2">"https://aoogle-production.up.railway.app/api/search"</span>
+    <h2>Integrations &amp; Plugins</h2>
+    <p>Arlong integrates with the tools you already use.</p>
 
-<span class="k">def</span> <span class="nf">search</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">page</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">r</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="nf">get</span><span class="p">(</span><span class="n">BASE</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"q"</span><span class="p">:</span> <span class="n">q</span><span class="p">,</span> <span class="s2">"page"</span><span class="p">:</span> <span class="n">page</span><span class="p">},</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">429</span><span class="p">:</span> <span class="k">return</span> <span class="bp">None</span>
-        <span class="n">r</span><span class="o">.</span><span class="nf">raise_for_status</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">r</span><span class="o">.</span><span class="nf">json</span><span class="p">()</span>
-    <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">RequestException</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">None</span>
-
-<span class="k">def</span> <span class="nf">show</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">data</span><span class="p">:</span> <span class="k">return</span>
-    <span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'\nResults for "</span><span class="si">{</span><span class="n">data</span><span class="p">[</span><span class="s2">"query"</span><span class="p">]</span><span class="si">}</span><span class="s1">":'</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="nf">enumerate</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">"results"</span><span class="p">],</span> <span class="mi">1</span><span class="p">):</span>
-        <span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'  </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">. </span><span class="si">{</span><span class="n">r</span><span class="p">[</span><span class="s2">"title"</span><span class="p">]</span><span class="si">}</span><span class="s1">'</span><span class="p">)</span>
-        <span class="nf">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">'     </span><span class="si">{</span><span class="n">r</span><span class="p">[</span><span class="s2">"url"</span><span class="p">]</span><span class="si">}</span><span class="s1">'</span><span class="p">)</span>
-
-<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">)</span> <span class="o">></span> <span class="mi">1</span><span class="p">:</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="nf">search</span><span class="p">(</span><span class="s2">" "</span><span class="o">.</span><span class="nf">join</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">:]))</span>
-        <span class="nf">show</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-        <span class="k">return</span>
-    <span class="nf">print</span><span class="p">(</span><span class="s2">"arlong CLI — type a query or 'q' to quit"</span><span class="p">)</span>
-    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">q</span> <span class="o">=</span> <span class="nf">input</span><span class="p">(</span><span class="s2">"\n> "</span><span class="p">)</span><span class="o">.</span><span class="nf">strip</span><span class="p">()</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">q</span> <span class="ow">or</span> <span class="n">q</span> <span class="o">==</span> <span class="s2">"q"</span><span class="p">:</span> <span class="k">break</span>
-            <span class="nf">show</span><span class="p">(</span><span class="nf">search</span><span class="p">(</span><span class="n">q</span><span class="p">))</span>
-        <span class="k">except</span> <span class="n">KeyboardInterrupt</span><span class="p">:</span>
-            <span class="k">break</span>
-
-<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
-    <span class="nf">main</span><span class="p">()</span></pre>
-
-    <p style="font-size:13px;color:var(--text3);margin:4px 0 20px">Save as <code>arlong-cli.py</code>. Run <code>python arlong-cli.py your search</code> for a one-shot search, or <code>python arlong-cli.py</code> for interactive mode.</p>
-
-    <div class="hr"></div>
-
-    <h2>Best practices</h2>
-    <ul>
-        <li><strong>Cache results</strong> — identical queries return the same results for one hour. Cache locally to avoid hitting the rate limit.</li>
-        <li><strong>Respect rate limits</strong> — 2 req/hour tokenless, or 80 req/30 minutes with an API key. Back off and retry after the <code>retry_after</code> period on 429s.</li>
-        <li><strong>Use <code>pretty=1</code></strong> during development for human-readable JSON output.</li>
-        <li><strong>Send your key when you have one</strong> — it raises your limit 40x and counts per key instead of per IP.</li>
-    </ul>
-
-    <div class="hr"></div>
-
-    <h2>Safety and integrity</h2>
-    <p>The API enforces the same safeguards as the web interface:</p>
-    <ul>
-        <li><strong>Crisis detection</strong> — queries expressing suicidal ideation or self-harm return crisis resources instead of search results.</li>
-        <li><strong>Content moderation</strong> — NSFW queries are blocked and redirected to support resources.</li>
-        <li><strong>Ad filtering</strong> — all sponsored and promoted results are removed before ranking.</li>
-        <li><strong>No tracking</strong> — no cookies, no analytics, no user profiling, no query logging.</li>
-    </ul>
-
-    <p style="font-size:13px;color:var(--text3);margin-top:28px">No key needed for a quick test — you get 2 free requests per hour per IP. Need a real allowance? Create a free API key at <a href="/api/dashboard">/api/dashboard</a>.</p>
-
-    <div class="footer-links">
-        <a href="/">Search</a>
-        <a href="/about">About</a>
-        <a href="/docs">API</a>
+    <div class="card-grid">
+        <div class="card" style="display:flex;align-items:center;gap:12px">
+            <div style="font-size:24px">&#x1f9e0;</div>
+            <div>
+                <strong>MCP Server</strong><br>
+                <span style="font-size:13px;color:var(--text3)">Claude Desktop, Cursor, Windsurf, and any MCP client.</span>
+            </div>
+            <span class="badge badge-live" style="margin-left:auto">Live</span>
+        </div>
+        <div class="card" style="display:flex;align-items:center;gap:12px">
+            <div style="font-size:24px">&#x1f310;</div>
+            <div>
+                <strong>REST API</strong><br>
+                <span style="font-size:13px;color:var(--text3)">Search, answer, and status endpoints for any HTTP client.</span>
+            </div>
+            <span class="badge badge-live" style="margin-left:auto">Live</span>
+        </div>
+        <div class="card" style="display:flex;align-items:center;gap:12px">
+            <div style="font-size:24px">&#x1f916;</div>
+            <div>
+                <strong>ucurl CLI</strong><br>
+                <span style="font-size:13px;color:var(--text3)">Direct CLI access to search, answer, and status.</span>
+            </div>
+            <span class="badge badge-live" style="margin-left:auto">Live</span>
+        </div>
     </div>
+
+    <h3>Coming Soon</h3>
+    <div class="card-grid">
+        <div class="plugin-card">
+            <span class="badge badge-soon">Coming Soon</span>
+            <h3>Claude Code Plugin</h3>
+            <p>Native Arlong search tool inside Claude Code for real-time web grounding during agentic coding sessions.</p>
+        </div>
+        <div class="plugin-card">
+            <span class="badge badge-soon">Coming Soon</span>
+            <h3>Claude Plugin</h3>
+            <p>Arlong as a Claude.ai plugin for persistent web search and citation in conversations.</p>
+        </div>
+        <div class="plugin-card">
+            <span class="badge badge-soon">Coming Soon</span>
+            <h3>ChatGPT Plugin</h3>
+            <p>Connect ChatGPT to Arlong's search index for grounded, cited answers with real-time web data.</p>
+        </div>
+    </div>
+
+    <hr class="hr" id="best-practices">
+
+    <h2>Best Practices</h2>
+    <ul>
+        <li><strong>Cache results</strong> &mdash; identical queries return the same results for one hour. Cache locally to avoid hitting the rate limit.</li>
+        <li><strong>Respect rate limits</strong> &mdash; 2 req/hour tokenless, or 80 req/30 minutes with an API key. Back off on <code>429</code> responses.</li>
+        <li><strong>Use the MCP server</strong> &mdash; for Claude Desktop / Cursor integrations, the remote MCP endpoint is the easiest path. Zero dependencies.</li>
+        <li><strong>Send your key</strong> &mdash; it raises your limit 40x and counts per key instead of per IP.</li>
+        <li><strong>Monitor status</strong> &mdash; call <code>/api/arlong/status</code> or check the MCP <code>arlong_status</code> tool for router health before high-volume requests.</li>
+    </ul>
+
+    <div class="footer">
+        <a href="/">Search</a>
+        <a href="/ai">AI Chat</a>
+        <a href="/api/dashboard">API Dashboard</a>
+        <a href="/docs">Docs</a>
+    </div>
+</main>
 </div>
 
 <script>
-    function tryApi() {
-        var q = document.getElementById('try-input').value.trim();
-        if (!q) { q = 'python programming'; document.getElementById('try-input').value = q; }
-        var el = document.getElementById('try-response');
-        el.textContent = 'Loading...';
-
-        fetch('/api/search?q=' + encodeURIComponent(q) + '&pretty=1')
-            .then(function(r) { return r.text(); })
-            .then(function(text) {
-                try {
-                    var parsed = JSON.parse(text);
-                    el.textContent = JSON.stringify(parsed, null, 2);
-                } catch(e) {
-                    el.textContent = text;
-                }
-            })
-            .catch(function(err) {
-                el.textContent = 'Error: ' + err.message;
-            });
-    }
-
-    document.getElementById('try-input').addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') { tryApi(); }
+function switchTab(group, tab){
+    document.querySelectorAll('.tab-btn[data-group="'+group+'"], .tab-panel[data-group="'+group+'"]').forEach(function(el){
+        el.classList.remove('active');
     });
+    var btn = document.querySelector('.tab-btn[data-group="'+group+'"]');
+    document.querySelectorAll('.tab-btn').forEach(function(b){
+        if(b.getAttribute('data-group') === group && b.textContent.toLowerCase().indexOf(tab) !== -1) b.classList.add('active');
+    });
+    document.querySelectorAll('.tab-panel[data-group="'+group+'"]').forEach(function(p){
+        if(p.getAttribute('data-tab') === tab) p.classList.add('active');
+    });
+}
+function tryAnswer(){
+    var q = document.getElementById('try-answer').value.trim();
+    if(!q) q = 'What is retrieval-augmented generation?';
+    var el = document.getElementById('try-answer-resp');
+    el.textContent = 'Loading...';
+    fetch('/api/arlong/answer?q=' + encodeURIComponent(q))
+        .then(function(r){ return r.text(); })
+        .then(function(t){ try{ el.textContent = JSON.stringify(JSON.parse(t), null, 2); }catch(e){ el.textContent = t; } })
+        .catch(function(e){ el.textContent = 'Error: ' + e.message; });
+}
+function tryStatus(){
+    var el = document.getElementById('try-status-resp');
+    el.textContent = 'Loading...';
+    fetch('/api/arlong/status')
+        .then(function(r){ return r.text(); })
+        .then(function(t){ try{ el.textContent = JSON.stringify(JSON.parse(t), null, 2); }catch(e){ el.textContent = t; } })
+        .catch(function(e){ el.textContent = 'Error: ' + e.message; });
+}
+document.getElementById('try-answer').addEventListener('keydown', function(e){ if(e.key === 'Enter') tryAnswer(); });
 </script>
 </body>
 </html>

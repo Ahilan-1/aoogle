@@ -330,6 +330,42 @@
     .ai-spinner{width:14px;height:14px;border:2px solid var(--border-color);border-top-color:#FFFFFF;border-radius:50%;animation:aiSpin .7s linear infinite}
     @keyframes aiSpin{to{transform:rotate(360deg)}}
 
+    /* ── Suggestion chips ── */
+    .ai-suggest{margin-top:18px}
+    .ai-suggest-chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+    .ai-suggest-chip{
+        padding:9px 16px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);
+        color:#D1D1D6;font-size:13px;cursor:pointer;transition:background .15s,border-color .15s,color .15s,transform .1s;
+    }
+    .ai-suggest-chip:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.3);color:#FFFFFF}
+    .ai-suggest-chip:active{transform:scale(.97)}
+
+    /* ── Reasoning / Chain-of-thought panel ── */
+    .ai-reason-panel{
+        margin:8px 0;border:1px solid var(--border-color);border-radius:10px;
+        background:var(--bg-inner);overflow:hidden;transition:max-height .3s ease;
+    }
+    .ai-reason-head{
+        display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer;
+        font-size:12.5px;font-weight:600;color:var(--text-muted);user-select:none;
+    }
+    .ai-reason-head:hover{color:var(--text-main)}
+    .ai-reason-chevron{width:14px;height:14px;transition:transform .2s}
+    .ai-reason-panel.open .ai-reason-chevron{transform:rotate(90deg)}
+    .ai-reason-body{
+        max-height:0;overflow:hidden;transition:max-height .3s ease;
+        padding:0 14px;font-size:13px;color:var(--text-muted);line-height:1.6;
+    }
+    .ai-reason-panel.open .ai-reason-body{max-height:300px;overflow-y:auto;padding-bottom:12px}
+    .ai-reason-panel.open .ai-reason-body{padding-top:4px}
+    .ai-reason-dot{
+        width:7px;height:7px;border-radius:50%;background:var(--accent);
+        animation:aiReasonPulse 1.2s ease-in-out infinite;flex-shrink:0;
+    }
+    .ai-reason-panel.done .ai-reason-dot{animation:none;background:var(--text-muted);opacity:.4}
+    @keyframes aiReasonPulse{0%,100%{opacity:.3;transform:scale(.85)}50%{opacity:1;transform:scale(1.15)}}
+    .ai-reason-body-inner{white-space:pre-wrap;word-break:break-word}
+
     /* ── Responsive ── */
     @media(max-width:1023px){
         .ai-sidebar{transform:translateX(-100%);transition:transform .25s ease;box-shadow:none}
@@ -424,6 +460,9 @@
                         <button class="ai-search-go" id="ai-landing-go" aria-label="Search">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
                         </button>
+                    </div>
+                    <div class="ai-suggest" id="ai-suggest">
+                        <div class="ai-suggest-chips" id="ai-suggest-chips"></div>
                     </div>
                     <div class="ai-widgets" id="ai-widgets">
                         <div class="ai-widget" id="ai-weather-widget" style="display:none">
@@ -778,8 +817,9 @@
             if(d.groups && d.groups.length){
                 renderGroups(ov, d.groups);
                 var startIdx = 0;
-                d.groups.forEach(function(g){
-                    fireLinkEvals(g.query, g.results, ov, startIdx);
+                d.groups.forEach(function(g, gi){
+                    var evalIdx = startIdx;
+                    setTimeout(function(){ fireLinkEvals(g.query, g.results, ov, evalIdx); }, gi * 1200);
                     startIdx += (g.results||[]).length;
                 });
                 renderReportCta(ov, displayQ, d.chat_id, d.results||[]);
@@ -828,7 +868,7 @@
         ov._report = true;
         var md = ov.querySelector('.ai-md');
         if(md) md.innerHTML = '<span class="ai-cursor"></span>';
-        streamAnswer(ov._q || ov._pendingQ, ov._cid || ov._pendingCid, ov._results || ov._pendingResults || [], ov, false, true, true, ov._pendingIdx);
+        streamAnswer(ov._q || ov._pendingQ, ov._cid || ov._pendingCid, ov._results || ov._pendingResults || [], ov, false, true, true, ov._pendingIdx, 0);
     };
     window.declineReport = function(btn){
         var ov = btn ? btn.closest('.ai-overview') : null;
@@ -1112,7 +1152,8 @@
     }
 
     /* ── streaming ── */
-    function streamAnswer(q, cid, results, ov, replaceLast, multitask, report, pidx){
+    function streamAnswer(q, cid, results, ov, replaceLast, multitask, report, pidx, retryCount){
+        retryCount = retryCount || 0;
         if(!ov){ ov = document.querySelector('.ai-assistant .ai-overview'); }
         if(!ov){ setBusy(false); busy=false; return; }
         var md = ov.querySelector('.ai-md');
@@ -1125,7 +1166,7 @@
                     tn.nodeValue = ' Deep Report';
                 }
             }
-            if(md) md.innerHTML = '<span class="ai-cursor"></span>';
+            if(md && !retryCount) md.innerHTML = '<span class="ai-cursor"></span>';
         }
         function finish(){
             bindCites(ov);
@@ -1171,17 +1212,44 @@
             }
             return pump();
         })
-        .catch(function(e){ if(!/limit/i.test(String(e && e.message))) failTurn(ov, 'Generation error. Please try again.'); })
+        .catch(function(e){
+            var msg = String(e && e.message || '');
+            if(/limit/i.test(msg)) return;
+            if(report && retryCount < 2 && /busy|overload|unavailable|swamped|rate|timeout|failed/i.test(msg)){
+                retryCount++;
+                var delay = 3000 * retryCount;
+                if(md) md.innerHTML = '<span class="ai-eval-loading">Models busy, retrying in ' + Math.round(delay/1000) + 's…</span>';
+                setTimeout(function(){ streamAnswer(q, cid, results, ov, replaceLast, multitask, report, pidx, retryCount); }, delay);
+                return;
+            }
+            failTurn(ov, 'Generation error. Please try again.');
+        })
         .finally(function(){ setBusy(false); busy = false; });
     }
     function renderMd(md, text){
         if(md.dataset.raw === text) return;
         md.dataset.raw = text;
+        var extracted = extractReasoning(text);
+        var displayText = extracted.text;
+        if(extracted.reasoning){
+            var ov = md.closest('.ai-overview');
+            updateReasonPanel(ov, extracted.reasoning);
+        }
+        var isOpenThink = /<think>[\s\S]*$/.test(text) && !/</think>/.test(text.slice(text.lastIndexOf('<think>')));
+        if(!isOpenThink && /<\/think>/i.test(text)){
+            var ovDone = md.closest('.ai-overview');
+            closeReasonPanel(ovDone);
+        }
+        if(isOpenThink){
+            var thinkStart = displayText.lastIndexOf('<think>');
+            if(thinkStart !== -1) displayText = displayText.substring(0, thinkStart);
+        }
+        displayText = displayText.replace(/<\|start_of_thought\|>[\s\S]*$/, '');
         var html = '';
         try{
-            if(window.marked && marked.parse){ html = marked.parse(text || ''); }
-            else { html = esc(text).replace(/\n/g,'<br>'); }
-        }catch(e){ html = esc(text).replace(/\n/g,'<br>'); }
+            if(window.marked && marked.parse){ html = marked.parse(displayText || ''); }
+            else { html = esc(displayText).replace(/\n/g,'<br>'); }
+        }catch(e){ html = esc(displayText).replace(/\n/g,'<br>'); }
         if(window.DOMPurify){ html = DOMPurify.sanitize(html, {ADD_ATTR:['target','rel']}); }
         md.innerHTML = html;
         if(window.hljs){ md.querySelectorAll('pre code').forEach(function(b){ try{ hljs.highlightElement(b); }catch(e){} }); }
@@ -1307,6 +1375,7 @@
     function renderChat(chat){
         var thread = document.getElementById('ai-active');
         thread.innerHTML = '';
+        _reasonPanels = {};
         var msgs = chat.messages || [];
         var feedback = chat.feedback || {};
         var aiIdx = 0;
@@ -1409,11 +1478,116 @@
         }
     });
 
+    /* ── suggestion chips ── */
+    var SUGGESTIONS = [
+        "What are the latest developments in AI?",
+        "How does quantum computing work?",
+        "Compare React vs Vue for a new project",
+        "Best practices for REST API design",
+        "How to deploy a Flask app to production?",
+        "What is retrieval-augmented generation?",
+        "Explain zero-knowledge proofs simply",
+        "How do neural networks learn?",
+        "What are the top programming languages in 2026?",
+        "How to set up a CI/CD pipeline?",
+        "What is WebAssembly and when should I use it?",
+        "Explain the CAP theorem",
+        "How does Docker differ from virtual machines?",
+        "What are transformer models in NLP?",
+        "How to optimize SQL queries for large tables?",
+        "What is edge computing and why does it matter?",
+        "Compare PostgreSQL vs MySQL for web apps",
+        "How do large language models generate text?",
+        "What is the SOLID principle in software design?",
+        "How does encryption work end-to-end?",
+        "What are the risks of prompt injection?",
+        "How to build a real-time chat with WebSockets?",
+        "What is Kubernetes and when do I need it?",
+        "Explain Git rebase vs merge",
+        "How to improve website performance and Core Web Vitals?"
+    ];
+    function renderSuggestChips(){
+        var box = document.getElementById('ai-suggest-chips');
+        if(!box) return;
+        var shuffled = SUGGESTIONS.slice().sort(function(){ return Math.random() - 0.5; });
+        var picked = shuffled.slice(0, 2);
+        box.innerHTML = '';
+        picked.forEach(function(txt){
+            var c = document.createElement('button');
+            c.type = 'button';
+            c.className = 'ai-suggest-chip';
+            c.textContent = txt;
+            c.addEventListener('click', function(){
+                var inp = document.getElementById('ai-landing-input');
+                if(inp){ inp.value = txt; inp.focus(); }
+            });
+            box.appendChild(c);
+        });
+    }
+
+    /* ── reasoning / chain-of-thought panel ── */
+    var _reasonPanels = {};
+    function extractReasoning(text){
+        var parts = [];
+        var clean = text.replace(/<think>([\s\S]*?)<\/think>/gi, function(m, inner){
+            parts.push(inner.trim());
+            return '';
+        }).replace(/<\|start_of_thought\|>([\s\S]*?)<\|end_of_thought\|>/gi, function(m, inner){
+            parts.push(inner.trim());
+            return '';
+        });
+        return { text: clean, reasoning: parts.join('\n\n') };
+    }
+    function getOrCreateReasonPanel(ov){
+        if(!ov) return null;
+        var id = null;
+        Array.prototype.slice.call(document.querySelectorAll('.ai-assistant')).forEach(function(a, i){
+            if(a.contains(ov)) id = i;
+        });
+        if(id == null) return null;
+        if(_reasonPanels[id]) return _reasonPanels[id];
+        var md = ov.querySelector('.ai-md');
+        if(!md) return null;
+        var panel = document.createElement('div');
+        panel.className = 'ai-reason-panel open';
+        panel.innerHTML = '<div class="ai-reason-head" onclick="toggleReasonPanel(this.parentElement)">'
+            + '<span class="ai-reason-dot"></span>'
+            + '<svg class="ai-reason-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>'
+            + '<span>Thinking...</span></div>'
+            + '<div class="ai-reason-body"><div class="ai-reason-body-inner"></div></div>';
+        md.parentNode.insertBefore(panel, md);
+        _reasonPanels[id] = panel;
+        return panel;
+    }
+    window.toggleReasonPanel = function(panel){
+        if(!panel) return;
+        panel.classList.toggle('open');
+    };
+    function updateReasonPanel(ov, reasoningText){
+        var panel = getOrCreateReasonPanel(ov);
+        if(!panel) return;
+        var inner = panel.querySelector('.ai-reason-body-inner');
+        if(inner) inner.textContent = reasoningText;
+    }
+    function closeReasonPanel(ov){
+        var id = null;
+        Array.prototype.slice.call(document.querySelectorAll('.ai-assistant')).forEach(function(a, i){
+            if(a.contains(ov)) id = i;
+        });
+        if(id != null && _reasonPanels[id]){
+            _reasonPanels[id].classList.remove('open');
+            _reasonPanels[id].classList.add('done');
+            var label = _reasonPanels[id].querySelector('.ai-reason-head span:last-child');
+            if(label) label.textContent = 'Reasoning complete';
+        }
+    }
+
     /* ── init ── */
     function init(){
         var chats = {{ chats | tojson }};
         renderHistory(chats);
         renderRecent(chats);
+        renderSuggestChips();
         loadWeather();
         setUsage(used, LIMIT);
         setCtxUsage(ctxUsed, CTX_LIMIT);
