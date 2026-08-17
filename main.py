@@ -13818,7 +13818,10 @@ def user_profile(username):
     profile = data_manager.get_user_profile(username)
     if not profile:
         return render_template('user_profile.html', profile=None, error='User not found'), 404
-    profile['is_owner'] = session.get('username') == username
+    owns_profile = session.get('username') == username
+    if owns_profile and request.args.get('public') != '1':
+        return redirect(url_for('dashboard', tab=request.args.get('tab', 'account')))
+    profile['is_owner'] = owns_profile and request.args.get('public') != '1'
     if profile['is_owner']:
         user = data_manager.get_user_by_id(session.get('user_id'))
         profile['email'] = user.get('email', '') if user else ''
