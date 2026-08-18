@@ -361,3 +361,51 @@ class TestMiddlewareBestAvailable:
         model, stream = m._ai_open_stream([{'role': 'user', 'content': 'hi'}], max_tokens=20)
         assert model == 'b'
         assert calls['stream'] is True
+
+
+class TestMcpReliabilityRegressions:
+    def test_failed_model_is_not_selected_again(self, monkeypatch):
+        router = _FakeRouter(pick='a', best='a')
+        attempted = []
+
+        def provider(model, *args, **kwargs):
+            attempted.append(model)
+            if model == 'a':
+                raise RuntimeError('429 rate limit')
+            return type('R', (), {'ok': True})
+
+        monkeypatch.setattr(m, 'AI_MODE_GROQ_API_KEY', 'test-key')
+        monkeypatch.setattr(m, '_ai_provider_call', provider)
+        monkeypatch.setattr(m._ai_router_module, 'get_router', lambda: router)
+        monkeypatch.setattr(m.data_manager, 'record_incident_recovery', lambda *a, **k: None)
+        result = m._ai_completion([{'role': 'user', 'content': 'hi'}], models=['a', 'b'])
+        assert result.ok
+        assert attempted == ['a', 'b']
+
+    def test_deep_schema_discloses_minimum(self):
+        tool = next(t for t in m.MCP_TOOLS if t['name'] == 'arlong_deep')
+        field = tool['inputSchema']['properties']['max_results']
+        assert field['minimum'] == 15
+        assert field['default'] >= field['minimum']
+        assert '15' in field['description']
+
+    def test_blocked_source_is_never_synthesis_eligible(self):
+        assert m._arlong_source_is_blocked({
+            'reputation': {'status': 'BLOCKED'},
+            'threat_flags': [],
+        })
+        assert m._arlong_source_is_blocked({
+            'reputation': {'status': 'UNVERIFIED'},
+            'threat_flags': ['prompt_injection'],
+        })
+
+    def test_unsupported_nist_version_is_removed(self):
+        draft = 'NIST AI Risk Management Framework 2.0 requires this control.'
+        evidence = 'NIST AI RMF 1.0 and related publications describe voluntary guidance.'
+        guarded = m._arlong_grounded_version_guard(draft, evidence)
+        assert '2.0' not in guarded
+        assert '1.0' in guarded
+
+    def test_supported_nist_version_is_preserved(self):
+        draft = 'NIST AI Risk Management Framework 2.0 requires this control.'
+        assert m._arlong_grounded_version_guard(draft, draft) == draft

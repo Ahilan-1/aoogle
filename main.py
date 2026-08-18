@@ -1447,6 +1447,8 @@ def add_security_headers(response):
                         response.headers['Content-Length'] = str(len(response.get_data()))
         except Exception:
             pass
+    # Compress only after every HTML/body mutation is complete.
+    _maybe_gzip(response)
     return response
 
 # Initialize S3 for persistent storage (Railway Storage Buckets)
@@ -5046,25 +5048,29 @@ def _extract_page_text(url, timeout=5):
 
 
 def _search_serper(query, region=None, max_results=10):
-    """Google search via Serper.dev — used as a last-resort fallback when the
-    DuckDuckGo-based engines all fail. Maps organic[] results to SearchResults;
-    returns [] when no API key is configured or the call fails."""
-    if not SERPER_API_KEY:
+    """Google search via Serper.dev, rotating to the secondary key on failure."""
+    keys = [k for k in (SERPER_API_KEY, SERPER_API_KEY_2) if k]
+    if not keys:
         return []
-    try:
-        payload = {'q': query}
-        if region and re.fullmatch(r'[a-zA-Z]{2}', region):
-            payload['gl'] = region.lower()
-        resp = requests.post(
-            'https://google.serper.dev/search',
-            headers={'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'},
-            json=payload,
-            timeout=8,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception as e:
-        app.logger.error(f"Serper search error: {e}")
+    payload = {'q': query, 'num': max(1, min(int(max_results or 10), 20))}
+    if region and re.fullmatch(r'[a-zA-Z]{2}', region):
+        payload['gl'] = region.lower()
+    data = None
+    for key_index, key in enumerate(keys):
+        try:
+            resp = requests.post(
+                'https://google.serper.dev/search',
+                headers={'X-API-KEY': key, 'Content-Type': 'application/json'},
+                json=payload,
+                timeout=5,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if data:
+                break
+        except Exception as e:
+            app.logger.warning(f"Serper key {key_index + 1} search failed: {e}")
+    if not data:
         return []
     results = []
     seen = set()
@@ -7024,7 +7030,7 @@ class ImprovedSearch:
 
         return results
 
-    def search(self, query, page=1, filter_type='general', region=None, force=False):
+    def search(self, query, page=1, filter_type='general', region=None, force=False, fast=False):
         """Main search method with pagination and fallback"""
         self._search_ts = time.time()
         self._current_region = region
@@ -7040,18 +7046,20 @@ class ImprovedSearch:
             errors = []
             all_results = None
 
+            # Temporary production policy: Serper is primary. DDG-family
+            # engines run only when both Serper keys fail or return no organic
+            # results, avoiding DDG CAPTCHA latency on the normal path.
+            serper_primary = _search_serper(query, region, max_results=20)
             futures = {}
-            # Fast path: only the DDG-family engines run synchronously — they
-            # answer in ~1s. The slow engines (google/brave/reddit_scrape/
-            # invidious, 5-15s timeouts) are fetched in the background and
-            # merged into the cache so the NEXT query gets full cross-engine
-            # diversity without paying their latency on the first one.
-            fast_engines = [u for u in self.search_urls if u.split('://')[0] in ('ddg_html', 'ddgs', 'ddg_reddit', 'ddg_video')]
+            fast_engines = [] if serper_primary else [
+                u for u in self.search_urls
+                if u.split('://')[0] in ('ddg_html', 'ddgs', 'ddg_reddit', 'ddg_video')
+            ]
             for search_url in fast_engines:
                 future = self.executor.submit(self._search_single_engine, search_url, query, page, region)
                 futures[future] = search_url
 
-            engine_lists = []
+            engine_lists = [list(serper_primary)] if serper_primary else []
             try:
                 # Global engine deadline: cap total multi-engine collection so a
                 # slow straggler can never stack on top of the panel fetches.
@@ -7117,12 +7125,13 @@ class ImprovedSearch:
 
             if results:
                 try:
-                    data_manager.record_engine_event('ddg', True)
+                    data_manager.record_engine_event('serper_primary' if serper_primary else 'ddg', True)
                     data_manager.record_engine_event('internal_search', True)
                 except Exception:
                     pass
                 ranked_results = self._rank_results(query, results)
-                ranked_results = self._rerank_with_content(query, ranked_results)
+                if not fast:
+                    ranked_results = self._rerank_with_content(query, ranked_results)
                 all_results = [result.to_dict() for result in ranked_results]
                 self._save_to_cache(cache_key, all_results)
             app.logger.info(f"[TRACE] engine+rank done in {time.time()-self._search_ts:.2f}s n={len(all_results) if all_results else 0}")
@@ -10566,6 +10575,22 @@ def search():
     return Response(stream_with_context(_stream()), mimetype='text/html')
 
 
+def _arlong_grounded_version_guard(answer, source_context):
+    """Remove unsupported named-version claims before they reach customers."""
+    text = answer or ''
+    evidence = (source_context or '').lower()
+    claimed_2 = re.search(r'\b(?:nist\s+)?(?:ai\s+)?risk management framework(?:\s*\(ai rmf\))?\s*(?:version\s*)?2\.0\b|\bai rmf\s*2\.0\b', text, re.I)
+    supported_2 = bool(re.search(r'\b(?:nist\s+)?(?:ai\s+)?risk management framework(?:\s*\(ai rmf\))?\s*(?:version\s*)?2\.0\b|\bai rmf\s*2\.0\b', evidence, re.I))
+    if claimed_2 and not supported_2:
+        replacement = ('NIST AI Risk Management Framework (AI RMF 1.0)'
+                       if re.search(r'\bai rmf\s*1\.0\b|risk management framework\s*1\.0\b', evidence, re.I)
+                       else 'NIST AI Risk Management Framework')
+        text = re.sub(r'\bNIST\s+AI\s+Risk Management Framework(?:\s*\(AI RMF\))?\s*(?:version\s*)?2\.0\b', replacement, text, flags=re.I)
+        text = re.sub(r'\bAI RMF\s*2\.0\b', replacement, text, flags=re.I)
+        app.logger.warning('Grounding guard removed unsupported NIST AI RMF 2.0 claim')
+    return text
+
+
 def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None,
                      followup_round=None, source_type='any', deep=False):
     """Generate Arlong's final AI answer for a query from internal functions.
@@ -10609,6 +10634,8 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None,
     def _fetch_one(r_url, r_title):
         """Fetch + clean one page; returns (url, title, text) or None."""
         try:
+            if SearchBlocker.is_blocklisted(r_url):
+                return None
             resp = _httpx.get(r_url, timeout=10, follow_redirects=True, headers={'User-Agent': _UA})
             if resp.status_code == 200:
                 text = _clean_page(resp.text)
@@ -10671,7 +10698,7 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None,
             news_items = [r for r in provided if r.get('category') == 'news']
             wiki_items = [r for r in provided if 'wikipedia.org' in (r.get('url') or '').lower()]
             academic_items = [r for r in provided if any(d in (r.get('url') or '').lower() for d in ('.edu', 'arxiv.org', 'scholar.google', 'pubmed', 'ncbi.nlm', 'nature.com', 'springer.com', 'ieee.org', 'acm.org'))]
-            official_items = [r for r in provided if any(d in (r.get('url') or '').lower() for d in ('.gov', '.mil', '.int', 'who.int', 'un.org', 'worldbank.org', 'imf.org', 'sec.gov', 'ec.europa.eu'))]
+            official_items = [r for r in provided if _arlong_is_official_url(r.get('url'))]
             rest_items = [r for r in provided if r not in news_items and r not in wiki_items and r not in academic_items and r not in official_items]
             q_lower = q.lower()
             # Source type preference: prioritize the requested content type
@@ -10691,18 +10718,12 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None,
                 sorted_provided = wiki_items + official_items + academic_items + news_items + rest_items
             else:
                 sorted_provided = news_items + wiki_items + official_items + academic_items + rest_items
-            snippet_context = ''
-            for r in sorted_provided[:8]:
-                r_snip = clean_snippet_text(r.get('snippet') or '')
-                r_url = (r.get('url') or '').strip()
-                if r_snip and r_url:
-                    snippet_context += f"\n[Snippet] {r.get('title', '')}: {r_snip} ({r_url})"
-            if snippet_context:
-                web_context += snippet_context
             for r in sorted_provided[:8]:
                 r_url = (r.get('url') or '').strip()
                 r_title = (r.get('title') or '').strip()
                 if not r_url or not r_url.startswith('http'):
+                    continue
+                if SearchBlocker.is_blocklisted(r_url):
                     continue
                 r_domain = _urlparse(r_url).netloc.lower()
                 r_domain = re.sub(r'^www\.', '', r_domain)
@@ -10816,6 +10837,8 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None,
         "about 'Vortex AI' almost certainly mean Google Cloud Vertex AI). Explicitly state the interpretation once. "
         "Reject sources about unrelated products that merely share a keyword. Prefer official documentation and "
         "regulators over forums, social posts, SEO pages, and similarly named domains. "
+        "Never attribute a statement to an agency or standards body unless that statement is supported by that agency's own source URL. "
+        "Never invent a framework edition or version number; preserve the exact version shown in the source. "
         "If a source provides a date, use it exactly as written. If no source provides a specific date, "
         "say the information is not dated rather than guessing. Hallucinated specifics are worse than admitting uncertainty. "
         "DOMAIN-SPECIFIC SYNTHESIS: When sources contain domain-specific details (regulations, policies, "
@@ -10867,6 +10890,7 @@ Give the most accurate answer you can in 2-3 sentences. If you are not certain, 
         timeout=120,
     )
     answer = polish_ai_summary_text(completion.choices[0].message.content.strip())
+    answer = _arlong_grounded_version_guard(answer, web_context)
 
     # Citations: rewrite [n]/[Source n] markers to real hyperlinks ONLY when
     # we actually retrieved sources. When sources is empty, remove every bare
@@ -11620,6 +11644,11 @@ def _arlong_eval_result(q, r, idx, fetch_content=True, content_max_chars=4000):
         "date": date,
         "snippet": snippet[:1000],
     }
+    if SearchBlocker.is_blocklisted(url):
+        item['reputation'] = {'status': 'BLOCKED', 'trust_score': 0}
+        item['threat_flags'] = ['domain_blocklist']
+        item['excluded_from_synthesis'] = True
+        return item
     try:
         import neural_search as _neural
         content = _arlong_page_text(url) if fetch_content else None
@@ -11641,6 +11670,8 @@ def _arlong_eval_result(q, r, idx, fetch_content=True, content_max_chars=4000):
         # if the synthesis model still sees the raw text. Blocked content
         # should never reach the answer prompt or the API response body.
         _block_st = ev.get('reputation', {}).get('status', 'UNVERIFIED')
+        if _block_st == 'BLOCKED' or item['threat_flags']:
+            item['excluded_from_synthesis'] = True
         if content and _block_st not in ('BLOCKED',):
             item["content"] = content[:max(500, min(int(content_max_chars or 4000), 12000))]
             if len(item["snippet"]) < 500:
@@ -11648,6 +11679,12 @@ def _arlong_eval_result(q, r, idx, fetch_content=True, content_max_chars=4000):
     except Exception as e:
         app.logger.debug(f"Arlong eval skip {url}: {e}")
     return item
+
+
+def _arlong_source_is_blocked(item):
+    return bool(item.get('excluded_from_synthesis') or
+                (item.get('reputation') or {}).get('status') == 'BLOCKED' or
+                item.get('threat_flags'))
 
 
 # ── content quality filters ──────────────────────────────────────────────────
@@ -11738,6 +11775,26 @@ def _arlong_normalize_query(q):
     return text
 
 
+def _arlong_is_official_url(url):
+    host = (urlparse(url or '').hostname or '').lower()
+    official_hosts = ('cloud.google.com', 'ai.google.dev', 'developers.google.com',
+                      'rbi.org.in', 'who.int', 'worldbank.org', 'sec.gov',
+                      'nist.gov', 'cisa.gov', 'europa.eu', 'un.org', 'imf.org')
+    return (host.endswith('.gov') or host.endswith('.mil') or host.endswith('.int') or
+            any(host == d or host.endswith('.' + d) for d in official_hosts))
+
+
+def _arlong_official_query(query):
+    low = (query or '').lower()
+    if 'nist' in low or 'ai risk management framework' in low or 'ai rmf' in low:
+        return f'{query} site:nist.gov'
+    if any(x in low for x in ('gemini', 'vertex ai', 'google cloud')):
+        return f'{query} official Google documentation'
+    if 'rbi' in low or 'reserve bank of india' in low:
+        return f'{query} site:rbi.org.in'
+    return f'{query} official government documentation'
+
+
 def _arlong_prefer_sources(results, source_type='any', q=''):
     """Stable source-type weighting without discarding useful alternatives."""
     source_type = (source_type or 'any').lower()
@@ -11749,9 +11806,7 @@ def _arlong_prefer_sources(results, source_type='any', q=''):
     def weight(r):
         url = (r.get('url') or '').lower()
         category = (r.get('category') or '').lower()
-        official = any(d in url for d in ('.gov', '.edu', 'cloud.google.com',
-                       'ai.google.dev', 'developers.google.com', 'rbi.org.in',
-                       'who.int', 'worldbank.org', 'sec.gov'))
+        official = _arlong_is_official_url(url)
         academic = any(d in url for d in ('arxiv.org', 'pubmed', 'nature.com', '.edu'))
         discussion = any(d in url for d in ('reddit.com', 'quora.com', 'forum', 'discuss.'))
         long_form = category in ('blog', 'article') or len(r.get('snippet') or '') > 350
@@ -11796,8 +11851,13 @@ def _arlong_search_payload(q, page=1, source_type='any', mode='balanced',
         include_content = False
     elif mode == 'deep':
         max_results = max(max_results, 15)
-    results, total_results = search_engine.search(search_q, page)
+    results, total_results = search_engine.search(search_q, page, fast=True)
     retrieval_ms = round((time.perf_counter() - started) * 1000, 1)
+    if source_type == 'official':
+        official_hits = _search_serper(_arlong_official_query(search_q), max_results=20)
+        official_dicts = [r.to_dict() for r in official_hits]
+        seen = {r.get('url') for r in official_dicts}
+        results = official_dicts + [r for r in results if r.get('url') not in seen]
     results = _arlong_prefer_sources(results, source_type, q)
     results = results[:max_results]
     search_stats.record()
@@ -11814,6 +11874,11 @@ def _arlong_search_payload(q, page=1, source_type='any', mode='balanced',
     for item in evaluated:
         item['quality_score'] = _arlong_result_quality(item)
     evaluated.sort(key=lambda item: item.get('quality_score', 0), reverse=True)
+    if source_type == 'official':
+        # Preserve the caller's explicit source preference after semantic
+        # reranking; otherwise a high-scoring commercial blog can jump above
+        # the agency publication that the caller requested.
+        evaluated.sort(key=lambda item: 0 if _arlong_is_official_url(item.get('url')) else 1)
     for rank, item in enumerate(evaluated, start=1):
         item['rank'] = rank
     evaluation_ms = round((time.perf_counter() - evaluation_started) * 1000, 1)
@@ -11837,9 +11902,6 @@ def _arlong_search_payload(q, page=1, source_type='any', mode='balanced',
         },
     }
     _arlong_attach_epistemic(response, evaluated)
-    # Inject into plain HTML before compression; otherwise browsers that
-    # advertise gzip can silently miss the urgent banner.
-    _maybe_gzip(response)
     return response
 
 
@@ -11847,7 +11909,7 @@ def _arlong_quick_payload(q, page=1, max_results=10):
     """Low-latency retrieval with no page fetch, embeddings, or AI evaluation."""
     started = time.perf_counter()
     search_q = _arlong_normalize_query(q)
-    results, total_results = search_engine.search(search_q, page)
+    results, total_results = search_engine.search(search_q, page, fast=True)
     links = []
     seen = set()
     for result in results:
@@ -11863,7 +11925,11 @@ def _arlong_quick_payload(q, page=1, max_results=10):
         if len(links) >= max(1, min(int(max_results or 10), 20)):
             break
     search_stats.record()
-    data_manager.increment_total_searches()
+    # Keep the low-latency path free of the durable JSON/Postgres metric write.
+    try:
+        search_engine.executor.submit(data_manager.increment_total_searches)
+    except Exception:
+        data_manager.increment_total_searches()
     return {
         'query': q,
         'interpreted_query': search_q if search_q != q else None,
@@ -11888,6 +11954,10 @@ def _arlong_answer_payload(q, source_type='any', deep=False):
     try:
         search_q = _arlong_normalize_query(q)
         results, _total = search_engine.search(search_q, 1)
+        if source_type == 'official':
+            official_hits = _search_serper(_arlong_official_query(search_q), max_results=20)
+            seen = {r.url for r in official_hits}
+            results = [r.to_dict() for r in official_hits] + [r for r in results if r.get('url') not in seen]
         results = _arlong_prefer_sources(results, source_type, q)
     except Exception as e:
         app.logger.error(f"Arlong API answer search error: {e}")
@@ -11910,15 +11980,19 @@ def _arlong_answer_payload(q, source_type='any', deep=False):
     # carries evaluation metadata on the same sources the answer cites.
     evaluated_sources = []
     for i, src in enumerate(sources[:8]):
-        evaluated_sources.append(_arlong_eval_result(q, src, i + 1))
+        evaluated = _arlong_eval_result(q, src, i + 1)
+        if not _arlong_source_is_blocked(evaluated):
+            evaluated_sources.append(evaluated)
 
     # Merge: use evaluated_sources as the primary `results` (they back the
     # answer), and keep the raw search hits only if they add unique URLs.
     seen_urls = {s.get('url') for s in evaluated_sources}
     for r in results[:5]:
         if (r.get('url') or '') not in seen_urls:
-            evaluated_sources.append(_arlong_eval_result(q, r, len(evaluated_sources) + 1))
-            seen_urls.add(r.get('url', ''))
+            evaluated = _arlong_eval_result(q, r, len(evaluated_sources) + 1)
+            if not _arlong_source_is_blocked(evaluated):
+                evaluated_sources.append(evaluated)
+                seen_urls.add(r.get('url', ''))
 
     response = {
         "query": q,
@@ -11940,6 +12014,8 @@ def _arlong_attach_epistemic(response, results):
         claims = []
         seen_domains = set()
         for r in results[:8]:
+            if _arlong_source_is_blocked(r):
+                continue
             url = (r.get('url') or '').strip()
             if not url:
                 continue
@@ -12078,7 +12154,7 @@ def _arlong_status_payload():
         'router': {'enabled': False, 'models': [], 'order': []},
         'neural': {'embedding_backend': 'local'},
         'mcp': {
-            'version': '1.2.0',
+            'version': '1.3.0',
             'tools': ['arlong_quick', 'arlong_search', 'arlong_deep',
                       'arlong_extract', 'arlong_answer', 'arlong_status'],
             'search_profiles': {
@@ -12276,13 +12352,16 @@ MCP_TOOLS = [
         'name': 'arlong_deep',
         'description': ('Deep web research using parallel page extraction, semantic relevance '
                         'analysis, trust and threat scoring, authority-aware ranking, and '
-                        'claim-level corroboration across up to 20 sources.'),
+                        'claim-level corroboration across 15 to 20 sources. max_results must be at least 15.'),
         'inputSchema': {
             'type': 'object',
             'properties': {
                 'query': {'type': 'string', 'description': 'The research query'},
                 'page': {'type': 'integer', 'description': 'Result page (1-based)', 'default': 1},
-                'max_results': {'type': 'integer', 'minimum': 15, 'maximum': 20, 'default': 20},
+                'max_results': {
+                    'type': 'integer', 'minimum': 15, 'maximum': 20, 'default': 20,
+                    'description': 'Number of results to research. Deep mode requires 15–20 results.',
+                },
                 'source_type': {
                     'type': 'string',
                     'enum': ['any', 'academic', 'official', 'news', 'discussion', 'long_form'],
@@ -12652,8 +12731,8 @@ def mcp_endpoint():
     if request.method == 'GET':
         return jsonify({
             'protocolVersion': '2024-11-05',
-            'capabilities': {'tools': {'listChanged': False}},
-            'serverInfo': {'name': 'arlong-mcp', 'version': '1.2.0'},
+            'capabilities': {'tools': {'listChanged': True}},
+            'serverInfo': {'name': 'arlong-mcp', 'version': '1.3.0'},
             'instructions': 'Arlong search: arlong_quick returns plain links without AI evaluation; arlong_search adds semantic trust scoring; arlong_deep performs parallel extraction and corroboration. arlong_quick/search/extract use 1 credit, arlong_deep 2, arlong_answer 3; status and discovery are free.',
         })
 
@@ -12675,8 +12754,8 @@ def mcp_endpoint():
             'id': msg_id,
             'result': {
                 'protocolVersion': params.get('protocolVersion', '2024-11-05'),
-                'capabilities': {'tools': {'listChanged': False}},
-                'serverInfo': {'name': 'arlong-mcp', 'version': '1.2.0'},
+                'capabilities': {'tools': {'listChanged': True}},
+                'serverInfo': {'name': 'arlong-mcp', 'version': '1.3.0'},
                 'instructions': 'Use arlong_quick for low-token plain links, arlong_search for normal trusted retrieval, arlong_deep for broad parallel semantic research, arlong_extract for full text from one URL, and arlong_answer for a cited synthesis. Credits: quick/search/extract 1, deep 2, answer 3, status free.',
             },
         })
@@ -14873,13 +14952,18 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
     router = _ai_router_module.get_router()
     for _ in range(len(model_list) + 2):
         model = None
+        remaining_models = [m for m in model_list if m not in tried]
+        if not remaining_models:
+            break
         if router is not None:
             try:
-                model = router.pick(est_tokens=est_tokens, prefer=model_list[0] if model_list else None,
-                                    allowed=model_list)
+                model = router.pick(est_tokens=est_tokens, prefer=remaining_models[0],
+                                    allowed=remaining_models)
             except TypeError:
                 # Compatibility with older/custom router implementations.
-                model = router.pick(est_tokens=est_tokens, prefer=model_list[0] if model_list else None)
+                model = router.pick(est_tokens=est_tokens, prefer=remaining_models[0])
+                if model in tried:
+                    model = remaining_models[0]
             if model is None:
                 # Smart transfer: every model is at/near its rolling budget.
                 # Rather than failing the user, transfer to the model closest
@@ -14888,9 +14972,11 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
                 # there escalates that model's cooldown and the loop naturally
                 # moves on to the next-closest model.
                 try:
-                    model = router.pick_best_available(est_tokens=est_tokens, allowed=model_list)
+                    model = router.pick_best_available(est_tokens=est_tokens, allowed=remaining_models)
                 except TypeError:
                     model = router.pick_best_available(est_tokens=est_tokens)
+                    if model in tried:
+                        model = remaining_models[0]
                 if model is None and not tried:
                     # Even the closest model is in hard cooldown — genuinely busy.
                     overloaded = True
@@ -14981,21 +15067,28 @@ def _ai_open_stream(messages, max_tokens=1600, temperature=0.4, timeout=120,
     router = _ai_router_module.get_router()
     for _ in range(len(model_list) + 2):
         model = None
+        remaining_models = [m for m in model_list if m not in tried]
+        if not remaining_models:
+            break
         if router is not None:
             try:
-                model = router.pick(est_tokens=est_tokens, prefer=model_list[0] if model_list else None,
-                                    allowed=model_list)
+                model = router.pick(est_tokens=est_tokens, prefer=remaining_models[0],
+                                    allowed=remaining_models)
             except TypeError:
-                model = router.pick(est_tokens=est_tokens, prefer=model_list[0] if model_list else None)
+                model = router.pick(est_tokens=est_tokens, prefer=remaining_models[0])
+                if model in tried:
+                    model = remaining_models[0]
             if model is None:
                 # Smart transfer: every model is at/near its rolling budget.
                 # Transfer to the model closest to usable instead of failing
                 # the user; a 429 there escalates its cooldown via mark_failure
                 # and the loop tries the next-closest model.
                 try:
-                    model = router.pick_best_available(est_tokens=est_tokens, allowed=model_list)
+                    model = router.pick_best_available(est_tokens=est_tokens, allowed=remaining_models)
                 except TypeError:
                     model = router.pick_best_available(est_tokens=est_tokens)
+                    if model in tried:
+                        model = remaining_models[0]
                 if model is None and not tried:
                     overloaded = True
                     errors.append('all models busy (rate limited or in cooldown)')
