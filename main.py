@@ -515,6 +515,7 @@ def _parse_iso_datetime(value):
 AI_CLARIFY_MAX_ROUNDS = int(os.environ.get('AI_CLARIFY_MAX_ROUNDS', 2))
 AI_CLARIFY_MAX_QUESTIONS = int(os.environ.get('AI_CLARIFY_MAX_QUESTIONS', 5))
 AI_AUTO_FOLLOWUPS = False
+FOUNDER_SEAT_LIMIT = max(1, int(os.environ.get('FOUNDER_SEAT_LIMIT', 100)))
 PLACES_RADIUS_KM = 40  # drop places farther than this from the requested location
 PLACES_MAX_RESULTS = 4  # cap shown results (also caps Place Details billing)
 PLACES_GL_DEFAULT = 'in'
@@ -4397,6 +4398,27 @@ class DataManager:
                 self.data = loaded
             record = self.data.setdefault('billing_subscriptions', {}).get(str(user_id), {})
             return dict(record)
+
+    def get_founder_seats_claimed(self):
+        """Count active founders plus recent pending checkouts as reserved seats."""
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            now = datetime.now(timezone.utc)
+            claimed = 0
+            for record in self.data.setdefault('billing_subscriptions', {}).values():
+                if 'founder' not in str(record.get('plan', '')).lower():
+                    continue
+                status = str(record.get('status', '')).lower()
+                if status in {'active', 'trialing'}:
+                    claimed += 1
+                    continue
+                if status == 'checkout_pending':
+                    updated = _parse_iso_datetime(record.get('updated_at'))
+                    if updated and (now - updated).total_seconds() < 30 * 60:
+                        claimed += 1
+            return claimed
 
     @staticmethod
     def _plan_from_billing(record):
@@ -13119,17 +13141,20 @@ def _dodo_product_id(plan):
 
 @app.route('/premium')
 def premium():
-    country = _billing_country()
     user_id = session.get('user_id')
     billing = data_manager.get_billing_record(user_id) if user_id else {}
+    founder_claimed = data_manager.get_founder_seats_claimed()
+    founder_left = max(0, FOUNDER_SEAT_LIMIT - founder_claimed)
     return render_template('premium.html',
-        country=country,
-        regional_price='₹399' if country == 'IN' else '$4.99',
-        founder_price='₹299' if country == 'IN' else '$3.49',
-        annual_price='₹3,990' if country == 'IN' else '$49.99',
+        regional_price='₹499',
+        founder_price='₹289',
+        annual_price='₹5,000',
+        founder_seat_limit=FOUNDER_SEAT_LIMIT,
+        founder_seats_left=founder_left,
         billing=billing,
         billing_ready=bool(_dodo_product_id('monthly')),
-        founder_ready=bool(_dodo_product_id('founder')),
+        annual_ready=bool(_dodo_product_id('annual')),
+        founder_ready=bool(_dodo_product_id('founder')) and founder_left > 0,
         billing_environment=dodo_billing.environment(),
     )
 
@@ -13146,6 +13171,8 @@ def billing_checkout():
     plan = str(body.get('plan', 'monthly')).lower()
     if plan not in {'monthly', 'annual', 'founder'}:
         return jsonify({'error': 'Invalid billing plan'}), 400
+    if plan == 'founder' and data_manager.get_founder_seats_claimed() >= FOUNDER_SEAT_LIMIT:
+        return jsonify({'error': 'The Founder allocation has been fully claimed. Choose Pro instead.'}), 409
     product_id = _dodo_product_id(plan)
     base = _public_base_url()
     try:
