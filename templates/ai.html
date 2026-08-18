@@ -1501,7 +1501,7 @@
                             + '<div class="ai-eval" id="ai-eval-'+(i+1)+'"><span class="ai-eval-label">AI Evaluation</span>'+evalBody+'</div></div>';
                     });
                 }
-                if(srcs.length && m.query && (m.evaluation_version !== 2 || Object.keys(evals).length < Math.min(srcs.length, 20))){
+                if(srcs.length && m.query && (m.evaluation_version !== 3 || Object.keys(evals).length < Math.min(srcs.length, 20))){
                     setTimeout(function(){ fireLinkEvals(m.query, srcs, a.querySelector('.ai-overview')); }, 0);
                 }
                 var val = feedback[''+aiIdx];

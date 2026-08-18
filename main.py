@@ -16055,6 +16055,64 @@ def api_ai_search():
     return jsonify(resp)
 
 
+_AI_EVAL_STOPWORDS = {
+    'about', 'after', 'before', 'best', 'does', 'from', 'have', 'into',
+    'latest', 'more', 'most', 'than', 'that', 'their', 'this', 'what',
+    'when', 'where', 'which', 'with', 'your', 'versus', 'review', 'reviews',
+}
+
+
+def _ai_eval_tokens(text):
+    return {
+        token for token in re.findall(r'[a-z0-9]+', (text or '').lower())
+        if len(token) >= 3 and token not in _AI_EVAL_STOPWORDS
+    }
+
+
+def _ai_source_tag(query, result):
+    """Classify provenance, including first-party brand and video sources."""
+    raw_url = result.get('url') or ''
+    parsed = urlparse(raw_url)
+    host = parsed.netloc.lower().removeprefix('www.')
+    community_hosts = (
+        'youtube.com', 'youtu.be', 'reddit.com', 'quora.com', 'medium.com',
+        'linkedin.com', 'forum.', 'forums.', 'discuss.',
+    )
+    if any(marker in host for marker in community_hosts):
+        return 'community'
+    if host.endswith('.gov') or '.gov.' in host or host.endswith('.edu') or '.edu.' in host:
+        return 'primary'
+    query_tokens = _ai_eval_tokens(query)
+    host_brand = host.split('.')[-2] if len(host.split('.')) >= 2 else host
+    if host_brand in query_tokens:
+        return 'primary'
+    if host == 'github.com':
+        owner = parsed.path.strip('/').split('/')[0].lower()
+        if owner and owner in query_tokens and owner not in {'python', 'web', 'data', 'code'}:
+            return 'primary'
+    if '/docs' in parsed.path.lower() or host in {'cloud.google.com', 'ai.google.dev'}:
+        return 'primary'
+    return 'trusted'
+
+
+def _ai_preview_detail(result, query_tokens):
+    """Choose an informative preview clause, excluding dates and boilerplate."""
+    snippet = re.sub(r'\s+', ' ', result.get('snippet') or '').strip()
+    snippet = re.sub(
+        r'^(?:\d+\s+(?:minutes?|hours?|days?|weeks?|months?|years?)\s+ago|'
+        r'(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},?\s+\d{4})\s*[-–—:]?\s*',
+        '', snippet, flags=re.I)
+    sentences = [s.strip(' -–—') for s in re.split(r'(?<=[.!?])\s+', snippet) if len(s.strip()) >= 24]
+    boilerplate = ('performance in production environments may vary', 'cookie', 'javascript', 'loading')
+    usable = [s for s in sentences if not any(x in s.lower() for x in boilerplate)]
+    if not usable:
+        usable = sentences
+    if usable:
+        usable.sort(key=lambda s: (len(_ai_eval_tokens(s) & query_tokens), bool(re.search(r'\d', s)), len(s)), reverse=True)
+        return usable[0].rstrip('.')[:145]
+    return ''
+
+
 def _ai_complete_link_evaluations(query, results, evaluations=None, tags=None):
     """Guarantee one stable evaluation and tag for every displayed source.
 
@@ -16064,37 +16122,31 @@ def _ai_complete_link_evaluations(query, results, evaluations=None, tags=None):
     """
     complete_evals = dict(evaluations or {})
     complete_tags = dict(tags or {})
+    query_tokens = _ai_eval_tokens(query)
     for idx, result in enumerate(results[:20], 1):
-        url = (result.get('url') or '').lower()
-        if idx not in complete_tags:
-            complete_tags[idx] = (
-                'primary' if any(d in url for d in (
-                    '.gov', '.edu', 'cloud.google.com', 'ai.google.dev'))
-                else ('community' if any(d in url for d in (
-                    'reddit.com', 'forum', 'discuss.')) else 'trusted')
-            )
+        complete_tags[idx] = _ai_source_tag(query, result)
         if idx in complete_evals and str(complete_evals[idx]).strip():
             continue
-        try:
-            import neural_search as _neural
-            ev = _neural.evaluate_page(
-                query, title=result.get('title', ''), url=result.get('url', ''),
-                snippet=result.get('snippet', ''))
-            score = max(0.0, min(1.0, float(ev.get('relevance_score') or 0)))
-            snippet = re.sub(r'\s+', ' ', result.get('snippet') or '').strip()
-            detail = snippet.split('. ')[0].rstrip('. ')[:125]
-            if not detail:
-                detail = (result.get('title') or 'the page topic').strip()[:125]
-            if score >= .60:
-                complete_evals[idx] = f"Worth opening — it directly covers {detail[0].lower() + detail[1:]}"[:220]
-            elif score >= .38:
-                complete_evals[idx] = f"Useful for a related angle — it covers {detail[0].lower() + detail[1:]}"[:220]
-            else:
-                complete_evals[idx] = f"Skip for this query — it mainly covers {detail[0].lower() + detail[1:]}"[:220]
-        except Exception:
-            domain = result.get('domain') or urlparse(result.get('url') or '').netloc
-            complete_evals[idx] = (
-                f"Open for a closer look at the result from {domain or 'this source'}; the preview is too limited to recommend confidently.")
+        title = re.sub(r'\s+(?:[-–—|]\s*)?(?:YouTube|GitHub)$', '', result.get('title') or '', flags=re.I).strip()
+        title = title or 'this page'
+        title_tokens = _ai_eval_tokens(title)
+        snippet_tokens = _ai_eval_tokens(result.get('snippet') or '')
+        host = urlparse(result.get('url') or '').netloc.lower().removeprefix('www.')
+        host_parts = host.split('.')
+        host_brand = host_parts[-2] if len(host_parts) >= 2 else host
+        denominator = max(1, len(query_tokens))
+        title_coverage = len(query_tokens & title_tokens) / denominator
+        total_coverage = len(query_tokens & (title_tokens | snippet_tokens)) / denominator
+        detail = _ai_preview_detail(result, query_tokens)
+        inside = f" It includes {detail}." if detail else ''
+        if title_coverage >= .75:
+            verdict = f'Worth opening — “{title}” directly matches the query.'
+        elif (title_coverage >= .34 or total_coverage >= .60 or
+              (complete_tags[idx] == 'primary' and host_brand in query_tokens)):
+            verdict = f'Useful for comparison — “{title}” covers a related part of the question.'
+        else:
+            verdict = f'Probably skip — “{title}” is only loosely related to the query.'
+        complete_evals[idx] = (verdict + inside)[:260]
     return complete_evals, complete_tags
 
 
@@ -16156,12 +16208,12 @@ def api_ai_links():
                 if target is not None:
                     target['evaluations'] = {**(target.get('evaluations') or {}), **evals}
                     target['source_tags'] = {**(target.get('source_tags') or {}), **tags}
-                    target['evaluation_version'] = 2
+                    target['evaluation_version'] = 3
                     chat['updated_at'] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
                     data_manager.save_ai_chat(session['user_id'], chat)
         except Exception as e:
             app.logger.error(f"AI links persist error: {e}")
-    return jsonify({'ok': True, 'complete': True, 'evaluation_version': 2,
+    return jsonify({'ok': True, 'complete': True, 'evaluation_version': 3,
                     'evaluations': evals, 'tags': tags})
 
 

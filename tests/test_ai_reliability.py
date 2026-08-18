@@ -47,3 +47,33 @@ def test_groq_rate_limit_uses_backup_account(monkeypatch):
     assert response.choices[0].message.content == 'ok'
     assert calls == ['primary-key', 'backup-key']
     assert main._ai_groq_key_for_call() == 'backup-key'
+
+
+def test_evaluation_fallback_understands_source_type_and_query_match():
+    results = [
+        {
+            'title': 'Benchmarks | Supabase Docs',
+            'url': 'https://supabase.com/docs/guides/realtime/benchmarks',
+            'snippet': '2 weeks ago - Performance in production environments may vary. Workloads demonstrate throughput and scalability.',
+        },
+        {
+            'title': 'Supabase vs PostgreSQL (2026) - YouTube',
+            'url': 'https://youtube.com/watch?v=123',
+            'snippet': 'A full breakdown comparing performance, scalability, and ease of use.',
+        },
+        {
+            'title': 'pgvector vs Pinecone: cost and performance',
+            'url': 'https://supabase.com/blog/pgvector-vs-pinecone',
+            'snippet': 'A comparison of Postgres pgvector and Pinecone for AI workloads.',
+        },
+    ]
+
+    evaluations, tags = main._ai_complete_link_evaluations(
+        'Supabase benchmarks', results)
+
+    assert evaluations[1].startswith('Worth opening')
+    assert '2 weeks ago' not in evaluations[1]
+    assert 'production environments may vary' not in evaluations[1]
+    assert evaluations[3].startswith('Useful for comparison')
+    assert tags[1] == 'primary'
+    assert tags[2] == 'community'
