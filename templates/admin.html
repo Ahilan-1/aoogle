@@ -278,7 +278,7 @@
                         {% for state in ['investigating','identified','monitoring','resolved'] %}<option value="{{ state }}" {{ 'selected' if active_incident.status == state else '' }}>{{ state|title }}</option>{% endfor %}
                     </select>
                     <textarea name="message" rows="2" placeholder="Public customer update…" style="padding:9px;border:1px solid var(--a-border);font-family:inherit"></textarea>
-                    <label style="font-size:13px"><input type="checkbox" name="compensation_review" {{ 'checked' if active_incident.compensation_review else '' }}> Flag subscribed customers for compensation review</label>
+                    {% if active_incident.compensation_eligible %}<label style="font-size:13px"><input type="checkbox" name="compensation_review" {{ 'checked' if active_incident.compensation_review else '' }}> Flag subscribed customers for compensation review</label>{% else %}<small>Compensation review is disabled for this {{ active_incident.kind|replace('_',' ') }} event.</small>{% endif %}
                     <button class="btn btn-approve" type="submit">Publish update</button>
                 </form>
                 {% else %}

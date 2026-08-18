@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="refresh" content="60">
   <title>Arlong Status</title>
   <meta name="description" content="Live operational status and incident updates for Arlong Search, AI, API, and MCP.">
   <style>
@@ -10,7 +11,7 @@
     *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif}
     main{width:min(900px,calc(100% - 32px));margin:auto;padding:42px 0 80px}a{color:inherit}.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:54px}.brand{font-weight:700;letter-spacing:-.02em;text-decoration:none}.back{color:var(--muted);text-decoration:none}
     h1{font-size:clamp(34px,6vw,58px);line-height:1.02;letter-spacing:-.055em;margin:0 0 14px}.lede{color:var(--muted);font-size:17px;max-width:650px;margin:0 0 34px}
-    .overall,.incident,.component{border:1px solid var(--line);background:var(--panel)}.overall{padding:20px 22px;display:flex;gap:14px;align-items:center;margin-bottom:30px}.dot{width:10px;height:10px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 5px rgba(98,192,115,.12);flex:none}.bad .dot{background:var(--bad);box-shadow:0 0 0 5px rgba(237,106,94,.12)}.overall strong{display:block;font-size:17px}.overall span{color:var(--muted)}
+    .overall,.incident,.component,.important{border:1px solid var(--line);background:var(--panel)}.important{padding:18px 22px;border-left:3px solid var(--warn);margin-bottom:14px}.important b{display:block;font:11px ui-monospace,SFMono-Regular,monospace;letter-spacing:.12em;color:var(--warn);margin-bottom:5px}.overall{padding:20px 22px;display:flex;gap:14px;align-items:center;margin-bottom:30px}.dot{width:10px;height:10px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 5px rgba(98,192,115,.12);flex:none}.bad .dot{background:var(--bad);box-shadow:0 0 0 5px rgba(237,106,94,.12)}.overall strong{display:block;font-size:17px}.overall span{color:var(--muted)}
     h2{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:38px 0 12px}.components{display:grid;grid-template-columns:repeat(4,1fr)}.component{padding:18px;border-right:0}.component:last-child{border-right:1px solid var(--line)}.component b{display:block}.state{color:var(--ok);font:12px ui-monospace,SFMono-Regular,monospace;text-transform:uppercase}.state.issue{color:var(--warn)}
     .incident{padding:26px;margin-bottom:14px}.incident-head{display:flex;gap:12px;justify-content:space-between;align-items:flex-start}.incident h3{font-size:21px;letter-spacing:-.025em;margin:0 0 5px}.meta{color:var(--muted);font:12px ui-monospace,SFMono-Regular,monospace}.chip{border:1px solid var(--line);border-radius:99px;padding:4px 10px;font:11px ui-monospace,SFMono-Regular,monospace;text-transform:uppercase;white-space:nowrap}.copy{margin:20px 0;color:#d8dbde}.care{border-left:2px solid var(--warn);padding:12px 14px;background:#17140e;color:#d9d3c8;font-size:13px}.timeline{margin-top:24px;border-top:1px solid var(--line)}.update{padding:16px 0;border-bottom:1px solid var(--line)}.update p{margin:4px 0 0}.empty{color:var(--muted);border:1px dashed var(--line);padding:22px}.footer{color:var(--muted);font-size:13px;margin-top:45px}
     @media(max-width:650px){main{padding-top:24px}.top{margin-bottom:38px}.components{grid-template-columns:1fr}.component{border-right:1px solid var(--line);border-bottom:0}.component:last-child{border-bottom:1px solid var(--line)}.incident-head{display:block}.chip{display:inline-block;margin-top:10px}}
@@ -20,20 +21,24 @@
   <div class="top"><a class="brand" href="/">ARLONG / STATUS</a><a class="back" href="/">Return to Arlong</a></div>
   <h1>Clear updates when things go wrong.</h1>
   <p class="lede">Live service health for Arlong Search, AI, API and MCP. Incident updates here are written for customers, not just servers.</p>
+  {% if important_announcement %}<div class="important"><b>IMPORTANT ANNOUNCEMENT</b>{{ important_announcement }}</div>{% endif %}
   <div class="overall {{ 'bad' if active_incident else '' }}"><i class="dot"></i><div><strong>{{ ('Service is recovering' if active_incident.status == 'monitoring' else 'We are investigating a service issue') if active_incident else 'All systems operational' }}</strong><span>{{ ('Successful requests are being monitored before we close the incident.' if active_incident.status == 'monitoring' else 'The team has been alerted. Updates will appear below.') if active_incident else 'No active incidents reported.' }}</span></div></div>
   <h2>Components</h2>
   <div class="components">
     {% set kind = active_incident.kind if active_incident else '' %}
-    {% set components = [('Website & dashboard', kind in ['service_offline','maintenance']), ('Search retrieval', kind in ['service_offline','maintenance','search_degraded']), ('AI synthesis', kind in ['service_offline','maintenance','provider_exhausted']), ('API & MCP', kind in ['service_offline','maintenance','provider_exhausted','search_degraded'])] %}
+    {% set components = [('Website & dashboard', kind in ['kill_switch','service_offline','maintenance']), ('Search retrieval', kind in ['kill_switch','service_offline','maintenance','search_degraded']), ('AI synthesis', kind in ['kill_switch','service_offline','maintenance','provider_exhausted']), ('API & MCP', kind in ['kill_switch','service_offline','maintenance','provider_exhausted','search_degraded'])] %}
     {% for name, affected in components %}<div class="component"><b>{{ name }}</b><span class="state {{ 'issue' if affected else '' }}">{{ 'Investigating' if affected else 'Operational' }}</span></div>{% endfor %}
   </div>
   <h2>{{ 'Incident detail' if focused else 'Incident history' }}</h2>
   {% set shown = [focused] if focused else incidents %}
   {% for incident in shown if incident %}
   <article class="incident" id="{{ incident.id }}">
-    <div class="incident-head"><div><h3>{{ incident.title }}</h3><div class="meta">{{ incident.component }} · began {{ incident.started_at.replace('T',' ')[:16] }} UTC</div></div><span class="chip">{{ incident.status }}</span></div>
+    <div class="incident-head"><div><h3>{{ incident.title }}</h3><div class="meta">{{ incident.component }} · began {{ incident.started_at.replace('T',' ')[:16] }} UTC · {{ incident.id }}</div></div><span class="chip">{{ incident.status }}</span></div>
     <p class="copy">{{ incident.message }}</p>
-    {% if incident.status != 'resolved' %}<div class="care"><strong>We are sorry for the interruption.</strong> If you subscribed before this incident, we will review the customer impact after recovery. If compensation is appropriate, eligible subscribers will be contacted with voucher details. You do not need to do anything right now.</div>{% endif %}
+    {% if incident.impact %}<div class="meta">IMPACT</div><p>{{ incident.impact }}</p>{% endif %}
+    <div class="meta">DETECTED BY {{ incident.detected_by|default('health monitor')|upper }} · SIGNALS {{ incident.occurrences|default(1) }} · NEXT UPDATE TARGET {{ incident.next_update_minutes|default(30) }} MIN</div>
+    {% if incident.status != 'resolved' and incident.compensation_eligible %}<div class="care"><strong>We are sorry for the interruption.</strong> If you subscribed before this incident, we will review the customer impact after recovery. If compensation is appropriate, eligible subscribers will be contacted with voucher details. You do not need to do anything right now.</div>
+    {% elif incident.status != 'resolved' %}<div class="care"><strong>Our team is working on it.</strong> We will update this page when the service state changes. No action is required from you.</div>{% endif %}
     <div class="timeline">
       {% for update in incident.updates|reverse %}<div class="update"><div class="meta">{{ update.status|upper }} · {{ update.created_at.replace('T',' ')[:16] }} UTC</div><p>{{ update.message }}</p></div>{% endfor %}
     </div>

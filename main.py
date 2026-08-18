@@ -1408,8 +1408,9 @@ def add_security_headers(response):
                     # Manual announcements are text-only. Links are supplied by
                     # the incident system, avoiding stored-markup injection.
                     safe_ann = _htmlmod.escape(announcement, quote=True)
+                banner_bg = '#8a4b08' if incident and incident.get('kind') == 'maintenance' else '#9b1c1c'
                 banner = (
-                    '<div id="arlong-urgent-banner" style="background:linear-gradient(90deg,#c5221f,#b71c1c);'
+                    '<div id="arlong-urgent-banner" data-incident-kind="' + _htmlmod.escape((incident or {}).get('kind', 'manual'), quote=True) + '" style="background:' + banner_bg + ';'
                     'color:#fff;text-align:center;padding:10px 40px 10px 20px;font-size:13px;font-weight:500;'
                     'position:fixed;top:0;left:0;right:0;z-index:9999;box-shadow:0 2px 12px rgba(197,34,31,.4);'
                     'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Helvetica,Arial,sans-serif">'
@@ -2935,7 +2936,11 @@ class DataManager:
             if loaded:
                 self.data = loaded
             records = list(self.data.get('incidents', []))
+        # Newest within each state, with active investigation work always
+        # above identified/monitoring work and resolved history.
         records.sort(key=lambda x: x.get('started_at', ''), reverse=True)
+        priority = {'investigating': 0, 'identified': 1, 'monitoring': 2, 'resolved': 3}
+        records.sort(key=lambda x: priority.get(x.get('status'), 4))
         return records[:max(1, min(int(limit or 20), 100))]
 
     def get_incident(self, incident_id):
@@ -2944,7 +2949,8 @@ class DataManager:
     def get_active_incident(self):
         return next((x for x in self.get_incidents(100) if x.get('status') != 'resolved'), None)
 
-    def ensure_incident(self, kind, title, message, component='Arlong AI', severity='major', automatic=True):
+    def ensure_incident(self, kind, title, message, component='Arlong AI', severity='major', automatic=True,
+                        compensation_eligible=False, impact='', detected_by='health monitor', next_update_minutes=30):
         """Create one durable incident per kind, or refresh the existing one."""
         now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         with self._lock:
@@ -2981,7 +2987,10 @@ class DataManager:
                 'severity': severity if severity in ('minor', 'major', 'critical') else 'major',
                 'status': 'investigating', 'automatic': bool(automatic), 'occurrences': 1,
                 'started_at': now, 'updated_at': now, 'last_seen_at': now,
+                'compensation_eligible': bool(compensation_eligible),
                 'compensation_review': False,
+                'impact': str(impact)[:300], 'detected_by': str(detected_by)[:80],
+                'next_update_minutes': max(5, min(int(next_update_minutes or 30), 240)),
                 'updates': [{'status': 'investigating', 'message': str(message)[:1200], 'created_at': now}],
             }
             incidents.append(active)
@@ -3000,6 +3009,11 @@ class DataManager:
                         if x.get('kind') == kind and x.get('status') != 'resolved' and x.get('automatic')), None)
             if not rec:
                 return None
+            # Backfill policy metadata for incidents created before policies
+            # were introduced, without a destructive data migration.
+            rec.setdefault('compensation_eligible', kind in ('provider_exhausted', 'search_degraded', 'service_offline'))
+            rec.setdefault('detected_by', 'model-router circuit breaker' if kind == 'provider_exhausted' else 'health monitor')
+            rec.setdefault('next_update_minutes', 15 if kind == 'provider_exhausted' else 30)
             successes = int(rec.get('recovery_successes', 0)) + 1
             rec['recovery_successes'] = successes
             if rec.get('status') != 'monitoring':
@@ -3042,7 +3056,7 @@ class DataManager:
             rec['status'] = status
             rec['updated_at'] = now
             if compensation_review is not None:
-                rec['compensation_review'] = bool(compensation_review)
+                rec['compensation_review'] = bool(compensation_review) and bool(rec.get('compensation_eligible'))
             public_message = (message or '').strip()[:1200]
             if public_message:
                 rec['message'] = public_message
@@ -12619,7 +12633,7 @@ def mcp_endpoint():
     if method == 'tools/call':
         _svc = _service_blocked()
         if _svc:
-            return _mcp_outage_result(msg_id, 'maintenance' if _svc == 'maintenance' else 'service_offline')
+            return _mcp_outage_result(msg_id, 'maintenance' if _svc == 'maintenance' else 'kill_switch')
         name = params.get('name')
         tool_credits = {'arlong_status': 0, 'arlong_quick': 1, 'arlong_search': 1,
                         'arlong_extract': 1, 'arlong_deep': 2,
@@ -13032,7 +13046,39 @@ def public_status():
     incidents = data_manager.get_incidents(20)
     return render_template('status.html', incidents=incidents,
                            active_incident=data_manager.get_active_incident(),
-                           service_status=data_manager.get_service_status(), focused=None)
+                           service_status=data_manager.get_service_status(), focused=None,
+                           important_announcement=data_manager.get_announcement())
+
+
+@app.route('/api/status')
+def public_status_api():
+    """Machine-readable health for agents, uptime monitors, and integrations."""
+    active = data_manager.get_active_incident()
+    service = data_manager.get_service_status()
+    kind = (active or {}).get('kind', '')
+    affected = {
+        'website': kind in ('kill_switch', 'service_offline', 'maintenance'),
+        'search': kind in ('kill_switch', 'service_offline', 'maintenance', 'search_degraded'),
+        'ai': kind in ('kill_switch', 'service_offline', 'maintenance', 'provider_exhausted'),
+        'api_mcp': bool(active),
+    }
+    incident = None
+    if active:
+        incident = {k: active.get(k) for k in (
+            'id', 'kind', 'title', 'status', 'severity', 'component', 'impact',
+            'started_at', 'updated_at', 'last_seen_at', 'occurrences', 'next_update_minutes')}
+        incident['url'] = _incident_url(active)
+    response = jsonify({
+        'status': 'operational' if not active else ('recovering' if active.get('status') == 'monitoring' else 'degraded'),
+        'checked_at': datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + 'Z',
+        'components': {name: ('degraded' if is_affected else 'operational') for name, is_affected in affected.items()},
+        'incident': incident,
+        'controls': {'maintenance': service.get('maintenance', False), 'protective_pause': service.get('kill_switch', False)},
+    })
+    response.headers['Cache-Control'] = 'no-store'
+    if active:
+        response.headers['Retry-After'] = '60'
+    return response
 
 
 @app.route('/status/incidents/<incident_id>')
@@ -13042,7 +13088,8 @@ def public_incident(incident_id):
         abort(404)
     return render_template('status.html', incidents=data_manager.get_incidents(20),
                            active_incident=data_manager.get_active_incident(),
-                           service_status=data_manager.get_service_status(), focused=incident)
+                           service_status=data_manager.get_service_status(), focused=incident,
+                           important_announcement=data_manager.get_announcement())
 
 
 @app.route('/admin/incidents/create', methods=['POST'])
@@ -13155,14 +13202,14 @@ def admin_service():
     maintenance = form.get('maintenance') == 'on'
     data_manager.set_service_status(kill_switch=kill_switch, maintenance=maintenance)
     if kill_switch:
-        _open_operational_incident('service_offline')
+        _open_operational_incident('kill_switch')
     elif maintenance:
         _open_operational_incident('maintenance')
     else:
         # Turning the service back on does not conceal history: it resolves
         # only the incident created by the matching administrative control.
         for incident in data_manager.get_incidents(100):
-            if incident.get('status') != 'resolved' and incident.get('kind') in ('service_offline', 'maintenance'):
+            if incident.get('status') != 'resolved' and incident.get('kind') in ('kill_switch', 'service_offline', 'maintenance'):
                 data_manager.update_incident(incident['id'], 'resolved', 'Service has been restored and is operating normally.')
     app.logger.warning(f"Admin updated service status: kill_switch={kill_switch}, maintenance={maintenance}")
     return redirect(url_for('admin_dashboard'))
@@ -14403,21 +14450,38 @@ def _service_blocked():
 def _open_operational_incident(kind, detail=''):
     """Open an idempotent, customer-safe incident without leaking provider details."""
     templates = {
-        'provider_exhausted': (
-            'AI requests are temporarily unavailable', 'AI routing', 'major',
-            'Our provider routes are not accepting work right now. The team has been alerted and is restoring capacity.'),
-        'maintenance': (
-            'Scheduled maintenance in progress', 'Arlong services', 'minor',
-            'Arlong is temporarily paused while we complete maintenance. We are monitoring the work and will post updates here.'),
-        'service_offline': (
-            'Service interruption', 'Arlong services', 'critical',
-            'Arlong is not responding as expected. The team has been alerted and is working to restore service.'),
-        'search_degraded': (
-            'Search is experiencing errors', 'Search and MCP', 'major',
-            'Some searches are failing or taking longer than expected. The team has been alerted and is investigating.'),
+        'provider_exhausted': {
+            'title': 'AI provider capacity exhausted', 'component': 'AI routing', 'severity': 'major',
+            'message': 'Every available AI route is currently unavailable or rate limited. Search retrieval remains available where possible while we restore synthesis capacity.',
+            'impact': 'AI answers, evaluations, and synthesis may fail. Plain-link search can remain available.',
+            'eligible': True, 'detected_by': 'model-router circuit breaker', 'next': 15},
+        'maintenance': {
+            'title': 'Maintenance in progress', 'component': 'Arlong services', 'severity': 'minor',
+            'message': 'Arlong has been intentionally paused while our team completes maintenance. We are working through the maintenance and will restore access when it is safe to do so.',
+            'impact': 'Search, AI, API, and MCP requests are temporarily paused.',
+            'eligible': False, 'detected_by': 'administrative maintenance control', 'next': 30},
+        'kill_switch': {
+            'title': 'Protective service pause', 'component': 'Arlong services', 'severity': 'critical',
+            'message': 'Arlong was intentionally paused by our operational safety control. The website and this status page remain available while the team checks the service and restores it safely.',
+            'impact': 'Search, AI, API, and MCP requests are blocked. Account and status pages remain available.',
+            'eligible': False, 'detected_by': 'operational kill switch', 'next': 15},
+        # Compatibility for incidents created before the dedicated kill policy.
+        'service_offline': {
+            'title': 'Service interruption', 'component': 'Arlong services', 'severity': 'critical',
+            'message': 'Arlong is not responding as expected. The team has been alerted and is working to restore service.',
+            'impact': 'Multiple Arlong services may be unavailable.',
+            'eligible': True, 'detected_by': 'service health monitor', 'next': 15},
+        'search_degraded': {
+            'title': 'Search reliability degraded', 'component': 'Search and MCP', 'severity': 'major',
+            'message': 'Repeated search failures crossed our reliability threshold. Some requests may fail or take longer while the team investigates.',
+            'impact': 'Search and MCP retrieval may be intermittent; account services remain available.',
+            'eligible': True, 'detected_by': 'search failure monitor', 'next': 20},
     }
-    title, component, severity, message = templates.get(kind, templates['service_offline'])
-    return data_manager.ensure_incident(kind, title, message, component, severity, automatic=True)
+    policy = templates.get(kind, templates['service_offline'])
+    return data_manager.ensure_incident(
+        kind, policy['title'], policy['message'], policy['component'], policy['severity'],
+        automatic=True, compensation_eligible=policy['eligible'], impact=policy['impact'],
+        detected_by=policy['detected_by'], next_update_minutes=policy['next'])
 
 
 def _incident_url(incident):
@@ -14428,10 +14492,19 @@ def _incident_url(incident):
 
 def _mcp_outage_result(msg_id, kind='provider_exhausted'):
     incident = _open_operational_incident(kind)
+    messages = {
+        'maintenance': ('Arlong is undergoing maintenance.', 'Please tell your user that Arlong is temporarily paused for maintenance and suggest trying again later.'),
+        'kill_switch': ('Arlong has been paused by an operational safety control.', 'Please tell your user that Arlong is temporarily paused while the team verifies service health.'),
+        'service_offline': ('Arlong is temporarily unavailable while we restore service.', 'Please tell your user that Arlong is experiencing an outage and suggest trying again shortly.'),
+        'provider_exhausted': ('Arlong AI synthesis is temporarily unavailable because every provider route is busy.', 'Please tell your user that AI answers are temporarily unavailable; plain-link search may still work.'),
+        'search_degraded': ('Arlong search is temporarily experiencing errors.', 'Please tell your user that search reliability is degraded and suggest trying again shortly.'),
+    }
+    message, instruction = messages.get(kind, messages['service_offline'])
     text = {
         'error': 'service_unavailable',
-        'message': "I'm sorry - Arlong is temporarily unavailable while we restore service.",
-        'agent_instruction': 'Please tell your user that Arlong is currently experiencing an outage or maintenance and suggest trying again shortly.',
+        'incident_type': kind,
+        'message': "I'm sorry - " + message,
+        'agent_instruction': instruction,
         'status_url': _incident_url(incident),
         'retry_after_seconds': 60,
         'note': "Even a search engine occasionally needs a moment to find itself.",
