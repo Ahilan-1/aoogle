@@ -100,7 +100,13 @@
     /* ── Bottom account / usage ── */
     .ai-sb-foot{border-top:1px solid var(--border-soft);padding:13px;background:#0b1016}
     .ai-account-card{padding:10px;border:1px solid #252e39;background:#11171f;border-radius:11px;margin-bottom:11px}
-    .ai-account{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+    .ai-account{display:flex;align-items:center;gap:10px}
+    .ai-account-toggle{width:100%;padding:0;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer;font:inherit}
+    .ai-account-toggle:focus-visible{outline:2px solid #5d91ff;outline-offset:5px;border-radius:6px}
+    .ai-account-chevron{width:15px;height:15px;margin-left:4px;color:var(--text-muted);flex-shrink:0;transition:transform .2s ease}
+    .ai-account-toggle[aria-expanded="true"] .ai-account-chevron{transform:rotate(180deg)}
+    .ai-account-details{display:grid;gap:11px}
+    .ai-account-details[hidden]{display:none}
     .ai-avatar{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#4f8cff,#8b5cf6);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;color:#fff;flex-shrink:0}
     .ai-account-name{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .ai-account-sub{font-size:11.5px;color:var(--text-muted)}
@@ -455,15 +461,17 @@
     <div class="ai-history" id="ai-history"><div class="ai-h-empty">No conversations yet</div></div>
     <div class="ai-sb-foot">
         <div class="ai-account-card">
-        <div class="ai-account">
+        <button class="ai-account ai-account-toggle" id="ai-account-toggle" type="button" aria-expanded="true" aria-controls="ai-account-details" onclick="toggleAccountUsage()">
             <div class="ai-avatar">{{ first_name[0] if first_name else 'A' }}</div>
             <div style="min-width:0">
                 <div class="ai-account-name">{{ username }}</div>
                 <div class="ai-account-sub">Arlong account</div>
             </div>
             <span class="ai-plan-chip">{{ plan_usage.limits.name if plan_usage is defined else 'Free' }}</span>
+            <svg class="ai-account-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
         </div>
-        </div>
+        <div class="ai-account-details" id="ai-account-details">
         <div class="ai-meter-card">
         <div class="ai-limit-title"><span>{% if plan_usage is defined and plan_usage.plan == 'free' %}Daily standard answers{% else %}Billing-period standard answers{% endif %}</span><span class="ai-limit-num" id="ai-usage-text">{{ msg_remaining }} / {{ msg_limit }} remaining</span></div>
         <div class="ai-usage-track"><div class="ai-usage-fill" id="ai-usage-fill" style="width:{{ ((msg_limit - msg_remaining) * 100 / msg_limit) | round }}%"></div></div>
@@ -474,6 +482,7 @@
         <a href="/dashboard" style="display:block;margin-top:14px;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;font-size:12px;color:#bbb;text-decoration:none;text-align:center">
             Manage account &amp; usage
         </a>
+        </div>
     </div>
 </aside>
 
@@ -583,6 +592,23 @@
 
     /* ── helpers ── */
     function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+    function setAccountUsageExpanded(expanded, remember){
+        var toggle = document.getElementById('ai-account-toggle');
+        var details = document.getElementById('ai-account-details');
+        if(!toggle || !details) return;
+        toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        details.hidden = !expanded;
+        if(remember){ try{ localStorage.setItem('arlong-account-usage-expanded', expanded ? '1' : '0'); }catch(e){} }
+    }
+    window.toggleAccountUsage = function(){
+        var toggle = document.getElementById('ai-account-toggle');
+        setAccountUsageExpanded(!toggle || toggle.getAttribute('aria-expanded') !== 'true', true);
+    };
+    (function(){
+        var saved = null;
+        try{ saved = localStorage.getItem('arlong-account-usage-expanded'); }catch(e){}
+        setAccountUsageExpanded(saved === null ? window.innerWidth >= 760 : saved === '1', false);
+    })();
     function timeAgo(iso){
         if(!iso) return '';
         var t = new Date(iso).getTime(); if(isNaN(t)) return '';
