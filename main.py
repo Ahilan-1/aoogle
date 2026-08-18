@@ -1396,7 +1396,8 @@ def add_security_headers(response):
         try:
             announcement = data_manager.get_announcement()
             incident = data_manager.get_active_incident()
-            if announcement or incident:
+            postmortem = data_manager.get_latest_postmortem_announcement()
+            if announcement or incident or postmortem:
                 import html as _htmlmod
                 if incident:
                     notice = ('Service is recovering and being monitored.' if incident.get('status') == 'monitoring'
@@ -1404,22 +1405,37 @@ def add_security_headers(response):
                     safe_ann = _htmlmod.escape(notice, quote=True)
                     incident_url = '/status/incidents/' + _htmlmod.escape(incident.get('id', ''), quote=True)
                     safe_ann += ' <a href="' + incident_url + '" style="color:#fff;text-decoration:underline;font-weight:700">View live incident</a>'
-                else:
+                    banner_bg = '#8a4b08' if incident.get('kind') == 'maintenance' else '#9b1c1c'
+                    banner_kind = incident.get('kind', 'incident')
+                    dismiss_key = ''
+                elif announcement:
                     # Manual announcements are text-only. Links are supplied by
                     # the incident system, avoiding stored-markup injection.
                     safe_ann = _htmlmod.escape(announcement, quote=True)
-                banner_bg = '#8a4b08' if incident and incident.get('kind') == 'maintenance' else '#9b1c1c'
+                    banner_bg = '#9b1c1c'
+                    banner_kind = 'manual'
+                    dismiss_key = ''
+                else:
+                    report_id = re.sub(r'[^A-Za-z0-9_-]', '', str(postmortem.get('id', '')))
+                    safe_ann = ('Incident report published: ' + _htmlmod.escape(postmortem.get('title', 'Service incident'), quote=True) +
+                                ' <a href="/status/incidents/' + report_id + '" style="color:#fff;text-decoration:underline;font-weight:700">Read what happened and compensation details</a>')
+                    banner_bg = '#175cd3'
+                    banner_kind = 'postmortem'
+                    dismiss_key = 'arlong-postmortem-' + report_id
+                dismiss_js = ("localStorage.setItem('" + dismiss_key + "','1');" if dismiss_key else '')
                 banner = (
-                    '<div id="arlong-urgent-banner" data-incident-kind="' + _htmlmod.escape((incident or {}).get('kind', 'manual'), quote=True) + '" style="background:' + banner_bg + ';'
+                    '<div id="arlong-urgent-banner" data-incident-kind="' + _htmlmod.escape(banner_kind, quote=True) + '" style="background:' + banner_bg + ';'
                     'color:#fff;text-align:center;padding:10px 40px 10px 20px;font-size:13px;font-weight:500;'
                     'position:fixed;top:0;left:0;right:0;z-index:9999;box-shadow:0 2px 12px rgba(197,34,31,.4);'
                     'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Helvetica,Arial,sans-serif">'
                     '<span style="margin-right:8px">&#x26A0;</span>' + safe_ann +
-                    '<button onclick="this.parentElement.remove()" style="position:absolute;right:12px;top:50%;'
+                    '<button onclick="' + dismiss_js + 'this.parentElement.remove()" style="position:absolute;right:12px;top:50%;'
                     'transform:translateY(-50%);background:none;border:none;color:#fff;font-size:18px;cursor:pointer;'
                     'padding:2px 6px;opacity:.7" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.7">&times;</button>'
                     '</div>'
                 )
+                if dismiss_key:
+                    banner += '<script>if(localStorage.getItem("' + dismiss_key + '")){document.getElementById("arlong-urgent-banner").remove()}</script>'
                 data = response.get_data(as_text=True)
                 if '<body' in data:
                     body_start = data.index('<body')
@@ -2949,6 +2965,10 @@ class DataManager:
     def get_active_incident(self):
         return next((x for x in self.get_incidents(100) if x.get('status') != 'resolved'), None)
 
+    def get_latest_postmortem_announcement(self):
+        return next((x for x in self.get_incidents(100)
+                     if x.get('postmortem_published') and x.get('postmortem_announcement_active')), None)
+
     def ensure_incident(self, kind, title, message, component='Arlong AI', severity='major', automatic=True,
                         compensation_eligible=False, impact='', detected_by='health monitor', next_update_minutes=30):
         """Create one durable incident per kind, or refresh the existing one."""
@@ -3063,6 +3083,48 @@ class DataManager:
                 rec.setdefault('updates', []).append({'status': status, 'message': public_message, 'created_at': now})
             if status == 'resolved':
                 rec['resolved_at'] = now
+            _save_json(self.data)
+            return dict(rec)
+
+    def publish_incident_postmortem(self, incident_id, what_went_wrong, impact, resolution,
+                                    prevention, compensation, compensation_details='', announce=False):
+        """Persist an admin-reviewed postmortem on the incident's permanent URL."""
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            rec = next((x for x in self.data.setdefault('incidents', []) if x.get('id') == incident_id), None)
+            if not rec or rec.get('status') != 'resolved':
+                return None
+            decision = compensation if compensation in ('voucher', 'none') else 'none'
+            rec['postmortem'] = {
+                'what_went_wrong': str(what_went_wrong).strip()[:4000],
+                'impact': str(impact).strip()[:2000],
+                'resolution': str(resolution).strip()[:4000],
+                'prevention': str(prevention).strip()[:4000],
+                'compensation': decision,
+                'compensation_details': str(compensation_details).strip()[:2000] if decision == 'voucher' else '',
+                'published_at': now,
+            }
+            rec['postmortem_published'] = True
+            # Customer-wide blue announcements are deliberately restricted to
+            # resolved, major/critical incidents with real compensation.
+            rec['postmortem_announcement_active'] = bool(
+                announce and rec.get('severity') in ('major', 'critical') and decision == 'voucher')
+            rec['updated_at'] = now
+            _save_json(self.data)
+            return dict(rec)
+
+    def stop_postmortem_announcement(self, incident_id):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            rec = next((x for x in self.data.setdefault('incidents', []) if x.get('id') == incident_id), None)
+            if not rec:
+                return None
+            rec['postmortem_announcement_active'] = False
             _save_json(self.data)
             return dict(rec)
 
@@ -13118,6 +13180,41 @@ def admin_incident_update(incident_id):
         request.form.get('message', ''),
         compensation_review=request.form.get('compensation_review') == 'on')
     if not rec:
+        abort(404)
+    return redirect(url_for('admin_dashboard'))
+
+
+@app.route('/admin/incidents/<incident_id>/postmortem', methods=['POST'])
+def admin_incident_postmortem(incident_id):
+    if not session.get('admin_logged_in'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    if not validate_csrf():
+        return jsonify({'error': 'CSRF'}), 403
+    required = {name: request.form.get(name, '').strip() for name in
+                ('what_went_wrong', 'impact', 'resolution', 'prevention')}
+    if any(not value for value in required.values()):
+        return jsonify({'error': 'What went wrong, impact, resolution, and prevention are required.'}), 400
+    compensation = request.form.get('compensation', 'none')
+    compensation_details = request.form.get('compensation_details', '').strip()
+    if compensation == 'voucher' and not compensation_details:
+        return jsonify({'error': 'Voucher eligibility and delivery details are required.'}), 400
+    rec = data_manager.publish_incident_postmortem(
+        incident_id,
+        required['what_went_wrong'], required['impact'], required['resolution'], required['prevention'],
+        compensation, compensation_details,
+        announce=request.form.get('announce') == 'on')
+    if not rec:
+        return jsonify({'error': 'Only resolved incidents can publish a post-incident report.'}), 400
+    return redirect(url_for('admin_dashboard'))
+
+
+@app.route('/admin/incidents/<incident_id>/postmortem/stop-announcement', methods=['POST'])
+def admin_incident_stop_postmortem_announcement(incident_id):
+    if not session.get('admin_logged_in'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    if not validate_csrf():
+        return jsonify({'error': 'CSRF'}), 403
+    if not data_manager.stop_postmortem_announcement(incident_id):
         abort(404)
     return redirect(url_for('admin_dashboard'))
 

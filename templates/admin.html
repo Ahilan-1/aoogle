@@ -291,7 +291,25 @@
                     <button class="btn btn-approve" type="submit">Open incident</button>
                 </form>
                 {% endif %}
-                {% if incidents %}<details style="margin-top:14px"><summary>Recent incident history ({{ incidents|length }})</summary>{% for incident in incidents %}<div style="padding:8px 0;border-top:1px solid var(--a-border);font-size:13px"><a href="/status/incidents/{{ incident.id }}" target="_blank">{{ incident.title }}</a> · {{ incident.status }}</div>{% endfor %}</details>{% endif %}
+                {% if incidents %}<details style="margin-top:14px"><summary>Incident reports &amp; history ({{ incidents|length }})</summary>
+                {% for incident in incidents %}<details style="padding:10px 0;border-top:1px solid var(--a-border);font-size:13px"><summary><a href="/status/incidents/{{ incident.id }}" target="_blank">{{ incident.title }}</a> · {{ incident.status }}{% if incident.postmortem_published %} · report published{% endif %}</summary>
+                    {% if incident.status == 'resolved' %}
+                    {% set pm = incident.postmortem|default({}) %}
+                    <form method="POST" action="/admin/incidents/{{ incident.id }}/postmortem" style="display:grid;gap:8px;padding:12px 0">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <strong>Post-incident report</strong>
+                        <textarea required name="what_went_wrong" rows="3" placeholder="What went wrong? Be concrete and customer-safe." style="padding:9px;font-family:inherit">{{ pm.what_went_wrong|default('') }}</textarea>
+                        <textarea required name="impact" rows="2" placeholder="Who and what was affected? Include the time window." style="padding:9px;font-family:inherit">{{ pm.impact|default(incident.impact|default('')) }}</textarea>
+                        <textarea required name="resolution" rows="3" placeholder="How did we restore service?" style="padding:9px;font-family:inherit">{{ pm.resolution|default('') }}</textarea>
+                        <textarea required name="prevention" rows="3" placeholder="What are we changing to reduce recurrence?" style="padding:9px;font-family:inherit">{{ pm.prevention|default('') }}</textarea>
+                        <select name="compensation" style="padding:9px"><option value="none" {{ 'selected' if pm.compensation|default('none') == 'none' else '' }}>No compensation</option><option value="voucher" {{ 'selected' if pm.compensation|default('') == 'voucher' else '' }}>Voucher compensation</option></select>
+                        <textarea name="compensation_details" rows="2" placeholder="Voucher value, eligibility, delivery method, and expiry. Never paste secret voucher codes here." style="padding:9px;font-family:inherit">{{ pm.compensation_details|default('') }}</textarea>
+                        {% if incident.severity in ['major','critical'] %}<label><input type="checkbox" name="announce" {{ 'checked' if incident.postmortem_announcement_active else '' }}> Show the blue customer announcement (requires Voucher compensation)</label>{% endif %}
+                        <button class="btn btn-approve" type="submit">Save &amp; publish incident report</button>
+                    </form>
+                    {% if incident.postmortem_announcement_active %}<form method="POST" action="/admin/incidents/{{ incident.id }}/postmortem/stop-announcement"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="btn btn-deny" type="submit">Stop blue announcement</button></form>{% endif %}
+                    {% else %}<p style="color:var(--a-text3)">Resolve this incident before publishing its permanent post-incident report.</p>{% endif %}
+                </details>{% endfor %}</details>{% endif %}
             </div>
         </div>
 
