@@ -387,6 +387,11 @@ PLACES_GEO_TTL = 90 * 24 * 3600  # geocode cache: 90 days
 # ── Arlong AI mode (arlong.org/ai) ──
 # Separate Groq key used ONLY by the /ai feature (search-result summaries use GROQ_API_KEY).
 AI_MODE_GROQ_API_KEY = os.environ.get('GROQ_AI_MODE_API_KEY', '')
+# A separate Groq account used only after the primary account reports rate
+# pressure/capacity errors. Keeping account failover here (rather than treating
+# it as another model) lets every Groq model benefit from the second quota pool.
+AI_MODE_GROQ_BACKUP_API_KEY = os.environ.get('GROQ_API_KEY', '')
+AI_GROQ_PRIMARY_COOLDOWN_UNTIL = 0.0
 AI_MODE_GROQ_MODEL = os.environ.get('GROQ_AI_MODE_MODEL', 'openai/gpt-oss-120b')
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '') or os.environ.get('GOOGLE_API_KEY', '')
 GEMINI_MODELS = tuple(m.strip() for m in os.environ.get(
@@ -14221,7 +14226,23 @@ def _read_error_log(hours=24):
 
 def _ai_groq(api_key=None):
     from groq import Groq
-    return Groq(api_key=api_key or AI_MODE_GROQ_API_KEY)
+    return Groq(api_key=api_key or _ai_groq_key_for_call())
+
+
+def _ai_groq_key_for_call(explicit=None):
+    """Use the backup account while the primary account is cooling down."""
+    if explicit:
+        return explicit
+    if (AI_MODE_GROQ_BACKUP_API_KEY and
+            time.time() < AI_GROQ_PRIMARY_COOLDOWN_UNTIL):
+        return AI_MODE_GROQ_BACKUP_API_KEY
+    return AI_MODE_GROQ_API_KEY
+
+
+def _ai_cooldown_primary_groq(seconds=90):
+    global AI_GROQ_PRIMARY_COOLDOWN_UNTIL
+    AI_GROQ_PRIMARY_COOLDOWN_UNTIL = max(
+        AI_GROQ_PRIMARY_COOLDOWN_UNTIL, time.time() + seconds)
 
 
 def _ai_is_gemini(model):
@@ -14408,7 +14429,7 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
     tried. Returns the completion object of the first model that answers.
     Raises AIAllModelsFailedError when every model fails.
     """
-    if not GEMINI_API_KEY and not AI_MODE_GROQ_API_KEY and not api_key:
+    if not GEMINI_API_KEY and not AI_MODE_GROQ_API_KEY and not AI_MODE_GROQ_BACKUP_API_KEY and not api_key:
         raise AIAllModelsFailedError(['Arlong AI is not configured (missing Gemini and Groq credentials)'])
     errors = []
     overloaded = False
@@ -14444,19 +14465,22 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
         if model is None:
             break
         tried.add(model)
+        selected_api_key = api_key
+        if not _ai_is_gemini(model):
+            selected_api_key = _ai_groq_key_for_call(api_key)
         try:
             try:
                 resp = _ai_provider_call(
                     model, messages, max_tokens, temperature, timeout,
                     response_format=response_format, reasoning_format=reasoning_format,
-                    api_key=api_key,
+                    api_key=selected_api_key,
                 )
             except Exception as e:
                 if response_format and 'json_validate_failed' in str(e).lower():
                     app.logger.warning(f"JSON validate failed on {model}, retrying without response_format")
                     resp = _ai_provider_call(
                         model, messages, max_tokens, temperature, timeout,
-                        reasoning_format=reasoning_format, api_key=api_key,
+                        reasoning_format=reasoning_format, api_key=selected_api_key,
                     )
                 else:
                     raise
@@ -14471,6 +14495,26 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
                 router.mark_failure(model, err)
             if _ai_error_is_overload(e):
                 overloaded = True
+                if (not _ai_is_gemini(model) and not api_key and
+                        selected_api_key != AI_MODE_GROQ_BACKUP_API_KEY and
+                        AI_MODE_GROQ_BACKUP_API_KEY and
+                        AI_MODE_GROQ_BACKUP_API_KEY != AI_MODE_GROQ_API_KEY):
+                    try:
+                        _ai_cooldown_primary_groq()
+                        app.logger.warning(f"AI model {model} rate-limited; trying backup Groq account")
+                        resp = _ai_provider_call(
+                            model, messages, max_tokens, temperature, timeout,
+                            response_format=response_format,
+                            reasoning_format=reasoning_format,
+                            api_key=AI_MODE_GROQ_BACKUP_API_KEY,
+                        )
+                        if router is not None:
+                            router.record(model, tokens=est_tokens, success=True)
+                        return resp
+                    except Exception as backup_error:
+                        backup_err = str(backup_error) or backup_error.__class__.__name__
+                        errors.append(f'{model} (backup account): {backup_err}')
+                        app.logger.error(f"AI backup Groq account failed on {model}: {backup_err}")
     raise AIAllModelsFailedError(errors, overloaded=overloaded)
 
 
@@ -14482,7 +14526,7 @@ def _ai_open_stream(messages, max_tokens=1600, temperature=0.4, timeout=120,
     goes into exponential cooldown and the next model is tried. Returns
     (model, stream). Raises AIAllModelsFailedError if every model fails.
     """
-    if not GEMINI_API_KEY and not AI_MODE_GROQ_API_KEY:
+    if not GEMINI_API_KEY and not AI_MODE_GROQ_API_KEY and not AI_MODE_GROQ_BACKUP_API_KEY:
         raise AIAllModelsFailedError(['Arlong AI is not configured'])
     errors = []
     overloaded = False
@@ -14515,10 +14559,12 @@ def _ai_open_stream(messages, max_tokens=1600, temperature=0.4, timeout=120,
         if model is None:
             break
         tried.add(model)
+        selected_api_key = None if _ai_is_gemini(model) else _ai_groq_key_for_call()
         try:
             stream = _ai_provider_call(
                 model, messages, max_tokens, temperature, timeout,
                 reasoning_format=reasoning_format, stream=True,
+                api_key=selected_api_key,
             )
             if router is not None:
                 router.record(model, tokens=est_tokens, success=True)
@@ -14531,6 +14577,25 @@ def _ai_open_stream(messages, max_tokens=1600, temperature=0.4, timeout=120,
                 router.mark_failure(model, err)
             if _ai_error_is_overload(e):
                 overloaded = True
+                if (AI_MODE_GROQ_BACKUP_API_KEY and
+                        AI_MODE_GROQ_BACKUP_API_KEY != AI_MODE_GROQ_API_KEY and
+                        not _ai_is_gemini(model) and
+                        selected_api_key != AI_MODE_GROQ_BACKUP_API_KEY):
+                    try:
+                        _ai_cooldown_primary_groq()
+                        app.logger.warning(f"AI stream {model} rate-limited; trying backup Groq account")
+                        stream = _ai_provider_call(
+                            model, messages, max_tokens, temperature, timeout,
+                            reasoning_format=reasoning_format, stream=True,
+                            api_key=AI_MODE_GROQ_BACKUP_API_KEY,
+                        )
+                        if router is not None:
+                            router.record(model, tokens=est_tokens, success=True)
+                        return model, stream
+                    except Exception as backup_error:
+                        backup_err = str(backup_error) or backup_error.__class__.__name__
+                        errors.append(f'{model} (backup account): {backup_err}')
+                        app.logger.error(f"AI stream backup Groq account failed on {model}: {backup_err}")
     raise AIAllModelsFailedError(errors, overloaded=overloaded)
 
 
@@ -15299,7 +15364,7 @@ def _ai_link_evaluations(query, results, max_links=20):
     earlier by _ai_pick_sources, so evaluations are framed positively and never
     criticize a source.
     """
-    if not AI_MODE_GROQ_API_KEY or not results:
+    if not (AI_MODE_GROQ_API_KEY or AI_MODE_GROQ_BACKUP_API_KEY) or not results:
         return {}, {}, None
     try:
         links = '\n'.join(
@@ -15989,6 +16054,43 @@ def api_ai_search():
     return jsonify(resp)
 
 
+def _ai_complete_link_evaluations(query, results, evaluations=None, tags=None):
+    """Guarantee one stable evaluation and tag for every displayed source.
+
+    JSON-mode models occasionally return a syntactically valid but partial
+    array. A partial response must never leave cards spinning forever, so any
+    omitted entry is completed from the local relevance/domain signals.
+    """
+    complete_evals = dict(evaluations or {})
+    complete_tags = dict(tags or {})
+    for idx, result in enumerate(results[:20], 1):
+        url = (result.get('url') or '').lower()
+        if idx not in complete_tags:
+            complete_tags[idx] = (
+                'primary' if any(d in url for d in (
+                    '.gov', '.edu', 'cloud.google.com', 'ai.google.dev'))
+                else ('community' if any(d in url for d in (
+                    'reddit.com', 'forum', 'discuss.')) else 'trusted')
+            )
+        if idx in complete_evals and str(complete_evals[idx]).strip():
+            continue
+        try:
+            import neural_search as _neural
+            ev = _neural.evaluate_page(
+                query, title=result.get('title', ''), url=result.get('url', ''),
+                snippet=result.get('snippet', ''))
+            score = max(0.0, min(1.0, float(ev.get('relevance_score') or 0)))
+            label = ('Highly relevant' if score >= .60 else
+                     ('Relevant' if score >= .38 else 'Limited relevance'))
+            complete_evals[idx] = (
+                f"{label} ({score:.0%}); verify important claims against the source.")
+        except Exception:
+            domain = result.get('domain') or urlparse(result.get('url') or '').netloc
+            complete_evals[idx] = (
+                f"Potentially useful result from {domain or 'this source'}; verify key claims.")
+    return complete_evals, complete_tags
+
+
 @app.route('/api/ai/links', methods=['POST'])
 def api_ai_links():
     if not session.get('user_id'):
@@ -16006,24 +16108,9 @@ def api_ai_links():
     except Exception:
         offset = 0
     evals, tags, err = _ai_link_evaluations(query, results)
-    if err:
-        # Evaluation metadata must survive provider outages. Fall back to the
-        # deterministic neural/domain signals and persist those immediately.
-        evals, tags = {}, {}
-        for idx, result in enumerate(results[:8], 1):
-            try:
-                import neural_search as _neural
-                ev = _neural.evaluate_page(query, title=result.get('title', ''),
-                                           url=result.get('url', ''),
-                                           snippet=result.get('snippet', ''))
-                score = float(ev.get('relevance_score') or 0)
-                label = 'highly relevant' if score >= .60 else ('relevant' if score >= .38 else 'limited relevance')
-                evals[idx] = f"{label.capitalize()} ({score:.0%}); verify important claims against the source."
-                url = (result.get('url') or '').lower()
-                tags[idx] = ('primary' if any(d in url for d in ('.gov', '.edu', 'cloud.google.com', 'ai.google.dev'))
-                             else ('community' if any(d in url for d in ('reddit.com', 'forum', 'discuss.')) else 'trusted'))
-            except Exception:
-                continue
+    # Complete partial model JSON too, not only total provider failures. This
+    # is the bug that previously left sources 3+ in an endless loading state.
+    evals, tags = _ai_complete_link_evaluations(query, results, evals, tags)
     evals = {int(k) + offset: v for k, v in evals.items()}
     tags = {int(k) + offset: v for k, v in tags.items()}
     # Persist evaluations into the chat so reloads show them without another
@@ -16041,6 +16128,19 @@ def api_ai_links():
                         target = m
                         break
                 if target is None:
+                    # Multi-query evaluations use each sub-query, while the
+                    # saved assistant turn keeps the parent query. Match on
+                    # source identity so those evaluations survive refresh.
+                    result_urls = {r.get('url') for r in results if r.get('url')}
+                    for i in range(len(msgs) - 1, -1, -1):
+                        m = msgs[i]
+                        source_urls = {
+                            r.get('url') for r in (m.get('sources') or [])
+                            if r.get('url')}
+                        if m.get('role') == 'assistant' and result_urls & source_urls:
+                            target = m
+                            break
+                if target is None:
                     for i in range(len(msgs) - 1, -1, -1):
                         m = msgs[i]
                         if m.get('role') == 'assistant' and m.get('pending') and not m.get('clarify'):
@@ -16053,7 +16153,7 @@ def api_ai_links():
                     data_manager.save_ai_chat(session['user_id'], chat)
         except Exception as e:
             app.logger.error(f"AI links persist error: {e}")
-    return jsonify({'ok': True, 'evaluations': evals, 'tags': tags})
+    return jsonify({'ok': True, 'complete': True, 'evaluations': evals, 'tags': tags})
 
 
 @app.route('/api/ai/report-decline', methods=['POST'])
