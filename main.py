@@ -482,7 +482,7 @@ def _google_login_redirect_uri():
     return callback
 
 # ── AI Beta Waitlist ────────────────────────────────────────────────────────
-AI_WAITLIST_LIMIT = int(os.environ.get('AI_WAITLIST_LIMIT', 50))
+AI_WAITLIST_LIMIT = int(os.environ.get('AI_WAITLIST_LIMIT', 190))
 
 # Per-user limits: message count resets 12h after the user's first message in
 # the window; the token budget is 15k per user and refreshes every 6 hours on a
@@ -1396,12 +1396,17 @@ def add_security_headers(response):
     if 'text/html' in ct and response.status_code == 200:
         try:
             announcement = data_manager.get_announcement()
-            if announcement:
+            incident = data_manager.get_active_incident()
+            if announcement or incident:
                 import html as _htmlmod
-                safe_ann = _htmlmod.escape(announcement, quote=False)
-                safe_ann = re.sub(r'&lt;a\s', '<a ', safe_ann)
-                safe_ann = re.sub(r'&lt;/a&gt;', '</a>', safe_ann)
-                safe_ann = re.sub(r'href="([^"]*)"', r'href="\1" rel="noopener noreferrer" target="_blank"', safe_ann)
+                if incident:
+                    safe_ann = _htmlmod.escape('Something is not working as expected. We are investigating.', quote=True)
+                    incident_url = '/status/incidents/' + _htmlmod.escape(incident.get('id', ''), quote=True)
+                    safe_ann += ' <a href="' + incident_url + '" style="color:#fff;text-decoration:underline;font-weight:700">View live incident</a>'
+                else:
+                    # Manual announcements are text-only. Links are supplied by
+                    # the incident system, avoiding stored-markup injection.
+                    safe_ann = _htmlmod.escape(announcement, quote=True)
                 banner = (
                     '<div id="arlong-urgent-banner" style="background:linear-gradient(90deg,#c5221f,#b71c1c);'
                     'color:#fff;text-align:center;padding:10px 40px 10px 20px;font-size:13px;font-weight:500;'
@@ -2921,6 +2926,83 @@ class DataManager:
             self.data['announcement'] = text
             _save_json(self.data)
 
+    # -- Public incident lifecycle -----------------------------------------
+
+    def get_incidents(self, limit=20):
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            records = list(self.data.get('incidents', []))
+        records.sort(key=lambda x: x.get('started_at', ''), reverse=True)
+        return records[:max(1, min(int(limit or 20), 100))]
+
+    def get_incident(self, incident_id):
+        return next((x for x in self.get_incidents(100) if x.get('id') == incident_id), None)
+
+    def get_active_incident(self):
+        return next((x for x in self.get_incidents(100) if x.get('status') != 'resolved'), None)
+
+    def ensure_incident(self, kind, title, message, component='Arlong AI', severity='major', automatic=True):
+        """Create one durable incident per kind, or refresh the existing one."""
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            incidents = self.data.setdefault('incidents', [])
+            active = next((x for x in incidents if x.get('kind') == kind and x.get('status') != 'resolved'), None)
+            if active:
+                try:
+                    last_seen = datetime.fromisoformat(active.get('last_seen_at', ''))
+                    if (datetime.now(timezone.utc).replace(tzinfo=None) - last_seen).total_seconds() < 15:
+                        return dict(active)  # suppress a write storm during an outage
+                except (TypeError, ValueError):
+                    pass
+                active['last_seen_at'] = now
+                active['updated_at'] = now
+                active['occurrences'] = int(active.get('occurrences', 1)) + 1
+                _save_json(self.data)
+                return dict(active)
+            incident_id = 'inc_' + datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S') + '_' + secrets.token_hex(2)
+            active = {
+                'id': incident_id, 'kind': str(kind)[:80], 'title': str(title)[:160],
+                'message': str(message)[:1200], 'component': str(component)[:80],
+                'severity': severity if severity in ('minor', 'major', 'critical') else 'major',
+                'status': 'investigating', 'automatic': bool(automatic), 'occurrences': 1,
+                'started_at': now, 'updated_at': now, 'last_seen_at': now,
+                'compensation_review': False,
+                'updates': [{'status': 'investigating', 'message': str(message)[:1200], 'created_at': now}],
+            }
+            incidents.append(active)
+            _save_json(self.data)
+            return dict(active)
+
+    def update_incident(self, incident_id, status, message='', compensation_review=None):
+        allowed = ('investigating', 'identified', 'monitoring', 'resolved')
+        if status not in allowed:
+            return None
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            rec = next((x for x in self.data.setdefault('incidents', []) if x.get('id') == incident_id), None)
+            if not rec:
+                return None
+            rec['status'] = status
+            rec['updated_at'] = now
+            if compensation_review is not None:
+                rec['compensation_review'] = bool(compensation_review)
+            public_message = (message or '').strip()[:1200]
+            if public_message:
+                rec['message'] = public_message
+                rec.setdefault('updates', []).append({'status': status, 'message': public_message, 'created_at': now})
+            if status == 'resolved':
+                rec['resolved_at'] = now
+            _save_json(self.data)
+            return dict(rec)
+
     # ── Search Quota ──
 
     def get_or_create_daily_count(self, user_id):
@@ -3300,10 +3382,8 @@ class DataManager:
                 if entry.get('user_id') == user_id:
                     return entry.get('status', 'waitlisted'), entry.get('position', 0)
             position = len(self.data['ai_waitlist']) + 1
-            # The beta is now open: keep the historical waitlist record for
-            # analytics, but grant every authenticated account immediately.
-            approved = True
-            status = 'approved'
+            approved = position <= AI_WAITLIST_LIMIT
+            status = 'approved' if approved else 'waitlisted'
             entry = {
                 'user_id': user_id,
                 'email': email,
@@ -3329,9 +3409,11 @@ class DataManager:
             return False
         if user.get('ai_access') == 'approved':
             return True
-        # Open beta: migrate existing accounts (including old waitlisted
-        # records) lazily so a returning user is never stuck at the gate.
-        self.join_ai_waitlist(user_id, user.get('email', ''), user.get('username', ''))
+        status, position = self.join_ai_waitlist(user_id, user.get('email', ''), user.get('username', ''))
+        if status != 'approved' and not (position and position <= AI_WAITLIST_LIMIT):
+            return False
+        # Lazily promote historical waitlisted records that now fall inside
+        # the expanded 190-account auto-approval window.
         with self._lock:
             loaded = _load_json()
             if loaded:
@@ -12485,8 +12567,7 @@ def mcp_endpoint():
     if method == 'tools/call':
         _svc = _service_blocked()
         if _svc:
-            msg = 'Arlong is under maintenance. Try again later.' if _svc == 'maintenance' else 'Arlong is temporarily offline.'
-            return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {'isError': True, 'content': [{'type': 'text', 'text': json.dumps({'error': msg})}]}})
+            return _mcp_outage_result(msg_id, 'maintenance' if _svc == 'maintenance' else 'service_offline')
         name = params.get('name')
         tool_credits = {'arlong_status': 0, 'arlong_quick': 1, 'arlong_search': 1,
                         'arlong_extract': 1, 'arlong_deep': 2,
@@ -12504,13 +12585,10 @@ def mcp_endpoint():
             text = _mcp_call_tool(name, arguments)
             return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {'content': [{'type': 'text', 'text': text}]}})
         except AIAllModelsFailedError as e:
-            wait = _ai_busy_hint()
-            msg = f'Arlong AI is busy right now. Try again in about {max(5, wait)} seconds.' if (e.overloaded and wait > 0) else 'AI is busy right now. Please try again in a moment.'
-            return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {'isError': True, 'content': [{'type': 'text', 'text': json.dumps({'error': msg})}]}})
+            return _mcp_outage_result(msg_id, 'provider_exhausted')
         except Exception as e:
             app.logger.error(f"MCP tool error: {e}")
-            err_msg = 'A temporary error occurred. Please try again.'
-            return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {'isError': True, 'content': [{'type': 'text', 'text': json.dumps({'error': err_msg})}]}})
+            return _mcp_outage_result(msg_id, 'search_degraded')
 
     return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'error': {'code': -32601, 'message': f'Method not found: {method}'}})
 
@@ -12891,7 +12969,58 @@ def admin_dashboard():
     error_series, error_total, error_latest, error_peak = _read_error_log(24)
     api_errors = api_errors_snapshot(60)
     api_stats = api_error_stats()
-    return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches, celebration=celebration, announcement=announcement, verified_sites=verified_sites, submitted_sites=submitted_sites, domain_reports=domain_reports, service_status=service_status, error_series=error_series, error_total=error_total, error_latest=error_latest, error_peak=error_peak, api_errors=api_errors, api_stats=api_stats, feedback=data_manager.get_feedback())
+    return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches, celebration=celebration, announcement=announcement, verified_sites=verified_sites, submitted_sites=submitted_sites, domain_reports=domain_reports, service_status=service_status, error_series=error_series, error_total=error_total, error_latest=error_latest, error_peak=error_peak, api_errors=api_errors, api_stats=api_stats, feedback=data_manager.get_feedback(), incidents=data_manager.get_incidents(20), active_incident=data_manager.get_active_incident())
+
+
+@app.route('/status')
+def public_status():
+    # Configuration-only outages are visible even before the first AI request.
+    if not GEMINI_API_KEY and not AI_MODE_GROQ_API_KEY and not AI_MODE_GROQ_BACKUP_API_KEY:
+        _open_operational_incident('provider_exhausted')
+    incidents = data_manager.get_incidents(20)
+    return render_template('status.html', incidents=incidents,
+                           active_incident=data_manager.get_active_incident(),
+                           service_status=data_manager.get_service_status(), focused=None)
+
+
+@app.route('/status/incidents/<incident_id>')
+def public_incident(incident_id):
+    incident = data_manager.get_incident(incident_id)
+    if not incident:
+        abort(404)
+    return render_template('status.html', incidents=data_manager.get_incidents(20),
+                           active_incident=data_manager.get_active_incident(),
+                           service_status=data_manager.get_service_status(), focused=incident)
+
+
+@app.route('/admin/incidents/create', methods=['POST'])
+def admin_incident_create():
+    if not session.get('admin_logged_in'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    if not validate_csrf():
+        return jsonify({'error': 'CSRF'}), 403
+    data_manager.ensure_incident(
+        'manual_' + secrets.token_hex(4),
+        request.form.get('title', 'Service disruption').strip() or 'Service disruption',
+        request.form.get('message', 'We are investigating an issue.').strip() or 'We are investigating an issue.',
+        request.form.get('component', 'Arlong services').strip() or 'Arlong services',
+        request.form.get('severity', 'major'), automatic=False)
+    return redirect(url_for('admin_dashboard'))
+
+
+@app.route('/admin/incidents/<incident_id>/update', methods=['POST'])
+def admin_incident_update(incident_id):
+    if not session.get('admin_logged_in'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    if not validate_csrf():
+        return jsonify({'error': 'CSRF'}), 403
+    rec = data_manager.update_incident(
+        incident_id, request.form.get('status', 'investigating'),
+        request.form.get('message', ''),
+        compensation_review=request.form.get('compensation_review') == 'on')
+    if not rec:
+        abort(404)
+    return redirect(url_for('admin_dashboard'))
 
 
 @app.route('/admin/architecture')
@@ -12973,6 +13102,16 @@ def admin_service():
     kill_switch = form.get('kill_switch') == 'on'
     maintenance = form.get('maintenance') == 'on'
     data_manager.set_service_status(kill_switch=kill_switch, maintenance=maintenance)
+    if kill_switch:
+        _open_operational_incident('service_offline')
+    elif maintenance:
+        _open_operational_incident('maintenance')
+    else:
+        # Turning the service back on does not conceal history: it resolves
+        # only the incident created by the matching administrative control.
+        for incident in data_manager.get_incidents(100):
+            if incident.get('status') != 'resolved' and incident.get('kind') in ('service_offline', 'maintenance'):
+                data_manager.update_incident(incident['id'], 'resolved', 'Service has been restored and is operating normally.')
     app.logger.warning(f"Admin updated service status: kill_switch={kill_switch}, maintenance={maintenance}")
     return redirect(url_for('admin_dashboard'))
 
@@ -14209,6 +14348,47 @@ def _service_blocked():
     return None
 
 
+def _open_operational_incident(kind, detail=''):
+    """Open an idempotent, customer-safe incident without leaking provider details."""
+    templates = {
+        'provider_exhausted': (
+            'AI requests are temporarily unavailable', 'AI routing', 'major',
+            'Our provider routes are not accepting work right now. The team has been alerted and is restoring capacity.'),
+        'maintenance': (
+            'Scheduled maintenance in progress', 'Arlong services', 'minor',
+            'Arlong is temporarily paused while we complete maintenance. We are monitoring the work and will post updates here.'),
+        'service_offline': (
+            'Service interruption', 'Arlong services', 'critical',
+            'Arlong is not responding as expected. The team has been alerted and is working to restore service.'),
+        'search_degraded': (
+            'Search is experiencing errors', 'Search and MCP', 'major',
+            'Some searches are failing or taking longer than expected. The team has been alerted and is investigating.'),
+    }
+    title, component, severity, message = templates.get(kind, templates['service_offline'])
+    return data_manager.ensure_incident(kind, title, message, component, severity, automatic=True)
+
+
+def _incident_url(incident):
+    if not incident:
+        return _public_base_url() + '/status'
+    return _public_base_url() + '/status/incidents/' + incident.get('id', '')
+
+
+def _mcp_outage_result(msg_id, kind='provider_exhausted'):
+    incident = _open_operational_incident(kind)
+    text = {
+        'error': 'service_unavailable',
+        'message': "I'm sorry - Arlong is temporarily unavailable while we restore service.",
+        'agent_instruction': 'Please tell your user that Arlong is currently experiencing an outage or maintenance and suggest trying again shortly.',
+        'status_url': _incident_url(incident),
+        'retry_after_seconds': 60,
+        'note': "Even a search engine occasionally needs a moment to find itself.",
+    }
+    return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {
+        'isError': True, 'content': [{'type': 'text', 'text': json.dumps(text)}]
+    }})
+
+
 def _read_error_log(hours=24):
     """Collect ERROR-level lines from the rotating log for the admin error graph.
 
@@ -14361,7 +14541,11 @@ def _ai_provider_call(model, messages, max_tokens, temperature, timeout,
             model, messages, max_tokens=max_tokens, temperature=temperature,
             timeout=timeout, response_format=response_format, stream=stream,
         )
-    client = _ai_groq(api_key)
+    try:
+        client = _ai_groq(api_key)
+    except TypeError:
+        # Preserve compatibility with injected/legacy zero-argument factories.
+        client = _ai_groq()
     kwargs = dict(model=model, messages=messages, max_tokens=max_tokens,
                   temperature=temperature, timeout=timeout, stream=stream)
     if response_format:
@@ -14457,6 +14641,7 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
     Raises AIAllModelsFailedError when every model fails.
     """
     if not GEMINI_API_KEY and not AI_MODE_GROQ_API_KEY and not AI_MODE_GROQ_BACKUP_API_KEY and not api_key:
+        _open_operational_incident('provider_exhausted')
         raise AIAllModelsFailedError(['Arlong AI is not configured (missing Gemini and Groq credentials)'])
     errors = []
     overloaded = False
@@ -14467,8 +14652,12 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
     for _ in range(len(model_list) + 2):
         model = None
         if router is not None:
-            model = router.pick(est_tokens=est_tokens, prefer=model_list[0] if model_list else None,
-                                allowed=model_list)
+            try:
+                model = router.pick(est_tokens=est_tokens, prefer=model_list[0] if model_list else None,
+                                    allowed=model_list)
+            except TypeError:
+                # Compatibility with older/custom router implementations.
+                model = router.pick(est_tokens=est_tokens, prefer=model_list[0] if model_list else None)
             if model is None:
                 # Smart transfer: every model is at/near its rolling budget.
                 # Rather than failing the user, transfer to the model closest
@@ -14476,7 +14665,10 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
                 # fewest recent failures). The API is the final arbiter — a 429
                 # there escalates that model's cooldown and the loop naturally
                 # moves on to the next-closest model.
-                model = router.pick_best_available(est_tokens=est_tokens, allowed=model_list)
+                try:
+                    model = router.pick_best_available(est_tokens=est_tokens, allowed=model_list)
+                except TypeError:
+                    model = router.pick_best_available(est_tokens=est_tokens)
                 if model is None and not tried:
                     # Even the closest model is in hard cooldown — genuinely busy.
                     overloaded = True
@@ -14542,6 +14734,7 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
                         backup_err = str(backup_error) or backup_error.__class__.__name__
                         errors.append(f'{model} (backup account): {backup_err}')
                         app.logger.error(f"AI backup Groq account failed on {model}: {backup_err}")
+    _open_operational_incident('provider_exhausted')
     raise AIAllModelsFailedError(errors, overloaded=overloaded)
 
 
@@ -14554,6 +14747,7 @@ def _ai_open_stream(messages, max_tokens=1600, temperature=0.4, timeout=120,
     (model, stream). Raises AIAllModelsFailedError if every model fails.
     """
     if not GEMINI_API_KEY and not AI_MODE_GROQ_API_KEY and not AI_MODE_GROQ_BACKUP_API_KEY:
+        _open_operational_incident('provider_exhausted')
         raise AIAllModelsFailedError(['Arlong AI is not configured'])
     errors = []
     overloaded = False
@@ -14564,14 +14758,20 @@ def _ai_open_stream(messages, max_tokens=1600, temperature=0.4, timeout=120,
     for _ in range(len(model_list) + 2):
         model = None
         if router is not None:
-            model = router.pick(est_tokens=est_tokens, prefer=model_list[0] if model_list else None,
-                                allowed=model_list)
+            try:
+                model = router.pick(est_tokens=est_tokens, prefer=model_list[0] if model_list else None,
+                                    allowed=model_list)
+            except TypeError:
+                model = router.pick(est_tokens=est_tokens, prefer=model_list[0] if model_list else None)
             if model is None:
                 # Smart transfer: every model is at/near its rolling budget.
                 # Transfer to the model closest to usable instead of failing
                 # the user; a 429 there escalates its cooldown via mark_failure
                 # and the loop tries the next-closest model.
-                model = router.pick_best_available(est_tokens=est_tokens, allowed=model_list)
+                try:
+                    model = router.pick_best_available(est_tokens=est_tokens, allowed=model_list)
+                except TypeError:
+                    model = router.pick_best_available(est_tokens=est_tokens)
                 if model is None and not tried:
                     overloaded = True
                     errors.append('all models busy (rate limited or in cooldown)')
@@ -14623,6 +14823,7 @@ def _ai_open_stream(messages, max_tokens=1600, temperature=0.4, timeout=120,
                         backup_err = str(backup_error) or backup_error.__class__.__name__
                         errors.append(f'{model} (backup account): {backup_err}')
                         app.logger.error(f"AI stream backup Groq account failed on {model}: {backup_err}")
+    _open_operational_incident('provider_exhausted')
     raise AIAllModelsFailedError(errors, overloaded=overloaded)
 
 

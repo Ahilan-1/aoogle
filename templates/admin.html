@@ -261,6 +261,40 @@
             </div>
         </div>
 
+        <div class="card" style="border-left:4px solid {{ '#c5221f' if active_incident else '#62c073' }}">
+            <div class="card-title">
+                Incident Control
+                {% if active_incident %}<span class="badge" style="background:#c5221f;color:#fff">{{ active_incident.status }}</span>{% else %}<span class="badge">clear</span>{% endif %}
+                <a href="/status" target="_blank" style="margin-left:auto;font-size:12px">Public status page ↗</a>
+            </div>
+            <div style="padding:16px 20px">
+                <p style="font-size:13px;color:var(--a-text3);margin:0 0 14px">Provider exhaustion and service controls create incidents automatically. Updates below are immediately public and the active incident is linked from the urgent banner.</p>
+                {% if active_incident %}
+                <form method="POST" action="/admin/incidents/{{ active_incident.id }}/update" style="display:grid;gap:10px">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <strong>{{ active_incident.title }}</strong>
+                    <small>{{ active_incident.id }} · {{ active_incident.component }} · {{ active_incident.occurrences }} signal(s)</small>
+                    <select name="status" style="padding:9px;border:1px solid var(--a-border)">
+                        {% for state in ['investigating','identified','monitoring','resolved'] %}<option value="{{ state }}" {{ 'selected' if active_incident.status == state else '' }}>{{ state|title }}</option>{% endfor %}
+                    </select>
+                    <textarea name="message" rows="2" placeholder="Public customer update…" style="padding:9px;border:1px solid var(--a-border);font-family:inherit"></textarea>
+                    <label style="font-size:13px"><input type="checkbox" name="compensation_review" {{ 'checked' if active_incident.compensation_review else '' }}> Flag subscribed customers for compensation review</label>
+                    <button class="btn btn-approve" type="submit">Publish update</button>
+                </form>
+                {% else %}
+                <form method="POST" action="/admin/incidents/create" style="display:grid;gap:10px">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <input name="title" required placeholder="Incident title" style="padding:9px;border:1px solid var(--a-border)">
+                    <input name="component" value="Arlong services" placeholder="Affected component" style="padding:9px;border:1px solid var(--a-border)">
+                    <textarea name="message" required rows="2" placeholder="Customer-facing explanation" style="padding:9px;border:1px solid var(--a-border);font-family:inherit"></textarea>
+                    <select name="severity" style="padding:9px;border:1px solid var(--a-border)"><option>minor</option><option selected>major</option><option>critical</option></select>
+                    <button class="btn btn-approve" type="submit">Open incident</button>
+                </form>
+                {% endif %}
+                {% if incidents %}<details style="margin-top:14px"><summary>Recent incident history ({{ incidents|length }})</summary>{% for incident in incidents %}<div style="padding:8px 0;border-top:1px solid var(--a-border);font-size:13px"><a href="/status/incidents/{{ incident.id }}" target="_blank">{{ incident.title }}</a> · {{ incident.status }}</div>{% endfor %}</details>{% endif %}
+            </div>
+        </div>
+
         <div class="card" style="border-left:4px solid {{ '#c5221f' if (service_status.kill_switch or service_status.maintenance) else '#1a73e8' }}">
             <div class="card-title">
                 Service Status
