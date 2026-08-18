@@ -14735,6 +14735,41 @@ def _ai_fetch_all_results(query, max_fetch=40):
 
 
 _AI_STATUS_TITLE_RE = re.compile(r'\b(404|page not found|not found|just a moment|attention required|access denied|server error|error)\b', re.I)
+_AI_RETRIEVAL_STOPWORDS = {
+    'about', 'best', 'comparison', 'does', 'from', 'have', 'into', 'more',
+    'than', 'that', 'their', 'this', 'versus', 'what', 'when', 'where',
+    'which', 'with', 'your',
+}
+
+
+def _ai_relevance_tokens(text):
+    tokens = set()
+    for token in re.findall(r'[a-z0-9]+', (text or '').lower()):
+        if len(token) < 3 or token in _AI_RETRIEVAL_STOPWORDS:
+            continue
+        aliases = {
+            'postgres': 'postgresql', 'benchmarks': 'benchmark',
+            'vectors': 'vector', 'pgvector': 'vector', 'embeddings': 'vector',
+            'llms': 'llm', 'latency': 'performance', 'throughput': 'performance',
+        }
+        tokens.add(aliases.get(token, token))
+    return tokens
+
+
+def _ai_source_relevance(query, candidate):
+    """Lexical specificity score used before any LLM source selection."""
+    query_tokens = _ai_relevance_tokens(query)
+    if not query_tokens:
+        return 1.0
+    title_tokens = _ai_relevance_tokens(candidate.get('title') or '')
+    body_tokens = _ai_relevance_tokens(
+        (candidate.get('title') or '') + ' ' + (candidate.get('snippet') or '') +
+        ' ' + (candidate.get('url') or ''))
+    title_hit = len(query_tokens & title_tokens) / len(query_tokens)
+    body_hit = len(query_tokens & body_tokens) / len(query_tokens)
+    # Title matches are stronger, but a technical benchmark often exposes its
+    # differentiating terms only in the snippet or URL.
+    return round(.42 * title_hit + .58 * body_hit, 4)
 
 
 def _ai_query_overlap(query, c):
@@ -14742,11 +14777,11 @@ def _ai_query_overlap(query, c):
 
     Used to drop totally unrelated results before they waste LLM tokens.
     """
-    words = set(re.findall(r'[a-z0-9]{3,}', (query or '').lower()))
+    words = _ai_relevance_tokens(query)
     if not words:
         return True
-    blob = (((c.get('title') or '') + ' ' + (c.get('snippet') or '')).lower())
-    return any(w in blob for w in words)
+    blob = _ai_relevance_tokens((c.get('title') or '') + ' ' + (c.get('snippet') or ''))
+    return bool(words & blob)
 
 
 def _ai_clean_sources(query, candidates):
@@ -14790,9 +14825,11 @@ def _ai_pick_sources(query, candidates, k=5):
     if not candidates:
         return []
     candidates = _ai_clean_sources(query, candidates)
+    candidates.sort(key=lambda c: _ai_source_relevance(query, c), reverse=True)
     candidates = candidates[:max(k * 4, 16)]
-    if not AI_MODE_GROQ_API_KEY or len(candidates) <= k:
-        return candidates[:k]
+    if not (AI_MODE_GROQ_API_KEY or AI_MODE_GROQ_BACKUP_API_KEY) or len(candidates) <= k:
+        useful = [c for c in candidates if _ai_source_relevance(query, c) >= .28]
+        return (useful or candidates[:2])[:k]
     try:
         listing = '\n'.join(
             f"{i+1}. {c['title']} | {c['url']} | {(c.get('snippet') or '')[:160]}"
@@ -14800,8 +14837,8 @@ def _ai_pick_sources(query, candidates, k=5):
         )
         comp = _ai_completion(
             messages=[
-                {'role': 'system', 'content': f'You pick the most useful web sources to answer a query. Reply with STRICT JSON only, shaped as {{"chosen":[1,4,2]}}: indices of the best sources, at most {k}, in priority order. Prefer primary sources (official docs, papers, direct announcements) over aggregators and forums. You MUST return at least 3 sources whenever possible — the user needs multiple perspectives. Only exclude sources that are clearly spam, ads, error pages, or completely unrelated. Return {{"chosen":[]}} only if literally every source is unusable.'},
-                {'role': 'user', 'content': f"Query: {query}\n\nSources:\n{listing}\n\nPick at least 3 and up to {k} relevant, trustworthy sources ordered best first. Include sources that are reasonably on-topic even if not perfect."},
+                {'role': 'system', 'content': f'You pick useful web sources for a query. Reply with STRICT JSON only, shaped as {{"chosen":[1,4,2]}}: indices of the best sources, at most {k}, in priority order. Preserve the query constraints and rank direct evidence first, but also include useful background that covers the core products, entities, or comparison. Prefer primary sources over SEO aggregators. Exclude only spam, broken pages, or genuinely unrelated results.'},
+                {'role': 'user', 'content': f"Query: {query}\n\nSources:\n{listing}\n\nChoose direct evidence first, followed by pages that provide useful background for understanding the query. Do not reject a page solely because it covers only part of a detailed request."},
             ],
             max_tokens=120,
             temperature=0.1,
@@ -14832,14 +14869,7 @@ def _ai_pick_sources(query, candidates, k=5):
         order = order[:k]
         app.logger.info(f"AI source pick: query='{query[:60]}', candidates={len(candidates)}, chosen_raw={chosen}, order={order}, parsed_ok={parsed_ok}")
         if not order and parsed_ok:
-            return candidates[:min(5, len(candidates))]
-        if len(order) < 2 and len(candidates) > len(order):
-            for c in candidates:
-                ci = candidates.index(c) + 1
-                if ci not in order:
-                    order.append(ci)
-                if len(order) >= min(k, len(candidates)):
-                    break
+            return candidates[:min(k, len(candidates))]
         return [candidates[i - 1] for i in order[:k]]
     except Exception as e:
         app.logger.error(f"AI source pick failed: {e}")
@@ -14856,7 +14886,10 @@ def _ai_top_results(query, limit=5):
         understood = _neural.understand_query(query)
     except Exception:
         pass
-    search_q = (understood or {}).get('phrase') or query
+    # Never replace a specific user query with the shorter neural "phrase".
+    # That previously dropped constraints such as local/LLM/vector/benchmark
+    # and produced generic comparison SEO pages.
+    search_q = query
     results, _total = _ai_fetch_all_results(search_q)
     top = []
     for r in results:
@@ -14871,6 +14904,26 @@ def _ai_top_results(query, limit=5):
             'domain': (d.get('domain') or urlparse(url).netloc).replace('www.', ''),
             'snippet': (d.get('snippet') or '')[:280],
         })
+    # If internal retrieval has no strong match, supplement rather than showing
+    # five weak pages. Serper key rotation handles its own quota pressure.
+    if top and max((_ai_source_relevance(query, r) for r in top), default=0) < .58:
+        try:
+            external = _search_serper(query, None) or []
+            seen = {r.get('url') for r in top}
+            for item in external:
+                d = item.to_dict() if hasattr(item, 'to_dict') else item
+                url = d.get('url') or d.get('link') or ''
+                if not url or url in seen:
+                    continue
+                seen.add(url)
+                top.append({
+                    'title': (d.get('title') or '')[:180], 'url': url,
+                    'favicon': d.get('favicon') or f"https://www.google.com/s2/favicons?domain={url}",
+                    'domain': (d.get('domain') or urlparse(url).netloc).replace('www.', ''),
+                    'snippet': (d.get('snippet') or '')[:280],
+                })
+        except Exception as e:
+            app.logger.warning(f"AI specificity fallback search failed: {e}")
     top = _ai_clean_sources(query, top)
     top = _ai_pick_sources(query, top, limit)
     if understood:
@@ -15374,7 +15427,7 @@ def _ai_link_evaluations(query, results, max_links=20):
         )
         comp = _ai_completion(
             messages=[
-                {'role': 'system', 'content': 'You are an editorial search guide. Evaluate whether each result is worth a human clicking for their exact query and state what useful material is inside. Reply with STRICT JSON only, shaped as {"evaluations":[{"idx":1,"eval":"Worth opening for its direct comparison table and current benchmarks."}],"tags":[{"idx":1,"tag":"primary"}]}. Never expose numeric relevance scores. Never say generic phrases such as "verify important claims". If a result is a weak match, say "Skip —" and briefly explain the mismatch. Valid tags are exactly: "primary" (official documentation, research papers, direct announcements), "community" (Reddit, forums, expert commentary), "trusted" (established reputable news/reference outlet).'},
+                {'role': 'system', 'content': 'You are an editorial search guide. Explain what each result offers and whether it is direct evidence or useful background for the query. Reply with STRICT JSON only, shaped as {"evaluations":[{"idx":1,"eval":"Useful background: compares PostgreSQL and Supabase, but does not benchmark the requested vector workload."}],"tags":[{"idx":1,"tag":"primary"}]}. Never expose numeric relevance scores. Never say generic phrases such as "verify important claims". Do not reject a page merely because it covers only one part of a specific query. Use "Skip" only when the page is genuinely unrelated to the core subject. Valid tags are exactly: "primary" (official documentation, research papers, direct announcements), "community" (videos, DEV, Reddit, forums, expert commentary), "trusted" (established reputable news/reference outlet).'},
                 {'role': 'user', 'content': f"Query: {query}\n\nSources:\n{links}\n\nEvaluate every source in this single response. For each source, write one specific sentence under 180 characters answering: is it worth opening for this query, and what is inside that makes it useful or not? Return an evaluation and tag for every index."},
             ],
             max_tokens=max(600, 60 * min(max_links, len(results))),
@@ -16076,7 +16129,7 @@ def _ai_source_tag(query, result):
     host = parsed.netloc.lower().removeprefix('www.')
     community_hosts = (
         'youtube.com', 'youtu.be', 'reddit.com', 'quora.com', 'medium.com',
-        'linkedin.com', 'forum.', 'forums.', 'discuss.',
+        'dev.to', 'linkedin.com', 'forum.', 'forums.', 'discuss.',
     )
     if any(marker in host for marker in community_hosts):
         return 'community'
@@ -16139,11 +16192,15 @@ def _ai_complete_link_evaluations(query, results, evaluations=None, tags=None):
         total_coverage = len(query_tokens & (title_tokens | snippet_tokens)) / denominator
         detail = _ai_preview_detail(result, query_tokens)
         inside = f" It includes {detail}." if detail else ''
+        matched_title = query_tokens & title_tokens
+        matched_any = query_tokens & (title_tokens | snippet_tokens)
         if title_coverage >= .75:
             verdict = f'Worth opening — “{title}” directly matches the query.'
-        elif (title_coverage >= .34 or total_coverage >= .60 or
+        elif (matched_title or len(matched_any) >= 2 or
               (complete_tags[idx] == 'primary' and host_brand in query_tokens)):
-            verdict = f'Useful for comparison — “{title}” covers a related part of the question.'
+            missing = sorted(query_tokens - (title_tokens | snippet_tokens))
+            gap = f" It does not appear to cover the more specific {'/'.join(missing[:3])} aspect." if missing else ''
+            verdict = f'Useful background — “{title}” covers a relevant part of the question.{gap}'
         else:
             verdict = f'Probably skip — “{title}” is only loosely related to the query.'
         complete_evals[idx] = (verdict + inside)[:260]
@@ -16208,12 +16265,12 @@ def api_ai_links():
                 if target is not None:
                     target['evaluations'] = {**(target.get('evaluations') or {}), **evals}
                     target['source_tags'] = {**(target.get('source_tags') or {}), **tags}
-                    target['evaluation_version'] = 3
+                    target['evaluation_version'] = 4
                     chat['updated_at'] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
                     data_manager.save_ai_chat(session['user_id'], chat)
         except Exception as e:
             app.logger.error(f"AI links persist error: {e}")
-    return jsonify({'ok': True, 'complete': True, 'evaluation_version': 3,
+    return jsonify({'ok': True, 'complete': True, 'evaluation_version': 4,
                     'evaluations': evals, 'tags': tags})
 
 

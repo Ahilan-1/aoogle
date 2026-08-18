@@ -74,6 +74,23 @@ def test_evaluation_fallback_understands_source_type_and_query_match():
     assert evaluations[1].startswith('Worth opening')
     assert '2 weeks ago' not in evaluations[1]
     assert 'production environments may vary' not in evaluations[1]
-    assert evaluations[3].startswith('Useful for comparison')
+    assert evaluations[3].startswith('Useful background')
     assert tags[1] == 'primary'
     assert tags[2] == 'community'
+
+
+def test_partial_topic_match_is_useful_background_not_rejected():
+    results = [{
+        'title': 'PostgreSQL vs Supabase (2026) - Detailed Comparison',
+        'url': 'https://example.com/postgresql-vs-supabase',
+        'snippet': 'Compare PostgreSQL and Supabase performance, scalability, and ease of use.',
+    }]
+
+    evaluations, _tags = main._ai_complete_link_evaluations(
+        'Comparison of PostgreSQL vs Supabase for local LLM vector storage performance benchmarks',
+        results,
+    )
+
+    assert evaluations[1].startswith('Useful background')
+    assert 'Probably skip' not in evaluations[1]
+    assert 'llm' in evaluations[1].lower() or 'vector' in evaluations[1].lower()
