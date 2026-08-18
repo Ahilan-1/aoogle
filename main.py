@@ -15357,12 +15357,13 @@ def _ai_link_evaluations(query, results, max_links=20):
     """One Groq call producing per-link relevance evaluations AND quality tags.
 
     Returns (evaluations, tags, err) where evaluations maps 1-based source index
-    to a short positive sentence on what the source contributes, and tags maps
+    to a short editorial sentence on what the source contains and whether it is
+    worth opening for this query, and tags maps
     the same index to 'primary' | 'community' | 'trusted'. `err` is None on
     success or a short reason string when the evaluation could not be produced
     (e.g. every model is busy). Weak sources are meant to have been dropped
-    earlier by _ai_pick_sources, so evaluations are framed positively and never
-    criticize a source.
+    earlier by _ai_pick_sources. Remaining weak matches should be identified
+    plainly instead of being promoted with a misleading score.
     """
     if not (AI_MODE_GROQ_API_KEY or AI_MODE_GROQ_BACKUP_API_KEY) or not results:
         return {}, {}, None
@@ -15373,8 +15374,8 @@ def _ai_link_evaluations(query, results, max_links=20):
         )
         comp = _ai_completion(
             messages=[
-                {'role': 'system', 'content': 'You evaluate web search results for a query. Reply with STRICT JSON only, shaped as {"evaluations":[{"idx":1,"eval":"one positive sentence"}],"tags":[{"idx":1,"tag":"primary"}]}. Valid tags are exactly: "primary" (official documentation, research papers, direct announcements), "community" (Reddit, forums, expert commentary), "trusted" (established reputable news/reference outlet).'},
-                {'role': 'user', 'content': f"Query: {query}\n\nSources:\n{links}\n\nEvaluate every source in this single response. For each source return one useful sentence under 120 characters and one tag: primary, community, or trusted. Use an empty evaluation for irrelevant sources."},
+                {'role': 'system', 'content': 'You are an editorial search guide. Evaluate whether each result is worth a human clicking for their exact query and state what useful material is inside. Reply with STRICT JSON only, shaped as {"evaluations":[{"idx":1,"eval":"Worth opening for its direct comparison table and current benchmarks."}],"tags":[{"idx":1,"tag":"primary"}]}. Never expose numeric relevance scores. Never say generic phrases such as "verify important claims". If a result is a weak match, say "Skip —" and briefly explain the mismatch. Valid tags are exactly: "primary" (official documentation, research papers, direct announcements), "community" (Reddit, forums, expert commentary), "trusted" (established reputable news/reference outlet).'},
+                {'role': 'user', 'content': f"Query: {query}\n\nSources:\n{links}\n\nEvaluate every source in this single response. For each source, write one specific sentence under 180 characters answering: is it worth opening for this query, and what is inside that makes it useful or not? Return an evaluation and tag for every index."},
             ],
             max_tokens=max(600, 60 * min(max_links, len(results))),
             temperature=0.2,
@@ -16080,14 +16081,20 @@ def _ai_complete_link_evaluations(query, results, evaluations=None, tags=None):
                 query, title=result.get('title', ''), url=result.get('url', ''),
                 snippet=result.get('snippet', ''))
             score = max(0.0, min(1.0, float(ev.get('relevance_score') or 0)))
-            label = ('Highly relevant' if score >= .60 else
-                     ('Relevant' if score >= .38 else 'Limited relevance'))
-            complete_evals[idx] = (
-                f"{label} ({score:.0%}); verify important claims against the source.")
+            snippet = re.sub(r'\s+', ' ', result.get('snippet') or '').strip()
+            detail = snippet.split('. ')[0].rstrip('. ')[:125]
+            if not detail:
+                detail = (result.get('title') or 'the page topic').strip()[:125]
+            if score >= .60:
+                complete_evals[idx] = f"Worth opening — it directly covers {detail[0].lower() + detail[1:]}"[:220]
+            elif score >= .38:
+                complete_evals[idx] = f"Useful for a related angle — it covers {detail[0].lower() + detail[1:]}"[:220]
+            else:
+                complete_evals[idx] = f"Skip for this query — it mainly covers {detail[0].lower() + detail[1:]}"[:220]
         except Exception:
             domain = result.get('domain') or urlparse(result.get('url') or '').netloc
             complete_evals[idx] = (
-                f"Potentially useful result from {domain or 'this source'}; verify key claims.")
+                f"Open for a closer look at the result from {domain or 'this source'}; the preview is too limited to recommend confidently.")
     return complete_evals, complete_tags
 
 
@@ -16149,11 +16156,13 @@ def api_ai_links():
                 if target is not None:
                     target['evaluations'] = {**(target.get('evaluations') or {}), **evals}
                     target['source_tags'] = {**(target.get('source_tags') or {}), **tags}
+                    target['evaluation_version'] = 2
                     chat['updated_at'] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
                     data_manager.save_ai_chat(session['user_id'], chat)
         except Exception as e:
             app.logger.error(f"AI links persist error: {e}")
-    return jsonify({'ok': True, 'complete': True, 'evaluations': evals, 'tags': tags})
+    return jsonify({'ok': True, 'complete': True, 'evaluation_version': 2,
+                    'evaluations': evals, 'tags': tags})
 
 
 @app.route('/api/ai/report-decline', methods=['POST'])

@@ -20,6 +20,8 @@ def test_partial_link_evaluations_are_completed(monkeypatch):
     assert set(tags) == {1, 2, 3}
     assert evaluations[1] == 'Useful official reference.'
     assert tags[3] == 'community'
+    assert all('%' not in text for text in evaluations.values())
+    assert all('verify important claims' not in text.lower() for text in evaluations.values())
 
 
 def test_groq_rate_limit_uses_backup_account(monkeypatch):
