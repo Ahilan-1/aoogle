@@ -1380,7 +1380,6 @@ def _maybe_gzip(response):
 
 @app.after_request
 def add_security_headers(response):
-    _maybe_gzip(response)
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
@@ -1400,7 +1399,9 @@ def add_security_headers(response):
             if announcement or incident:
                 import html as _htmlmod
                 if incident:
-                    safe_ann = _htmlmod.escape('Something is not working as expected. We are investigating.', quote=True)
+                    notice = ('Service is recovering and being monitored.' if incident.get('status') == 'monitoring'
+                              else 'Something is not working as expected. We are investigating.')
+                    safe_ann = _htmlmod.escape(notice, quote=True)
                     incident_url = '/status/incidents/' + _htmlmod.escape(incident.get('id', ''), quote=True)
                     safe_ann += ' <a href="' + incident_url + '" style="color:#fff;text-decoration:underline;font-weight:700">View live incident</a>'
                 else:
@@ -2953,6 +2954,15 @@ class DataManager:
             incidents = self.data.setdefault('incidents', [])
             active = next((x for x in incidents if x.get('kind') == kind and x.get('status') != 'resolved'), None)
             if active:
+                if active.get('status') == 'monitoring':
+                    active['status'] = 'investigating'
+                    active.pop('recovery_started_at', None)
+                    active['recovery_successes'] = 0
+                    active.setdefault('updates', []).append({
+                        'status': 'investigating',
+                        'message': 'The issue returned during recovery monitoring. The team is continuing its investigation.',
+                        'created_at': now,
+                    })
                 try:
                     last_seen = datetime.fromisoformat(active.get('last_seen_at', ''))
                     if (datetime.now(timezone.utc).replace(tzinfo=None) - last_seen).total_seconds() < 15:
@@ -2977,6 +2987,45 @@ class DataManager:
             incidents.append(active)
             _save_json(self.data)
             return dict(active)
+
+    def record_incident_recovery(self, kind='provider_exhausted'):
+        """Advance an automatic incident after sustained successful work."""
+        now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = now_dt.isoformat()
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            rec = next((x for x in self.data.setdefault('incidents', [])
+                        if x.get('kind') == kind and x.get('status') != 'resolved' and x.get('automatic')), None)
+            if not rec:
+                return None
+            successes = int(rec.get('recovery_successes', 0)) + 1
+            rec['recovery_successes'] = successes
+            if rec.get('status') != 'monitoring':
+                rec['status'] = 'monitoring'
+                rec['recovery_started_at'] = now
+                rec['updated_at'] = now
+                rec.setdefault('updates', []).append({
+                    'status': 'monitoring',
+                    'message': 'Requests are succeeding again. We are monitoring the recovery before declaring the incident resolved.',
+                    'created_at': now,
+                })
+            try:
+                age = (now_dt - datetime.fromisoformat(rec.get('recovery_started_at', now))).total_seconds()
+            except (TypeError, ValueError):
+                age = 0
+            if successes >= 3 and age >= 30:
+                rec['status'] = 'resolved'
+                rec['resolved_at'] = now
+                rec['updated_at'] = now
+                rec.setdefault('updates', []).append({
+                    'status': 'resolved',
+                    'message': 'Service has recovered and remained stable. We are closing this incident while continuing normal monitoring.',
+                    'created_at': now,
+                })
+            _save_json(self.data)
+            return dict(rec)
 
     def update_incident(self, incident_id, status, message='', compensation_review=None):
         allowed = ('investigating', 'identified', 'monitoring', 'resolved')
@@ -11712,6 +11761,9 @@ def _arlong_search_payload(q, page=1, source_type='any', mode='balanced',
         },
     }
     _arlong_attach_epistemic(response, evaluated)
+    # Inject into plain HTML before compression; otherwise browsers that
+    # advertise gzip can silently miss the urgent banner.
+    _maybe_gzip(response)
     return response
 
 
@@ -14705,6 +14757,7 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
                     raise
             if router is not None:
                 router.record(model, tokens=est_tokens, success=True)
+            data_manager.record_incident_recovery('provider_exhausted')
             return resp
         except Exception as e:
             err = str(e) or e.__class__.__name__
@@ -14729,6 +14782,7 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
                         )
                         if router is not None:
                             router.record(model, tokens=est_tokens, success=True)
+                        data_manager.record_incident_recovery('provider_exhausted')
                         return resp
                     except Exception as backup_error:
                         backup_err = str(backup_error) or backup_error.__class__.__name__
@@ -14795,6 +14849,7 @@ def _ai_open_stream(messages, max_tokens=1600, temperature=0.4, timeout=120,
             )
             if router is not None:
                 router.record(model, tokens=est_tokens, success=True)
+            data_manager.record_incident_recovery('provider_exhausted')
             return model, stream
         except Exception as e:
             err = str(e) or e.__class__.__name__
@@ -14818,6 +14873,7 @@ def _ai_open_stream(messages, max_tokens=1600, temperature=0.4, timeout=120,
                         )
                         if router is not None:
                             router.record(model, tokens=est_tokens, success=True)
+                        data_manager.record_incident_recovery('provider_exhausted')
                         return model, stream
                     except Exception as backup_error:
                         backup_err = str(backup_error) or backup_error.__class__.__name__

@@ -20,7 +20,7 @@
   <div class="top"><a class="brand" href="/">ARLONG / STATUS</a><a class="back" href="/">Return to Arlong</a></div>
   <h1>Clear updates when things go wrong.</h1>
   <p class="lede">Live service health for Arlong Search, AI, API and MCP. Incident updates here are written for customers, not just servers.</p>
-  <div class="overall {{ 'bad' if active_incident else '' }}"><i class="dot"></i><div><strong>{{ 'We are investigating a service issue' if active_incident else 'All systems operational' }}</strong><span>{{ 'The team has been alerted. Updates will appear below.' if active_incident else 'No active incidents reported.' }}</span></div></div>
+  <div class="overall {{ 'bad' if active_incident else '' }}"><i class="dot"></i><div><strong>{{ ('Service is recovering' if active_incident.status == 'monitoring' else 'We are investigating a service issue') if active_incident else 'All systems operational' }}</strong><span>{{ ('Successful requests are being monitored before we close the incident.' if active_incident.status == 'monitoring' else 'The team has been alerted. Updates will appear below.') if active_incident else 'No active incidents reported.' }}</span></div></div>
   <h2>Components</h2>
   <div class="components">
     {% set kind = active_incident.kind if active_incident else '' %}
