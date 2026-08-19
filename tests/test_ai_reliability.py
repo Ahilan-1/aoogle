@@ -94,3 +94,42 @@ def test_partial_topic_match_is_useful_background_not_rejected():
     assert evaluations[1].startswith('Useful background')
     assert 'Probably skip' not in evaluations[1]
     assert 'llm' in evaluations[1].lower() or 'vector' in evaluations[1].lower()
+
+
+def test_compact_evaluation_never_cuts_through_a_word():
+    text = ('Worth opening: provides a concrete comparison of retrieval latency, '
+            'indexing cost, filtering controls, and production tradeoffs for teams.')
+    compact = main._ai_compact_evaluation(text, 90)
+
+    assert len(compact) <= 91
+    assert compact.endswith('.')
+    assert not compact.endswith('team.')
+    assert compact[-2].isalnum()
+
+
+def test_link_evaluation_uses_novel_preview_detail_instead_of_title():
+    results = [{
+        'title': 'How to Avoid Stress',
+        'url': 'https://medium.com/blog/how-to-avoid-stress',
+        'snippet': ('How to avoid stress. The author recommends a four-step breathing '
+                    'exercise and keeping a seven-day trigger journal.'),
+    }]
+
+    evaluations, _tags = main._ai_complete_link_evaluations(
+        'how to avoid stress', results)
+
+    assert evaluations[1].startswith('Worth opening:')
+    assert 'four-step breathing' in evaluations[1]
+    assert 'directly matches' not in evaluations[1].lower()
+    assert len(evaluations[1]) <= 151
+
+
+def test_link_evaluation_admits_when_preview_adds_nothing():
+    evaluations, _tags = main._ai_complete_link_evaluations(
+        'how to avoid stress', [{
+            'title': 'How to Avoid Stress',
+            'url': 'https://example.com/how-to-avoid-stress',
+            'snippet': 'In this article we will talk about how to avoid stress.',
+        }])
+
+    assert evaluations[1] == 'Direct match, but the preview reveals no detail beyond the title.'

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "arlong-plugins",
+  "owner": {
+    "name": "Arlong"
+  },
+  "metadata": {
+    "description": "Official Claude Code integrations from Arlong."
+  },
+  "plugins": [
+    {
+      "name": "arlong-search",
+      "source": "./claude-plugin",
+      "description": "Security-aware, token-efficient web search and cited research through Arlong MCP.",
+      "version": "1.0.0",
+      "category": "development",
+      "tags": ["search", "research", "mcp", "security"]
+    }
+  ]
+}

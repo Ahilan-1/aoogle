@@ -295,6 +295,7 @@
     .ai-clarify-open:hover{opacity:.9}
 
     .ai-report-cta{background:var(--bg-inner);border:1px solid var(--border-color);border-radius:10px;padding:18px 20px;margin:8px 0}
+    .deep-info-list{display:grid;gap:12px;margin:4px 0}.deep-info-step{display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:start}.deep-info-step span{width:24px;height:24px;border:1px solid #414349;border-radius:50%;display:grid;place-items:center;font-size:10px;color:#bfc2c8}.deep-info-step b{display:block;font-size:13px}.deep-info-step p{margin:2px 0 0;color:var(--text-muted);font-size:12px;line-height:1.45}.deep-info-check{display:flex;gap:9px;align-items:center;color:var(--text-muted);font-size:12px}.deep-info-check input{accent-color:#fff}
     .ai-regen-menu{background:var(--bg-inner);border:1px solid var(--border-color);border-radius:10px;padding:18px 20px;margin:8px 0}
     .ai-regen-title{font-size:14.5px;font-weight:700;color:#FFFFFF;margin-bottom:14px}
     .ai-report-title{font-size:14.5px;font-weight:700;color:#FFFFFF;margin-bottom:6px}
@@ -414,8 +415,24 @@
     .ai-deep-btn.on{box-shadow:none}
     @media(max-width:1023px){.ai-main{margin-left:0}}
 </style>
+<style>
+    .ai-main{isolation:isolate;background:#0a0a0a;--chat-bg:none;--chat-overlay:.54;--chat-blur:0px}
+    .ai-main:before{content:"";position:absolute;inset:0;z-index:-2;background-image:var(--chat-bg);background-size:cover;background-position:center;filter:blur(var(--chat-blur));transform:scale(1.025);transition:background-image .3s,filter .25s}
+    .ai-main:after{content:"";position:absolute;inset:0;z-index:-1;background:rgba(6,8,12,var(--chat-overlay));pointer-events:none;transition:background .25s}
+    .ai-main.has-chat-bg .ai-searchbar,.ai-main.has-chat-bg .ai-widget,.ai-main.has-chat-bg .ai-rcard,.ai-main.has-chat-bg .ai-link-card,.ai-main.has-chat-bg .ai-overview,.ai-main.has-chat-bg .ai-user-bubble{background:rgba(18,20,25,.72);backdrop-filter:blur(20px);border-color:rgba(255,255,255,.14)}
+    .ai-appearance{position:fixed;right:18px;top:16px;z-index:70;display:flex;align-items:center;gap:8px;background:rgba(20,22,27,.76);border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(18px);padding:8px 11px;border-radius:10px;font-size:12px;color:#d8d9dc}.ai-appearance svg{width:15px;height:15px}
+    .appearance-wrap{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.66);backdrop-filter:blur(8px)}.appearance-wrap.show{display:flex}
+    .appearance-panel{width:min(720px,100%);max-height:min(760px,92vh);overflow:auto;background:rgba(18,19,22,.96);border:1px solid #3b3d42;border-radius:16px;box-shadow:0 30px 100px rgba(0,0,0,.65)}
+    .appearance-head,.appearance-foot{display:flex;align-items:center;justify-content:space-between;padding:17px 20px;border-bottom:1px solid #2f3034}.appearance-foot{border-top:1px solid #2f3034;border-bottom:0;justify-content:flex-end;gap:9px}.appearance-body{padding:20px}.appearance-kicker{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#8f9299}.appearance-title{font-size:17px;font-weight:650}.appearance-x{width:34px;height:34px;border-radius:8px;color:#aaa}.appearance-x:hover{background:#292a2e;color:#fff}
+    .appearance-section{margin-bottom:22px}.appearance-section h3{font-size:12px;margin:0 0 10px;color:#c8c9cc}.bg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.bg-choice{height:94px;border:1px solid #35373c;border-radius:10px;position:relative;overflow:hidden;background:#0b0c0e}.bg-choice i{position:absolute;inset:0;background:var(--preview);background-size:cover;background-position:center}.bg-choice span{position:absolute;left:8px;bottom:7px;background:rgba(0,0,0,.62);padding:3px 7px;border-radius:99px;font-size:10px}.bg-choice.active{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.2)}
+    .upload-zone{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px dashed #484b52;padding:14px;border-radius:10px;color:#aaa;font-size:12px}.upload-zone input{display:none}.appearance-controls{display:grid;grid-template-columns:1fr 1fr;gap:14px}.appearance-control{background:#111216;border:1px solid #2d2f34;padding:12px;border-radius:10px}.appearance-control label{display:flex;justify-content:space-between;font-size:11px;color:#b7b9bd;margin-bottom:8px}.appearance-control input{width:100%;accent-color:#fff}.appearance-btn{padding:9px 14px;border-radius:8px;background:#f2f2f2;color:#111;font-weight:650}.appearance-btn.ghost{background:#292a2e;color:#ddd}
+    @media(max-width:1023px){.ai-appearance{top:9px;right:112px;z-index:82;padding:8px}.ai-appearance span{display:none}}
+    @media(max-width:600px){.appearance-wrap{align-items:flex-end;padding:0}.appearance-panel{width:100%;max-height:88vh;border-radius:18px 18px 0 0}.appearance-body{padding:16px}.bg-grid{grid-template-columns:repeat(2,1fr)}.bg-choice{height:82px}.appearance-controls{grid-template-columns:1fr}.ai-main.has-chat-bg .ai-landing{padding-top:72px}.ai-main.has-chat-bg .ai-widget,.ai-main.has-chat-bg .ai-rcard{background:rgba(17,19,24,.68)}}
+</style>
 </head>
 <body>
+<button class="ai-appearance" id="appearance-open" type="button" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="8" cy="10" r="1"/><circle cx="12" cy="7" r="1"/><circle cx="16" cy="10" r="1"/><path d="M12 21a3 3 0 0 1 0-6h2a3 3 0 0 0 0-6"/></svg><span>Appearance</span></button>
+<div class="appearance-wrap" id="appearance-wrap" role="dialog" aria-modal="true" aria-labelledby="appearance-title"><section class="appearance-panel"><header class="appearance-head"><div><div class="appearance-kicker">Workspace</div><div class="appearance-title" id="appearance-title">Chat appearance</div></div><button class="appearance-x" id="appearance-x" aria-label="Close">✕</button></header><div class="appearance-body"><section class="appearance-section"><h3>Background</h3><div class="bg-grid" id="bg-grid"><button class="bg-choice" data-bg="none"><i style="--preview:#090a0c"></i><span>Default</span></button><button class="bg-choice" data-bg="aurora"><i style="--preview:radial-gradient(circle at 20% 10%,#24547c,transparent 42%),linear-gradient(145deg,#0b2639,#251f35 65%,#17100d)"></i><span>Aurora</span></button><button class="bg-choice" data-bg="gradient"><i style="--preview:linear-gradient(135deg,#071b2c 0%,#183a57 38%,#513b54 72%,#171219 100%)"></i><span>Gradient</span></button><button class="bg-choice" data-bg="signal"><i style="--preview:radial-gradient(circle at 75% 18%,#49355b,transparent 35%),radial-gradient(circle at 20% 80%,#153f49,transparent 40%),#101117"></i><span>Signal</span></button><button class="bg-choice" data-bg="dawn"><i style="--preview:linear-gradient(160deg,#113e5b 0%,#596876 48%,#856d66 75%,#181820 100%)"></i><span>Dawn</span></button><button class="bg-choice" data-bg="custom"><i id="custom-preview" style="--preview:linear-gradient(135deg,#1c1d22,#343640)"></i><span>Custom</span></button></div></section><section class="appearance-section"><h3>Custom image</h3><label class="upload-zone"><span><b>Add an image</b><br>JPEG, PNG or WebP · stored only on this device</span><span class="appearance-btn ghost">Choose file</span><input id="background-file" type="file" accept="image/jpeg,image/png,image/webp"></label></section><div class="appearance-controls"><div class="appearance-control"><label><span>Overlay</span><output id="overlay-value">54%</output></label><input id="overlay-range" type="range" min="20" max="88" value="54"></div><div class="appearance-control"><label><span>Background blur</span><output id="blur-value">0px</output></label><input id="blur-range" type="range" min="0" max="18" value="0"></div></div></div><footer class="appearance-foot"><button class="appearance-btn ghost" id="appearance-reset">Reset</button><button class="appearance-btn" id="appearance-save">Save changes</button></footer></section></div>
 <header class="ai-mobile-top">
     <button class="ai-menu-btn" id="ai-menu-btn" aria-label="Menu">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:22px;height:22px"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
@@ -425,7 +442,8 @@
 </header>
 
 <div class="ai-overlay" id="ai-overlay"></div>
-<div class="upgrade-modal" id="upgrade-modal"><div class="upgrade-card"><h2 id="upgrade-title">Unlock more research</h2><p id="upgrade-copy">Upgrade for 300 standard answers, 25 deep research answers, and 2,000 API/MCP searches per billing period.</p><div class="upgrade-actions"><button type="button" id="upgrade-later">Maybe later</button><a href="/premium">View plans</a></div></div></div>
+<div class="upgrade-modal" id="upgrade-modal"><div class="upgrade-card"><h2 id="upgrade-title">Unlock more research</h2><p id="upgrade-copy">Upgrade for larger monthly answer, deep-research, and API/MCP allowances.</p><div class="upgrade-actions"><button type="button" id="upgrade-later">Maybe later</button><a href="/premium">View plans</a></div></div></div>
+<div class="ai-modal-wrap" id="deep-info-modal" role="dialog" aria-modal="true" aria-labelledby="deep-info-title"><div class="ai-modal"><div class="ai-modal-head"><div><div class="appearance-kicker">Research mode</div><div class="ai-modal-title" id="deep-info-title">How Deep Search works</div></div><button type="button" class="ai-modal-x" id="deep-info-close" aria-label="Close">✕</button></div><div class="ai-modal-body"><div class="deep-info-list"><div class="deep-info-step"><span>1</span><div><b>Clarifies only when essential</b><p>Arlong asks for missing context only when searching without it would produce a weak answer.</p></div></div><div class="deep-info-step"><span>2</span><div><b>Plans several research angles</b><p>The request is split into core findings, primary evidence, and limitations or alternatives.</p></div></div><div class="deep-info-step"><span>3</span><div><b>Searches in parallel</b><p>Up to three focused searches gather and deduplicate roughly 15 sources.</p></div></div><div class="deep-info-step"><span>4</span><div><b>Reads the strongest pages</b><p>Relevant page content is extracted, screened, and grounded before synthesis.</p></div></div><div class="deep-info-step"><span>5</span><div><b>Writes the report automatically</b><p>You receive a structured, cited report with comparisons, gaps, and contradictions.</p></div></div></div><label class="deep-info-check"><input type="checkbox" id="deep-info-remember"> Don’t show this explanation again</label></div><div class="ai-modal-foot"><button type="button" class="ai-btn-ghost" id="deep-info-cancel">Use Standard</button><button type="button" class="ai-btn-main" id="deep-info-continue">Start Deep Search</button></div></div></div>
 
 <aside class="ai-sidebar" id="ai-sidebar">
     <div class="ai-sb-head">
@@ -456,6 +474,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 9l-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"/></svg>
             Connect MCP
         </a>
+        <a class="ai-nav-item" href="/support">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v11H8l-4 4V5z"/><path d="M8 9h8M8 12h5"/></svg>
+            Support
+        </a>
     </nav>
     <div class="ai-sb-label">Chat History</div>
     <div class="ai-history" id="ai-history"><div class="ai-h-empty">No conversations yet</div></div>
@@ -473,12 +495,12 @@
         </div>
         <div class="ai-account-details" id="ai-account-details">
         <div class="ai-meter-card">
-        <div class="ai-limit-title"><span>{% if plan_usage is defined and plan_usage.plan == 'free' %}Daily standard answers{% else %}Billing-period standard answers{% endif %}</span><span class="ai-limit-num" id="ai-usage-text">{{ msg_remaining }} / {{ msg_limit }} remaining</span></div>
+        <div class="ai-limit-title"><span>Monthly standard answers</span><span class="ai-limit-num" id="ai-usage-text">{{ msg_remaining }} / {{ msg_limit }} remaining</span></div>
         <div class="ai-usage-track"><div class="ai-usage-fill" id="ai-usage-fill" style="width:{{ ((msg_limit - msg_remaining) * 100 / msg_limit) | round }}%"></div></div>
         <div class="ai-limit-title"><span>Token Budget ({{ ctx_reset_hours }}h)</span><span class="ai-limit-num" id="ai-ctx-text">{{ ctx_used }} / {{ ctx_limit }} tokens</span></div>
         <div class="ai-usage-track"><div class="ai-usage-fill" id="ai-ctx-fill" style="width:{{ ctx_pct }}%"></div></div>
         </div>
-        {% if plan_usage is defined and plan_usage.plan == 'free' %}<a class="ai-upgrade" href="/premium">Upgrade your limits</a><div class="ai-upgrade-note">Free: 10 standard answers/day, 3 deep answers/month, 100 API/MCP searches/month.</div>{% else %}<div class="ai-upgrade-note">{{ plan_usage.limits.name if plan_usage is defined else 'Free' }} plan active</div>{% endif %}
+        {% if plan_usage is defined and plan_usage.plan == 'free' %}<a class="ai-upgrade" href="/premium">Upgrade your limits</a><div class="ai-upgrade-note">Free: 10 standard answers, 3 deep answers, and 30 API/MCP credits each month.</div>{% else %}<div class="ai-upgrade-note">{{ plan_usage.limits.name if plan_usage is defined else 'Free' }} plan active</div>{% endif %}
         <a href="/dashboard" style="display:block;margin-top:14px;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;font-size:12px;color:#bbb;text-decoration:none;text-align:center">
             Manage account &amp; usage
         </a>
@@ -572,6 +594,22 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
 <script>
+(function(){
+    var key='arlong-chat-appearance-v1', main=document.querySelector('.ai-main');
+    var wrap=document.getElementById('appearance-wrap'), file=document.getElementById('background-file');
+    var overlay=document.getElementById('overlay-range'), blur=document.getElementById('blur-range');
+    var backgrounds={none:'none',aurora:'radial-gradient(circle at 20% 10%,#24547c,transparent 42%),linear-gradient(145deg,#0b2639,#251f35 65%,#17100d)',gradient:'linear-gradient(135deg,#071b2c 0%,#183a57 38%,#513b54 72%,#171219 100%)',signal:'radial-gradient(circle at 75% 18%,#49355b,transparent 35%),radial-gradient(circle at 20% 80%,#153f49,transparent 40%),#101117',dawn:'linear-gradient(160deg,#113e5b 0%,#596876 48%,#856d66 75%,#181820 100%)'};
+    var state={mode:'none',overlay:54,blur:0,image:''};
+    try{state=Object.assign(state,JSON.parse(localStorage.getItem(key)||'{}'))}catch(e){}
+    function bgValue(){return state.mode==='custom'&&state.image?'url("'+state.image+'")':(backgrounds[state.mode]||'none')}
+    function apply(){var bg=bgValue();main.style.setProperty('--chat-bg',bg);main.style.setProperty('--chat-overlay',String(state.overlay/100));main.style.setProperty('--chat-blur',state.blur+'px');main.classList.toggle('has-chat-bg',bg!=='none');overlay.value=state.overlay;blur.value=state.blur;document.getElementById('overlay-value').textContent=state.overlay+'%';document.getElementById('blur-value').textContent=state.blur+'px';document.querySelectorAll('.bg-choice').forEach(function(b){b.classList.toggle('active',b.dataset.bg===state.mode)});if(state.image)document.getElementById('custom-preview').style.setProperty('--preview','url("'+state.image+'")')}
+    function close(){wrap.classList.remove('show');document.getElementById('appearance-open').focus()}
+    document.getElementById('appearance-open').addEventListener('click',function(){wrap.classList.add('show')});document.getElementById('appearance-x').addEventListener('click',close);wrap.addEventListener('click',function(e){if(e.target===wrap)close()});
+    document.querySelectorAll('.bg-choice').forEach(function(b){b.addEventListener('click',function(){if(b.dataset.bg==='custom'&&!state.image){file.click();return}state.mode=b.dataset.bg;apply()})});
+    overlay.addEventListener('input',function(){state.overlay=Number(overlay.value);apply()});blur.addEventListener('input',function(){state.blur=Number(blur.value);apply()});
+    file.addEventListener('change',function(){var selected=file.files&&file.files[0];if(!selected)return;if(selected.size>8*1024*1024){alert('Choose an image smaller than 8 MB.');file.value='';return}var reader=new FileReader();reader.onload=function(){var img=new Image();img.onload=function(){var scale=Math.min(1,1600/img.width,1200/img.height),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);state.image=canvas.toDataURL('image/jpeg',.82);state.mode='custom';apply()};img.src=reader.result};reader.readAsDataURL(selected)});
+    document.getElementById('appearance-reset').addEventListener('click',function(){state={mode:'none',overlay:54,blur:0,image:''};try{localStorage.removeItem(key)}catch(e){}apply()});document.getElementById('appearance-save').addEventListener('click',function(){try{localStorage.setItem(key,JSON.stringify(state))}catch(e){alert('This image is too large for browser storage. Try a smaller image.');return}close()});document.addEventListener('keydown',function(e){if(e.key==='Escape'&&wrap.classList.contains('show'))close()});apply();
+})();
 (function(){
     var LIMIT = {{ msg_limit }};
     var CTX_LIMIT = {{ ctx_limit }};
@@ -686,7 +724,7 @@
             if(dis){
                 var msg = ctxUsed >= CTX_LIMIT
                     ? 'Token budget used up (' + fmtTokens(CTX_LIMIT) + ' tokens). Refreshes every ' + CTX_RESET_HOURS + 'h.'
-                    : 'Daily message limit reached (' + LIMIT + '/' + LIMIT + '). Refreshes every ' + MSG_RESET_HOURS + 'h.';
+                    : 'Standard-answer allowance reached (' + LIMIT + '/' + LIMIT + '). Check your plan or add credits in the dashboard.';
                 banner.innerHTML = msg; banner.classList.add('show');
             }
             else banner.classList.remove('show');
@@ -822,11 +860,22 @@
     }
 
     /* ── query submission ── */
+    var deepInfoModal = document.getElementById('deep-info-modal');
+    function setDeepMode(value){ deepMode=!!value; syncDeepBtns(); }
+    function closeDeepInfo(){ if(deepInfoModal) deepInfoModal.style.display='none'; }
+    function openDeepInfo(){ if(deepInfoModal) deepInfoModal.style.display='flex'; }
     window.toggleDeep = function(btn){
-        deepMode = !deepMode;
-        syncDeepBtns();
+        if(deepMode){ setDeepMode(false); }
+        else {
+            var skipInfo=false; try{skipInfo=localStorage.getItem('arlong-deep-info-seen')==='1'}catch(e){}
+            if(skipInfo) setDeepMode(true); else openDeepInfo();
+        }
         if(btn){ btn.blur(); }
     };
+    document.getElementById('deep-info-close')?.addEventListener('click',closeDeepInfo);
+    document.getElementById('deep-info-cancel')?.addEventListener('click',function(){setDeepMode(false);closeDeepInfo()});
+    document.getElementById('deep-info-continue')?.addEventListener('click',function(){if(document.getElementById('deep-info-remember')?.checked){try{localStorage.setItem('arlong-deep-info-seen','1')}catch(e){}}setDeepMode(true);closeDeepInfo()});
+    deepInfoModal?.addEventListener('click',function(e){if(e.target===deepInfoModal)closeDeepInfo()});
     function syncDeepBtns(){
         var on = deepMode ? ' on' : '';
         var a = document.getElementById('ai-landing-deep');
@@ -893,7 +942,7 @@
                         + 'AI answers will be back shortly — please try again in a little while.');
                     return;
                 }
-                failTurn(ov, d.error || 'Search failed. Please try again.');
+                failTurn(ov, d.message || d.error || 'Search failed. Please try again.');
                 return;
             }
             if(d.clarify && d.clarify.questions && d.clarify.questions.length){
@@ -925,8 +974,10 @@
                     setTimeout(function(){ fireLinkEvals(g.query, g.results, ov, evalIdx); }, gi * 1200);
                     startIdx += (g.results||[]).length;
                 });
-                renderReportCta(ov, displayQ, d.chat_id, d.results||[]);
-                setBusy(false); busy = false;
+                ov._report = true;
+                var reportMd=ov.querySelector('.ai-md');
+                if(reportMd) reportMd.innerHTML='<div class="ai-eval-loading"><span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span> Synthesizing the deep report…</div>';
+                streamAnswer(displayQ, d.chat_id, d.results||[], ov, false, true, true, document.querySelectorAll('.ai-assistant').length - 1);
             } else if(d.results && d.results.length){
                 renderSources(ov, d.results);
                 fireLinkEvals(q, d.results, ov);
@@ -1270,6 +1321,8 @@
     /* ── streaming ── */
     function streamAnswer(q, cid, results, ov, replaceLast, multitask, report, pidx, retryCount){
         retryCount = retryCount || 0;
+        var retryScheduled = false;
+        busy = true; setBusy(true);
         if(!ov){ ov = document.querySelector('.ai-assistant .ai-overview'); }
         if(!ov){ setBusy(false); busy=false; return; }
         var md = ov.querySelector('.ai-md');
@@ -1306,7 +1359,7 @@
                     if(parsed.limit_type === 'plan') maybeUpgrade(parsed.used || parsed.msg_used || LIMIT, parsed.limit || parsed.msg_limit || LIMIT, true);
                     failTurn(ov, parsed.limit_type === 'context'
                         ? 'Token budget for the current ' + CTX_RESET_HOURS + 'h window is used up. It refreshes automatically — start a new chat or check back later.'
-                        : 'Daily message limit reached. Try again after the window refreshes.');
+                        : 'Your standard-answer allowance is used up. Check your plan or add credits in the dashboard.');
                     return null;
                 }
                 throw new Error(t||'Stream failed');
@@ -1334,6 +1387,7 @@
             if(/limit/i.test(msg)) return;
             if(report && retryCount < 2 && /busy|overload|unavailable|swamped|rate|timeout|failed/i.test(msg)){
                 retryCount++;
+                retryScheduled = true;
                 var delay = 3000 * retryCount;
                 if(md) md.innerHTML = '<span class="ai-eval-loading">Models busy, retrying in ' + Math.round(delay/1000) + 's…</span>';
                 setTimeout(function(){ streamAnswer(q, cid, results, ov, replaceLast, multitask, report, pidx, retryCount); }, delay);
@@ -1341,7 +1395,7 @@
             }
             failTurn(ov, 'Generation error. Please try again.');
         })
-        .finally(function(){ setBusy(false); busy = false; });
+        .finally(function(){ if(!retryScheduled){ setBusy(false); busy = false; } });
     }
     function renderMd(md, text){
         if(md.dataset.raw === text) return;
@@ -1527,7 +1581,7 @@
                             + '<div class="ai-eval" id="ai-eval-'+(i+1)+'"><span class="ai-eval-label">AI Evaluation</span>'+evalBody+'</div></div>';
                     });
                 }
-                if(srcs.length && m.query && (m.evaluation_version !== 4 || Object.keys(evals).length < Math.min(srcs.length, 20))){
+                if(srcs.length && m.query && (m.evaluation_version !== 5 || Object.keys(evals).length < Math.min(srcs.length, 20))){
                     setTimeout(function(){ fireLinkEvals(m.query, srcs, a.querySelector('.ai-overview')); }, 0);
                 }
                 var val = feedback[''+aiIdx];
@@ -1537,18 +1591,20 @@
                     + '<span class="ai-feedback">'
                     + '<button class="ai-icon-btn'+up+'" title="Good answer" onclick="feedback(this,\'up\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg></button>'
                     + '<button class="ai-icon-btn'+down+'" title="Bad answer" onclick="feedback(this,\'down\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg></button></span>';
+                var savedDeep = !!(m.deep || m.multitask || m.report);
+                var savedReport = !!(m.report || m.multitask);
                 a.innerHTML = '<div class="ai-sources">'+srcHtml+'</div>'
-                    + '<div class="ai-overview"><div class="ai-ov-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M4.5 7.5l15 9"/><path d="M19.5 7.5l-15 9"/></svg> Arlong AI Overview</div>'
+                    + '<div class="ai-overview"><div class="ai-ov-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M4.5 7.5l15 9"/><path d="M19.5 7.5l-15 9"/></svg> '+(savedReport ? 'Deep Report' : 'Arlong AI Overview')+'</div>'
                     + '<div class="ai-md"></div><div class="ai-actions">'+act+'</div></div>';
                 thread.appendChild(a);
                 var mdEl = a.querySelector('.ai-md');
                 var ovEl = a.querySelector('.ai-overview');
                 ovEl._q = m.query || '';
                 ovEl._cid = chatId;
-                ovEl._deep = m.deep ? true : false;
+                ovEl._deep = savedDeep;
                 ovEl._results = srcs;
-                ovEl._groups = null;
-                ovEl._report = false;
+                ovEl._groups = m.groups || null;
+                ovEl._report = savedReport;
                 if(m.pending && !m.content && m.multitask){
                     ovEl._pendingQ = m.query || '';
                     ovEl._pendingCid = chatId;

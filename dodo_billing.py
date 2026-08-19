@@ -33,7 +33,8 @@ def configured():
     return bool(api_key())
 
 
-def create_checkout(*, product_id, user_id, email, name, return_url, cancel_url, plan):
+def create_checkout(*, product_id, user_id, email, name, return_url, cancel_url, plan='', metadata=None,
+                    billing_currency=None):
     if not configured():
         raise DodoBillingError("Dodo Payments is not configured")
     if not product_id:
@@ -43,8 +44,10 @@ def create_checkout(*, product_id, user_id, email, name, return_url, cancel_url,
         "customer": {"email": email, "name": name},
         "return_url": return_url,
         "cancel_url": cancel_url,
-        "metadata": {"arlong_user_id": str(user_id), "arlong_plan": plan},
+        "metadata": {"arlong_user_id": str(user_id), "arlong_plan": plan, **(metadata or {})},
     }
+    if billing_currency:
+        payload["billing_currency"] = str(billing_currency).upper()
     try:
         response = requests.post(
             f"{api_base()}/checkouts",
@@ -64,6 +67,23 @@ def create_checkout(*, product_id, user_id, email, name, return_url, cancel_url,
     if not body.get("checkout_url"):
         raise DodoBillingError("Dodo did not return a checkout URL")
     return body
+
+
+def cancel_subscription(subscription_id):
+    """Schedule cancellation at period end, preserving already-paid access."""
+    if not configured() or not subscription_id:
+        raise DodoBillingError("No active Dodo subscription is connected to this account")
+    try:
+        response = requests.patch(
+            f"{api_base()}/subscriptions/{subscription_id}",
+            headers={"Authorization": f"Bearer {api_key()}", "Content-Type": "application/json"},
+            json={"cancel_at_next_billing_date": True,
+                  "cancel_reason": "cancelled_by_customer"}, timeout=20)
+    except requests.RequestException as exc:
+        raise DodoBillingError("Could not reach Dodo Payments") from exc
+    if not response.ok:
+        raise DodoBillingError(f"Could not schedule cancellation (HTTP {response.status_code})")
+    return response.json()
 
 
 def create_customer_portal(customer_id, return_url):

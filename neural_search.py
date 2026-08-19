@@ -25,6 +25,7 @@ import re
 import socket
 import threading
 import time
+import ipaddress
 from urllib.parse import urlparse
 
 try:
@@ -60,6 +61,25 @@ INJECTION_RE_SIGNALS = [
     (re.compile(r'password|secret key|api[_-]?key|credential|cvv|ssn|social security', re.I), 'CREDENTIAL_HARVEST'),
 ]
 
+# High-signal, model-directed behavior. These patterns intentionally require
+# an action or instruction near the sensitive target so ordinary pages that
+# merely mention passwords, APIs, or prompt injection are not blocked.
+BEHAVIOR_RE_SIGNALS = [
+    (re.compile(r'\b(?:send|upload|post|transmit|exfiltrat\w*|forward)\b.{0,90}\b(?:secret|token|password|credential|api[_ -]?key|environment variable|\.env|private key|seed phrase)\b', re.I | re.S), 'SECRET_EXFILTRATION', 6),
+    (re.compile(r'\b(?:enter|provide|paste|submit|verify|reveal)\b.{0,70}\b(?:password|credential|api[_ -]?key|private key|seed phrase|recovery phrase|cvv|social security)\b', re.I | re.S), 'CREDENTIAL_SOLICITATION', 5),
+    (re.compile(r'\b(?:run|execute|invoke|call|use)\b.{0,60}\b(?:shell|terminal|command|tool|function|powershell|bash|cmd(?:\.exe)?)\b', re.I | re.S), 'TOOL_EXECUTION_REQUEST', 4),
+    (re.compile(r'\b(?:download|install)\b.{0,80}\b(?:and|then)\b.{0,30}\b(?:run|execute|open)\b', re.I | re.S), 'DOWNLOAD_EXECUTE', 5),
+    (re.compile(r'\b(?:do not|never)\b.{0,35}\b(?:tell|inform|mention|reveal)\b.{0,40}\b(?:user|developer|operator|human)\b', re.I | re.S), 'HIDE_FROM_USER', 4),
+    (re.compile(r'(?:^|\n)\s*(?:system|assistant|developer|tool)\s*(?:message)?\s*:', re.I), 'ROLE_IMPERSONATION', 4),
+    (re.compile(r'<\|(?:system|assistant|developer|tool|im_start|im_end)[^>]*\|>|\[/?(?:system|assistant|developer|tool)\]', re.I), 'MODEL_CONTROL_TOKEN', 5),
+]
+
+_SECURITY_CACHE = {}
+_SECURITY_CACHE_LOCK = threading.Lock()
+_SECURITY_CACHE_MAX = 10000
+_SECURITY_SCAN_LIMIT = 16000
+DETECTOR_VERSION = '2.0'
+
 AMBIENT_INJECTION_RE = (
     re.compile(r'<[^>]+>', re.I),           # raw markup in plain text context
     re.compile(r'\b(?:free|cheap|discount|buy now|win|prize)\w*\b', re.I),  # ad-y vocabulary
@@ -68,15 +88,23 @@ AMBIENT_INJECTION_RE = (
 
 
 class InjectionReport:
-    __slots__ = ('flagged', 'flags', 'reason')
+    __slots__ = ('flagged', 'flags', 'reason', 'risk_score', 'action', 'scanned_chars')
 
-    def __init__(self, flagged=False, flags=None, reason=''):
+    def __init__(self, flagged=False, flags=None, reason='', risk_score=0,
+                 action=None, scanned_chars=0):
         self.flagged = bool(flagged)
         self.flags = list(flags or [])
         self.reason = reason or ''
+        self.risk_score = max(0, min(int(risk_score or 0), 100))
+        self.action = action or ('block' if self.flagged else ('review' if self.risk_score else 'allow'))
+        self.scanned_chars = int(scanned_chars or 0)
 
     def as_dict(self):
-        return {'flagged': self.flagged, 'flags': self.flags, 'reason': self.reason}
+        return {
+            'flagged': self.flagged, 'flags': self.flags, 'reason': self.reason,
+            'risk_score': self.risk_score, 'action': self.action,
+            'scanned_chars': self.scanned_chars, 'detector_version': DETECTOR_VERSION,
+        }
 
 
 # ── local deterministic embedding (fallback / offline) ───────────────────────
@@ -247,45 +275,121 @@ def keyword_similarity(query, candidate):
 
 
 # ── page evaluation ──────────────────────────────────────────────────────────
-def detect_injection(text, allow_llm_escalation=True, llm_eval=None):
+def _url_threat_flags(url):
+    """Cheap URL deception checks. Flags are signals, not reputation claims."""
+    if not url:
+        return []
+    try:
+        parsed = urlparse(url)
+        host = (parsed.hostname or '').lower()
+        flags = []
+        if parsed.scheme not in ('http', 'https'):
+            flags.append('UNSAFE_URL_SCHEME')
+        if parsed.username or parsed.password:
+            flags.append('URL_USERINFO_DECEPTION')
+        if host.startswith('xn--') or '.xn--' in host:
+            flags.append('PUNYCODE_HOST')
+        try:
+            ipaddress.ip_address(host.strip('[]'))
+            flags.append('IP_LITERAL_HOST')
+        except ValueError:
+            pass
+        if parsed.port and parsed.port not in (80, 443):
+            flags.append('UNUSUAL_PORT')
+        raw = str(url)
+        if raw.count('%') >= 5 or re.search(r'%0[ad]|%25(?:2f|5c)|%u[0-9a-f]{4}', raw, re.I):
+            flags.append('URL_ENCODING_EVASION')
+        if re.search(r'\.(?:exe|msi|scr|bat|cmd|ps1|jar|apk)(?:$|[?#])', parsed.path, re.I):
+            flags.append('EXECUTABLE_DOWNLOAD')
+        return list(dict.fromkeys(flags))
+    except Exception:
+        return ['MALFORMED_URL']
+
+
+def detect_injection(text, allow_llm_escalation=True, llm_eval=None, url=''):
     """Detect prompt-injection / threat signals in scraped page text.
 
     Runs free regex/heuristic checks first. Only when the page is *ambiguous*
     (has some soft signals but no hard flag) does it escalate to the optional
     LLM evaluation callback. Returns an InjectionReport.
     """
-    if not text:
-        return InjectionReport(False, [], '')
-    hard_flags = []
+    raw = str(text or '')
+    scan = raw[:_SECURITY_SCAN_LIMIT]
+    classifier_mode = 'secondary' if allow_llm_escalation and llm_eval is not None else 'local'
+    cache_key = hashlib.sha256(
+        (url + '\0' + classifier_mode + '\0' + scan).encode('utf-8', 'ignore')).hexdigest()
+    with _SECURITY_CACHE_LOCK:
+        cached = _SECURITY_CACHE.get(cache_key)
+    if cached:
+        return InjectionReport(**cached)
+
+    weighted_flags = []
+    risk = 0
     soft_hits = 0
+    educational_context = bool(re.search(
+        r'\b(?:prompt injection|security research|attack example|example attack|detection rule|red team|threat model)\b',
+        scan, re.I))
     for rx, flag in INJECTION_RE_SIGNALS:
-        if rx.search(text):
+        if rx.search(scan):
             if flag in ('ZERO_WIDTH_CONTROL', 'HIDDEN_CSS', 'OFFSCREEN_CSS',
                         'INSTRUCTION_OVERRIDE', 'SYSTEM_HIJACK'):
-                hard_flags.append(flag)
+                weight = 5 if flag in ('INSTRUCTION_OVERRIDE', 'SYSTEM_HIJACK') else 3
+                if educational_context and flag in ('INSTRUCTION_OVERRIDE', 'SYSTEM_HIJACK'):
+                    weight = 3
+                weighted_flags.append((flag, weight))
+                risk += weight
             else:
                 soft_hits += 1
+    for rx, flag, weight in BEHAVIOR_RE_SIGNALS:
+        if rx.search(scan):
+            weighted_flags.append((flag, weight))
+            risk += weight
+    url_flags = _url_threat_flags(url)
+    for flag in url_flags:
+        weight = 5 if flag in ('UNSAFE_URL_SCHEME', 'URL_USERINFO_DECEPTION',
+                               'EXECUTABLE_DOWNLOAD') else 2
+        weighted_flags.append((flag, weight))
+        risk += weight
     # structural weirdness that usually accompanies injection
     for rx in AMBIENT_INJECTION_RE:
-        if rx.search(text):
+        if rx.search(scan):
             soft_hits += 1
-    # normalize flags (dedup, keep order)
-    flags = list(dict.fromkeys(hard_flags))
-    if hard_flags:
-        return InjectionReport(True, flags, 'hard injection signals detected')
     if soft_hits >= 3:
+        weighted_flags.append(('MULTIPLE_SUSPICIOUS_SIGNALS', 2))
+        risk += 2
+
+    flags = list(dict.fromkeys(flag for flag, _weight in weighted_flags))
+    # Convert the small additive score into a stable public 0-100 risk value.
+    public_risk = min(100, risk * 12)
+    flagged = risk >= 5 or any(f in flags for f in (
+        'SECRET_EXFILTRATION', 'CREDENTIAL_SOLICITATION', 'MODEL_CONTROL_TOKEN',
+        'DOWNLOAD_EXECUTE', 'EXECUTABLE_DOWNLOAD', 'URL_USERINFO_DECEPTION'))
+    reason = 'high-confidence model or browser threat signals detected' if flagged else ''
+
+    if not flagged and risk in (3, 4):
         # ambiguous → escalate to LLM if provided (only for subtle cases)
         if allow_llm_escalation and llm_eval is not None:
             try:
-                verdict = llm_eval(text)
+                verdict = llm_eval(scan)
                 if verdict and verdict.get('flagged'):
-                    return InjectionReport(True, list(verdict.get('flags') or ['LIKELY_INJECTION']),
-                                           verdict.get('reason') or 'LLM flag')
-                return InjectionReport(False, [], 'LLM cleared')
+                    flagged = True
+                    flags = list(dict.fromkeys(flags + list(verdict.get('flags') or ['LIKELY_INJECTION'])))
+                    public_risk = max(public_risk, 72)
+                    reason = verdict.get('reason') or 'secondary classifier flag'
             except Exception:
                 pass
-        return InjectionReport(False, flags, 'multiple soft signals, no hard flag')
-    return InjectionReport(False, flags, '')
+    report = InjectionReport(flagged, flags, reason, public_risk,
+                             'block' if flagged else ('review' if risk else 'allow'), len(scan))
+    cached_value = {
+        'flagged': report.flagged, 'flags': report.flags, 'reason': report.reason,
+        'risk_score': report.risk_score, 'action': report.action,
+        'scanned_chars': report.scanned_chars,
+    }
+    with _SECURITY_CACHE_LOCK:
+        if len(_SECURITY_CACHE) >= _SECURITY_CACHE_MAX:
+            _SECURITY_CACHE.clear()
+        _SECURITY_CACHE[cache_key] = cached_value
+    return report
 
 
 def evaluate_page(query, title='', url='', snippet='', content=''):
@@ -311,7 +415,7 @@ def evaluate_page(query, title='', url='', snippet='', content=''):
     # floor tiny negatives
     rel = max(0.0, min(1.0, rel))
 
-    inj = detect_injection(' '.join((title or '', snippet or '', (content or '')[:12000])))
+    inj = detect_injection(' '.join((title or '', snippet or '', (content or '')[:12000])), url=url)
     if inj.flagged:
         status = 'BLOCKED'
         # Blocked sources must always score below UNVERIFIED (55) and unknown (50).
@@ -350,6 +454,7 @@ def evaluate_page(query, title='', url='', snippet='', content=''):
         },
         'reputation': {'status': status, 'trust_score': trust},
         'threat_flags': flags,
+        'security_analysis': inj.as_dict(),
     }
 
 

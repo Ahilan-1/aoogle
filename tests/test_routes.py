@@ -198,3 +198,193 @@ class TestAIHelpers:
         assert last.get('declined') is True
 
 
+class TestCommunitySupport:
+    @staticmethod
+    def _login_user(client, username='supporter'):
+        import main as m
+        user, error = m.data_manager.create_user(
+            username, 'StrongPassword123!', 'question', 'answer', '127.0.0.1',
+            f'{username}@example.com')
+        assert error is None
+        with client.session_transaction() as sess:
+            sess['user_id'] = user['user_id']
+            sess['username'] = user['username']
+            sess['_csrf_token'] = 'support-csrf'
+        return user
+
+    def test_support_requires_registered_account(self, client):
+        response = client.get('/support')
+        assert response.status_code == 302
+        assert '/login' in response.location or '/signup' in response.location
+
+    def test_ai_chat_includes_responsive_appearance_controls(self, client):
+        self._login_user(client, 'appearanceuser')
+        response = client.get('/ai/chat')
+        assert response.status_code == 200
+        assert b'id="appearance-open"' in response.data
+        assert b'data-bg="gradient"' in response.data
+        assert b'id="background-file"' in response.data
+        assert b'arlong-chat-appearance-v1' in response.data
+        assert b'id="deep-info-modal"' in response.data
+        assert b'How Deep Search works' in response.data
+        assert b'Synthesizing the deep report' in response.data
+
+    def test_customer_can_create_and_reply_to_private_ticket(self, client):
+        import main as m
+        user = self._login_user(client)
+        response = client.post('/support', data={
+            '_csrf_token': 'support-csrf', 'category': 'api_mcp',
+            'subject': 'Claude MCP authentication fails',
+            'description': 'Claude Code returns an OAuth error whenever I connect the Arlong MCP server.',
+            'client': 'Claude Code', 'steps': 'Run the MCP add command and authenticate.',
+            'expected': 'The server connects.', 'actual': 'OAuth returns an error.',
+        })
+        assert response.status_code == 302
+        ticket = m.data_manager.get_support_tickets(user['user_id'])[0]
+        assert response.location.endswith('/support/tickets/' + ticket['id'] + '?created=1')
+        assert ticket['status'] == 'new'
+
+        detail = client.get('/support/tickets/' + ticket['id'])
+        assert detail.status_code == 200
+        assert b'Claude MCP authentication fails' in detail.data
+
+        reply = client.post('/support/tickets/' + ticket['id'] + '/reply', data={
+            '_csrf_token': 'support-csrf', 'message': 'The exact error code is invalid_redirect_uri.',
+        })
+        assert reply.status_code == 302
+        updated = m.data_manager.get_support_ticket(ticket['id'], user['user_id'])
+        assert updated['status'] == 'open'
+        assert len(updated['messages']) == 2
+
+    def test_customer_cannot_read_another_users_ticket(self, client):
+        import main as m
+        owner = self._login_user(client, 'ticketowner')
+        ticket, error = m.data_manager.create_support_ticket(
+            owner['user_id'], owner['username'], owner['email'], 'account',
+            'Account email cannot be changed',
+            'The account screen rejects my valid password when I save a new email address.')
+        assert error is None
+        other, error = m.data_manager.create_user(
+            'otheruser', 'StrongPassword123!', 'question', 'answer', '127.0.0.2',
+            'otheruser@example.com')
+        assert error is None
+        with client.session_transaction() as sess:
+            sess['user_id'] = other['user_id']
+            sess['username'] = other['username']
+        assert client.get('/support/tickets/' + ticket['id']).status_code == 404
+
+    def test_admin_can_reply_and_set_ticket_workflow(self, client, monkeypatch):
+        import main as m
+        user = self._login_user(client, 'adminreplyuser')
+        ticket, error = m.data_manager.create_support_ticket(
+            user['user_id'], user['username'], user['email'], 'billing',
+            'Invoice is not visible in billing',
+            'My successful subscription payment is visible but the invoice link is missing.')
+        assert error is None
+        monkeypatch.setattr(m, 'send_resend_email', lambda *args, **kwargs: True)
+        with client.session_transaction() as sess:
+            sess.clear()
+            sess['admin_logged_in'] = True
+            sess['_csrf_token'] = 'admin-csrf'
+        response = client.post('/admin/tickets/' + ticket['id'] + '/reply', data={
+            '_csrf_token': 'admin-csrf', 'message': 'We found the payment and are regenerating your invoice.',
+            'status': 'waiting_on_customer',
+        })
+        assert response.status_code == 302
+        updated = m.data_manager.get_support_ticket(ticket['id'])
+        assert updated['status'] == 'waiting_on_customer'
+        assert updated['first_response_at']
+        assert updated['unread_by_customer'] is True
+        queue = client.get('/admin/tickets?ticket=' + ticket['id'])
+        assert queue.status_code == 200
+        assert b'We found the payment' in queue.data
+
+    def test_support_membership_and_paid_discount_workflow(self, client):
+        import main as m
+        from datetime import datetime, timedelta, timezone
+        user = self._login_user(client, 'paidticketuser')
+        uid = str(user['user_id'])
+        with m.data_manager._lock:
+            m.data_manager.data.setdefault('billing_subscriptions', {})[uid] = {
+                'plan': 'annual', 'status': 'active', 'subscription_id': 'sub_test',
+                'customer_id': 'cus_test', 'cancel_at_period_end': False,
+                'current_period_end': (datetime.now(timezone.utc) + timedelta(days=20)).isoformat(),
+            }
+            m._save_json(m.data_manager.data)
+        membership = m._support_membership(uid)
+        assert membership['label'] == 'Pro Annual'
+        assert membership['auto_renew'] is True
+        ticket, error = m.data_manager.create_support_ticket(
+            uid, user['username'], user['email'], 'billing',
+            'Request billing assistance',
+            'I need help understanding a renewal charge on my paid subscription.')
+        assert error is None
+        with client.session_transaction() as sess:
+            sess.clear(); sess['admin_logged_in'] = True; sess['_csrf_token'] = 'admin-csrf'
+        page = client.get('/admin/tickets?ticket=' + ticket['id'])
+        assert b'Pro Annual' in page.data and b'Auto-renew' in page.data
+        response = client.post('/admin/tickets/' + ticket['id'] + '/discount', data={
+            '_csrf_token': 'admin-csrf', 'code': 'CARE20',
+            'offer': '20% off the next eligible billing cycle', 'cycles': '1',
+        })
+        assert response.status_code == 302
+        saved = m.data_manager.get_support_ticket(ticket['id'])
+        assert saved['discount_offer']['code'] == 'CARE20'
+        assert 'does not automatically change your current renewal' in saved['messages'][-1]['message']
+
+    def test_admin_credit_compensation_is_capped_and_audited(self, client):
+        import main as m
+        user = self._login_user(client, 'creditcompuser')
+        ticket, error = m.data_manager.create_support_ticket(
+            user['user_id'], user['username'], user['email'], 'reliability',
+            'Search outage consumed credits',
+            'Several API requests failed during a confirmed service incident.')
+        assert error is None
+        with client.session_transaction() as sess:
+            sess.clear(); sess['admin_logged_in'] = True; sess['_csrf_token'] = 'admin-csrf'
+        rejected = client.post(f'/admin/tickets/{ticket["id"]}/credits', data={
+            '_csrf_token': 'admin-csrf', 'credits': '91', 'reason': 'Service incident'})
+        assert rejected.status_code == 400
+        granted = client.post(f'/admin/tickets/{ticket["id"]}/credits', data={
+            '_csrf_token': 'admin-csrf', 'credits': '90', 'reason': 'Confirmed service incident'})
+        assert granted.status_code == 302
+        wallet = m.data_manager.get_api_credit_wallet(user['user_id'])
+        assert wallet['balance'] == 90
+        assert wallet['ledger'][0]['source'] == 'support_compensation'
+
+    def test_credit_purchase_webhook_is_idempotent(self, client):
+        import main as m
+        user = self._login_user(client, 'creditbuyer')
+        payload = {'type': 'payment.succeeded', 'data': {'object': {
+            'payment_id': 'pay_credit_test',
+            'metadata': {'arlong_user_id': str(user['user_id']), 'arlong_credit_pack': '300'},
+        }}}
+        processed, uid = m.data_manager.process_dodo_webhook('wh_credit_1', payload)
+        assert processed is True and uid == str(user['user_id'])
+        processed_again, _ = m.data_manager.process_dodo_webhook('wh_credit_1', payload)
+        assert processed_again is False
+        assert m.data_manager.get_api_credit_wallet(user['user_id'])['balance'] == 300
+
+    def test_free_user_can_spend_prepaid_credits_after_included_allowance(self, client):
+        import main as m
+        user = self._login_user(client, 'freecredituser')
+        uid = user['user_id']
+        assert m.data_manager.consume_plan_usage(uid, 'api', 30)['allowed'] is True
+        assert m.data_manager.consume_plan_usage(uid, 'api', 1)['allowed'] is False
+        m.data_manager.grant_api_credits(uid, 2, 'Purchased test credits', source='test')
+        result = m.data_manager.consume_plan_usage(uid, 'api', 1)
+        assert result['allowed'] is True
+        assert result['bonus_remaining'] == 1
+
+    def test_failed_deep_search_usage_can_be_restored(self, client):
+        import main as m
+        user = self._login_user(client, 'deeprefunduser')
+        uid = user['user_id']
+        consumed = m.data_manager.consume_plan_usage(uid, 'deep', 1)
+        assert consumed['allowed'] is True
+        assert consumed['used'] == 1
+        restored = m.data_manager.refund_plan_usage(uid, 'deep', 1)
+        assert restored['used'] == 0
+        assert restored['remaining'] == restored['limit']
+
+

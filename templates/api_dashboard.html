@@ -273,10 +273,15 @@ ucurl "https://arlong.org/api/search?q=python&key={{ keys[0].key if keys else 'Y
     "trust_score": 92
   },
   "threat_flags": [],
+  "security_analysis": {
+    "risk_score": 0,
+    "action": "allow",
+    "detector_version": "2.0"
+  },
   "snippet": "…",
   "content": "…"
 }</pre>
-                <p class="muted" style="margin:10px 0 0"><code class="inline">relevance_score</code> is an embedding cosine (0–1), <code class="inline">reputation.status</code> is <code class="inline">SAFE / UNVERIFIED / BLOCKED</code>, and <code class="inline">threat_flags</code> surfaces prompt-injection signals. The top-level <code class="inline">epistemic_state</code> string tells you how many independent sources agree.</p>
+                <p class="muted" style="margin:10px 0 0"><code class="inline">relevance_score</code> is an embedding cosine (0–1), <code class="inline">reputation.status</code> is <code class="inline">SAFE / UNVERIFIED / BLOCKED</code>, and <code class="inline">security_analysis</code> gives a deterministic risk score and containment action. Treat <code class="inline">action: block</code> or any non-empty <code class="inline">threat_flags</code> as untrusted. Blocked page content is withheld from synthesis. The top-level <code class="inline">epistemic_state</code> tells you how many independent sources agree.</p>
             </div>
             <table>
                 <tr><th>Endpoint</th><th>Description</th></tr>

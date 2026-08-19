@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "arlong-search",
+  "displayName": "Arlong Search",
+  "version": "1.0.0",
+  "description": "Security-aware, token-efficient web search and cited research through Arlong MCP.",
+  "author": {
+    "name": "Arlong"
+  },
+  "homepage": "https://arlong.org/ai",
+  "repository": "https://github.com/Ahilan-1/aoogle",
+  "license": "Proprietary",
+  "keywords": ["search", "research", "mcp", "citations", "prompt-injection", "security"]
+}
