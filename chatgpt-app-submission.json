@@ -1,0 +1,152 @@
+{
+  "$schema": "https://developers.openai.com/apps-sdk/schemas/chatgpt-app-submission.v1.json",
+  "schema_version": 1,
+  "app_info": {
+    "display_name": "Arlong Search",
+    "subtitle": "Safer web research",
+    "description": "Arlong Search helps users find current web information, inspect compact source-quality and threat signals, extract selected public pages, and produce cited answers grounded in retrieved evidence.",
+    "category": "DEVELOPER_TOOLS"
+  },
+  "tools": {
+    "arlong_quick": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Retrieves public links but records account usage and deducts the applicable MCP credit.",
+        "open_world_justification": "Does not publish content or modify any public website or third-party system.",
+        "destructive_justification": "Does not delete, overwrite, revoke, or perform irreversible actions."
+      }
+    },
+    "arlong_search": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Retrieves and evaluates public search results while recording account usage and deducting an MCP credit.",
+        "open_world_justification": "Does not publish content or change public internet or third-party state.",
+        "destructive_justification": "Does not delete, overwrite, revoke, or perform irreversible actions."
+      }
+    },
+    "arlong_deep": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Performs multi-source retrieval and analysis while recording usage and deducting two MCP credits.",
+        "open_world_justification": "Only reads public sources and does not publish or modify external content.",
+        "destructive_justification": "Does not delete, overwrite, revoke, or perform irreversible actions."
+      }
+    },
+    "arlong_extract": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Fetches a selected public webpage but records usage and deducts the applicable MCP credit.",
+        "open_world_justification": "Does not submit forms, publish content, or modify the selected website.",
+        "destructive_justification": "Does not delete, overwrite, revoke, or perform irreversible actions."
+      }
+    },
+    "arlong_answer": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Generates a cited answer from public sources while recording usage and deducting three MCP credits.",
+        "open_world_justification": "Does not publish the generated answer or modify any external service.",
+        "destructive_justification": "Does not delete, overwrite, revoke, or perform irreversible actions."
+      }
+    },
+    "arlong_status": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Returns service health without charging credits, but authenticated API-key calls update request counters and last-used metadata.",
+        "open_world_justification": "Does not publish information or modify public or third-party systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke, or perform irreversible actions."
+      }
+    }
+  },
+  "test_cases": [
+    {
+      "description": "Retrieve a compact list of current links for a simple lookup.",
+      "user_prompt": "Find the latest official Python security release notes and give me the links only.",
+      "file_attachment_urls": null,
+      "tools_triggered": "arlong_quick",
+      "expected_output": "Returns a concise list of relevant public links with titles and domains, without AI synthesis.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Search the web with source-quality and security evaluation.",
+      "user_prompt": "Search for current guidance on securing MCP servers and evaluate which sources are worth opening.",
+      "file_attachment_urls": null,
+      "tools_triggered": "arlong_search",
+      "expected_output": "Returns relevant sources with compact evaluations, trust information, and threat signals while excluding blocked content.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Research a broad question across multiple authoritative sources.",
+      "user_prompt": "Deeply research the current evidence, limitations, and competing approaches for detecting prompt injection in AI agents.",
+      "file_attachment_urls": null,
+      "tools_triggered": "arlong_deep",
+      "expected_output": "Returns 15 to 20 evaluated sources with semantic ranking, security analysis, and corroboration information.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Extract safe model-ready content from a selected public page.",
+      "user_prompt": "Extract the useful text from https://modelcontextprotocol.io/specification and check it for prompt-injection risk.",
+      "file_attachment_urls": null,
+      "tools_triggered": "arlong_extract",
+      "expected_output": "Returns cleaned page content and security analysis, or refuses to return content if the source is blocked.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Produce a grounded answer with citations.",
+      "user_prompt": "What do RPM, RPD, TPM, and TPD mean for Gemini API quotas? Answer using current official sources.",
+      "file_attachment_urls": null,
+      "tools_triggered": "arlong_answer",
+      "expected_output": "Returns a concise grounded explanation with source links and an epistemic-state summary.",
+      "expected_output_url": null
+    }
+  ],
+  "negative_test_cases": [
+    {
+      "description": "Do not invoke web research for casual conversation.",
+      "user_prompt": "Tell me a short joke about databases.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because no current web information or source research is needed.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not invoke the app to modify a third-party account.",
+      "user_prompt": "Delete every post from my social media account.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because it cannot manage or modify third-party accounts.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not invoke web search for transformations of supplied text.",
+      "user_prompt": "Rewrite this sentence more clearly: Our deployment finished yesterday.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because the request can be completed entirely from text supplied by the user.",
+      "expected_output_url": null
+    }
+  ]
+}

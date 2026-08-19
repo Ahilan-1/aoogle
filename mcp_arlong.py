@@ -30,6 +30,11 @@ except Exception:  # pragma: no cover
 BASE_URL = os.environ.get('ARLONG_BASE_URL', 'https://arlong.org').rstrip('/')
 API_KEY = os.environ.get('ARLONG_API_KEY', '')
 
+_OUTPUT_SCHEMA = {
+    'type': 'object',
+    'additionalProperties': True,
+}
+
 TOOLS = [
     {
         'name': 'arlong_search',
@@ -45,6 +50,8 @@ TOOLS = [
             },
             'required': ['query'],
         },
+        'outputSchema': _OUTPUT_SCHEMA,
+        'annotations': {'readOnlyHint': False, 'openWorldHint': False, 'destructiveHint': False},
     },
     {
         'name': 'arlong_answer',
@@ -59,6 +66,8 @@ TOOLS = [
             },
             'required': ['query'],
         },
+        'outputSchema': _OUTPUT_SCHEMA,
+        'annotations': {'readOnlyHint': False, 'openWorldHint': False, 'destructiveHint': False},
     },
     {
         'name': 'arlong_status',
@@ -66,6 +75,8 @@ TOOLS = [
                         '(RPM/RPD/TPM/TPD usage + cooldowns per model) and the '
                         'neural module (local vs remote embeddings).'),
         'inputSchema': {'type': 'object', 'properties': {}},
+        'outputSchema': _OUTPUT_SCHEMA,
+        'annotations': {'readOnlyHint': False, 'openWorldHint': False, 'destructiveHint': False},
     },
 ]
 
@@ -82,10 +93,13 @@ def _call_api(path, params):
 
 
 def _tool_result(obj, is_error=False):
-    return {
+    result = {
         'content': [{'type': 'text', 'text': json.dumps(obj, indent=2)}],
         'isError': is_error,
     }
+    if not is_error and isinstance(obj, dict):
+        result['structuredContent'] = obj
+    return result
 
 
 def _handle_call(name, args):

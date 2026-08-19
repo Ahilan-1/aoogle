@@ -392,6 +392,16 @@ class TestMcpReliabilityRegressions:
         assert field['default'] >= field['minimum']
         assert '15' in field['description']
 
+    def test_all_hosted_mcp_tools_have_review_metadata_and_output_schemas(self):
+        assert len(m.MCP_TOOLS) == 6
+        for tool in m.MCP_TOOLS:
+            assert tool.get('outputSchema', {}).get('type') == 'object'
+            assert tool['annotations'] == {
+                'readOnlyHint': False,
+                'destructiveHint': False,
+                'openWorldHint': False,
+            }
+
     def test_blocked_source_is_never_synthesis_eligible(self):
         assert m._arlong_source_is_blocked({
             'reputation': {'status': 'BLOCKED'},

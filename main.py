@@ -12587,6 +12587,46 @@ def api_admin_architecture_status():
     })
 
 
+_MCP_LINK_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'title': {'type': 'string'}, 'url': {'type': 'string'},
+        'domain': {'type': 'string'},
+    },
+    'required': ['title', 'url', 'domain'],
+    'additionalProperties': True,
+}
+_MCP_RESULT_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'title': {'type': 'string'}, 'url': {'type': 'string'},
+        'domain': {'type': 'string'}, 'snippet': {'type': 'string'},
+        'content': {'type': 'string'}, 'rank': {'type': 'integer'},
+        'threat_flags': {'type': 'array', 'items': {'type': 'string'}},
+        'excluded_from_synthesis': {'type': 'boolean'},
+        'ai_evaluation': {'type': 'object', 'additionalProperties': True},
+        'reputation': {'type': 'object', 'additionalProperties': True},
+        'security_analysis': {'type': 'object', 'additionalProperties': True},
+    },
+    'required': ['url'],
+    'additionalProperties': True,
+}
+_MCP_SEARCH_OUTPUT_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'query': {'type': 'string'}, 'page': {'type': 'integer'},
+        'total_results': {'type': 'integer'}, 'returned_results': {'type': 'integer'},
+        'mode': {'type': 'string'},
+        'results': {'type': 'array', 'items': _MCP_RESULT_SCHEMA},
+        'epistemic_state': {'type': 'string'},
+        'corroboration': {'type': 'object', 'additionalProperties': True},
+        'timing': {'type': 'object', 'additionalProperties': True},
+        'search_metadata': {'type': 'object', 'additionalProperties': True},
+    },
+    'required': ['query', 'results', 'mode'],
+    'additionalProperties': True,
+}
+
 MCP_TOOLS = [
     {
         'name': 'arlong_quick',
@@ -12602,7 +12642,21 @@ MCP_TOOLS = [
             },
             'required': ['query'],
         },
-        'annotations': {'readOnlyHint': True, 'destructiveHint': False, 'openWorldHint': True},
+        'outputSchema': {
+            'type': 'object',
+            'properties': {
+                'query': {'type': 'string'}, 'page': {'type': 'integer'},
+                'total_results': {'type': 'integer'}, 'returned_results': {'type': 'integer'},
+                'mode': {'type': 'string'},
+                'results': {'type': 'array', 'items': _MCP_LINK_SCHEMA},
+                'ai_evaluation': {'type': 'boolean'},
+                'content_extraction': {'type': 'boolean'},
+                'timing': {'type': 'object', 'additionalProperties': True},
+            },
+            'required': ['query', 'results', 'mode'],
+            'additionalProperties': True,
+        },
+        'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False},
     },
     {
         'name': 'arlong_search',
@@ -12636,7 +12690,8 @@ MCP_TOOLS = [
             },
             'required': ['query'],
         },
-        'annotations': {'readOnlyHint': True, 'destructiveHint': False, 'openWorldHint': True},
+        'outputSchema': _MCP_SEARCH_OUTPUT_SCHEMA,
+        'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False},
     },
     {
         'name': 'arlong_deep',
@@ -12660,7 +12715,8 @@ MCP_TOOLS = [
             },
             'required': ['query'],
         },
-        'annotations': {'readOnlyHint': True, 'destructiveHint': False, 'openWorldHint': True},
+        'outputSchema': _MCP_SEARCH_OUTPUT_SCHEMA,
+        'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False},
     },
     {
         'name': 'arlong_extract',
@@ -12676,7 +12732,19 @@ MCP_TOOLS = [
             },
             'required': ['url'],
         },
-        'annotations': {'readOnlyHint': True, 'destructiveHint': False, 'openWorldHint': True},
+        'outputSchema': {
+            'type': 'object',
+            'properties': {
+                'url': {'type': 'string'}, 'content': {'type': 'string'},
+                'ai_evaluation': {'type': 'object', 'additionalProperties': True},
+                'reputation': {'type': 'object', 'additionalProperties': True},
+                'threat_flags': {'type': 'array', 'items': {'type': 'string'}},
+                'security_analysis': {'type': 'object', 'additionalProperties': True},
+            },
+            'required': ['url', 'content', 'threat_flags'],
+            'additionalProperties': True,
+        },
+        'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False},
     },
     {
         'name': 'arlong_answer',
@@ -12708,7 +12776,21 @@ MCP_TOOLS = [
             },
             'required': ['query'],
         },
-        'annotations': {'readOnlyHint': True, 'destructiveHint': False, 'openWorldHint': True},
+        'outputSchema': {
+            'type': 'object',
+            'properties': {
+                'query': {'type': 'string'}, 'answer': {'type': 'string'},
+                'mode': {'type': 'string'},
+                'sources': {'type': 'array', 'items': _MCP_RESULT_SCHEMA},
+                'results': {'type': 'array', 'items': _MCP_RESULT_SCHEMA},
+                'epistemic_state': {'type': 'string'},
+                'corroboration': {'type': 'object', 'additionalProperties': True},
+                'followup': {'type': 'object', 'additionalProperties': True},
+            },
+            'required': ['query', 'answer', 'sources', 'mode'],
+            'additionalProperties': True,
+        },
+        'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False},
     },
     {
         'name': 'arlong_status',
@@ -12716,7 +12798,18 @@ MCP_TOOLS = [
                         '(RPM/RPD/TPM/TPD usage + cooldowns per model) and the '
                         'neural module (local vs remote embeddings).'),
         'inputSchema': {'type': 'object', 'properties': {}},
-        'annotations': {'readOnlyHint': True, 'destructiveHint': False, 'openWorldHint': False},
+        'outputSchema': {
+            'type': 'object',
+            'properties': {
+                'router': {'type': 'object', 'additionalProperties': True},
+                'neural': {'type': 'object', 'additionalProperties': True},
+                'mcp': {'type': 'object', 'additionalProperties': True},
+                'server_time': {'type': 'string'},
+            },
+            'required': ['router', 'neural', 'mcp', 'server_time'],
+            'additionalProperties': True,
+        },
+        'annotations': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False},
     },
 ]
 
@@ -13082,7 +13175,11 @@ def mcp_endpoint():
         arguments = params.get('arguments') or {}
         try:
             text = _mcp_call_tool(name, arguments)
-            return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {'content': [{'type': 'text', 'text': text}]}})
+            structured = json.loads(text)
+            return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {
+                'content': [{'type': 'text', 'text': text}],
+                'structuredContent': structured,
+            }})
         except AIAllModelsFailedError as e:
             return _mcp_outage_result(msg_id, 'provider_exhausted')
         except Exception as e:
