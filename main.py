@@ -10889,6 +10889,25 @@ def _arlong_grounded_version_guard(answer, source_context):
     return text
 
 
+_AI_SECURITY_EVIDENCE_RULES = (
+    "\nGENERAL EVIDENCE RULES:\n"
+    "- A result title, URL, source tag, or AI evaluation is navigation metadata, not evidence for a factual claim. Use only the supplied preview or page content.\n"
+    "- Preserve the exact subject and scope of every claim. Do not transfer a statement between an upstream project, a downstream vendor, a package, a product edition, a country, or a version.\n"
+    "- Preserve qualifiers and negation such as before, after, fixed in, affected through, at least, at most, not, and except. Reversing a qualifier is worse than omitting the claim.\n"
+    "- Missing, zero, N/A, unknown, or blank fields are absence of data unless a primary source explicitly defines them otherwise.\n"
+    "- Do not claim that sources agree merely because they discuss the same topic. Agreement requires matching claims; otherwise report the uncertainty or omit a consensus statement.\n"
+    "- Search previews may be clipped mid-sentence. If a conclusion depends on the clipped part, do not complete it from grammar or assumption.\n"
+    "\nSECURITY-ADVISORY EVIDENCE RULES:\n"
+    "- For a query naming an exact CVE, GHSA, CWE, or RFC identifier, use only sources that explicitly contain that identifier; a different identifier is unrelated.\n"
+    "- A phrase such as 'versions before 18.5, 17.11, or 14.24 are affected' means those listed boundary versions contain the fixes. Never call a boundary version vulnerable.\n"
+    "- Distinguish the vulnerability class from possible consequences. SQL injection is not itself remote code execution unless a primary advisory explicitly classifies it that way.\n"
+    "- A package scanner saying a host or distribution is unpatched does not prove that the upstream project has released no fix. Keep package status and upstream status separate.\n"
+    "- Values such as 0, N/A, unknown, or blank in an aggregator are missing/default metadata, not an official zero severity or proof that no CVSS score exists.\n"
+    "- Preserve CVSS vector semantics exactly, including privileges and user interaction. Do not replace them with easier exploitability claims.\n"
+    "- Do not infer version ranges, patch status, severity, or exploit requirements from a broken clause; state that the preview is insufficient.\n"
+)
+
+
 def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None,
                      followup_round=None, source_type='any', deep=False):
     """Generate Arlong's final AI answer for a query from internal functions.
@@ -11157,7 +11176,7 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None,
         "Use enough detail to fully answer the question; do not force a complex research answer into a generic overview. "
         "If the output limit is reached, end with: 'Output limit reached — reply continue, or choose a section to continue.' "
         "Write in clean prose: no extra spaces before punctuation, no bullet symbols unless the user sees a list format."
-        + round_note
+        + _AI_SECURITY_EVIDENCE_RULES + round_note
     )
 
     if web_context:
@@ -16141,6 +16160,22 @@ def _ai_query_overlap(query, c):
     return bool(words & blob)
 
 
+def _ai_exact_identifiers(text):
+    """Identifiers whose digits must match exactly; token overlap is unsafe."""
+    value = text or ''
+    identifiers = {
+        f'CVE-{year}-{number}'
+        for year, number in re.findall(r'\bCVE[-\s](\d{4})[-\s](\d{4,7})\b', value, re.I)
+    }
+    identifiers.update(
+        'GHSA-' + '-'.join(parts).upper()
+        for parts in re.findall(r'\bGHSA-([A-Z0-9]{4})-([A-Z0-9]{4})-([A-Z0-9]{4})\b', value, re.I)
+    )
+    identifiers.update(f'CWE-{number}' for number in re.findall(r'\bCWE[-\s](\d{1,5})\b', value, re.I))
+    identifiers.update(f'RFC-{number}' for number in re.findall(r'\bRFC\s*[- ]?\s*(\d{3,5})\b', value, re.I))
+    return identifiers
+
+
 def _ai_clean_sources(query, candidates):
     """Drop sources that should never be surfaced to the AI: blocklisted
     domains, ads, error/redirect pages, and results with zero query overlap.
@@ -16148,6 +16183,7 @@ def _ai_clean_sources(query, candidates):
     Guarantees at least one candidate survives so an answer is never empty.
     """
     cleaned = []
+    required_ids = _ai_exact_identifiers(query)
     for c in candidates or []:
         url = c.get('url') or ''
         title = (c.get('title') or '').strip()
@@ -16165,8 +16201,14 @@ def _ai_clean_sources(query, candidates):
             continue
         if not _ai_query_overlap(query, c):
             continue
+        if required_ids:
+            candidate_ids = _ai_exact_identifiers(
+                title + ' ' + snippet + ' ' + url
+            )
+            if not required_ids.issubset(candidate_ids):
+                continue
         cleaned.append(c)
-    if not cleaned and candidates:
+    if not cleaned and candidates and not required_ids:
         return [candidates[0]]
     return cleaned
 
@@ -16784,7 +16826,7 @@ def _ai_link_evaluations(query, results, max_links=20):
         )
         comp = _ai_completion(
             messages=[
-                {'role': 'system', 'content': 'You write compact click-decision notes for human search results. Reply with STRICT JSON only, shaped as {"evaluations":[{"idx":1,"eval":"Worth opening: gives four breathing exercises and a seven-day practice plan."}],"tags":[{"idx":1,"tag":"trusted"}]}. Each evaluation must reveal the most decision-useful detail that is NOT already obvious from the title, URL, or query, such as a concrete finding, method, comparison, limitation, number, or firsthand perspective. Never restate the title or say "this article is about". Never invent details beyond the supplied preview. If the preview adds no concrete information, say "Direct match, but the preview reveals no detail beyond the title." Use "Useful background" for a relevant partial angle and "Skip" only for a genuinely unrelated result. Never expose numeric relevance scores or use generic advice such as "verify important claims". Valid tags are exactly: "primary" (official documentation, research papers, direct announcements), "community" (videos, DEV, Reddit, forums, expert commentary), "trusted" (established reputable news/reference outlet).'},
+                {'role': 'system', 'content': 'You write compact click-decision notes for human search results. Reply with STRICT JSON only, shaped as {"evaluations":[{"idx":1,"eval":"Worth opening: gives four breathing exercises and a seven-day practice plan."}],"tags":[{"idx":1,"tag":"trusted"}]}. Each evaluation must reveal the most decision-useful detail that is NOT already obvious from the title, URL, or query, such as a concrete finding, method, comparison, limitation, number, or firsthand perspective. Never restate the title or say "this article is about". Never invent details beyond the supplied preview. If the preview adds no concrete information, say "Direct match, but the preview reveals no detail beyond the title." Use "Useful background" for a relevant partial angle and "Skip" only for a genuinely unrelated result. When the query contains an exact identifier such as a CVE, a result about any different identifier is unrelated even if the surrounding topic matches. Never list missing query words, expose internal token matching, expose numeric relevance scores, or use generic advice such as "verify important claims". Valid tags are exactly: "primary" (official documentation, research papers, direct announcements), "community" (videos, DEV, Reddit, forums, expert commentary), "trusted" (established reputable news/reference outlet).'},
                 {'role': 'user', 'content': f"Query: {query}\n\nSources:\n{links}\n\nReturn one complete click-decision sentence of at most 140 characters for every source. Prioritize unique substance over description. Return an evaluation and tag for every index."},
             ],
             max_tokens=max(600, 60 * min(max_links, len(results))),
@@ -16966,6 +17008,7 @@ def _ai_build_messages(history, results, report=False):
             "If NO sources were provided, answer from your own knowledge and add a short note that live sources "
             "could not be verified for this query."
         )
+    system += _AI_SECURITY_EVIDENCE_RULES
     messages = [{'role': 'system', 'content': system}]
     messages.extend(history)
     if results:
@@ -16973,14 +17016,16 @@ def _ai_build_messages(history, results, report=False):
         lines = []
         for i, r in enumerate(shown):
             line = (f"[{i+1}] {('(' + r.get('group', '') + ') ') if r.get('group') else ''}"
-                    f"{r['title']} - {r['url']}\n    {(r.get('snippet') or '')[:200]}")
+                    f"{r['title']} - {r['url']}")
             if r.get('content') and i < 8:
-                line += "\n    CONTENT: " + re.sub(r'\s+', ' ', str(r['content'])[:1400])
+                line += "\n    PAGE CONTENT: " + re.sub(r'\s+', ' ', str(r['content'])[:1400])
+            else:
+                line += "\n    NO PAGE EVIDENCE AVAILABLE — do not use or cite this source for factual claims."
             lines.append(line)
         sources = '\n'.join(lines)
         messages.append({
             'role': 'user',
-            'content': f"Web search results for the current query:\n{sources}\n\nSynthesize your answer using these results and cite them inline as [1]-[{len(shown)}]. Read the CONTENT sections carefully — they contain the actual page text, which is often where the precise answer lives. Do not invent sources."
+            'content': f"Web sources for the current query:\n{sources}\n\nSynthesize the answer using PAGE CONTENT only and cite it inline as [1]-[{len(shown)}]. Titles, URLs, search previews, AI evaluations, source tags, and reputation labels are not factual evidence. Never use or cite a source marked NO PAGE EVIDENCE. If the remaining page evidence cannot support the requested claim, say that clearly instead of inferring it. Do not invent sources."
         })
     else:
         messages.append({'role': 'user', 'content': 'No web results were retrieved for this query. Answer from your own knowledge.'})
@@ -17432,17 +17477,16 @@ def api_ai_search():
         # evaluation. Only an explicitly requested deep search may fan out.
         flat = _ai_top_results(base_q, 8)
 
-    # Ground the strongest results with real page bodies so the synthesis LLM
-    # reads actual content — the difference between a wrong multi-hop answer and
-    # a correct one. Deep mode always grounds; normal mode grounds only the
-    # multi-hop path to keep simple queries fast.
-    if flat and (deep or multi_hop):
+    # Ground the strongest results with real page bodies before synthesis.
+    # Link evaluations may use previews to help a human decide what to open,
+    # but previews and evaluations are never sufficient evidence for an answer.
+    if flat:
         if groups:
             for g in groups:
                 _ai_ground_results(g['query'], g['results'], per_fetch=3, max_fetch=6)
             flat = [r for g in groups for r in g['results']]
         else:
-            _ai_ground_results(base_q, flat, per_fetch=4, max_fetch=8)
+            _ai_ground_results(base_q, flat, per_fetch=4, max_fetch=(8 if deep else 6))
 
     # A paid Deep action must not disappear into an empty report. Restore its
     # allowance and keep a durable explanation in chat so refresh is safe.
@@ -17505,6 +17549,9 @@ _AI_EVAL_STOPWORDS = {
 def _ai_compact_evaluation(text, limit=150):
     """Return a complete, compact click note without slicing through a word."""
     clean = re.sub(r'\s+', ' ', str(text or '')).strip(' \t\r\n-–—')
+    # Internal lexical-gap diagnostics are not useful editorial copy. Older
+    # fallback evaluations exposed fragments such as "; missing 15741/called".
+    clean = re.sub(r'\s*;\s*missing\s+[^.!?;]+', '', clean, flags=re.I).strip()
     if not clean:
         return ''
     # Prefer the first complete sentence when a model ignored the one-sentence
@@ -17594,8 +17641,17 @@ def _ai_complete_link_evaluations(query, results, evaluations=None, tags=None):
     complete_evals = dict(evaluations or {})
     complete_tags = dict(tags or {})
     query_tokens = _ai_eval_tokens(query)
+    required_ids = _ai_exact_identifiers(query)
     for idx, result in enumerate(results[:20], 1):
         complete_tags[idx] = _ai_source_tag(query, result)
+        if required_ids:
+            result_ids = _ai_exact_identifiers(
+                (result.get('title') or '') + ' ' + (result.get('snippet') or '') +
+                ' ' + (result.get('url') or '')
+            )
+            if not required_ids.issubset(result_ids):
+                complete_evals[idx] = 'Skip: this result concerns a different exact identifier.'
+                continue
         if idx in complete_evals and str(complete_evals[idx]).strip():
             complete_evals[idx] = _ai_compact_evaluation(complete_evals[idx])
             continue
@@ -17619,10 +17675,9 @@ def _ai_complete_link_evaluations(query, results, evaluations=None, tags=None):
               (complete_tags[idx] == 'primary' and host_brand in query_tokens)):
             missing = sorted(query_tokens - (title_tokens | snippet_tokens))
             if detail:
-                gap = f"; missing {'/'.join(missing[:2])}" if missing else ''
-                verdict = f'Useful background: {detail}{gap}.'
+                verdict = f'Useful background: {detail}.'
             elif missing:
-                verdict = f"Useful background, but the preview does not cover {'/'.join(missing[:3])}."
+                verdict = 'Useful background, but the preview does not establish the specific detail requested.'
             else:
                 verdict = 'Useful background, but the preview provides no concrete detail.'
         else:

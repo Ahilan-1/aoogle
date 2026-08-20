@@ -93,7 +93,8 @@ def test_partial_topic_match_is_useful_background_not_rejected():
 
     assert evaluations[1].startswith('Useful background')
     assert 'Probably skip' not in evaluations[1]
-    assert 'llm' in evaluations[1].lower() or 'vector' in evaluations[1].lower()
+    assert 'performance' in evaluations[1].lower()
+    assert '; missing' not in evaluations[1].lower()
 
 
 def test_compact_evaluation_never_cuts_through_a_word():
@@ -133,3 +134,65 @@ def test_link_evaluation_admits_when_preview_adds_nothing():
         }])
 
     assert evaluations[1] == 'Direct match, but the preview reveals no detail beyond the title.'
+
+
+def test_cve_query_excludes_results_for_other_vulnerabilities():
+    results = [
+        {'title': 'CVE-2026-15741 PostgreSQL SQL injection',
+         'url': 'https://nvd.nist.gov/vuln/detail/CVE-2026-15741',
+         'snippet': 'CVE-2026-15741 affects expression deparse consumers.'},
+        {'title': 'CVE-2026-40415 Windows TCP/IP issue',
+         'url': 'https://example.com/CVE-2026-40415',
+         'snippet': 'A different remote code execution vulnerability.'},
+    ]
+
+    cleaned = main._ai_clean_sources('Explain CVE-2026-15741', results)
+    assert [r['url'] for r in cleaned] == [results[0]['url']]
+    evaluations, _tags = main._ai_complete_link_evaluations(
+        'Explain CVE-2026-15741', results,
+        {2: 'Worth opening: describes remote code execution.'},
+    )
+    assert evaluations[2] == 'Skip: this result concerns a different exact identifier.'
+
+
+def test_link_evaluation_never_exposes_missing_token_diagnostics():
+    compact = main._ai_compact_evaluation(
+        'Useful background: PostgreSQL expression parsing; missing 15741/called.'
+    )
+    assert compact == 'Useful background: PostgreSQL expression parsing.'
+    assert 'missing' not in compact.lower()
+
+
+def test_security_advisory_rules_are_in_standard_and_deep_prompts():
+    standard = main._ai_build_messages([], [], report=False)[0]['content']
+    deep = main._ai_build_messages([], [], report=True)[0]['content']
+    for prompt in (standard, deep):
+        assert 'boundary versions contain the fixes' in prompt
+        assert 'package status and upstream status separate' in prompt
+        assert 'missing/default metadata' in prompt
+        assert 'Preserve CVSS vector semantics exactly' in prompt
+
+
+def test_overview_context_excludes_evaluations_and_ungrounded_previews():
+    results = [{
+        'title': 'Example advisory', 'url': 'https://example.com/advisory',
+        'snippet': 'UNRELIABLE_PREVIEW says version 4 is vulnerable',
+        'ai_evaluation': {'summary': 'HALLUCINATED_EVALUATION'},
+    }, {
+        'title': 'Grounded advisory', 'url': 'https://example.org/advisory',
+        'snippet': 'ANOTHER_UNRELIABLE_PREVIEW',
+        'content': 'GROUND_TRUTH says versions before 4 are affected.',
+        'evaluation': 'ANOTHER_HALLUCINATED_EVALUATION',
+    }]
+
+    messages = main._ai_build_messages([], results)
+    context = messages[-1]['content']
+    assert 'GROUND_TRUTH' in context
+    assert 'UNRELIABLE_PREVIEW' not in context
+    assert 'HALLUCINATED_EVALUATION' not in context
+    assert 'NO PAGE EVIDENCE' in context
+
+
+def test_exact_identifier_matching_covers_non_cve_queries():
+    assert main._ai_exact_identifiers('Read RFC 9110 and CWE-89') == {'RFC-9110', 'CWE-89'}
+    assert main._ai_exact_identifiers('GHSA-abcd-1234-wxyz') == {'GHSA-ABCD-1234-WXYZ'}
