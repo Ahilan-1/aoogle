@@ -229,6 +229,12 @@ class TestCommunitySupport:
         assert b'How Deep Search works' in response.data
         assert b'Synthesizing the deep report' in response.data
 
+    def test_openai_apps_domain_verification_challenge(self, client):
+        response = client.get('/.well-known/openai-apps-challenge')
+        assert response.status_code == 200
+        assert response.mimetype == 'text/plain'
+        assert response.get_data(as_text=True) == 'zCN9OEIpUmErDO_8uqNoYidXBlAPA9YR0Es9w_uEjwY'
+
     def test_customer_can_create_and_reply_to_private_ticket(self, client):
         import main as m
         user = self._login_user(client)

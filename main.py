@@ -12892,6 +12892,16 @@ def mcp_oauth_resource_metadata():
     })
 
 
+@app.route('/.well-known/openai-apps-challenge')
+def openai_apps_domain_challenge():
+    """Public origin-root token used by OpenAI to verify arlong.org."""
+    return Response(
+        'zCN9OEIpUmErDO_8uqNoYidXBlAPA9YR0Es9w_uEjwY',
+        status=200,
+        mimetype='text/plain',
+    )
+
+
 @app.route('/.well-known/oauth-authorization-server')
 def mcp_oauth_server_metadata():
     issuer = _mcp_oauth_issuer()
