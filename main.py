@@ -3602,6 +3602,22 @@ class DataManager:
                     return u
         return None
 
+    def authenticate_user_identifier(self, identifier, password):
+        """Authenticate an account by username or email without exposing which matched."""
+        identifier = (identifier or '').strip().lower()
+        if not identifier or not password:
+            return None
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for user in self.data.get('users', []):
+                username_match = user.get('username', '').lower() == identifier
+                email_match = bool(user.get('email')) and user.get('email', '').lower() == identifier
+                if (username_match or email_match) and user.get('password_hash'):
+                    return user if self.check_password(password, user['password_hash']) else None
+        return None
+
     def get_user_by_id(self, user_id):
         if not user_id:
             return None
@@ -9747,6 +9763,7 @@ EXTENSION_CLIENT_TOKEN = os.environ.get('ARLONG_EXTENSION_TOKEN') or None
 
 anon_api_limiter = RateLimiter(limit=ANON_API_LIMIT, window=ANON_API_WINDOW)
 oauth_api_limiter = RateLimiter(limit=400, window=30 * 60)
+mcp_oauth_login_limiter = RateLimiter(limit=8, window=5 * 60)
 
 # Feedback portal: a light anti-spam throttle (5 submissions/hour/IP).
 feedback_limiter = RateLimiter(limit=5, window=3600)
@@ -12932,6 +12949,21 @@ def mcp_oauth_register():
                     'redirect_uris': redirects, 'token_endpoint_auth_method': 'none'}), 201
 
 
+def _mcp_oauth_finish_authorization(pending, user, identity=None):
+    identity = identity or {}
+    identity = {
+        **identity,
+        'sub': user['user_id'],
+        'email': user.get('email', ''),
+        'name': identity.get('name') or user.get('username', ''),
+    }
+    code = 'mcp_code_' + _mcp_oauth_serializer().dumps({**pending, 'identity': identity})
+    from urllib.parse import urlencode
+    return redirect(pending['redirect_uri'] + ('&' if '?' in pending['redirect_uri'] else '?') + urlencode({
+        'code': code, 'state': pending.get('client_state', ''),
+    }))
+
+
 @app.route('/oauth/authorize')
 def mcp_oauth_authorize():
     client_id = request.args.get('client_id', '')
@@ -12949,14 +12981,52 @@ def mcp_oauth_authorize():
         return jsonify({'error': 'invalid_request', 'error_description': 'authorization code + PKCE S256 required'}), 400
     if resource != _mcp_oauth_resource():
         return jsonify({'error': 'invalid_target'}), 400
-    oauth_state = secrets.token_urlsafe(24)
     session['mcp_oauth_pending'] = {
-        'state': oauth_state, 'client_id': client_id, 'redirect_uri': redirect_uri,
+        'client_id': client_id, 'redirect_uri': redirect_uri,
         'client_state': state, 'challenge': challenge, 'resource': resource,
     }
+    return render_template('mcp_oauth_login.html', client_name=client.get('client_name', 'MCP client'))
+
+
+@app.route('/oauth/authorize/password', methods=['POST'])
+def mcp_oauth_password():
+    pending = session.get('mcp_oauth_pending') or {}
+    if not pending:
+        return jsonify({'error': 'authorization_expired'}), 400
+    if not validate_csrf():
+        return render_template('mcp_oauth_login.html', error='Invalid form submission. Please try again.',
+                               client_name='MCP client'), 400
+    ip = request.remote_addr or '127.0.0.1'
+    if not mcp_oauth_login_limiter.check('mcp-login:' + ip).get('allowed', False):
+        return render_template('mcp_oauth_login.html', error='Too many attempts. Please wait five minutes.',
+                               client_name='MCP client'), 429
+    user = data_manager.authenticate_user_identifier(
+        request.form.get('identifier', ''), request.form.get('password', '')
+    )
+    if not user:
+        return render_template('mcp_oauth_login.html', error='Invalid email, username, or password.',
+                               client_name='MCP client'), 401
+    if not user.get('email'):
+        return render_template('mcp_oauth_login.html',
+                               error='Add an email address to this Arlong account before connecting it.',
+                               client_name='MCP client'), 400
+    session.pop('mcp_oauth_pending', None)
+    return _mcp_oauth_finish_authorization(pending, user)
+
+
+@app.route('/oauth/authorize/google')
+def mcp_oauth_google_start():
+    pending = session.get('mcp_oauth_pending') or {}
+    if not pending:
+        return jsonify({'error': 'authorization_expired'}), 400
+    oauth_state = secrets.token_urlsafe(24)
+    pending['state'] = oauth_state
+    session['mcp_oauth_pending'] = pending
     google_redirect = os.environ.get('MCP_OAUTH_GOOGLE_REDIRECT_URI', '').strip() or url_for('mcp_oauth_google_callback', _external=True)
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
-        return jsonify({'error': 'oauth_not_configured', 'message': 'Google OAuth client credentials are missing.'}), 503
+        return render_template('mcp_oauth_login.html',
+                               error='Google sign-in is temporarily unavailable. Use your Arlong account.',
+                               client_name='MCP client'), 503
     params = {
         'client_id': GOOGLE_CLIENT_ID, 'redirect_uri': google_redirect,
         'response_type': 'code', 'scope': 'openid email profile',
@@ -12988,12 +13058,7 @@ def mcp_oauth_google_callback():
         user = data_manager.create_user_google(identity.get('email', ''), identity.get('name', ''), identity.get('sub', ''))
     if not user:
         return jsonify({'error': 'account_creation_failed'}), 500
-    identity = {**identity, 'sub': user['user_id'], 'email': user.get('email', '')}
-    code = 'mcp_code_' + _mcp_oauth_serializer().dumps({**pending, 'identity': identity})
-    from urllib.parse import urlencode
-    return redirect(pending['redirect_uri'] + ('&' if '?' in pending['redirect_uri'] else '?') + urlencode({
-        'code': code, 'state': pending.get('client_state', ''),
-    }))
+    return _mcp_oauth_finish_authorization(pending, user, identity)
 
 
 @app.route('/oauth/token', methods=['POST'])

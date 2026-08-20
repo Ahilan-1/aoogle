@@ -20,6 +20,51 @@ class TestRoutes:
         assert resp.status_code == 200
         assert resp.data == b'ok'
 
+    def test_mcp_oauth_accepts_existing_arlong_password_account(self, client):
+        import base64
+        import hashlib
+        from urllib.parse import parse_qs, urlparse
+        import main as m
+
+        user, error = m.data_manager.create_user(
+            'oauthreviewer', 'strong-review-password', 'none', 'none',
+            '127.0.0.1', 'oauth-review@example.com'
+        )
+        assert error is None and user
+        registration = client.post('/oauth/register', json={
+            'client_name': 'OpenAI review client',
+            'redirect_uris': ['https://chatgpt.com/callback'],
+        })
+        assert registration.status_code == 201
+        client_id = registration.get_json()['client_id']
+        verifier = 'review-verifier-' + ('x' * 43)
+        challenge = base64.urlsafe_b64encode(
+            hashlib.sha256(verifier.encode()).digest()
+        ).decode().rstrip('=')
+        authorize = client.get('/oauth/authorize', query_string={
+            'client_id': client_id, 'redirect_uri': 'https://chatgpt.com/callback',
+            'response_type': 'code', 'code_challenge': challenge,
+            'code_challenge_method': 'S256', 'state': 'review-state',
+        })
+        assert authorize.status_code == 200
+        assert b'Continue with Google' in authorize.data
+        assert b'Email or username' in authorize.data
+        with client.session_transaction() as sess:
+            csrf = sess['_csrf_token']
+        approved = client.post('/oauth/authorize/password', data={
+            '_csrf_token': csrf, 'identifier': 'oauth-review@example.com',
+            'password': 'strong-review-password',
+        })
+        assert approved.status_code == 302
+        query = parse_qs(urlparse(approved.location).query)
+        assert query['state'] == ['review-state']
+        token = client.post('/oauth/token', data={
+            'grant_type': 'authorization_code', 'code': query['code'][0],
+            'code_verifier': verifier, 'client_id': client_id,
+        })
+        assert token.status_code == 200
+        assert token.get_json()['access_token'].startswith('mcp_oauth_')
+
     def test_search_streams_results(self, client):
         resp = client.get('/search?q=python+tutorial')
         assert resp.status_code == 200
