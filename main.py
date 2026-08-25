@@ -13711,6 +13711,12 @@ def videos():
 def blog():
     return render_template('blog.html')
 
+
+@app.route('/blog/hidden-prompt-injection')
+def hidden_prompt_injection_blog():
+    """Public technical case study for the web-content safety layer."""
+    return render_template('security_blog.html')
+
 @app.route('/about')
 def about():
     return redirect(url_for('land'))

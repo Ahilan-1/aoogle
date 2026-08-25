@@ -3601,13 +3601,24 @@ if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded'
             <button class="wn-close" id="wn-close" aria-label="Close">&times;</button>
             <div class="wn-title-wrap">
                 <div class="wn-title">What's new in arlong</div>
-                <div class="wn-date">Aug 7, 2026</div>
+                <div class="wn-date">Aug 25, 2026</div>
             </div>
             <div class="wn-spacer"></div>
         </div>
         <div class="wn-body">
             <div class="wn-slides" id="wn-slides">
                 <div class="wn-slide active">
+                    <div class="wn-slide-img"><img src="/static/prompt-injection-source.png" alt="Hidden prompt injection detected in webpage source" loading="lazy"></div>
+                    <h3>Web safety: hidden instructions screened</h3>
+                    <p class="wn-s-sub">Arlong detected an indirect prompt-injection attempt in a real page and isolated it from the AI answer path.</p>
+                    <ul class="wn-feats">
+                        <li><strong>Source-level detection:</strong> instruction-like content is surfaced as a safety signal.</li>
+                        <li><strong>Context isolation:</strong> a webpage cannot rewrite the user’s task.</li>
+                        <li><strong>Inspectable behavior:</strong> read the technical case study and its limits.</li>
+                    </ul>
+                    <div class="wn-actions"><a class="wn-btn blog" href="/blog/hidden-prompt-injection">Read technical note</a><a class="wn-btn go" href="/ai">Try Arlong AI</a></div>
+                </div>
+                <div class="wn-slide">
                     <div class="wn-slide-img"><img src="https://i.pinimg.com/1200x/a7/49/58/a749587d9ff8cefe6b24ddb574a251b7.jpg" alt="Arlong AI" loading="lazy"></div>
                     <h3>Introducing Arlong AI</h3>
                     <p class="wn-s-sub">A search engine with a built-in private AI assistant.</p>
@@ -3703,7 +3714,7 @@ window._wnOnboarding = {{ 'true' if onboarding else 'false' }};
         overlay.classList.remove('open');
         overlay.setAttribute('aria-hidden','true');
         document.body.style.overflow='';
-        try{localStorage.setItem('arlong_wn_v3','1');}catch(e){}
+        try{localStorage.setItem('arlong_wn_v4','1');}catch(e){}
     }
     if(closeBtn)closeBtn.addEventListener('click',close);
     overlay.addEventListener('click',function(e){if(e.target===overlay)close();});
@@ -3714,7 +3725,7 @@ window._wnOnboarding = {{ 'true' if onboarding else 'false' }};
     });
     if(prevBtn)prevBtn.addEventListener('click',function(){showSlide(idx-1);});
     var shouldOpen=isOnboarding;
-    if(!shouldOpen){try{shouldOpen=localStorage.getItem('arlong_wn_v3')!=='1';}catch(e){shouldOpen=true;}}
+    if(!shouldOpen){try{shouldOpen=localStorage.getItem('arlong_wn_v4')!=='1';}catch(e){shouldOpen=true;}}
     if(shouldOpen)setTimeout(open,350);
 })();
 </script>

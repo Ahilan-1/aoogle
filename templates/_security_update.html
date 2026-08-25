@@ -1,0 +1,21 @@
+<style>
+  .security-update-trigger{position:fixed;right:18px;bottom:18px;z-index:80;border:1px solid rgba(255,255,255,.2);background:rgba(10,12,16,.86);backdrop-filter:blur(14px);color:#eef3fb;padding:9px 12px;font:600 12px Inter,Arial,sans-serif;cursor:pointer}.security-update-trigger:hover{border-color:#78afff}.security-update-overlay{position:fixed;inset:0;z-index:10050;background:rgba(0,0,0,.74);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;padding:18px}.security-update-overlay.open{display:flex}.security-update-card{width:min(510px,100%);background:#0b0d11;color:#f1f4f8;border:1px solid #303744;box-shadow:0 26px 90px rgba(0,0,0,.6);padding:26px;position:relative}.security-update-close{position:absolute;right:12px;top:10px;border:0;background:transparent;color:#9ca6b5;font-size:24px;cursor:pointer}.security-update-kicker{font:11px "SFMono-Regular",Consolas,monospace;letter-spacing:.1em;color:#78afff;text-transform:uppercase}.security-update-card h2{font:600 28px/1.08 Inter,Arial,sans-serif;letter-spacing:-.04em;margin:14px 0 10px;max-width:420px}.security-update-card p{color:#b9c1cd;font:14px/1.6 Inter,Arial,sans-serif;margin:0}.security-update-points{margin:19px 0;padding:0;list-style:none;border-top:1px solid #252a34}.security-update-points li{padding:11px 0;border-bottom:1px solid #252a34;color:#cdd4df;font:13px/1.45 Inter,Arial,sans-serif}.security-update-points b{color:#fff}.security-update-actions{display:flex;gap:10px;flex-wrap:wrap}.security-update-read{background:#f5f7fa;color:#08090b;text-decoration:none;padding:10px 14px;font:700 13px Inter,Arial,sans-serif}.security-update-dismiss{border:1px solid #353b46;background:transparent;color:#dfe5ee;padding:10px 14px;font:600 13px Inter,Arial,sans-serif;cursor:pointer}@media(max-width:520px){.security-update-card{padding:23px 20px}.security-update-card h2{font-size:25px}.security-update-trigger{right:12px;bottom:12px}}
+</style>
+<button class="security-update-trigger" type="button" data-security-update-open>What’s new · Web safety</button>
+<div class="security-update-overlay" id="security-update-overlay" role="dialog" aria-modal="true" aria-label="What’s new: web safety">
+  <section class="security-update-card">
+    <button class="security-update-close" type="button" aria-label="Close">×</button>
+    <div class="security-update-kicker">What’s new / security</div>
+    <h2>Hidden webpage instructions are now screened before AI synthesis.</h2>
+    <p>Arlong detected an indirect prompt-injection attempt in a real page and isolated it from the answer path.</p>
+    <ul class="security-update-points">
+      <li><b>Visible safety signal:</b> suspicious instruction patterns are reported as source metadata.</li>
+      <li><b>Safer context:</b> flagged content is not treated as a user instruction or factual evidence.</li>
+      <li><b>Read the case study:</b> see the source, the detection signal, and the limits of the approach.</li>
+    </ul>
+    <div class="security-update-actions"><a class="security-update-read" href="/blog/hidden-prompt-injection">Read technical note ↗</a><button class="security-update-dismiss" type="button">Not now</button></div>
+  </section>
+</div>
+<script>
+  (function(){var key='arlong_security_update_v1',o=document.getElementById('security-update-overlay');if(!o)return;function close(){o.classList.remove('open');try{localStorage.setItem(key,'1')}catch(e){}}function open(){o.classList.add('open')}document.querySelectorAll('[data-security-update-open]').forEach(function(b){b.addEventListener('click',open)});o.querySelector('.security-update-close').addEventListener('click',close);o.querySelector('.security-update-dismiss').addEventListener('click',close);o.addEventListener('click',function(e){if(e.target===o)close()});document.addEventListener('keydown',function(e){if(e.key==='Escape')close()});try{if(localStorage.getItem(key)!=='1')setTimeout(open,900)}catch(e){setTimeout(open,900)}})();
+</script>
