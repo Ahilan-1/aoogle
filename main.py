@@ -334,6 +334,34 @@ def _metrics_request_finish(response):
         response.headers['Server-Timing'] = f'app;dur={elapsed_ms}'
     return response
 
+
+@app.after_request
+def _record_product_usage(response):
+    """Capture a small, opt-out-respecting set of authenticated product events."""
+    if response.status_code >= 400 or session.get('admin_logged_in'):
+        return response
+    user_id = session.get('user_id')
+    if not user_id:
+        return response
+    event_map = {
+        ('GET', '/search'): 'web_search',
+        ('GET', '/ai'): 'ai_workspace_opened',
+        ('GET', '/ai/chat'): 'ai_chat_opened',
+        ('POST', '/api/ai/search'): 'ai_search_started',
+        ('POST', '/api/ai/stream'): 'ai_answer_generated',
+        ('GET', '/dashboard'): 'dashboard_opened',
+        ('GET', '/support'): 'support_opened',
+        ('POST', '/support'): 'support_ticket_created',
+        ('GET', '/premium'): 'billing_opened',
+    }
+    feature = event_map.get((request.method, request.path))
+    if feature:
+        try:
+            data_manager.record_product_event(user_id, feature)
+        except Exception as exc:
+            app.logger.warning('Product analytics event was not recorded: %s', exc)
+    return response
+
 # Load .env file manually
 env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
 if os.path.exists(env_path):
@@ -4649,6 +4677,90 @@ class DataManager:
                     return True
             return False
 
+    # These events intentionally exclude queries, prompts, URLs, page content,
+    # IP addresses, browser data, and API-key values.
+    _PRODUCT_ANALYTICS_FEATURES = {
+        'web_search', 'ai_workspace_opened', 'ai_chat_opened',
+        'ai_search_started', 'ai_answer_generated', 'dashboard_opened',
+        'support_opened', 'support_ticket_created', 'api_request',
+        'mcp_request', 'billing_opened',
+    }
+
+    def record_product_event(self, user_id, feature, status='success'):
+        """Persist one minimal, opt-out-respecting product-usage event."""
+        user_id, feature = str(user_id or ''), str(feature or '')
+        if not user_id or feature not in self._PRODUCT_ANALYTICS_FEATURES:
+            return False
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(days=90)
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            user = next((u for u in self.data.get('users', [])
+                         if str(u.get('user_id', '')) == user_id), None)
+            if not user or not user.get('preferences', {}).get('analytics_enabled', True):
+                return False
+            events = self.data.setdefault('product_analytics_events', [])
+            events.append({'user_id': user_id, 'feature': feature,
+                           'status': 'success' if status == 'success' else 'failed',
+                           'created_at': now.isoformat()})
+            retained = []
+            for event in events:
+                try:
+                    event_time = datetime.fromisoformat(str(event.get('created_at', '')))
+                    event_time = event_time if event_time.tzinfo else event_time.replace(tzinfo=timezone.utc)
+                except (TypeError, ValueError):
+                    continue
+                if event_time >= cutoff:
+                    retained.append(event)
+            self.data['product_analytics_events'] = retained[-50000:]
+            _save_json(self.data)
+        return True
+
+    def get_product_analytics(self, days=30, user_id=''):
+        """Build administrator metrics from the minimal event stream."""
+        days = max(1, min(int(days or 30), 90))
+        cutoff, selected_user = datetime.now(timezone.utc) - timedelta(days=days), str(user_id or '').strip()
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            users = {str(u.get('user_id', '')): u for u in self.data.get('users', [])}
+            filtered = []
+            for event in self.data.get('product_analytics_events', []):
+                if not isinstance(event, dict) or (selected_user and str(event.get('user_id', '')) != selected_user):
+                    continue
+                try:
+                    event_time = datetime.fromisoformat(str(event.get('created_at', '')))
+                    event_time = event_time if event_time.tzinfo else event_time.replace(tzinfo=timezone.utc)
+                except (TypeError, ValueError):
+                    continue
+                if event_time >= cutoff:
+                    filtered.append({**event, '_time': event_time})
+        feature_counts, daily_counts, active_users = {}, {}, set()
+        for event in filtered:
+            feature = event.get('feature', 'other')
+            feature_counts[feature] = feature_counts.get(feature, 0) + 1
+            day = event['_time'].strftime('%Y-%m-%d')
+            daily_counts[day] = daily_counts.get(day, 0) + 1
+            active_users.add(str(event.get('user_id', '')))
+        recent = []
+        for event in sorted(filtered, key=lambda item: item['_time'], reverse=True)[:250]:
+            user = users.get(str(event.get('user_id', '')), {})
+            recent.append({'user_id': str(event.get('user_id', '')),
+                           'username': user.get('username', 'Deleted account'),
+                           'plan': (user.get('billing', {}) or {}).get('plan', 'free'),
+                           'feature': event.get('feature', 'other').replace('_', ' '),
+                           'status': event.get('status', 'success'),
+                           'created_at': event['_time'].strftime('%d %b %Y, %H:%M UTC')})
+        return {'days': days, 'total_events': len(filtered), 'active_users': len(active_users),
+                'tracked_accounts': len({str(e.get('user_id', '')) for e in filtered}),
+                'feature_counts': sorted(({'feature': k.replace('_', ' '), 'count': v}
+                                          for k, v in feature_counts.items()), key=lambda item: item['count'], reverse=True),
+                'daily_counts': [{'date': day, 'count': count} for day, count in sorted(daily_counts.items())],
+                'recent_events': recent, 'selected_user': selected_user}
+
     def get_ai_chats(self, user_id):
         """Return all AI chat sessions for a user, newest first."""
         with self._lock:
@@ -5349,6 +5461,30 @@ def _detect_domain_entity(domain):
     return None
 
 
+_EXTRACT_SECURITY_REPORTS = {}
+_EXTRACT_SECURITY_LOCK = threading.Lock()
+_EXTRACT_SECURITY_TTL = 600
+
+
+def _remember_extract_security_report(url, report):
+    if not url or report is None:
+        return
+    now = time.time()
+    with _EXTRACT_SECURITY_LOCK:
+        _EXTRACT_SECURITY_REPORTS[url] = (report, now)
+        for key, (_value, created) in list(_EXTRACT_SECURITY_REPORTS.items()):
+            if now - created > _EXTRACT_SECURITY_TTL:
+                _EXTRACT_SECURITY_REPORTS.pop(key, None)
+
+
+def _get_extract_security_report(url):
+    with _EXTRACT_SECURITY_LOCK:
+        entry = _EXTRACT_SECURITY_REPORTS.get(url)
+        if entry and time.time() - entry[1] < _EXTRACT_SECURITY_TTL:
+            return entry[0]
+    return None
+
+
 def _extract_page_text(url, timeout=5):
     try:
         if not _is_safe_url(url):
@@ -5357,6 +5493,22 @@ def _extract_page_text(url, timeout=5):
         headers = {'User-Agent': ua.random}
         resp = _safe_get(url, timeout=timeout, headers=headers)
         resp.raise_for_status()
+        # Screen the raw document before BeautifulSoup removes comments,
+        # scripts, styles, and concealed DOM nodes. The visible-text pass
+        # below remains useful for ordinary content; this preflight protects
+        # the trust boundary against instructions deliberately hidden in HTML.
+        try:
+            import neural_search as _neural
+            report = _neural.detect_injection(resp.text, url=url)
+            _remember_extract_security_report(url, report)
+            if report.flagged:
+                app.logger.info('Blocked page extraction %s due to security flags: %s',
+                                urlparse(url).netloc, ','.join(report.flags[:4]))
+                return ''
+        except Exception:
+            # A detector error must never make extraction less available, but
+            # downstream evaluation still runs its independent text scan.
+            pass
         soup = BeautifulSoup(resp.text, 'html.parser')
         for tag in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'noscript', 'form', 'svg', 'iframe']):
             tag.decompose()
@@ -5632,6 +5784,7 @@ def _sergod_rerank(query, results):
         except Exception as exc:
             app.logger.warning('SerGoD unavailable; retaining hybrid rank: %s', str(exc)[:160])
             return False
+
     for position, index in enumerate(order):
         if 0 <= index < len(candidates):
             candidates[index].sergod_rank = position
@@ -11259,6 +11412,12 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None,
                 return None
             resp = _httpx.get(r_url, timeout=10, follow_redirects=True, headers={'User-Agent': _UA})
             if resp.status_code == 200:
+                if _neural is not None:
+                    raw_report = _neural.detect_injection(resp.text, url=r_url)
+                    if raw_report.flagged:
+                        app.logger.info('AI context preflight dropped %s (%s)',
+                                        _urlparse(r_url).netloc, ','.join(raw_report.flags[:4]))
+                        return None
                 text = _clean_page(resp.text)
                 if len(text) > 100:
                     return (r_url, r_title or '', text)
@@ -12221,6 +12380,15 @@ def _arlong_api_gate(credits=1):
         resp.headers['X-RateLimit-Remaining'] = '0'
         resp.headers['X-RateLimit-Reset'] = str(rate['retry_after'])
         return resp
+    # Attribute successful authenticated machine usage to the owning account,
+    # without retaining the request body, query, URL, IP, or API key value.
+    try:
+        if tier == 'oauth' and oauth_user:
+            data_manager.record_product_event(oauth_user['user_id'], 'mcp_request' if request.path == '/mcp' else 'api_request')
+        elif tier == 'key' and key_rec:
+            data_manager.record_product_event(key_rec.get('user_id'), 'mcp_request' if request.path == '/mcp' else 'api_request')
+    except Exception as exc:
+        app.logger.warning('API analytics event was not recorded: %s', exc)
     return rate, tier, api_key
 
 
@@ -12278,7 +12446,14 @@ def _arlong_eval_result(q, r, idx, fetch_content=True, content_max_chars=4000):
         # Filter out garbage content (JS loading spinners, "Try again" etc.)
         if content and _is_junk_content(content):
             content = None
-        ev = _neural.evaluate_page(q, title=title, url=url, snippet=snippet[:500], content=(content or '')[:4000])
+        # Use the raw-document preflight when available. A blocked extractor
+        # returns no page text by design, so relying on the visible-text scan
+        # alone here would lose the reason the page was contained.
+        preflight = _get_extract_security_report(url)
+        ev = _neural.evaluate_page(
+            q, title=title, url=url, snippet=snippet[:500], content=(content or '')[:4000],
+            security_report=preflight,
+        )
         item["ai_evaluation"] = {
             "relevance_score": ev.get('relevance_score', 0.0),
             "summary": ev.get('ai_evaluation', {}).get('summary') or snippet[:200],
@@ -13978,6 +14153,16 @@ def admin_dashboard():
     api_errors = api_errors_snapshot(60)
     api_stats = api_error_stats()
     return render_template('admin.html', login=False, stats=stats, reports=reports, blacklist=blacklist, total_searches=total_searches, celebration=celebration, announcement=announcement, verified_sites=verified_sites, submitted_sites=submitted_sites, domain_reports=domain_reports, service_status=service_status, error_series=error_series, error_total=error_total, error_latest=error_latest, error_peak=error_peak, api_errors=api_errors, api_stats=api_stats, feedback=data_manager.get_feedback(), incidents=data_manager.get_incidents(20), active_incident=data_manager.get_active_incident())
+
+
+@app.route('/admin/analytics')
+def admin_analytics():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login'))
+    days = safe_int(request.args.get('days', 30), 30)
+    user_id = request.args.get('user_id', '').strip()[:128]
+    return render_template('admin_analytics.html',
+                           analytics=data_manager.get_product_analytics(days, user_id))
 
 
 @app.route('/status')
@@ -15747,8 +15932,11 @@ def api_user_preferences():
         prefs = data_manager.get_user_preferences(user_id)
         return jsonify({'ok': True, 'preferences': prefs})
     prefs = request.get_json(silent=True) or {}
-    allowed_keys = {'ai_summary', 'trending_country', 'debug_search'}
+    allowed_keys = {'ai_summary', 'trending_country', 'debug_search', 'analytics_enabled'}
     filtered = {k: v for k, v in prefs.items() if k in allowed_keys}
+    for key in ('ai_summary', 'debug_search', 'analytics_enabled'):
+        if key in filtered and not isinstance(filtered[key], bool):
+            filtered.pop(key)
     ok = data_manager.update_user_preferences(user_id, filtered)
     return jsonify({'ok': ok})
 

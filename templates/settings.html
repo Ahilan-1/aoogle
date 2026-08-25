@@ -125,6 +125,23 @@
             </div>
         </div>
 
+        <h2>Privacy</h2>
+        <div class="card">
+            <div class="toggle-row">
+                <div class="toggle-label">
+                    <h3>Product analytics</h3>
+                    <div class="label-desc">Help us understand which features are used. We record only feature names, success status, and time. We never store your search queries, AI messages, links, page content, IP address, or browser details in product analytics.</div>
+                </div>
+                <div class="toggle-wrap">
+                    <div class="toggle {{ 'on' if preferences.get('analytics_enabled', True) else '' }}" id="toggle-analytics-enabled" onclick="togglePref('analytics_enabled', this)"></div>
+                </div>
+            </div>
+            <div class="status-badge {{ 'on' if preferences.get('analytics_enabled', True) else 'off' }}" id="badge-analytics-enabled">
+                <span class="dot"></span>
+                {{ 'Enabled' if preferences.get('analytics_enabled', True) else 'Disabled' }}
+            </div>
+        </div>
+
         <h2>Regional</h2>
         <div class="card">
             <div class="toggle-row">

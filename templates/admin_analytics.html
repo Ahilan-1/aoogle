@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product analytics | Arlong Admin</title>
+    <style>
+        :root { --bg:#0b1018; --panel:#121a26; --panel2:#182334; --border:#29384c; --text:#ecf3fb; --muted:#9aabbd; --blue:#61a8ff; --green:#58d69a; }
+        * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--text); font-family:Inter,Arial,sans-serif; }
+        .header { display:flex; justify-content:space-between; gap:18px; align-items:center; padding:18px 30px; border-bottom:1px solid var(--border); background:#0e1520; position:sticky; top:0; z-index:2; }
+        .header h1 { font-size:18px; margin:0; } .nav { display:flex; gap:8px; flex-wrap:wrap; } .nav a,.filter button { color:var(--muted); border:1px solid var(--border); border-radius:7px; text-decoration:none; font-size:13px; padding:7px 11px; background:transparent; }
+        .nav a.active,.nav a:hover,.filter button:hover { color:var(--text); border-color:#4f78a4; background:#17243a; }
+        main { max-width:1240px; margin:0 auto; padding:30px; } .eyebrow { color:var(--blue); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; }
+        h2 { font-size:22px; margin:7px 0; } .intro { color:var(--muted); line-height:1.55; max-width:800px; margin:0 0 22px; font-size:14px; }
+        .filter { display:flex; gap:8px; align-items:center; margin-bottom:22px; flex-wrap:wrap; } .filter a,.filter button { color:var(--muted); border:1px solid var(--border); border-radius:7px; text-decoration:none; font-size:13px; padding:7px 11px; background:transparent; } .filter a.active,.filter button.active { background:#2468b4; color:white; border-color:#367dcc; }
+        .filter form { display:flex; gap:8px; } input { background:#101927; color:var(--text); border:1px solid var(--border); border-radius:7px; padding:8px 10px; min-width:210px; }
+        .stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin:20px 0; }.card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:18px; }.number { font-size:28px; font-weight:750; }.label { color:var(--muted); margin-top:5px; font-size:13px; }
+        .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; } .card h3 { margin:0 0 16px; font-size:15px; }.feature { display:grid; grid-template-columns:145px 1fr 45px; align-items:center; gap:10px; margin:11px 0; font-size:13px; }.feature span:first-child { text-transform:capitalize; color:#d9e5f3; }.track { background:#223044; height:8px; border-radius:10px; overflow:hidden; }.fill { height:100%; background:linear-gradient(90deg,#478bdc,#6fb6ff); border-radius:10px; }.feature strong { color:#c7d8eb; text-align:right; }
+        .days { display:flex; align-items:end; height:166px; gap:5px; border-bottom:1px solid var(--border); padding:0 1px; }.day { flex:1; min-width:6px; background:linear-gradient(180deg,#63aaff,#285a99); border-radius:4px 4px 0 0; position:relative; }.day:hover::after { content:attr(data-label); position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); white-space:nowrap; font-size:11px; background:#05090e; border:1px solid var(--border); border-radius:5px; padding:5px; color:white; z-index:1; }.empty { color:var(--muted); font-size:13px; padding:28px 0; text-align:center; }
+        .activity { margin-top:14px; overflow:hidden; }.table-wrap { overflow:auto; } table { width:100%; border-collapse:collapse; min-width:700px; } th,td { padding:13px 12px; text-align:left; border-bottom:1px solid var(--border); font-size:13px; } th { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.06em; } td a { color:#81baff; text-decoration:none; }.plan,.status { display:inline-block; padding:3px 7px; background:#1d2b40; border-radius:99px; font-size:11px; text-transform:capitalize; }.status { color:var(--green); background:#163628; }.notice { color:var(--muted); font-size:12px; line-height:1.55; margin:14px 0 0; }
+        @media (max-width:760px) { .header { padding:14px 16px; align-items:flex-start; flex-direction:column; }.header .nav { width:100%; }.header h1{font-size:17px;} main { padding:22px 16px; }.stats,.grid { grid-template-columns:1fr; }.feature{grid-template-columns:112px 1fr 36px;} }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>arlong <span style="color:var(--muted);font-weight:400">Admin</span></h1>
+        <nav class="nav">
+            <a href="/admin/dashboard">Dashboard</a><a href="/admin/analytics" class="active">Analytics</a><a href="/admin/accounts">Accounts</a><a href="/admin/tickets">Support</a><a href="/admin/architecture">Architecture</a><a href="/admin/logout">Sign out</a>
+        </nav>
+    </header>
+    <main>
+        <div class="eyebrow">Privacy-conscious product analytics</div>
+        <h2>{% if analytics.selected_user %}Activity for one account{% else %}Feature adoption and account activity{% endif %}</h2>
+        <p class="intro">This view contains minimal opt-in account events only: feature, outcome, and timestamp. It never records search queries, AI prompts, URLs, page text, IP addresses, or browser details.</p>
+        <div class="filter">
+            {% for option in [7, 30, 90] %}<a href="/admin/analytics?days={{ option }}{% if analytics.selected_user %}&amp;user_id={{ analytics.selected_user }}{% endif %}" class="{{ 'active' if analytics.days == option else '' }}">{{ option }} days</a>{% endfor %}
+            <form method="get"><input type="hidden" name="days" value="{{ analytics.days }}"><input name="user_id" value="{{ analytics.selected_user }}" placeholder="Filter by account ID"><button type="submit">View account</button></form>
+            {% if analytics.selected_user %}<a href="/admin/analytics?days={{ analytics.days }}">Clear filter</a>{% endif %}
+        </div>
+        <section class="stats">
+            <div class="card"><div class="number">{{ analytics.total_events }}</div><div class="label">Recorded events</div></div>
+            <div class="card"><div class="number">{{ analytics.active_users }}</div><div class="label">Active accounts</div></div>
+            <div class="card"><div class="number">{{ analytics.tracked_accounts }}</div><div class="label">Accounts represented</div></div>
+        </section>
+        <section class="grid">
+            <div class="card"><h3>Most-used features</h3>{% if analytics.feature_counts %}{% set max_feature = analytics.feature_counts[0].count %}{% for row in analytics.feature_counts %}<div class="feature"><span>{{ row.feature }}</span><div class="track"><div class="fill" style="width:{{ ((row.count / max_feature) * 100)|round }}%"></div></div><strong>{{ row.count }}</strong></div>{% endfor %}{% else %}<div class="empty">No opted-in activity for this period yet.</div>{% endif %}</div>
+            <div class="card"><h3>Activity over time</h3>{% if analytics.daily_counts %}{% set max_day = analytics.daily_counts|map(attribute='count')|max %}<div class="days">{% for day in analytics.daily_counts %}<div class="day" data-label="{{ day.date }}: {{ day.count }} events" style="height:{{ [8, ((day.count / max_day) * 100)|round]|max }}%"></div>{% endfor %}</div><p class="notice">Hover a bar for the date and event count.</p>{% else %}<div class="empty">No daily activity to display yet.</div>{% endif %}</div>
+        </section>
+        <section class="card activity"><h3>Latest account activity</h3><div class="table-wrap">{% if analytics.recent_events %}<table><thead><tr><th>Account</th><th>Plan</th><th>Feature</th><th>Outcome</th><th>Time</th></tr></thead><tbody>{% for event in analytics.recent_events %}<tr><td><a href="/admin/analytics?days={{ analytics.days }}&amp;user_id={{ event.user_id }}">{{ event.username }}</a></td><td><span class="plan">{{ event.plan }}</span></td><td>{{ event.feature }}</td><td><span class="status">{{ event.status }}</span></td><td>{{ event.created_at }}</td></tr>{% endfor %}</tbody></table>{% else %}<div class="empty">No activity matches this view.</div>{% endif %}</div><p class="notice">Raw product-analytics events automatically expire after 90 days. This dashboard is an operational product tool, not session replay or behavioural profiling.</p></section>
+    </main>
+</body>
+</html>

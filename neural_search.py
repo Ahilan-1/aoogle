@@ -19,6 +19,8 @@ Implements the "understand before you search" pipeline:
 from __future__ import annotations
 
 import hashlib
+import base64
+import html
 import math
 import os
 import re
@@ -26,6 +28,7 @@ import socket
 import threading
 import time
 import ipaddress
+import unicodedata
 from urllib.parse import urlparse
 
 try:
@@ -77,8 +80,8 @@ BEHAVIOR_RE_SIGNALS = [
 _SECURITY_CACHE = {}
 _SECURITY_CACHE_LOCK = threading.Lock()
 _SECURITY_CACHE_MAX = 10000
-_SECURITY_SCAN_LIMIT = 16000
-DETECTOR_VERSION = '2.0'
+_SECURITY_SCAN_LIMIT = 48000
+DETECTOR_VERSION = '3.0'
 
 AMBIENT_INJECTION_RE = (
     re.compile(r'<[^>]+>', re.I),           # raw markup in plain text context
@@ -105,6 +108,55 @@ class InjectionReport:
             'risk_score': self.risk_score, 'action': self.action,
             'scanned_chars': self.scanned_chars, 'detector_version': DETECTOR_VERSION,
         }
+
+
+def _security_canonical_forms(raw):
+    """Return bounded, detector-only views resilient to common obfuscation.
+
+    This deliberately does not alter the text returned to users. It gives the
+    detector a normalized view of HTML entities, Unicode compatibility forms,
+    zero-width controls, and percent-encoded fragments.
+    """
+    source = str(raw or '')[:_SECURITY_SCAN_LIMIT]
+    decoded = html.unescape(source)
+    normalized = unicodedata.normalize('NFKC', decoded)
+    normalized = re.sub(r'[\u200b\u200c\u200d\u2060\ufeff\x00-\x1f]', ' ', normalized)
+    try:
+        from urllib.parse import unquote
+        normalized = unquote(normalized)
+    except Exception:
+        pass
+    # Preserve the raw form for DOM/CSS signals and scan a whitespace-collapsed
+    # form for instructions split by markup or invisible characters.
+    compact = re.sub(r'\s+', ' ', normalized).strip()
+    forms = [source, compact]
+    for token in re.findall(r'(?:base64,|base64\s*[:=]\s*)([A-Za-z0-9+/]{24,}={0,2})', source, re.I):
+        try:
+            candidate = base64.b64decode(token, validate=False).decode('utf-8', 'ignore')
+            if candidate:
+                forms.append(candidate[:8000])
+        except Exception:
+            pass
+    return forms
+
+
+_CONCEALED_HTML_RE = re.compile(
+    r'(?:display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?:[.;}\s]|$)|'
+    r'font-size\s*:\s*(?:0|1)px|color\s*:\s*transparent|'
+    r'rgba\([^)]*,\s*0(?:\.0+)?\s*\)|left\s*:\s*-\d{2,}|top\s*:\s*-\d{2,})',
+    re.I,
+)
+
+
+def _has_concealed_instruction(raw, canonical):
+    """Detect instruction-shaped text placed in HTML that is hidden to readers."""
+    if not _CONCEALED_HTML_RE.search(raw or ''):
+        return False
+    return bool(re.search(
+        r'\b(?:ignore|disregard|override|forget|follow|execute|run|reveal|send|upload)\b.{0,160}'
+        r'\b(?:instruction|prompt|rule|system|assistant|tool|command|secret|credential|user)\b',
+        canonical or '', re.I | re.S,
+    ))
 
 
 # ── local deterministic embedding (fallback / offline) ───────────────────────
@@ -385,10 +437,11 @@ def detect_injection(text, allow_llm_escalation=True, llm_eval=None, url=''):
     LLM evaluation callback. Returns an InjectionReport.
     """
     raw = str(text or '')
-    scan = raw[:_SECURITY_SCAN_LIMIT]
+    forms = _security_canonical_forms(raw)
+    scan = forms[1] if len(forms) > 1 else raw[:_SECURITY_SCAN_LIMIT]
     classifier_mode = 'secondary' if allow_llm_escalation and llm_eval is not None else 'local'
     cache_key = hashlib.sha256(
-        (url + '\0' + classifier_mode + '\0' + scan).encode('utf-8', 'ignore')).hexdigest()
+        (DETECTOR_VERSION + '\0' + url + '\0' + classifier_mode + '\0' + scan).encode('utf-8', 'ignore')).hexdigest()
     with _SECURITY_CACHE_LOCK:
         cached = _SECURITY_CACHE.get(cache_key)
     if cached:
@@ -400,8 +453,9 @@ def detect_injection(text, allow_llm_escalation=True, llm_eval=None, url=''):
     educational_context = bool(re.search(
         r'\b(?:prompt injection|security research|attack example|example attack|detection rule|red team|threat model)\b',
         scan, re.I))
+    raw_scan = forms[0]
     for rx, flag in INJECTION_RE_SIGNALS:
-        if rx.search(scan):
+        if any(rx.search(form) for form in forms):
             if flag in ('ZERO_WIDTH_CONTROL', 'HIDDEN_CSS', 'OFFSCREEN_CSS',
                         'INSTRUCTION_OVERRIDE', 'SYSTEM_HIJACK'):
                 weight = 5 if flag in ('INSTRUCTION_OVERRIDE', 'SYSTEM_HIJACK') else 3
@@ -412,9 +466,15 @@ def detect_injection(text, allow_llm_escalation=True, llm_eval=None, url=''):
             else:
                 soft_hits += 1
     for rx, flag, weight in BEHAVIOR_RE_SIGNALS:
-        if rx.search(scan):
+        if any(rx.search(form) for form in forms):
             weighted_flags.append((flag, weight))
             risk += weight
+    # A directive hidden from a human reader is materially different from a
+    # security article quoting one. Treat concealment + model-direction as a
+    # high-confidence boundary violation before synthesis.
+    if _has_concealed_instruction(raw_scan, scan):
+        weighted_flags.append(('CONCEALED_INSTRUCTION', 7))
+        risk += 7
     url_flags = _url_threat_flags(url)
     for flag in url_flags:
         weight = 5 if flag in ('UNSAFE_URL_SCHEME', 'URL_USERINFO_DECEPTION',
@@ -423,7 +483,7 @@ def detect_injection(text, allow_llm_escalation=True, llm_eval=None, url=''):
         risk += weight
     # structural weirdness that usually accompanies injection
     for rx in AMBIENT_INJECTION_RE:
-        if rx.search(scan):
+        if any(rx.search(form) for form in forms):
             soft_hits += 1
     if soft_hits >= 3:
         weighted_flags.append(('MULTIPLE_SUSPICIOUS_SIGNALS', 2))
@@ -435,6 +495,7 @@ def detect_injection(text, allow_llm_escalation=True, llm_eval=None, url=''):
     flagged = risk >= 5 or any(f in flags for f in (
         'SECRET_EXFILTRATION', 'CREDENTIAL_SOLICITATION', 'MODEL_CONTROL_TOKEN',
         'DOWNLOAD_EXECUTE', 'EXECUTABLE_DOWNLOAD', 'URL_USERINFO_DECEPTION'))
+    flagged = flagged or 'CONCEALED_INSTRUCTION' in flags
     reason = 'high-confidence model or browser threat signals detected' if flagged else ''
 
     if not flagged and risk in (3, 4):
@@ -463,7 +524,7 @@ def detect_injection(text, allow_llm_escalation=True, llm_eval=None, url=''):
     return report
 
 
-def evaluate_page(query, title='', url='', snippet='', content=''):
+def evaluate_page(query, title='', url='', snippet='', content='', security_report=None):
     """Score how relevant + safe a page is for `query`.
 
     Relevance = cosine(query-embedding, page-embedding) — computed from cached
@@ -486,7 +547,9 @@ def evaluate_page(query, title='', url='', snippet='', content=''):
     # floor tiny negatives
     rel = max(0.0, min(1.0, rel))
 
-    inj = detect_injection(' '.join((title or '', snippet or '', (content or '')[:12000])), url=url)
+    inj = security_report or detect_injection(
+        ' '.join((title or '', snippet or '', (content or '')[:12000])), url=url
+    )
     if inj.flagged:
         status = 'BLOCKED'
         # Blocked sources must always score below UNVERIFIED (55) and unknown (50).
