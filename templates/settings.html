@@ -108,6 +108,23 @@
             </div>
         </div>
 
+        <h2>Diagnostics</h2>
+        <div class="card">
+            <div class="toggle-row">
+                <div class="toggle-label">
+                    <h3>Search debug details</h3>
+                    <div class="label-desc">Show search timing and source-fallback details below results. Keep this off for the normal search experience.</div>
+                </div>
+                <div class="toggle-wrap">
+                    <div class="toggle {{ 'on' if preferences.debug_search else '' }}" id="toggle-debug-search" onclick="togglePref('debug_search', this)"></div>
+                </div>
+            </div>
+            <div class="status-badge {{ 'on' if preferences.debug_search else 'off' }}" id="badge-debug-search">
+                <span class="dot"></span>
+                {{ 'Enabled' if preferences.debug_search else 'Disabled' }}
+            </div>
+        </div>
+
         <h2>Regional</h2>
         <div class="card">
             <div class="toggle-row">

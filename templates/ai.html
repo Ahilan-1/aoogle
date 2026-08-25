@@ -228,6 +228,14 @@
     .ai-overview .ai-ov-label{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#FFFFFF;font-weight:600;display:inline-flex;align-items:center;gap:7px;background:var(--bg-inner);padding:6px 12px;border-radius:8px;margin-bottom:16px}
     .ai-overview .ai-ov-label svg{width:14px;height:14px;color:#FFFFFF}
     .ai-md{font-size:15.5px;color:var(--text-main);word-wrap:break-word;line-height:1.72}
+    .ai-loading-state{display:flex;align-items:center;gap:11px;min-height:24px;margin:2px 0;color:var(--text-muted);font-size:13px;letter-spacing:.01em}
+    .ai-loading-state[hidden]{display:none}
+    .ai-thinking-orb{position:relative;width:18px;height:18px;border:1px solid rgba(255,255,255,.38);border-radius:50%;flex:0 0 18px;animation:aiThinkingSpin 1.8s linear infinite}
+    .ai-thinking-orb:after{content:'';position:absolute;width:4px;height:4px;border-radius:50%;background:#fff;top:2px;left:2px;box-shadow:0 0 10px rgba(255,255,255,.8)}
+    .ai-thinking-copy{transition:opacity .2s ease}.ai-thinking-copy.swap{opacity:.38}
+    @keyframes aiThinkingSpin{to{transform:rotate(360deg)}}
+    .ai-weather-answer{margin:0 0 14px;padding:18px 19px;border:1px solid rgba(126,190,255,.34);border-radius:13px;background:linear-gradient(135deg,#4389e6,#6aa7f3);color:#fff;box-shadow:0 12px 30px rgba(32,94,178,.18)}
+    .ai-weather-answer-top{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.ai-weather-answer-place{font-size:13px;font-weight:650;opacity:.9}.ai-weather-answer-temp{font-size:36px;font-weight:720;letter-spacing:-.055em;line-height:1.05;margin-top:4px}.ai-weather-answer-condition{font-size:13px;opacity:.9;margin-top:5px}.ai-weather-answer-icon{font-size:34px;line-height:1}.ai-weather-answer-facts{display:flex;gap:8px;flex-wrap:wrap;margin-top:15px}.ai-weather-answer-fact{padding:5px 8px;border:1px solid rgba(255,255,255,.22);border-radius:7px;background:rgba(10,42,92,.15);font-size:11px;color:rgba(255,255,255,.93)}
     .ai-md > :first-child{margin-top:0}
     .ai-md > :last-child{margin-bottom:0}
     .ai-md p{margin:12px 0}
@@ -594,6 +602,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
 <script>
+    // Keep saved answers visually identical to streamed answers. In particular,
+    // `breaks` preserves intentional single-line structure after a reload while
+    // GFM keeps nested lists and tables as Markdown rather than flattened text.
+    if(window.marked && marked.setOptions){ marked.setOptions({gfm:true, breaks:true}); }
 (function(){
     var key='arlong-chat-appearance-v1', main=document.querySelector('.ai-main');
     var wrap=document.getElementById('appearance-wrap'), file=document.getElementById('background-file');
@@ -919,6 +931,7 @@
         document.getElementById('ai-active-input').value = '';
         showTurnUser(displayQ);
         var ov = showAssistantFrame();
+        startThinking(ov);
         setBusy(true);
         var body = {query:q, chat_id: pendingChatId || undefined, deep: deepMode ? true : false};
         if(answers && answers.length) body.answers = answers;
@@ -927,6 +940,7 @@
         .then(function(r){ return r.json().then(function(d){ d._status = r.status; return d; }); })
         .then(function(d){
             if(!d.ok){
+                stopThinking(ov);
                 setBusy(false); busy = false;
                 if(d.error === 'limit' || d._status === 429){
                     if(d.msg_used != null) setUsage(d.msg_used, d.msg_limit || LIMIT);
@@ -945,7 +959,30 @@
                 failTurn(ov, d.message || d.error || 'Search failed. Please try again.');
                 return;
             }
+            if(d.casual){
+                stopThinking(ov);
+                chatId = d.chat_id || pendingChatId || null;
+                ov._q = q; ov._cid = chatId; ov._results = [];
+                var casualMd = ov.querySelector('.ai-md');
+                if(casualMd) renderMd(casualMd, d.answer || 'Hey.');
+                if(d.chat_id && !pendingChatId) refreshChats();
+                setBusy(false); busy = false;
+                scrollBottom();
+                return;
+            }
+            if(d.weather){
+                stopThinking(ov);
+                chatId = d.chat_id || pendingChatId || null;
+                ov._q = q; ov._cid = chatId; ov._results = [];
+                var weatherMd = ov.querySelector('.ai-md');
+                if(weatherMd) weatherMd.innerHTML = weatherCardHtml(d.weather) + '<p>'+esc(d.answer || '')+'</p>';
+                if(d.chat_id && !pendingChatId) refreshChats();
+                setBusy(false); busy = false;
+                scrollBottom();
+                return;
+            }
             if(d.clarify && d.clarify.questions && d.clarify.questions.length){
+                stopThinking(ov);
                 setBusy(false); busy = false;
                 if(d.chat_id) chatId = d.chat_id;
                 if(d.chat_id && !pendingChatId){
@@ -1049,7 +1086,7 @@
         d.className = 'ai-assistant';
         d.innerHTML = '<div class="ai-sources ai-src-zone" style="display:none"></div>'
             + '<div class="ai-overview"><div class="ai-ov-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M4.5 7.5l15 9"/><path d="M19.5 7.5l-15 9"/></svg> Arlong AI Overview</div>'
-            + '<div class="ai-md"><span class="ai-cursor"></span></div>'
+            + '<div class="ai-loading-state" aria-live="polite"><span class="ai-thinking-orb"></span><span class="ai-thinking-copy">Surfing the web…</span></div><div class="ai-md"></div>'
             + '<div class="ai-actions"><button class="ai-icon-btn" title="Copy" onclick="copyAnswer(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>'
             + '<button class="ai-icon-btn" title="Regenerate" onclick="regenerate(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg></button>'
             + '<span class="ai-feedback"><button class="ai-icon-btn" title="Good answer" onclick="feedback(this,\'up\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg></button>'
@@ -1059,8 +1096,49 @@
         scrollBottom();
         return d;
     }
+    var THINKING_LINES = [
+        'Surfing the web…',
+        'Checking the good corners of the internet…',
+        'Separating signal from suspiciously confident noise…',
+        'Reading so you do not have to open twelve tabs…',
+        'Asking the web politely for receipts…',
+        'Hallucinating myself, then fact-checking it…',
+        'Putting on tiny research glasses…',
+        'Gazing at the search results respectfully…',
+        'You look good today. Also, finding sources…',
+        'What scent are you using? Anyway, researching…',
+        'Negotiating with the internet…',
+        'Looking for primary sources before the blogs get ideas…',
+    ];
+    function startThinking(ov){
+        if(!ov) return;
+        if(ov._thinkingTimer){ clearInterval(ov._thinkingTimer); ov._thinkingTimer = null; }
+        var state = ov.querySelector('.ai-loading-state');
+        if(state){ state.hidden = false; state.setAttribute('aria-hidden', 'false'); }
+        var copy = ov.querySelector('.ai-thinking-copy');
+        if(!copy) return;
+        var i = Math.floor(Math.random() * THINKING_LINES.length);
+        copy.textContent = THINKING_LINES[i];
+        ov._thinkingTimer = setInterval(function(){
+            i = (i + 1) % THINKING_LINES.length;
+            copy.classList.add('swap');
+            setTimeout(function(){ copy.textContent = THINKING_LINES[i]; copy.classList.remove('swap'); }, 130);
+        }, 2200);
+    }
+    function stopThinking(ov){
+        if(!ov) return;
+        if(ov._thinkingTimer){ clearInterval(ov._thinkingTimer); ov._thinkingTimer = null; }
+        var state = ov.querySelector('.ai-loading-state');
+        if(state){ state.hidden = true; state.setAttribute('aria-hidden', 'true'); }
+    }
+    function weatherCardHtml(w){
+        var facts = (w.facts || []).slice(0,3).map(function(f){ return '<span class="ai-weather-answer-fact">'+esc(f[0])+': '+esc(f[1])+'</span>'; }).join('');
+        var iconMap = {clear:'☀️',pcloudy:'🌤️',mcloudy:'⛅',cloudy:'☁️',lightrain:'🌦️',rain:'🌧️',snow:'🌨️',ts:'⛈️',fog:'🌫️'};
+        return '<div class="ai-weather-answer"><div class="ai-weather-answer-top"><div><div class="ai-weather-answer-place">'+esc(w.title || 'Weather')+'</div><div class="ai-weather-answer-temp">'+esc(w.temp || '—')+'</div><div class="ai-weather-answer-condition">'+esc(w.condition || '')+'</div></div><div class="ai-weather-answer-icon">'+(iconMap[w.image] || '🌤️')+'</div></div><div class="ai-weather-answer-facts">'+facts+'</div></div>';
+    }
     function failTurn(ov, msg){
         if(!ov) return;
+        stopThinking(ov);
         var md = ov.querySelector('.ai-md');
         if(md) md.innerHTML = '<p style="color:#D1D1D6">'+esc(msg)+'</p>';
         scrollBottom();
@@ -1375,6 +1453,7 @@
                 return reader.read().then(function(r){
                     if(r.done){ finish(); return; }
                     full += dec.decode(r.value, {stream:true});
+                    if(full) stopThinking(ov);
                     renderMd(md, full);
                     scrollBottomSoft();
                     return pump();
@@ -1616,6 +1695,8 @@
                         + '<div class="ai-report-actions"><button type="button" class="ai-btn-ghost" onclick="regenerate(this)">Try again</button></div>';
                 } else if(m.declined && !m.content){
                     mdEl.innerHTML = '<p style="color:var(--text-muted);font-size:13px">Report skipped — the sources above remain available.</p>';
+                } else if(m.weather){
+                    mdEl.innerHTML = weatherCardHtml(m.weather) + '<p>'+esc(m.content || '')+'</p>';
                 } else {
                     renderMd(mdEl, m.content || '');
                 }

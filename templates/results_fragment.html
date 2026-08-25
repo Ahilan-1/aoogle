@@ -53,9 +53,9 @@
                 </div>
             {% endif %}
 
-            {% if serper_fallback %}
+            {% if debug_search and serper_fallback %}
             <div class="notice-banner warning" id="serper-notice">
-                <strong>Server trouble detected.</strong> Our primary search servers didn't respond, so we switched this query to a backup server to fetch your results. They're coming through &mdash; please hold on.
+                <strong>Fresh-source check used.</strong> We switched to a live backup index because the first result set was not specific enough for this query.
             </div>
             {% endif %}
 
@@ -122,7 +122,7 @@
                 <div style="color:var(--text3);font-size:13px;margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                     {% if crisis_info %}You are not alone. These resources can help.
                     {% elif notice and notice.type == 'redirect' %}No results found
-                    {% else %}About {{ total_results }} results{% if search_time is defined %} ({{ search_time }}s){% endif %}
+                    {% else %}About {{ total_results }} results{% if debug_search and search_time is defined %} ({{ search_time }}s){% endif %}
                         <button type="button" class="refresh-results-btn" onclick="refreshResults({{ total_results }})" title="Re-fetch the results">Not satisfied? Refresh</button>
                     {% endif %}
                 </div>
@@ -206,6 +206,28 @@
                         {% set ns.disc = ns.disc + [result] %}
                     {% endif %}
                 {% endfor %}
+                {% if video_results %}
+                <section class="vid-sec vid-google" data-category="video">
+                    <div class="vid-head"><span>Videos</span><a href="/videos?q={{ query|urlencode }}" class="panel-more" aria-label="View all videos">View all <span>&rsaquo;</span></a></div>
+                    <div class="vid-list">
+                    {% for video in video_results[:4] %}
+                        <a class="vid-list-item" href="{{ video.url }}" target="_blank" rel="noopener">
+                            <div class="vid-thumb">
+                                {% if video.thumbnail %}<img src="{{ video.thumbnail }}" alt="" loading="lazy">{% endif %}
+                                <span class="vid-play">&#9654;</span>
+                                {% if video.duration %}<span class="vid-dur">{{ video.duration }}</span>{% endif %}
+                            </div>
+                            <div class="vid-copy">
+                                <div class="vid-title">{{ video.title }}</div>
+                                <div class="vid-meta"><span class="vid-ch">{{ video.channel or 'Video' }}</span>{% if video.published %}<span class="vid-dot"></span><span>{{ video.published }}</span>{% endif %}</div>
+                                {% if video.description %}<div class="vid-desc">{{ video.description }}</div>{% endif %}
+                            </div>
+                        </a>
+                    {% endfor %}
+                    </div>
+                    <a href="/videos?q={{ query|urlencode }}" class="panel-view-all">View all videos <span>&rsaquo;</span></a>
+                </section>
+                {% endif %}
                 {% for result in result_groups %}
                     {% set is_video = result.category == 'videos' or result.category == 'video' %}
                     {% set has_siblings = result.sitelinks and result.sitelinks|length > 0 %}

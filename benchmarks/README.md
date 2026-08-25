@@ -43,3 +43,17 @@ python benchmarks/bench.py --resume                      # skip tasks already ca
 - `results/raw/<query>_<engine>_<mode>.json` — raw API responses (resumable cache)
 - `results/bench_output.json` — normalized records with latency + estimated cost
 - `results/report.md` — per-engine summary table + per-query top-3 results & answers
+
+## Refresh only Arlong
+
+The latest runner preserves captured competitor responses and refreshes only
+Arlong through current production endpoints. It defaults to one question,
+sequential calls, a delay, resume, and atomic checkpoints.
+
+```bash
+python benchmarks/arlong_latest.py run --queries-file benchmarks/queries2.json
+python benchmarks/arlong_latest.py run --queries-file benchmarks/queries2.json --start 2 --limit 5
+python benchmarks/arlong_latest.py report
+```
+
+Keep `ARLONG_API_KEY` in ignored `benchmarks/.env.bench`; it is never written to results.

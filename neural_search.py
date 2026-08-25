@@ -189,6 +189,77 @@ def cosine(a, b):
     return dot / (na * nb)
 
 
+def assess_search_coverage(query, results, minimum_score=0.26):
+    """Semantically judge whether a result set answers a search request.
+
+    A single embedding is built for the query and compared to each title,
+    snippet, and URL record. The score is blended with meaningful-term coverage
+    so a generic page such as "How to Survive" cannot pass a query about a
+    crowd stampede just because it shares an action verb.
+
+    Returns small, serializable diagnostics. Callers should fall back to a
+    second provider when ``sufficient`` is false. Embeddings are cached, so the
+    same query/results do not repeatedly incur embedding work.
+    """
+    q = (query or '').strip()
+    query_terms = set(_tokens(q))
+    if not q or not results:
+        return {'sufficient': False, 'reason': 'no_results', 'best_score': 0.0,
+                'relevant_count': 0, 'scores': []}
+    q_embedding = get_embedding(q)
+    # Estimate every query term's discriminative value from THIS result set.
+    # Terms appearing on almost every candidate carry little routing evidence;
+    # rare query terms carry more. This is IDF-style constraint coverage, not a
+    # manually maintained list of verbs, domains, or safety topics.
+    corpus_terms = []
+    normalized = []
+    for item in list(results)[:12]:
+        if isinstance(item, dict):
+            title = str(item.get('title') or '')
+            snippet = str(item.get('snippet') or item.get('description') or '')
+            url = str(item.get('url') or '')
+        else:
+            title = str(getattr(item, 'title', '') or '')
+            snippet = str(getattr(item, 'snippet', '') or '')
+            url = str(getattr(item, 'url', '') or '')
+        text = f'{title}\n{snippet}\n{url}'[:3000]
+        normalized.append(text)
+        corpus_terms.append(set(_tokens(text)))
+    n_docs = len(normalized)
+    idf = {
+        term: math.log((n_docs + 1) / (1 + sum(term in doc for doc in corpus_terms))) + 1.0
+        for term in query_terms
+    }
+    idf_total = sum(idf.values()) or 1.0
+    scores = []
+    for text, result_terms in zip(normalized, corpus_terms):
+        semantic = max(0.0, cosine(q_embedding, get_embedding(text)))
+        constraint_coverage = sum(idf[term] for term in query_terms if term in result_terms) / idf_total
+        # Embeddings handle synonymy and phrasing; adaptive constraint coverage
+        # prevents generic pages from winning due to similar prose alone.
+        score = round(semantic * 0.65 + constraint_coverage * 0.35, 4)
+        scores.append((score, constraint_coverage))
+    ranked = sorted((score for score, _anchor in scores), reverse=True)
+    relevant = sum(1 for score, constraint_coverage in scores
+                   if score >= minimum_score and constraint_coverage >= 0.45)
+    best = ranked[0] if ranked else 0.0
+    # Required corroboration grows with independent query constraints rather
+    # than a fixed “three good links” heuristic. A one-term navigation request
+    # needs one strong hit; a multi-constraint request needs multiple matches.
+    required = max(1, min(n_docs, int(math.ceil(math.log2(len(query_terms) + 1)))))
+    sufficient = best >= max(minimum_score, 0.32) and relevant >= required
+    reason = 'semantic_coverage_ok' if sufficient else 'weak_semantic_coverage'
+    return {
+        'sufficient': sufficient,
+        'reason': reason,
+        'best_score': round(best, 4),
+        'relevant_count': relevant,
+        'required_relevant': required,
+        'scores': [score for score, _anchor in scores],
+        'embedding_backend': 'remote' if EMBED_API_KEY else 'local_hashing',
+    }
+
+
 # ── query understanding ──────────────────────────────────────────────────────
 _STOPWORDS = set((
     'the', 'a', 'an', 'and', 'or', 'but', 'of', 'to', 'in', 'for', 'on',
