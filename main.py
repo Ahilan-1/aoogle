@@ -4738,6 +4738,49 @@ class DataManager:
                     continue
                 if event_time >= cutoff:
                     filtered.append({**event, '_time': event_time})
+            api_keys = [key for key in self.data.get('api_keys', []) if isinstance(key, dict)]
+            plan_records = self.data.get('plan_usage', {})
+            chats_by_user = self.data.get('ai_chats', {})
+            wallets = self.data.get('api_credit_wallets', {})
+            account_usage = []
+            subscription_counts = {}
+            for user_key, user in users.items():
+                if selected_user and user_key != selected_user:
+                    continue
+                entitlement = self._entitlement_locked(user_key)
+                plan = entitlement.get('plan', 'free')
+                billing = entitlement.get('billing', {})
+                if str(billing.get('status', '')).lower() in {'active', 'trialing'}:
+                    subscription_counts[plan] = subscription_counts.get(plan, 0) + 1
+                usage = plan_records.get(user_key, {}) if isinstance(plan_records, dict) else {}
+                limits = entitlement.get('limits', {})
+                user_keys = [key for key in api_keys if str(key.get('user_id', '')) == user_key]
+                user_chats = chats_by_user.get(user_key, []) if isinstance(chats_by_user, dict) else []
+                user_chats = [chat for chat in user_chats if isinstance(chat, dict)]
+                message_count = sum(len(chat.get('messages', [])) for chat in user_chats if isinstance(chat.get('messages', []), list))
+                wallet = wallets.get(user_key, {}) if isinstance(wallets, dict) else {}
+                standard_used = int(usage.get('standard', 0) or 0)
+                deep_used = int(usage.get('deep', 0) or 0)
+                api_used = int(usage.get('api', 0) or 0)
+                account_usage.append({
+                    'user_id': user_key,
+                    'username': user.get('username', 'Unknown account'),
+                    'plan': plan,
+                    'standard_used': standard_used,
+                    'standard_left': max(0, int(limits.get('standard', 0) or 0) - standard_used),
+                    'deep_used': deep_used,
+                    'deep_left': max(0, int(limits.get('deep', 0) or 0) - deep_used),
+                    'api_used': api_used,
+                    'api_left': max(0, int(limits.get('api', 0) or 0) - api_used),
+                    'prepaid_credits': max(0, int(wallet.get('balance', 0) or 0)),
+                    'agent_keys': len(user_keys),
+                    'agent_requests': sum(int(key.get('requests_total', 0) or 0) for key in user_keys),
+                    'chat_sessions': len(user_chats),
+                    'chat_messages': message_count,
+                    'last_activity': max([str(user.get('last_action_at', '') or '')] +
+                                         [str(key.get('last_used_at', '') or '') for key in user_keys] +
+                                         [str(chat.get('updated_at', '') or '') for chat in user_chats]),
+                })
         feature_counts, daily_counts, active_users = {}, {}, set()
         for event in filtered:
             feature = event.get('feature', 'other')
@@ -4754,12 +4797,28 @@ class DataManager:
                            'feature': event.get('feature', 'other').replace('_', ' '),
                            'status': event.get('status', 'success'),
                            'created_at': event['_time'].strftime('%d %b %Y, %H:%M UTC')})
+        baseline_features = [
+            {'feature': 'Web searches', 'count': int(self.data.get('total_searches', 0) or 0)},
+            {'feature': 'AI chat sessions', 'count': sum(row['chat_sessions'] for row in account_usage)},
+            {'feature': 'AI chat messages', 'count': sum(row['chat_messages'] for row in account_usage)},
+            {'feature': 'Agent API keys', 'count': sum(row['agent_keys'] for row in account_usage)},
+            {'feature': 'Agent and API requests', 'count': sum(row['agent_requests'] for row in account_usage)},
+            {'feature': 'Standard AI answers used', 'count': sum(row['standard_used'] for row in account_usage)},
+            {'feature': 'Deep research used', 'count': sum(row['deep_used'] for row in account_usage)},
+            {'feature': 'API and MCP credits used', 'count': sum(row['api_used'] for row in account_usage)},
+        ]
+        baseline_features = [row for row in baseline_features if row['count'] > 0]
         return {'days': days, 'total_events': len(filtered), 'active_users': len(active_users),
                 'tracked_accounts': len({str(e.get('user_id', '')) for e in filtered}),
                 'feature_counts': sorted(({'feature': k.replace('_', ' '), 'count': v}
                                           for k, v in feature_counts.items()), key=lambda item: item['count'], reverse=True),
                 'daily_counts': [{'date': day, 'count': count} for day, count in sorted(daily_counts.items())],
-                'recent_events': recent, 'selected_user': selected_user}
+                'recent_events': recent, 'selected_user': selected_user,
+                'registered_accounts': len(users),
+                'active_subscriptions': sum(subscription_counts.values()),
+                'subscription_counts': subscription_counts,
+                'baseline_features': sorted(baseline_features, key=lambda item: item['count'], reverse=True),
+                'account_usage': sorted(account_usage, key=lambda item: (item['last_activity'], item['agent_requests'], item['chat_messages']), reverse=True)}
 
     def get_ai_chats(self, user_id):
         """Return all AI chat sessions for a user, newest first."""
