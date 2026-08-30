@@ -20,3 +20,7 @@ testerr.txt
 testout.txt
 benchmarks/results/
 indexer/artifacts/
+.test-venv/
+.test-runtime/
+search_intelligence.sqlite3
+search_intelligence.sqlite3.*.tmp

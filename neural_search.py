@@ -81,7 +81,7 @@ _SECURITY_CACHE = {}
 _SECURITY_CACHE_LOCK = threading.Lock()
 _SECURITY_CACHE_MAX = 10000
 _SECURITY_SCAN_LIMIT = 48000
-DETECTOR_VERSION = '3.0'
+DETECTOR_VERSION = '3.1'
 
 AMBIENT_INJECTION_RE = (
     re.compile(r'<[^>]+>', re.I),           # raw markup in plain text context
@@ -120,7 +120,12 @@ def _security_canonical_forms(raw):
     source = str(raw or '')[:_SECURITY_SCAN_LIMIT]
     decoded = html.unescape(source)
     normalized = unicodedata.normalize('NFKC', decoded)
-    normalized = re.sub(r'[\u200b\u200c\u200d\u2060\ufeff\x00-\x1f]', ' ', normalized)
+    # Format controls are commonly inserted *inside* dangerous keywords
+    # (``ig\u200bnore``). Remove them so canonical matching rejoins the token;
+    # replace actual ASCII controls with whitespace to avoid joining unrelated
+    # words across structural boundaries.
+    normalized = re.sub(r'[\u200b\u200c\u200d\u2060\ufeff]', '', normalized)
+    normalized = re.sub(r'[\x00-\x1f]', ' ', normalized)
     try:
         from urllib.parse import unquote
         normalized = unquote(normalized)

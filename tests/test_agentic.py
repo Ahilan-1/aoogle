@@ -393,7 +393,7 @@ class TestMcpReliabilityRegressions:
         assert '15' in field['description']
 
     def test_all_hosted_mcp_tools_have_review_metadata_and_output_schemas(self):
-        assert len(m.MCP_TOOLS) == 6
+        assert len(m.MCP_TOOLS) == 7
         for tool in m.MCP_TOOLS:
             assert tool.get('outputSchema', {}).get('type') == 'object'
             assert tool['annotations'] == {
@@ -401,6 +401,63 @@ class TestMcpReliabilityRegressions:
                 'destructiveHint': False,
                 'openWorldHint': False,
             }
+
+    def test_people_tool_discloses_verification_and_cost(self):
+        tool = next(t for t in m.MCP_TOOLS if t['name'] == 'arlong_people')
+        assert tool['inputSchema']['properties']['max_results']['maximum'] == 30
+        assert 'public' in tool['description'].lower()
+        assert 'unverified' in tool['description'].lower()
+
+    def test_people_confidence_cannot_be_high_with_unverified_criteria(self):
+        assert m._people_confidence(0, 3) == 'low'
+        assert m._people_confidence(2, 3) == 'medium'
+        assert m._people_confidence(3, 3) == 'high'
+
+    def test_people_evidence_preserves_education_semantics(self):
+        criteria = [
+            'Current role: senior software engineer',
+            'Current employer: Google',
+            'Education or study: machine learning',
+        ]
+        matched, unknown = m._people_evidence_criteria(
+            criteria,
+            'Senior Software Engineer at Google',
+            'Currently at Google and working on machine learning systems.',
+        )
+        assert criteria[0] in matched
+        assert criteria[1] in matched
+        assert criteria[2] in unknown
+
+    def test_people_parser_preserves_every_constraint_in_complex_brief(self):
+        query = ('Product managers currently at Google in London who studied '
+                 'computer science and worked on AI products')
+        assert m._people_heuristic_criteria(query) == [
+            'Current role: Product managers',
+            'Current employer: Google',
+            'Location: London',
+            'Education or study: computer science',
+            'Domain experience: AI products',
+        ]
+
+    def test_people_planner_merge_never_discards_different_fields(self):
+        merged = m._people_merge_criteria(
+            ['Current employer: Google', 'Location: London'],
+            ['Education or study: computer science', 'Domain experience: AI products'],
+        )
+        assert len(merged) == 4
+        assert 'Location: London' in merged
+        assert 'Domain experience: AI products' in merged
+
+    def test_people_evidence_passport_marks_missing_fields_honestly(self):
+        criteria = ['Current employer: Google', 'Location: London']
+        passport = m._people_criterion_records(
+            criteria, [criteria[0]], 'Product Manager at Google',
+            'Currently at Google.', 'https://www.linkedin.com/in/example',
+        )
+        assert passport[0]['status'] == 'verified'
+        assert passport[0]['source_url'].endswith('/example')
+        assert passport[1]['status'] == 'unverified'
+        assert passport[1]['evidence'] == ''
 
     def test_blocked_source_is_never_synthesis_eligible(self):
         assert m._arlong_source_is_blocked({

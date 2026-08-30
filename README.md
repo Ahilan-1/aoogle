@@ -38,7 +38,7 @@ GET /api/search?q=your+query
 Two access tiers:
 
 - **Tokenless** — 2 requests per hour per IP address. For occasional, exploratory use.
-- **Registered** — create a free account, accept the [Terms of Service](https://arlong.org/terms-of-service), and get an API key with a burst limit of **80 requests per 30 minutes** and a Free allowance of **100 API/MCP requests per month**. Founder and Pro include 2,000 per billing period. Keys and usage live at [`/api/dashboard`](https://arlong.org/api/dashboard).
+- **Registered** — create a free account, accept the [Terms of Service](https://arlong.org/terms-of-service), and get an API key with a burst limit of **80 requests per 30 minutes**. Free includes 30 API/MCP credits every three days; paid allowances are listed on the membership page. Keys and usage live in the Arlong dashboard.
 
 Pass your key via the `Authorization` header (`Authorization: Bearer al_...`) or the `key` query parameter.
 
@@ -51,6 +51,7 @@ MCP search profiles are explicit so agents can control latency and context use:
 - `arlong_quick` — plain links only; no extraction or AI evaluation (1 credit)
 - `arlong_search` — balanced semantic relevance, trust signals, and previews (1 credit)
 - `arlong_deep` — parallel extraction and corroboration across up to 20 sources (2 credits)
+- `arlong_people` — public professional-profile discovery with criterion verification (2 credits)
 - `arlong_extract` — clean text from one public URL (1 credit)
 - `arlong_answer` — grounded cited synthesis (3 credits)
 - `arlong_status` — capabilities and live health (free)
@@ -88,7 +89,11 @@ The app is Flask-based and ready for any WSGI server. A `railway.json` is includ
 - DuckDuckGo HTML endpoint (web results)
 - Bing Images (image results)
 - Google Suggest API (autocomplete fallback)
-- In-memory caching (Redis optional)
+- Bounded in-process caching (no always-on Redis service required)
+- PostgreSQL as the sole mutable production datastore
+- Immutable read-only SQLite lookups for the blocklist and Tranco authority data
+- Verified Railway builds remove the large JSON inputs from the runtime image
+- Gzip-compressed daily recovery snapshots with seven restore points
 - Chart.js (live stats dashboard)
 
 ## License

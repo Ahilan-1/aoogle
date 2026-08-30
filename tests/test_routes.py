@@ -262,17 +262,12 @@ class TestCommunitySupport:
         assert response.status_code == 302
         assert '/login' in response.location or '/signup' in response.location
 
-    def test_ai_chat_includes_responsive_appearance_controls(self, client):
+    def test_retired_ai_chat_redirects_to_agent_playground(self, client):
         self._login_user(client, 'appearanceuser')
         response = client.get('/ai/chat')
-        assert response.status_code == 200
-        assert b'id="appearance-open"' in response.data
-        assert b'data-bg="gradient"' in response.data
-        assert b'id="background-file"' in response.data
-        assert b'arlong-chat-appearance-v1' in response.data
-        assert b'id="deep-info-modal"' in response.data
-        assert b'How Deep Search works' in response.data
-        assert b'Synthesizing the deep report' in response.data
+        assert response.status_code == 302
+        assert '/dashboard' in response.location
+        assert 'tab=agent' in response.location
 
     def test_openai_apps_domain_verification_challenge(self, client):
         response = client.get('/.well-known/openai-apps-challenge')

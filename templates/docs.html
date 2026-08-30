@@ -351,6 +351,10 @@ results.<span class="fn">slice</span>(<span class="n">0</span>, <span class="n">
             <td>Parallel extraction and semantic analysis across up to 20 sources, with trust ranking and claim-level corroboration.</td>
         </tr>
         <tr>
+            <td><code>arlong_people</code></td>
+            <td>Find public professional profiles from natural-language criteria. Agentic mode runs complementary constraint searches and returns a field-level Evidence Passport with verified and unverified requirements separated. Uses 2 API/MCP credits.</td>
+        </tr>
+        <tr>
             <td><code>arlong_extract</code></td>
             <td>Extract up to 12,000 characters of clean page text with reputation and prompt-injection checks.</td>
         </tr>
@@ -367,6 +371,7 @@ results.<span class="fn">slice</span>(<span class="n">0</span>, <span class="n">
     <h3>Tool schemas</h3>
     <div class="tabs" data-group="mcp-tools">
         <button class="tab-btn active" onclick="switchTab('mcp-tools','search')">arlong_search</button>
+        <button class="tab-btn" onclick="switchTab('mcp-tools','people')">arlong_people</button>
         <button class="tab-btn" onclick="switchTab('mcp-tools','extract')">arlong_extract</button>
         <button class="tab-btn" onclick="switchTab('mcp-tools','answer')">arlong_answer</button>
         <button class="tab-btn" onclick="switchTab('mcp-tools','status')">arlong_status</button>
@@ -382,6 +387,20 @@ results.<span class="fn">slice</span>(<span class="n">0</span>, <span class="n">
       <span class="n">"page"</span>:  { <span class="n">"type"</span>: <span class="s">"integer"</span>, <span class="n">"default"</span>: <span class="n">1</span> },
       <span class="n">"mode"</span>:  { <span class="n">"enum"</span>: [<span class="s">"instant"</span>, <span class="s">"balanced"</span>, <span class="s">"deep"</span>] },
       <span class="n">"max_results"</span>: { <span class="n">"type"</span>: <span class="s">"integer"</span>, <span class="n">"maximum"</span>: <span class="n">20</span> }
+    },
+    <span class="n">"required"</span>: [<span class="s">"query"</span>]
+  }
+}</pre>
+    </div>
+    <div class="tab-panel" data-group="mcp-tools" data-tab="people">
+<pre>{
+  <span class="n">"name"</span>: <span class="s">"arlong_people"</span>,
+  <span class="n">"inputSchema"</span>: {
+    <span class="n">"type"</span>: <span class="s">"object"</span>,
+    <span class="n">"properties"</span>: {
+      <span class="n">"query"</span>: { <span class="n">"type"</span>: <span class="s">"string"</span> },
+      <span class="n">"max_results"</span>: { <span class="n">"type"</span>: <span class="s">"integer"</span>, <span class="n">"minimum"</span>: <span class="n">1</span>, <span class="n">"maximum"</span>: <span class="n">30</span> },
+      <span class="n">"mode"</span>: { <span class="n">"enum"</span>: [<span class="s">"normal"</span>, <span class="s">"agentic"</span>], <span class="n">"default"</span>: <span class="s">"agentic"</span> }
     },
     <span class="n">"required"</span>: [<span class="s">"query"</span>]
   }

@@ -1,16 +1,11 @@
-"""Optional Postgres mirror backend for the data.json persistence layer.
+"""Authoritative PostgreSQL persistence for Arlong application state.
 
-Design (dual-write, PG-first reads):
-  - data.json remains the source of truth (writes always go there first).
-  - On every successful data.json save, the same top-level keys are mirrored
-    into Postgres as JSONB rows (one row per data.json key) via pg_save_all().
-  - Reads try Postgres first via pg_load_all(); any key missing from PG falls
-    back to the data.json copy; if PG is unreachable the whole doc comes from
-    data.json.
-
-Everything is best-effort: a Postgres failure is logged and never breaks the
-application, because data.json was already written. PG is only enabled when a
-DATABASE_URL environment variable is present AND psycopg2 is installed.
+The first production migration imports every top-level key from the legacy
+JSON document into an ``app_data`` JSONB row. Writes are transactional and
+replace the complete logical document without dual-writing a mutable file.
+This lossless intermediate schema prevents account, billing, OAuth, history,
+or analytics fields from disappearing while those domains are normalized into
+dedicated tables over time.
 """
 
 import json
@@ -33,7 +28,7 @@ _pool = None
 _pool_lock = threading.Lock()
 _schema_ready = False
 _schema_lock = threading.Lock()
-_last_save_ok = None  # None=unknown, True/False = result of last mirror attempt
+_last_save_ok = None  # None=unknown, True/False = result of last authoritative write
 
 
 def _dsn():
@@ -57,7 +52,7 @@ def _safe_dsn():
 
 
 def enabled():
-    """True when Postgres mirroring is configured and available."""
+    """True when the authoritative PostgreSQL backend is configured."""
     return bool(_dsn() and _HAS_PSYCOPG2)
 
 
@@ -72,7 +67,10 @@ def _get_pool():
     with _pool_lock:
         if _pool is None:
             try:
-                _pool = psycopg2.pool.SimpleConnectionPool(
+                # Gunicorn runs one process with eight request threads. Use
+                # psycopg2's synchronized pool; SimpleConnectionPool is not
+                # safe to share across those threads.
+                _pool = psycopg2.pool.ThreadedConnectionPool(
                     1, 5, _dsn(), sslmode=_sslmode(), connect_timeout=5,
                 )
             except Exception as e:
@@ -150,11 +148,11 @@ def pg_load_all():
 
 
 def pg_save_all(data):
-    """Best-effort mirror of the full data dict into app_data.
+    """Transactionally replace the complete logical document in PostgreSQL.
 
     Upserts one JSONB row per top-level key in a single transaction and prunes
-    rows whose key no longer exists in the source doc. Returns True on success,
-    False when disabled or on failure (callers must never depend on it).
+    rows whose key no longer exists in the submitted document. Returns True on
+    commit and False on any failure; the caller must fail the mutation closed.
     """
     global _last_save_ok
     if not enabled():
@@ -202,10 +200,57 @@ def pg_save_all(data):
         _release(pool, conn)
 
 
-def last_save_ok():
-    """True if the most recent mirror write succeeded, False if it failed.
+def pg_seed_if_empty(data):
+    """Atomically import a complete legacy document only into an empty DB.
 
-    None means no mirror attempt has happened yet this process (e.g. fresh
+    This is deliberately separate from pg_save_all: two app instances starting
+    together cannot overwrite a database that another instance has already
+    seeded. Every top-level key and JSON value is preserved losslessly.
+    """
+    global _last_save_ok
+    if not isinstance(data, dict) or not data or not init_schema():
+        return False
+    pool = _get_pool()
+    if pool is None:
+        return False
+    conn = None
+    try:
+        conn = pool.getconn()
+        with conn.cursor() as cur:
+            cur.execute("SELECT pg_advisory_xact_lock(7140622026)")
+            cur.execute("SELECT COUNT(*) FROM app_data")
+            if int(cur.fetchone()[0]) != 0:
+                conn.rollback()
+                return False
+            rows = [(key, _pg_extras.Json(value)) for key, value in data.items()
+                    if isinstance(key, str)]
+            cur.executemany(
+                "INSERT INTO app_data (key, value, updated_at) VALUES (%s, %s, now())",
+                rows,
+            )
+            cur.execute("SELECT COUNT(*) FROM app_data")
+            if int(cur.fetchone()[0]) != len(rows):
+                raise RuntimeError('seed row count mismatch')
+        conn.commit()
+        _last_save_ok = True
+        return True
+    except Exception as exc:
+        try:
+            if conn is not None:
+                conn.rollback()
+        except Exception:
+            pass
+        log.error('PG seed failed for %s: %s', _safe_dsn(), exc)
+        _last_save_ok = False
+        return False
+    finally:
+        _release(pool, conn)
+
+
+def last_save_ok():
+    """True if the most recent authoritative write succeeded.
+
+    None means no write attempt has happened yet this process (e.g. fresh
     start after a seed) - callers may treat None as 'trust Postgres'.
     """
     return _last_save_ok
