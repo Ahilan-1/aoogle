@@ -30,11 +30,14 @@ def runner():
 @pytest.fixture(autouse=True)
 def clean_data():
     original_file = DATA_FILE
+    import main as m
+    original_backend = m.PERSISTENCE_BACKEND
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
         temp_path = f.name
         json.dump({"reports": [], "blacklist": {}, "total_searches": 0, "celebration": "", "announcement": ""}, f)
-    import main as m
     m.DATA_FILE = temp_path
+    m.PERSISTENCE_BACKEND = 'json'
+    m._invalidate_json_cache()
     m.data_manager = DataManager()
     yield
     try:
@@ -42,4 +45,6 @@ def clean_data():
     except:
         pass
     m.DATA_FILE = original_file
+    m.PERSISTENCE_BACKEND = original_backend
+    m._invalidate_json_cache()
     m.data_manager = DataManager()

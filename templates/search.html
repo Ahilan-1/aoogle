@@ -1205,6 +1205,13 @@
         .fb-msg.ok{display:block;background:#1d1d1d;border:1px solid #3a3a3a;color:#e8e8e8}
         .fb-msg.err{display:block;background:#1d1d1d;border:1px solid #5a3a3a;color:#ffc2c2}
     </style>
+<style>
+/* Original Arlong wave wordmark. This is the shared visual signature. */
+.glogo,.results-header .mini-logo{display:inline-flex;align-items:center;font-family:'Product Sans',Arial,sans-serif!important;font-weight:400;letter-spacing:-2px!important;background:none!important;color:var(--text)!important;animation:none!important}
+.glogo:before,.results-header .mini-logo:before{display:none!important}
+.glogo span,.mini-logo span{background:linear-gradient(to top,#0066cc,#3399ff 50%,var(--text) 50%)!important;background-size:100% 200%!important;-webkit-background-clip:text!important;background-clip:text!important;color:transparent!important;animation:arlong-wave 4s ease-in-out infinite!important;text-shadow:none!important}
+.glogo span:nth-child(2),.mini-logo span:nth-child(2){animation-delay:.15s!important}.glogo span:nth-child(3),.mini-logo span:nth-child(3){animation-delay:.3s!important}.glogo span:nth-child(4),.mini-logo span:nth-child(4){animation-delay:.45s!important}.glogo span:nth-child(5),.mini-logo span:nth-child(5){animation-delay:.6s!important}.glogo span:nth-child(6),.mini-logo span:nth-child(6){animation-delay:.75s!important}
+</style>
 </head>
 <body data-loggedin="{% if session.user_id %}true{% else %}false{% endif %}" class="dark-mode portal-mode">
     <canvas id="fireworks-canvas"></canvas>
