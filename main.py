@@ -14021,17 +14021,30 @@ def _mcp_call_tool(name, args):
     if name == 'arlong_extract':
         url = (args.get('url') or '').strip()
         if not url or not _is_safe_url(url):
-            raise ValueError('a safe public HTTP(S) url is required')
+            raise ValueError('url must resolve to a public HTTP(S) endpoint')
         limit = max(500, min(int(args.get('max_chars') or 8000), 12000))
         query = (args.get('query') or urlparse(url).netloc).strip()
         raw = {'url': url, 'title': '', 'snippet': '', 'domain': urlparse(url).netloc}
         item = _arlong_eval_result(query, raw, 1, fetch_content=True, content_max_chars=limit)
+        extraction_status = item.get('extraction_status') or 'failed'
+        security = item.get('security_analysis') or {}
+        if not security:
+            security = {
+                'flagged': False,
+                'flags': ['EXTRACTION_FAILED'],
+                'reason': 'page content was not successfully security-scanned',
+                'risk_score': 0,
+                'risk_level': 'unknown',
+                'action': 'unknown',
+                'scanned_chars': 0,
+                'detector_version': 'unavailable',
+            }
         return json.dumps({'url': url, 'content': item.get('content', ''),
-                           'extraction_status': item.get('extraction_status', 'failed'),
+                           'extraction_status': extraction_status,
                            'ai_evaluation': item.get('ai_evaluation', {}),
                            'reputation': item.get('reputation', {}),
-                           'threat_flags': item.get('threat_flags', []),
-                           'security_analysis': item.get('security_analysis', {})}, indent=2)
+                           'threat_flags': item.get('threat_flags') or security.get('flags', []),
+                           'security_analysis': security}, indent=2)
     if name == 'arlong_answer':
         query = (args.get('query') or '').strip()
         if not query:
@@ -14138,15 +14151,39 @@ def mcp_endpoint():
         try:
             text = _mcp_call_tool(name, arguments)
             structured = json.loads(text)
+            if (name in ('arlong_quick', 'arlong_search', 'arlong_deep') or
+                    (name == 'arlong_extract' and structured.get('extraction_status') == 'ok')):
+                try:
+                    data_manager.record_incident_recovery('search_degraded')
+                except Exception as recovery_error:
+                    app.logger.warning('Incident recovery telemetry failed: %s',
+                                       str(recovery_error)[:160])
             return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {
                 'content': [{'type': 'text', 'text': text}],
                 'structuredContent': structured,
             }})
+        except ValueError as e:
+            # Invalid tool arguments are caller errors, not operational
+            # incidents. In particular, a private or DNS-unresolvable extract
+            # URL must never create a global search-degraded incident.
+            return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'error': {
+                'code': -32602,
+                'message': str(e)[:240] or 'Invalid tool arguments',
+            }})
         except AIAllModelsFailedError as e:
             return _mcp_outage_result(msg_id, 'provider_exhausted')
         except Exception as e:
-            app.logger.error(f"MCP tool error: {e}")
-            return _mcp_outage_result(msg_id, 'search_degraded')
+            app.logger.error('MCP tool %s error: %s', name, str(e)[:240])
+            if name == 'arlong_extract':
+                return _mcp_extract_failure_result(msg_id, (arguments or {}).get('url', ''))
+            if name in ('arlong_quick', 'arlong_search', 'arlong_deep'):
+                return _mcp_outage_result(msg_id, 'search_degraded')
+            # A single unexpected non-search tool failure is not evidence of
+            # a system-wide search outage.
+            return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'error': {
+                'code': -32603,
+                'message': 'The requested tool failed internally.',
+            }})
 
     return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'error': {'code': -32601, 'message': f'Method not found: {method}'}})
 
@@ -16432,6 +16469,34 @@ def _mcp_outage_result(msg_id, kind='provider_exhausted'):
     }
     return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {
         'isError': True, 'content': [{'type': 'text', 'text': json.dumps(text)}]
+    }})
+
+
+def _mcp_extract_failure_result(msg_id, url=''):
+    """Return an extract-local failure without opening a search incident."""
+    payload = {
+        'error': 'extraction_failed',
+        'message': 'Arlong could not retrieve and security-scan this page.',
+        'url': str(url or '')[:2000],
+        'content': '',
+        'extraction_status': 'failed',
+        'threat_flags': ['EXTRACTION_FAILED'],
+        'security_analysis': {
+            'flagged': False,
+            'flags': ['EXTRACTION_FAILED'],
+            'reason': 'page retrieval or security screening failed',
+            'risk_score': 0,
+            'risk_level': 'unknown',
+            'action': 'unknown',
+            'scanned_chars': 0,
+            'detector_version': 'unavailable',
+        },
+        'retry_after_seconds': 30,
+    }
+    return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {
+        'isError': True,
+        'content': [{'type': 'text', 'text': json.dumps(payload)}],
+        'structuredContent': payload,
     }})
 
 

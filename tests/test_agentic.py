@@ -181,6 +181,70 @@ class TestSecurityDisposition:
         assert m._search_preview_for_model(result) is None
 
 
+class TestMcpExtractFailureIsolation:
+    @staticmethod
+    def _call(client):
+        return client.post('/mcp', json={
+            'jsonrpc': '2.0',
+            'id': 7,
+            'method': 'tools/call',
+            'params': {
+                'name': 'arlong_extract',
+                'arguments': {'url': 'https://example.test/page'},
+            },
+        })
+
+    def test_invalid_extract_url_is_invalid_params_not_incident(self, client, monkeypatch):
+        monkeypatch.setattr(m, '_service_blocked', lambda: None)
+        monkeypatch.setattr(m, '_arlong_api_gate', lambda credits=1: (None, None))
+        monkeypatch.setattr(m, '_mcp_call_tool',
+                            lambda *a, **k: (_ for _ in ()).throw(ValueError('public URL required')))
+        monkeypatch.setattr(m, '_open_operational_incident',
+                            lambda *a, **k: pytest.fail('invalid input opened an incident'))
+        payload = self._call(client).get_json()
+        assert payload['error']['code'] == -32602
+        assert 'result' not in payload
+
+    def test_extract_exception_returns_local_unknown_state(self, client, monkeypatch):
+        monkeypatch.setattr(m, '_service_blocked', lambda: None)
+        monkeypatch.setattr(m, '_arlong_api_gate', lambda credits=1: (None, None))
+        monkeypatch.setattr(m, '_mcp_call_tool',
+                            lambda *a, **k: (_ for _ in ()).throw(RuntimeError('fetch failed')))
+        monkeypatch.setattr(m, '_open_operational_incident',
+                            lambda *a, **k: pytest.fail('extract failure opened a search incident'))
+        payload = self._call(client).get_json()['result']
+        structured = payload['structuredContent']
+        assert payload['isError'] is True
+        assert structured['extraction_status'] == 'failed'
+        assert structured['security_analysis']['action'] == 'unknown'
+        assert structured['security_analysis']['scanned_chars'] == 0
+
+    def test_extract_missing_security_report_is_never_allow(self, monkeypatch):
+        monkeypatch.setattr(m, '_is_safe_url', lambda url: True)
+        monkeypatch.setattr(m, '_arlong_eval_result', lambda *a, **k: {})
+        payload = json.loads(m._mcp_call_tool(
+            'arlong_extract', {'url': 'https://example.test/page'}))
+        assert payload['extraction_status'] == 'failed'
+        assert payload['security_analysis']['action'] == 'unknown'
+        assert payload['threat_flags'] == ['EXTRACTION_FAILED']
+
+    def test_recovery_telemetry_cannot_break_successful_extract(self, client, monkeypatch):
+        monkeypatch.setattr(m, '_service_blocked', lambda: None)
+        monkeypatch.setattr(m, '_arlong_api_gate', lambda credits=1: (None, None))
+        monkeypatch.setattr(m, '_mcp_call_tool', lambda *a, **k: json.dumps({
+            'url': 'https://example.test/page',
+            'content': 'verified page text',
+            'extraction_status': 'ok',
+            'threat_flags': [],
+            'security_analysis': {'action': 'allow'},
+        }))
+        monkeypatch.setattr(m.data_manager, 'record_incident_recovery',
+                            lambda *a, **k: (_ for _ in ()).throw(RuntimeError('storage down')))
+        payload = self._call(client).get_json()
+        assert 'error' not in payload
+        assert payload['result']['structuredContent']['extraction_status'] == 'ok'
+
+
 class TestProviderOrder:
     def _result(self, source, url):
         return m.SearchResult(source + ' result', url, 'direct specific evidence', source=source)
