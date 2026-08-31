@@ -49,9 +49,8 @@ Compatible MCP clients discover authorization through
 MCP search profiles are explicit so agents can control latency and context use:
 
 - `arlong_quick` — plain links only; no extraction or AI evaluation (1 credit)
-- `arlong_search` — balanced semantic relevance, trust signals, and previews (1 credit)
-- `arlong_deep` — parallel extraction and corroboration across up to 20 sources (2 credits)
-- `arlong_people` — public professional-profile discovery with criterion verification (2 credits)
+- `arlong_search` — Serper-primary neural relevance, trust signals, and screened previews (1 credit)
+- `arlong_deep` — parallel Arlong research lanes, extraction, and claim-level evidence across up to 20 sources (2 credits)
 - `arlong_extract` — clean text from one public URL (1 credit)
 - `arlong_answer` — grounded cited synthesis (3 credits)
 - `arlong_status` — capabilities and live health (free)

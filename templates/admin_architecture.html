@@ -240,9 +240,9 @@ var CLIENT_HEARTBEAT = {status:'unknown', samples:[], failures:0, lastOk:0};
 var NODES = [
   {id:'query',     label:'Query Input',       x:40,  y:30,  layer:'input',   color:'var(--link)',   sub:'Natural language + voice',     metric_key:null},
   {id:'understand',label:'Neural Understanding',x:40,  y:160, layer:'input',   color:'var(--link)',   sub:'Terms, polysemy, intent',      metric_key:null},
-  {id:'embed',     label:'Embedding Cache',    x:40,  y:290, layer:'input',   color:'var(--link)',   sub:'512-d local LRU',              metric_key:null, toggle:'cache'},
-  {id:'ddg',       label:'DDG Engine',         x:280, y:30,  layer:'retrieval',color:'var(--green)',  sub:'HTML + ddgs + site search',    metric_key:'internal_search'},
-  {id:'serper',    label:'Serper Fallback',    x:520, y:30,  layer:'retrieval',color:'var(--green)',  sub:'Google API · key rotation',    metric_key:'serper_fallback'},
+  {id:'embed',     label:'Neural Embeddings',  x:40,  y:290, layer:'input',   color:'var(--link)',   sub:'Gemini semantic vectors + LRU',metric_key:null, toggle:'cache'},
+  {id:'serper',    label:'Serper Primary',     x:280, y:30,  layer:'retrieval',color:'var(--green)',  sub:'Live web · key rotation',      metric_key:'serper_primary'},
+  {id:'puri',      label:'Puri Secondary',     x:520, y:30,  layer:'retrieval',color:'var(--green)',  sub:'Semantic coverage recovery',   metric_key:'puri_secondary'},
   {id:'fetch',     label:'Page Fetch',         x:280, y:160, layer:'retrieval',color:'var(--green)',  sub:'ThreadPool · 6s budget',       metric_key:'page_fetch', toggle:'cache'},
   {id:'relevance', label:'Relevance Gate',     x:280, y:290, layer:'eval',     color:'var(--orange)', sub:'Cosine sim >= 0.35',           metric_key:null},
   {id:'inject',    label:'Injection Detector',  x:520, y:160, layer:'eval',     color:'var(--orange)', sub:'Heuristics + LLM fallback',    metric_key:null, toggle:'threat'},
@@ -256,8 +256,8 @@ var NODES = [
 ];
 
 var EDGES = [
-  ['query','understand'],['understand','ddg'],['understand','embed'],
-  ['ddg','fetch'],['serper','fetch'],['understand','serper'],
+  ['query','understand'],['understand','serper'],['understand','embed'],
+  ['serper','fetch'],['puri','fetch'],['understand','puri'],
   ['embed','relevance'],['fetch','relevance'],
   ['relevance','inject'],['inject','blocked'],['relevance','blocked'],
   ['inject','corrobor'],['relevance','corrobor'],

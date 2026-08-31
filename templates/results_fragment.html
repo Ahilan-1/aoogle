@@ -53,9 +53,9 @@
                 </div>
             {% endif %}
 
-            {% if debug_search and serper_fallback %}
-            <div class="notice-banner warning" id="serper-notice">
-                <strong>Fresh-source check used.</strong> We switched to a live backup index because the first result set was not specific enough for this query.
+            {% if debug_search and puri_secondary %}
+            <div class="notice-banner warning" id="secondary-index-notice">
+                <strong>Secondary coverage added.</strong> Arlong consulted its secondary index because the primary live-web results did not fully cover this query.
             </div>
             {% endif %}
 

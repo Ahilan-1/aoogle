@@ -7,6 +7,7 @@ Bang redirects are answered server-side on `/search`. The tests below exercise
 the current behavior.
 """
 from urllib.parse import quote
+import main as m
 
 
 class TestRoutes:
@@ -20,11 +21,18 @@ class TestRoutes:
         assert resp.status_code == 200
         assert resp.data == b'ok'
 
+    def test_people_search_is_discontinued(self, client):
+        assert client.get('/people').status_code == 404
+        assert client.get('/api/arlong/people?query=engineers').status_code == 404
+        assert client.post('/api/people/search', json={
+            'query': 'software engineers',
+        }).status_code == 404
+        assert 'arlong_people' not in {tool['name'] for tool in m.MCP_TOOLS}
+
     def test_mcp_oauth_accepts_existing_arlong_password_account(self, client):
         import base64
         import hashlib
         from urllib.parse import parse_qs, urlparse
-        import main as m
 
         user, error = m.data_manager.create_user(
             'oauthreviewer', 'strong-review-password', 'none', 'none',

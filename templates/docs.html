@@ -252,8 +252,18 @@ results.<span class="fn">slice</span>(<span class="n">0</span>, <span class="n">
   <span class="n">"sources"</span>: [
     {<span class="n">"title"</span>: <span class="s">"..."</span>, <span class="n">"url"</span>: <span class="s">"https://..."</span>, <span class="n">"snippet"</span>: <span class="s">"..."</span>}
   ],
-  <span class="n">"epistemic_state"</span>: <span class="s">"4 sources examined; 3 agree on a common claim"</span>
+  <span class="n">"epistemic_state"</span>: <span class="s">"4 independent domains examined; 3 contain a closely overlapping claim (not a factuality verdict)"</span>
 }</pre>
+
+    <h3>Security states</h3>
+    <p><code>security_analysis.action</code> is <code>allow</code>, <code>review</code>, <code>block</code>, or <code>unknown</code>. Review content is sanitised and may be used cautiously; blocked content is withheld. Unknown means no raw document was successfully scanned and can never be treated as allow.</p>
+    <table>
+        <tr><th>Risk level</th><th>Meaning</th><th>Action</th></tr>
+        <tr><td><code>none / low</code></td><td>No model-directed threat; low-confidence structural signal at most.</td><td>Allow.</td></tr>
+        <tr><td><code>review</code></td><td>Ambiguous instruction-like or hidden-page features.</td><td>Use only sanitised visible content.</td></tr>
+        <tr><td><code>high / critical</code></td><td>Instruction override, concealed model direction, credential/tool threat, or unsafe fetch target.</td><td>Block content.</td></tr>
+        <tr><td><code>unknown</code></td><td>Retrieval or security preflight failed; <code>scanned_chars</code> is zero.</td><td>Return no content.</td></tr>
+    </table>
 
     <hr class="hr">
 
@@ -344,23 +354,19 @@ results.<span class="fn">slice</span>(<span class="n">0</span>, <span class="n">
         </tr>
         <tr>
             <td><code>arlong_search</code></td>
-            <td>Web search with relevance scores, reputation/trust status, threat flags, and corroboration report showing how many independent sources agree.</td>
+            <td>Serper-primary web search with neural relevance, independent reputation/security states, screened content, and claim-overlap telemetry.</td>
         </tr>
         <tr>
             <td><code>arlong_deep</code></td>
-            <td>Parallel extraction and semantic analysis across up to 20 sources, with trust ranking and claim-level corroboration.</td>
-        </tr>
-        <tr>
-            <td><code>arlong_people</code></td>
-            <td>Find public professional profiles from natural-language criteria. Agentic mode runs complementary constraint searches and returns a field-level Evidence Passport with verified and unverified requirements separated. Uses 2 API/MCP credits.</td>
+            <td>Parallel Arlong research lanes and semantic analysis across up to 20 sources, with trust ranking, evidence-gap repair, and claim-level records.</td>
         </tr>
         <tr>
             <td><code>arlong_extract</code></td>
-            <td>Extract up to 12,000 characters of clean page text with reputation and prompt-injection checks.</td>
+            <td>Extract up to 12,000 characters of clean page text with prompt-injection checks and an explicit <code>extraction_status</code>.</td>
         </tr>
         <tr>
             <td><code>arlong_answer</code></td>
-            <td>Grounded AI answer with cited sources and epistemic state (e.g. "4 sources examined; 3 agree on a common claim").</td>
+            <td>Grounded AI answer with cited sources, explicit evidence claims, and an epistemic state that distinguishes textual overlap from factual verification.</td>
         </tr>
         <tr>
             <td><code>arlong_status</code></td>
@@ -371,7 +377,6 @@ results.<span class="fn">slice</span>(<span class="n">0</span>, <span class="n">
     <h3>Tool schemas</h3>
     <div class="tabs" data-group="mcp-tools">
         <button class="tab-btn active" onclick="switchTab('mcp-tools','search')">arlong_search</button>
-        <button class="tab-btn" onclick="switchTab('mcp-tools','people')">arlong_people</button>
         <button class="tab-btn" onclick="switchTab('mcp-tools','extract')">arlong_extract</button>
         <button class="tab-btn" onclick="switchTab('mcp-tools','answer')">arlong_answer</button>
         <button class="tab-btn" onclick="switchTab('mcp-tools','status')">arlong_status</button>
@@ -387,20 +392,6 @@ results.<span class="fn">slice</span>(<span class="n">0</span>, <span class="n">
       <span class="n">"page"</span>:  { <span class="n">"type"</span>: <span class="s">"integer"</span>, <span class="n">"default"</span>: <span class="n">1</span> },
       <span class="n">"mode"</span>:  { <span class="n">"enum"</span>: [<span class="s">"instant"</span>, <span class="s">"balanced"</span>, <span class="s">"deep"</span>] },
       <span class="n">"max_results"</span>: { <span class="n">"type"</span>: <span class="s">"integer"</span>, <span class="n">"maximum"</span>: <span class="n">20</span> }
-    },
-    <span class="n">"required"</span>: [<span class="s">"query"</span>]
-  }
-}</pre>
-    </div>
-    <div class="tab-panel" data-group="mcp-tools" data-tab="people">
-<pre>{
-  <span class="n">"name"</span>: <span class="s">"arlong_people"</span>,
-  <span class="n">"inputSchema"</span>: {
-    <span class="n">"type"</span>: <span class="s">"object"</span>,
-    <span class="n">"properties"</span>: {
-      <span class="n">"query"</span>: { <span class="n">"type"</span>: <span class="s">"string"</span> },
-      <span class="n">"max_results"</span>: { <span class="n">"type"</span>: <span class="s">"integer"</span>, <span class="n">"minimum"</span>: <span class="n">1</span>, <span class="n">"maximum"</span>: <span class="n">30</span> },
-      <span class="n">"mode"</span>: { <span class="n">"enum"</span>: [<span class="s">"normal"</span>, <span class="s">"agentic"</span>], <span class="n">"default"</span>: <span class="s">"agentic"</span> }
     },
     <span class="n">"required"</span>: [<span class="s">"query"</span>]
   }

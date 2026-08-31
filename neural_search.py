@@ -91,22 +91,35 @@ AMBIENT_INJECTION_RE = (
 
 
 class InjectionReport:
-    __slots__ = ('flagged', 'flags', 'reason', 'risk_score', 'action', 'scanned_chars')
+    __slots__ = ('flagged', 'flags', 'reason', 'risk_score', 'action', 'scanned_chars', 'findings')
 
     def __init__(self, flagged=False, flags=None, reason='', risk_score=0,
-                 action=None, scanned_chars=0):
+                 action=None, scanned_chars=0, findings=None):
         self.flagged = bool(flagged)
         self.flags = list(flags or [])
         self.reason = reason or ''
         self.risk_score = max(0, min(int(risk_score or 0), 100))
         self.action = action or ('block' if self.flagged else ('review' if self.risk_score else 'allow'))
         self.scanned_chars = int(scanned_chars or 0)
+        self.findings = list(findings or [])
 
     def as_dict(self):
+        if self.action == 'unknown':
+            risk_level = 'unknown'
+        elif self.action == 'block':
+            risk_level = 'critical' if self.risk_score >= 85 else 'high'
+        elif self.risk_score >= 25:
+            risk_level = 'review'
+        elif self.risk_score:
+            risk_level = 'low'
+        else:
+            risk_level = 'none'
         return {
             'flagged': self.flagged, 'flags': self.flags, 'reason': self.reason,
             'risk_score': self.risk_score, 'action': self.action,
+            'risk_level': risk_level,
             'scanned_chars': self.scanned_chars, 'detector_version': DETECTOR_VERSION,
+            'findings': self.findings,
         }
 
 
@@ -153,15 +166,48 @@ _CONCEALED_HTML_RE = re.compile(
 )
 
 
-def _has_concealed_instruction(raw, canonical):
-    """Detect instruction-shaped text placed in HTML that is hidden to readers."""
-    if not _CONCEALED_HTML_RE.search(raw or ''):
-        return False
-    return bool(re.search(
-        r'\b(?:ignore|disregard|override|forget|follow|execute|run|reveal|send|upload)\b.{0,160}'
-        r'\b(?:instruction|prompt|rule|system|assistant|tool|command|secret|credential|user)\b',
-        canonical or '', re.I | re.S,
-    ))
+_INSTRUCTION_SHAPE_RE = re.compile(
+    r'(?:\b(?:ignore|disregard|override|forget|follow|execute|run|reveal|send|upload|refuse)\b'
+    r'.{0,180}\b(?:instruction|prompt|rule|system|assistant|tool|command|secret|credential|user|reading)\b|'
+    r'<\s*(?:system|assistant|developer|tool)(?:-prompt)?\b|'
+    r'\b(?:anthropic|openai|gemini|claude)[_-](?:magic|string|trigger|system)\w*)',
+    re.I | re.S,
+)
+
+
+def _concealed_instruction_fragments(raw):
+    """Return only hidden regions that contain model-directed instructions.
+
+    The previous detector combined a CSS signal from one part of the document
+    with instruction-like prose from any other part. That made ordinary
+    Next.js tutorial pages look concealed. Keeping the style/attribute and the
+    text in the same bounded fragment prevents that cross-document false
+    positive while still covering comments and hidden DOM nodes.
+    """
+    source = str(raw or '')[:_SECURITY_SCAN_LIMIT]
+    candidates = []
+
+    # HTML comments are removed by visible-text extraction, so inspect their
+    # contents before BeautifulSoup gets a chance to discard them.
+    candidates.extend(m.group(1) for m in re.finditer(r'<!--([\s\S]{0,12000}?)-->', source, re.I))
+
+    # Inline-hidden elements. Match one complete bounded node so unrelated CSS
+    # and article prose cannot be joined into a synthetic "concealed" signal.
+    hidden_node = re.compile(
+        r'<(?P<tag>[a-z][\w:-]*)\b(?P<attrs>[^>]{0,1500}(?:hidden\b|aria-hidden\s*=\s*["\']?true|'
+        r'style\s*=\s*["\'][^"\']*(?:display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?:[.;\s]|$)|'
+        r'font-size\s*:\s*(?:0|1)px|color\s*:\s*transparent|left\s*:\s*-\d{2,}|top\s*:\s*-\d{2,})'
+        r'[^"\']*["\'])[^>]*)>(?P<body>[\s\S]{0,12000}?)</(?P=tag)\s*>',
+        re.I,
+    )
+    candidates.extend(m.group(0) for m in hidden_node.finditer(source))
+
+    suspicious = []
+    for fragment in candidates:
+        canonical = re.sub(r'\s+', ' ', unicodedata.normalize('NFKC', html.unescape(fragment)))
+        if _INSTRUCTION_SHAPE_RE.search(canonical):
+            suspicious.append(fragment)
+    return suspicious
 
 
 # ── local deterministic embedding (fallback / offline) ───────────────────────
@@ -477,9 +523,11 @@ def detect_injection(text, allow_llm_escalation=True, llm_eval=None, url=''):
     # A directive hidden from a human reader is materially different from a
     # security article quoting one. Treat concealment + model-direction as a
     # high-confidence boundary violation before synthesis.
-    if _has_concealed_instruction(raw_scan, scan):
+    concealed_fragments = _concealed_instruction_fragments(raw_scan)
+    if concealed_fragments:
         weighted_flags.append(('CONCEALED_INSTRUCTION', 7))
-        risk += 7
+        weighted_flags.append(('PROMPT_INJECTION_ATTEMPT', 3))
+        risk += 10
     url_flags = _url_threat_flags(url)
     for flag in url_flags:
         weight = 5 if flag in ('UNSAFE_URL_SCHEME', 'URL_USERINFO_DECEPTION',
@@ -497,10 +545,21 @@ def detect_injection(text, allow_llm_escalation=True, llm_eval=None, url=''):
     flags = list(dict.fromkeys(flag for flag, _weight in weighted_flags))
     # Convert the small additive score into a stable public 0-100 risk value.
     public_risk = min(100, risk * 12)
-    flagged = risk >= 5 or any(f in flags for f in (
-        'SECRET_EXFILTRATION', 'CREDENTIAL_SOLICITATION', 'MODEL_CONTROL_TOKEN',
-        'DOWNLOAD_EXECUTE', 'EXECUTABLE_DOWNLOAD', 'URL_USERINFO_DECEPTION'))
-    flagged = flagged or 'CONCEALED_INSTRUCTION' in flags
+    # Do not turn several unrelated review signals into a block. A tutorial can
+    # legitimately contain scripts, hidden framework markup, and phrases such
+    # as "run the tool". Blocking requires at least one instruction/control or
+    # concrete browser/data threat, not a large sum of ambient features.
+    block_flags = {
+        'INSTRUCTION_OVERRIDE', 'SYSTEM_HIJACK', 'SECRET_EXFILTRATION',
+        'CREDENTIAL_SOLICITATION', 'MODEL_CONTROL_TOKEN', 'DOWNLOAD_EXECUTE',
+        'EXECUTABLE_DOWNLOAD', 'URL_USERINFO_DECEPTION',
+        'CONCEALED_INSTRUCTION', 'PROMPT_INJECTION_ATTEMPT',
+    }
+    if educational_context and not concealed_fragments:
+        block_flags.difference_update({'INSTRUCTION_OVERRIDE', 'SYSTEM_HIJACK'})
+    flagged = bool(block_flags.intersection(flags))
+    if not flagged:
+        public_risk = min(public_risk, 59)
     reason = 'high-confidence model or browser threat signals detected' if flagged else ''
 
     if not flagged and risk in (3, 4):
@@ -515,12 +574,62 @@ def detect_injection(text, allow_llm_escalation=True, llm_eval=None, url=''):
                     reason = verdict.get('reason') or 'secondary classifier flag'
             except Exception:
                 pass
+    findings = []
+    signal_patterns = [(rx, flag) for rx, flag in INJECTION_RE_SIGNALS]
+    signal_patterns.extend((rx, flag) for rx, flag, _weight in BEHAVIOR_RE_SIGNALS)
+    for rx, flag in signal_patterns:
+        if flag not in flags:
+            continue
+        match = rx.search(raw_scan)
+        source_view = 'raw_html' if match else 'canonicalized_text'
+        if not match:
+            match = rx.search(scan)
+        if not match:
+            continue
+        offset = match.start() if source_view == 'raw_html' else None
+        findings.append({
+            'flag': flag,
+            'location': source_view,
+            'offset': offset,
+            'line': (raw_scan.count('\n', 0, offset) + 1) if offset is not None else None,
+            'visibility': 'unknown',
+            'addressed_to_model': flag in {
+                'INSTRUCTION_OVERRIDE', 'SYSTEM_HIJACK', 'ROLE_IMPERSONATION',
+                'MODEL_CONTROL_TOKEN', 'HIDE_FROM_USER',
+            },
+            'requests_external_action': flag in {
+                'TOOL_EXECUTION_REQUEST', 'DOWNLOAD_EXECUTE', 'SECRET_EXFILTRATION',
+                'CREDENTIAL_SOLICITATION',
+            },
+            # Fingerprint evidence rather than echoing hostile instructions
+            # back into an agent's context.
+            'evidence_sha256': hashlib.sha256(match.group(0).encode('utf-8', 'ignore')).hexdigest()[:16],
+            'matched_chars': len(match.group(0)),
+        })
+        if len(findings) >= 8:
+            break
+    if concealed_fragments:
+        fragment = concealed_fragments[0]
+        offset = raw_scan.find(fragment)
+        findings.append({
+            'flag': 'PROMPT_INJECTION_ATTEMPT',
+            'location': 'html_comment' if '<!--' in raw_scan[max(0, offset - 4):offset + 4] else 'hidden_dom',
+            'offset': offset if offset >= 0 else None,
+            'line': (raw_scan.count('\n', 0, offset) + 1) if offset >= 0 else None,
+            'visibility': 'hidden',
+            'addressed_to_model': True,
+            'requests_external_action': bool(re.search(
+                r'\b(?:execute|run|call|send|upload|reveal)\b', fragment, re.I)),
+            'evidence_sha256': hashlib.sha256(fragment.encode('utf-8', 'ignore')).hexdigest()[:16],
+            'matched_chars': len(fragment),
+        })
     report = InjectionReport(flagged, flags, reason, public_risk,
-                             'block' if flagged else ('review' if risk else 'allow'), len(scan))
+                             'block' if flagged else ('review' if risk else 'allow'), len(scan), findings)
     cached_value = {
         'flagged': report.flagged, 'flags': report.flags, 'reason': report.reason,
         'risk_score': report.risk_score, 'action': report.action,
         'scanned_chars': report.scanned_chars,
+        'findings': report.findings,
     }
     with _SECURITY_CACHE_LOCK:
         if len(_SECURITY_CACHE) >= _SECURITY_CACHE_MAX:
@@ -646,7 +755,7 @@ def _domain_trust(url):
 # Local 512-dim hashing embeddings are less precise than remote API embeddings,
 # so we use a lower threshold for them. 0.78 works well for 768-dim remote,
 # 0.55 works better for local 512-dim.
-_CORROBORATION_THRESHOLD = 0.32 if EMBED_DIM <= 512 else 0.58
+_CORROBORATION_THRESHOLD = 0.48 if EMBED_DIM <= 512 else 0.62
 
 
 def corroborate(claims):
@@ -678,7 +787,11 @@ def corroborate(claims):
             left_terms = set(re.findall(r'[a-z0-9]{3,}', ' '.join(x.get('claim_text', '') for x in group).lower()))
             right_terms = set(re.findall(r'[a-z0-9]{3,}', (vecs[j][0].get('claim_text') or '').lower()))
             overlap = len(left_terms & right_terms) / max(1, min(len(left_terms), len(right_terms)))
-            if vj and (cosine(centroid, vj) >= _CORROBORATION_THRESHOLD or overlap >= 0.35):
+            # Topic similarity alone is not corroboration. Require both a
+            # semantic match and substantial proposition-level word overlap;
+            # the former OR-based rule clustered broad background pages that
+            # merely mentioned the same subject.
+            if vj and cosine(centroid, vj) >= _CORROBORATION_THRESHOLD and overlap >= 0.48:
                 group.append(vecs[j][0])
                 group_vecs.append(vj)
                 assigned[j] = True
