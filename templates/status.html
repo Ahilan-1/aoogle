@@ -22,7 +22,7 @@
   <h1>Clear updates when things go wrong.</h1>
   <p class="lede">Live service health for Arlong Search, AI, API and MCP. Incident updates here are written for customers, not just servers.</p>
   {% if important_announcement %}<div class="important"><b>IMPORTANT ANNOUNCEMENT</b>{{ important_announcement }}</div>{% endif %}
-  <div class="overall {{ 'bad' if active_incident else '' }}"><i class="dot"></i><div><strong>{{ ('Service is recovering' if active_incident.status == 'monitoring' else 'We are investigating a service issue') if active_incident else 'All systems operational' }}</strong><span>{{ ('Successful requests are being monitored before we close the incident.' if active_incident.status == 'monitoring' else 'The team has been alerted. Updates will appear below.') if active_incident else 'No active incidents reported.' }}</span></div></div>
+  <div class="overall {{ 'bad' if active_incident else '' }}"><i class="dot"></i><div><strong>{{ ('Service is recovering' if active_incident.status == 'monitoring' else 'Incident Autopilot is working on a service issue') if active_incident else 'All systems operational' }}</strong><span>{{ ('Autopilot is validating successful requests before it closes the incident.' if active_incident.status == 'monitoring' else 'Autopilot is diagnosing repeated failures and attempting recovery. Updates will appear below.') if active_incident else 'Incident Autopilot is monitoring service health.' }}</span></div></div>
   <h2>Components</h2>
   <div class="components">
     {% set kind = active_incident.kind if active_incident else '' %}
@@ -36,9 +36,9 @@
     <div class="incident-head"><div><h3>{{ incident.title }}</h3><div class="meta">{{ incident.component }} · began {{ incident.started_at.replace('T',' ')[:16] }} UTC · {{ incident.id }}</div></div><span class="chip">{{ incident.status }}</span></div>
     <p class="copy">{{ incident.message }}</p>
     {% if incident.impact %}<div class="meta">IMPACT</div><p>{{ incident.impact }}</p>{% endif %}
-    <div class="meta">DETECTED BY {{ incident.detected_by|default('health monitor')|upper }} · SIGNALS {{ incident.occurrences|default(1) }} · NEXT UPDATE TARGET {{ incident.next_update_minutes|default(30) }} MIN</div>
+    <div class="meta">{{ 'AUTOPILOT MODE · ' if incident.autopilot_mode|default(false) else '' }}DETECTED BY {{ incident.detected_by|default('health monitor')|upper }} · SIGNALS {{ incident.occurrences|default(1) }} · NEXT UPDATE TARGET {{ incident.next_update_minutes|default(30) }} MIN</div>
     {% if incident.status != 'resolved' and incident.compensation_eligible %}<div class="care"><strong>We are sorry for the interruption.</strong> If you subscribed before this incident, we will review the customer impact after recovery. If compensation is appropriate, eligible subscribers will be contacted with voucher details. You do not need to do anything right now.</div>
-    {% elif incident.status != 'resolved' %}<div class="care"><strong>Our team is working on it.</strong> We will update this page when the service state changes. No action is required from you.</div>{% endif %}
+    {% elif incident.status != 'resolved' %}<div class="care"><strong>Incident Autopilot is working on it.</strong> It is diagnosing the affected component, attempting recovery, and will update this timeline when the evidence supports a state change. No action is required from you.</div>{% endif %}
     {% if incident.postmortem_published and focused %}
       {% set pm = incident.postmortem %}<section class="postmortem"><div class="meta">POST-INCIDENT REPORT · PUBLISHED {{ pm.published_at.replace('T',' ')[:16] }} UTC</div>
         <h4>What went wrong</h4><p>{{ pm.what_went_wrong }}</p>

@@ -275,7 +275,7 @@
                 <form method="POST" action="/admin/incidents/{{ active_incident.id }}/update" style="display:grid;gap:10px">
                     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <strong>{{ active_incident.title }}</strong>
-                    <small>{{ active_incident.id }} · {{ active_incident.component }} · {{ active_incident.occurrences }} signal(s)</small>
+                    <small>{{ active_incident.id }} · {{ active_incident.component }} · {{ active_incident.occurrences }} signal(s){% if active_incident.autopilot_mode %} · Autopilot {{ active_incident.autopilot_state|default('diagnosing') }}{% endif %}</small>
                     <select name="status" style="padding:9px;border:1px solid var(--a-border)">
                         {% for state in ['investigating','identified','monitoring','resolved'] %}<option value="{{ state }}" {{ 'selected' if active_incident.status == state else '' }}>{{ state|title }}</option>{% endfor %}
                     </select>

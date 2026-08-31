@@ -5,6 +5,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import pytest
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import main as m
 import ai_router as ar
@@ -243,6 +244,63 @@ class TestMcpExtractFailureIsolation:
         payload = self._call(client).get_json()
         assert 'error' not in payload
         assert payload['result']['structuredContent']['extraction_status'] == 'ok'
+
+
+class TestIncidentAutopilot:
+    def test_single_failure_does_not_open_incident(self):
+        first = m._open_operational_incident('search_degraded')
+        second = m._open_operational_incident('search_degraded')
+        assert first is None
+        assert second is None
+        assert m.data_manager.get_incidents() == []
+
+        incident = m._open_operational_incident('search_degraded')
+        assert incident['autopilot_mode'] is True
+        assert incident['autopilot_state'] == 'diagnosing'
+        assert incident['occurrences'] >= 3
+        assert any('Incident Autopilot is active' in update['message']
+                   for update in incident['updates'])
+
+    def test_success_clears_transient_failure_window(self):
+        assert m._open_operational_incident('search_degraded') is None
+        assert m.data_manager.record_incident_recovery('search_degraded') is None
+        assert m._open_operational_incident('search_degraded') is None
+        assert m._open_operational_incident('search_degraded') is None
+        assert m.data_manager.get_incidents() == []
+
+    def test_autopilot_requires_sustained_recovery_before_resolving(self):
+        for _ in range(3):
+            incident = m._open_operational_incident('provider_exhausted')
+        assert incident['status'] == 'investigating'
+
+        first = m.data_manager.record_incident_recovery('provider_exhausted')
+        assert first['status'] == 'investigating'
+        second = m.data_manager.record_incident_recovery('provider_exhausted')
+        assert second['status'] == 'monitoring'
+        assert 'validating stability' in second['updates'][-1]['message']
+
+        state = m._load_json()
+        active = next(item for item in state['incidents'] if item['kind'] == 'provider_exhausted')
+        active['recovery_started_at'] = (
+            datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=90)
+        ).isoformat()
+        m._save_json(state)
+        for _ in range(3):
+            resolved = m.data_manager.record_incident_recovery('provider_exhausted')
+        assert resolved['status'] == 'resolved'
+        assert resolved['autopilot_state'] == 'healthy'
+
+    def test_existing_incident_gets_one_autopilot_announcement(self):
+        incident = m.data_manager.ensure_incident(
+            'search_degraded', 'Search issue', 'Investigating repeated failures',
+            automatic=True,
+        )
+        m.data_manager.enable_incident_autopilot('search_degraded')
+        m.data_manager.enable_incident_autopilot('search_degraded')
+        refreshed = m.data_manager.get_incident(incident['id'])
+        announcements = [u for u in refreshed['updates']
+                         if u.get('source') == 'incident_autopilot']
+        assert len(announcements) == 1
 
 
 class TestProviderOrder:

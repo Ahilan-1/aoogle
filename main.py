@@ -2806,6 +2806,25 @@ def _prune_old_backups(keep=7):
     except Exception as e:
         app.logger.error(f"Backup prune failed: {e}")
 
+_INCIDENT_AUTOPILOT_POLICIES = {
+    # A single request failure is noise, not an incident. Autopilot opens a
+    # public incident only after the threshold is crossed inside the rolling
+    # window, then requires sustained successes before changing state.
+    'search_degraded': {
+        'failure_threshold': 3, 'window_seconds': 120,
+        'monitor_successes': 2, 'resolve_successes': 5, 'resolve_seconds': 45,
+    },
+    'provider_exhausted': {
+        'failure_threshold': 3, 'window_seconds': 120,
+        'monitor_successes': 2, 'resolve_successes': 5, 'resolve_seconds': 60,
+    },
+    'service_offline': {
+        'failure_threshold': 2, 'window_seconds': 60,
+        'monitor_successes': 2, 'resolve_successes': 5, 'resolve_seconds': 60,
+    },
+}
+
+
 class DataManager:
     def __init__(self):
         self._lock = threading.Lock()
@@ -3068,6 +3087,101 @@ class DataManager:
         return next((x for x in self.get_incidents(100)
                      if x.get('postmortem_published') and x.get('postmortem_announcement_active')), None)
 
+    def enable_incident_autopilot(self, kind=None, signal_count=None):
+        """Annotate active automatic incidents and publish one autopilot update."""
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+        changed = False
+        selected = None
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for rec in self.data.setdefault('incidents', []):
+                if (rec.get('status') == 'resolved' or not rec.get('automatic') or
+                        (kind and rec.get('kind') != kind)):
+                    continue
+                policy = _INCIDENT_AUTOPILOT_POLICIES.get(rec.get('kind'), {})
+                rec['autopilot_mode'] = True
+                rec['autopilot_version'] = '1.0'
+                rec['autopilot_state'] = ('validating_recovery'
+                                          if rec.get('status') == 'monitoring'
+                                          else 'diagnosing')
+                rec['autopilot_policy'] = dict(policy)
+                if signal_count is not None:
+                    rec['autopilot_signal_count'] = int(signal_count)
+                    rec['occurrences'] = max(int(rec.get('occurrences', 1)), int(signal_count))
+                if not rec.get('autopilot_announced_at'):
+                    announcement = (
+                        'Incident Autopilot is active. It detected repeated failures, '
+                        'isolated the affected service, and is running automated recovery '
+                        'checks. Autopilot will move this incident through investigating, '
+                        'monitoring, and resolved states when the evidence supports each step.'
+                    )
+                    rec.setdefault('updates', []).append({
+                        'status': rec.get('status', 'investigating'),
+                        'message': announcement,
+                        'created_at': now,
+                        'source': 'incident_autopilot',
+                    })
+                    rec['autopilot_announced_at'] = now
+                rec['updated_at'] = now
+                changed = True
+                selected = dict(rec)
+            if changed:
+                _save_json(self.data)
+        return selected
+
+    def record_incident_failure(self, kind, title, message, component='Arlong AI',
+                                severity='major', compensation_eligible=False,
+                                impact='', detected_by='incident autopilot',
+                                next_update_minutes=30):
+        """Record one signal and open/refresh an incident only when warranted."""
+        policy = _INCIDENT_AUTOPILOT_POLICIES.get(kind, {
+            'failure_threshold': 3, 'window_seconds': 120,
+            'monitor_successes': 2, 'resolve_successes': 5, 'resolve_seconds': 60,
+        })
+        now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = now_dt.isoformat()
+        threshold = int(policy['failure_threshold'])
+        window = int(policy['window_seconds'])
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            controllers = self.data.setdefault('incident_autopilot', {})
+            controller = controllers.setdefault(kind, {})
+            recent = []
+            for raw in controller.get('failure_timestamps', []):
+                try:
+                    stamp = datetime.fromisoformat(raw)
+                    if (now_dt - stamp).total_seconds() <= window:
+                        recent.append(raw)
+                except (TypeError, ValueError):
+                    continue
+            recent.append(now)
+            controller.update({
+                'failure_timestamps': recent[-max(threshold * 4, 12):],
+                'consecutive_successes': 0,
+                'last_failure_at': now,
+                'state': 'threshold_reached' if len(recent) >= threshold else 'observing',
+                'failure_threshold': threshold,
+                'window_seconds': window,
+            })
+            active = next((x for x in self.data.setdefault('incidents', [])
+                           if x.get('kind') == kind and x.get('status') != 'resolved'), None)
+            signal_count = len(recent)
+            _save_json(self.data)
+        if not active and signal_count < threshold:
+            app.logger.warning('Incident Autopilot observed %s failure %s/%s; no incident opened',
+                               kind, signal_count, threshold)
+            return None
+        rec = self.ensure_incident(
+            kind, title, message, component, severity, automatic=True,
+            compensation_eligible=compensation_eligible, impact=impact,
+            detected_by=detected_by, next_update_minutes=next_update_minutes,
+        )
+        return self.enable_incident_autopilot(kind, signal_count=signal_count) or rec
+
     def ensure_incident(self, kind, title, message, component='Arlong AI', severity='major', automatic=True,
                         compensation_eligible=False, impact='', detected_by='health monitor', next_update_minutes=30):
         """Create one durable incident per kind, or refresh the existing one."""
@@ -3079,6 +3193,10 @@ class DataManager:
             incidents = self.data.setdefault('incidents', [])
             active = next((x for x in incidents if x.get('kind') == kind and x.get('status') != 'resolved'), None)
             if active:
+                active['recovery_successes'] = 0
+                if active.get('automatic'):
+                    active['autopilot_mode'] = True
+                    active['autopilot_state'] = 'diagnosing'
                 if active.get('status') == 'monitoring':
                     active['status'] = 'investigating'
                     active.pop('recovery_started_at', None)
@@ -3117,45 +3235,68 @@ class DataManager:
             return dict(active)
 
     def record_incident_recovery(self, kind='provider_exhausted'):
-        """Advance an automatic incident after sustained successful work."""
+        """Let autopilot advance an incident after sustained successful work."""
         now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
         now = now_dt.isoformat()
+        policy = _INCIDENT_AUTOPILOT_POLICIES.get(kind, {
+            'monitor_successes': 2, 'resolve_successes': 5, 'resolve_seconds': 60,
+        })
         with self._lock:
             loaded = _load_json()
             if loaded:
                 self.data = loaded
+            controllers = self.data.setdefault('incident_autopilot', {})
+            controller = controllers.setdefault(kind, {})
+            controller['failure_timestamps'] = []
+            controller['last_success_at'] = now
+            controller['consecutive_successes'] = int(controller.get('consecutive_successes', 0)) + 1
+            controller['state'] = 'healthy' if not any(
+                x.get('kind') == kind and x.get('status') != 'resolved'
+                for x in self.data.setdefault('incidents', [])) else 'validating_recovery'
             rec = next((x for x in self.data.setdefault('incidents', [])
                         if x.get('kind') == kind and x.get('status') != 'resolved' and x.get('automatic')), None)
             if not rec:
+                _save_json(self.data)
                 return None
             # Backfill policy metadata for incidents created before policies
             # were introduced, without a destructive data migration.
             rec.setdefault('compensation_eligible', kind in ('provider_exhausted', 'search_degraded', 'service_offline'))
-            rec.setdefault('detected_by', 'model-router circuit breaker' if kind == 'provider_exhausted' else 'health monitor')
+            rec.setdefault('detected_by', 'incident autopilot')
             rec.setdefault('next_update_minutes', 15 if kind == 'provider_exhausted' else 30)
+            rec['autopilot_mode'] = True
+            rec['autopilot_state'] = 'validating_recovery'
             successes = int(rec.get('recovery_successes', 0)) + 1
             rec['recovery_successes'] = successes
-            if rec.get('status') != 'monitoring':
+            if (rec.get('status') != 'monitoring' and
+                    successes >= int(policy.get('monitor_successes', 2))):
                 rec['status'] = 'monitoring'
                 rec['recovery_started_at'] = now
                 rec['updated_at'] = now
                 rec.setdefault('updates', []).append({
                     'status': 'monitoring',
-                    'message': 'Requests are succeeding again. We are monitoring the recovery before declaring the incident resolved.',
+                    'message': ('Incident Autopilot is seeing successful requests again. '
+                                'It is validating stability before declaring recovery.'),
                     'created_at': now,
+                    'source': 'incident_autopilot',
                 })
             try:
                 age = (now_dt - datetime.fromisoformat(rec.get('recovery_started_at', now))).total_seconds()
             except (TypeError, ValueError):
                 age = 0
-            if successes >= 3 and age >= 30:
+            if (rec.get('status') == 'monitoring' and
+                    successes >= int(policy.get('resolve_successes', 5)) and
+                    age >= int(policy.get('resolve_seconds', 60))):
                 rec['status'] = 'resolved'
                 rec['resolved_at'] = now
                 rec['updated_at'] = now
+                rec['autopilot_state'] = 'healthy'
+                controller['state'] = 'healthy'
                 rec.setdefault('updates', []).append({
                     'status': 'resolved',
-                    'message': 'Service has recovered and remained stable. We are closing this incident while continuing normal monitoring.',
+                    'message': ('Incident Autopilot verified sustained recovery and closed '
+                                'the incident. Passive health monitoring remains active.'),
                     'created_at': now,
+                    'source': 'incident_autopilot',
                 })
             _save_json(self.data)
             return dict(rec)
@@ -5508,6 +5649,13 @@ class DataManager:
 
 
 data_manager = DataManager()
+try:
+    # Deployment migration: attach the autopilot controller and publish its
+    # one-time status update on any automatic incident already in progress.
+    data_manager.enable_incident_autopilot()
+except Exception as _autopilot_boot_error:
+    app.logger.warning('Incident Autopilot startup migration deferred: %s',
+                       str(_autopilot_boot_error)[:160])
 
 
 class KumoCrawler:
@@ -14640,13 +14788,20 @@ def public_status_api():
     if active:
         incident = {k: active.get(k) for k in (
             'id', 'kind', 'title', 'status', 'severity', 'component', 'impact',
-            'started_at', 'updated_at', 'last_seen_at', 'occurrences', 'next_update_minutes')}
+            'started_at', 'updated_at', 'last_seen_at', 'occurrences', 'next_update_minutes',
+            'autopilot_mode', 'autopilot_state', 'autopilot_signal_count', 'autopilot_policy')}
         incident['url'] = _incident_url(active)
     response = jsonify({
         'status': 'operational' if not active else ('recovering' if active.get('status') == 'monitoring' else 'degraded'),
         'checked_at': datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + 'Z',
         'components': {name: ('degraded' if is_affected else 'operational') for name, is_affected in affected.items()},
         'incident': incident,
+        'incident_autopilot': {
+            'mode': 'active',
+            'state': (active or {}).get('autopilot_state', 'observing'),
+            'public_incident_open': bool(active),
+            'behavior': 'rolling failure thresholds and sustained-recovery validation',
+        },
         'controls': {'maintenance': service.get('maintenance', False), 'protective_pause': service.get('kill_switch', False)},
     })
     response.headers['Cache-Control'] = 'no-store'
@@ -16406,13 +16561,13 @@ def _service_blocked():
 
 
 def _open_operational_incident(kind, detail=''):
-    """Open an idempotent, customer-safe incident without leaking provider details."""
+    """Feed a customer-safe signal into Incident Autopilot."""
     templates = {
         'provider_exhausted': {
             'title': 'AI provider capacity exhausted', 'component': 'AI routing', 'severity': 'major',
             'message': 'Every available AI route is currently unavailable or rate limited. Search retrieval remains available where possible while we restore synthesis capacity.',
             'impact': 'AI answers, evaluations, and synthesis may fail. Plain-link search can remain available.',
-            'eligible': True, 'detected_by': 'model-router circuit breaker', 'next': 15},
+            'eligible': True, 'detected_by': 'incident autopilot', 'next': 15},
         'maintenance': {
             'title': 'Maintenance in progress', 'component': 'Arlong services', 'severity': 'minor',
             'message': 'Arlong has been intentionally paused while our team completes maintenance. We are working through the maintenance and will restore access when it is safe to do so.',
@@ -16428,14 +16583,19 @@ def _open_operational_incident(kind, detail=''):
             'title': 'Service interruption', 'component': 'Arlong services', 'severity': 'critical',
             'message': 'Arlong is not responding as expected. The team has been alerted and is working to restore service.',
             'impact': 'Multiple Arlong services may be unavailable.',
-            'eligible': True, 'detected_by': 'service health monitor', 'next': 15},
+            'eligible': True, 'detected_by': 'incident autopilot', 'next': 15},
         'search_degraded': {
             'title': 'Search reliability degraded', 'component': 'Search and MCP', 'severity': 'major',
             'message': 'Repeated search failures crossed our reliability threshold. Some requests may fail or take longer while the team investigates.',
             'impact': 'Search and MCP retrieval may be intermittent; account services remain available.',
-            'eligible': True, 'detected_by': 'search failure monitor', 'next': 20},
+            'eligible': True, 'detected_by': 'incident autopilot', 'next': 20},
     }
     policy = templates.get(kind, templates['service_offline'])
+    if kind in _INCIDENT_AUTOPILOT_POLICIES:
+        return data_manager.record_incident_failure(
+            kind, policy['title'], policy['message'], policy['component'], policy['severity'],
+            compensation_eligible=policy['eligible'], impact=policy['impact'],
+            detected_by=policy['detected_by'], next_update_minutes=policy['next'])
     return data_manager.ensure_incident(
         kind, policy['title'], policy['message'], policy['component'], policy['severity'],
         automatic=True, compensation_eligible=policy['eligible'], impact=policy['impact'],
@@ -16466,6 +16626,14 @@ def _mcp_outage_result(msg_id, kind='provider_exhausted'):
         'status_url': _incident_url(incident),
         'retry_after_seconds': 60,
         'note': "Even a search engine occasionally needs a moment to find itself.",
+        'incident_autopilot': {
+            'mode': 'active',
+            'public_incident_opened': bool(incident),
+            'state': (incident or {}).get('autopilot_state', 'observing'),
+            'message': ('Repeated failures crossed the incident threshold; Autopilot is diagnosing and attempting recovery.'
+                        if incident else
+                        'This failure is being observed. One failure alone does not open a public incident.'),
+        },
     }
     return jsonify({'jsonrpc': '2.0', 'id': msg_id, 'result': {
         'isError': True, 'content': [{'type': 'text', 'text': json.dumps(text)}]
