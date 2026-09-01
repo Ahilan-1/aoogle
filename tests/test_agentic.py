@@ -303,6 +303,115 @@ class TestIncidentAutopilot:
         assert len(announcements) == 1
 
 
+class TestEvidenceGraphSearch:
+    def test_answer_contract_preserves_entity_constraints_and_fields(self):
+        contract = m._arlong_build_answer_contract(
+            'Find YC startups whose founders did not attend Ivy League universities')
+        assert contract['task'] == 'entity_list'
+        assert contract['entity_type'].lower() == 'yc startups'
+        fields = {field['name'] for field in contract['required_fields']}
+        assert {'company', 'founder', 'education', 'batch'} <= fields
+        assert any('did not attend' in item['text'].lower()
+                   for item in contract['constraints'])
+        assert contract['verification']['abstain_when_missing'] is True
+
+    def test_evidence_atoms_mark_syndicated_copy_as_dependent(self):
+        contract = m._arlong_build_answer_contract('Find startup founders and their education')
+        claim = ('Acme founder Mira Rao attended Stanford University and earned '
+                 'a computer science degree in 2018.')
+        results = [
+            {
+                'url': 'https://acme.example/about', 'snippet': claim,
+                'ai_evaluation': {'relevance_score': .9},
+                'reputation': {'status': 'SAFE', 'trust_score': 90},
+                'security_analysis': {'action': 'allow'}, 'threat_flags': [],
+            },
+            {
+                'url': 'https://syndicated.example/acme', 'snippet': claim,
+                'ai_evaluation': {'relevance_score': .85},
+                'reputation': {'status': 'SAFE', 'trust_score': 80},
+                'security_analysis': {'action': 'allow'}, 'threat_flags': [],
+            },
+        ]
+        atoms = m._arlong_build_evidence_atoms(
+            'Find startup founders and their education', contract, results)
+        assert len(atoms) == 2
+        assert atoms[0]['independent'] is True
+        assert atoms[1]['independent'] is False
+        assert atoms[1]['duplicate_of'] == atoms[0]['id']
+
+    def test_related_field_does_not_satisfy_an_unproven_constraint(self):
+        score = m._arlong_evidence_coverage(
+            'whose founders did not attend Ivy League universities',
+            'Acme founder Mira Rao attended Stanford University.',
+            requirement_kind='constraint',
+        )
+        assert score < .38
+
+    def test_optimizer_prefers_missing_constraint_coverage_over_popularity(self):
+        contract = {
+            'contract_id': 'ac_test', 'task': 'entity_list',
+            'required_fields': [
+                {'id': 'field:company', 'name': 'company'},
+                {'id': 'field:education', 'name': 'education'},
+            ],
+            'constraints': [],
+        }
+        popular = {
+            'url': 'https://popular.example/topic', 'quality_score': .99,
+            'ai_evaluation': {'relevance_score': .99},
+            'reputation': {'status': 'SAFE', 'trust_score': 99},
+            'security_analysis': {'action': 'allow'}, 'threat_flags': [],
+        }
+        evidence = {
+            'url': 'https://university.edu/founder', 'quality_score': .62,
+            'ai_evaluation': {'relevance_score': .62},
+            'reputation': {'status': 'SAFE', 'trust_score': 88},
+            'security_analysis': {'action': 'allow'}, 'threat_flags': [],
+        }
+        atoms = [{
+            'id': 'ev_1', 'source_url': evidence['url'], 'independent': True,
+            'covers': [{'requirement_id': 'field:education', 'score': .9}],
+        }]
+        ranked, summary = m._arlong_optimize_evidence_set(
+            contract, [popular, evidence], atoms)
+        assert ranked[0]['url'] == evidence['url']
+        assert summary['requirements_covered'] == 1
+        assert summary['abstention_recommended'] is True
+        assert summary['missing_requirements'][0]['id'] == 'field:company'
+
+    def test_search_payload_exposes_method_telemetry(self, monkeypatch):
+        raw = {
+            'title': 'Acme founder biography',
+            'url': 'https://acme.example/about',
+            'snippet': 'Acme founder Mira Rao attended Stanford University.',
+            'domain': 'acme.example',
+        }
+        evaluated = dict(raw, **{
+            'ai_evaluation': {'relevance_score': .9},
+            'reputation': {'status': 'SAFE', 'trust_score': 90},
+            'security_analysis': {'action': 'allow'},
+            'threat_flags': [],
+            'extraction_status': 'ok',
+        })
+        extra_queries = []
+        monkeypatch.setattr(m.search_engine, 'search', lambda *a, **k: ([raw], 1))
+        monkeypatch.setattr(m, '_search_serper',
+                            lambda query, *a, **k: (extra_queries.append(query) or []))
+        monkeypatch.setattr(m, '_arlong_eval_result', lambda *a, **k: dict(evaluated))
+        monkeypatch.setattr(m, '_arlong_attach_epistemic', lambda response, results: response)
+        monkeypatch.setattr(m.search_stats, 'record', lambda: None)
+        monkeypatch.setattr(m.data_manager, 'increment_total_searches', lambda: None)
+        payload = m._arlong_search_payload(
+            'Find startup founders and their education', max_results=5)
+        assert payload['answer_contract']['task'] == 'entity_list'
+        assert payload['evidence_set']['method'] == 'arlong_evidence_graph_v1'
+        assert payload['evidence_atoms']
+        assert payload['search_metadata']['ranking'] == 'arlong_evidence_graph_v1'
+        assert 'evidence_marginal_score' in payload['results'][0]
+        assert extra_queries and 'official primary source' in extra_queries[0]
+
+
 class TestProviderOrder:
     def _result(self, source, url):
         return m.SearchResult(source + ' result', url, 'direct specific evidence', source=source)

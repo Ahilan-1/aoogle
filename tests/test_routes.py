@@ -14,7 +14,15 @@ class TestRoutes:
     def test_home_page(self, client):
         resp = client.get('/')
         assert resp.status_code == 200
-        assert b'arlong' in resp.data
+        assert b'Secure Web Search API for AI Agents' in resp.data
+        assert b'Arlong Evidence Graph Search' in resp.data
+        assert b'rel="canonical" href="https://arlong.org/"' in resp.data
+        assert b'application/ld+json' in resp.data
+
+    def test_legacy_landing_redirects_to_canonical_home(self, client):
+        resp = client.get('/land')
+        assert resp.status_code == 301
+        assert resp.headers['Location'].endswith('/')
 
     def test_health(self, client):
         resp = client.get('/health')
@@ -163,6 +171,16 @@ class TestRoutes:
         assert resp.status_code == 200
         assert b'User-agent' in resp.data
         assert b'Disallow' in resp.data
+        assert b'arlong.org/sitemap.xml' in resp.data
+        assert b'aoogle-production' not in resp.data
+
+    def test_sitemap_lists_canonical_public_pages(self, client):
+        resp = client.get('/sitemap.xml')
+        assert resp.status_code == 200
+        assert resp.mimetype == 'application/xml'
+        assert b'<loc>https://arlong.org/</loc>' in resp.data
+        assert b'<loc>https://arlong.org/docs</loc>' in resp.data
+        assert b'/admin' not in resp.data
 
     def test_api_bangs(self, client):
         resp = client.get('/api/bangs')

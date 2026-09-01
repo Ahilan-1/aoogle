@@ -354,11 +354,11 @@ results.<span class="fn">slice</span>(<span class="n">0</span>, <span class="n">
         </tr>
         <tr>
             <td><code>arlong_search</code></td>
-            <td>Serper-primary web search with neural relevance, independent reputation/security states, screened content, and claim-overlap telemetry.</td>
+            <td>Serper-primary live-web retrieval compiled into an Answer Contract, followed by security-screened evidence atoms and marginal evidence-set ranking.</td>
         </tr>
         <tr>
             <td><code>arlong_deep</code></td>
-            <td>Parallel Arlong research lanes and semantic analysis across up to 20 sources, with trust ranking, evidence-gap repair, and claim-level records.</td>
+            <td>Parallel evidence-gap retrieval across up to 20 sources, with Answer Contract coverage, source-lineage deduplication, claim-level records, and abstention telemetry.</td>
         </tr>
         <tr>
             <td><code>arlong_extract</code></td>
@@ -373,6 +373,22 @@ results.<span class="fn">slice</span>(<span class="n">0</span>, <span class="n">
             <td>Live health snapshot of the model router (RPM/RPD/TPM/TPD usage + cooldowns) and neural module (local vs remote embeddings).</td>
         </tr>
     </table>
+
+    <h3>Arlong Evidence Graph Search</h3>
+    <p>Balanced Search, Deep Search, and Answer compile the request into an <code>answer_contract</code>. Arlong then extracts bounded, security-screened <code>evidence_atoms</code> and ranks the returned source set by marginal requirement coverage rather than ranking every page independently.</p>
+<pre>{
+  <span class="n">"answer_contract"</span>: {
+    <span class="n">"task"</span>: <span class="s">"entity_list"</span>,
+    <span class="n">"required_fields"</span>: [{<span class="n">"id"</span>: <span class="s">"field:company"</span>, <span class="n">"name"</span>: <span class="s">"company"</span>}],
+    <span class="n">"verification"</span>: {<span class="n">"field_level_evidence"</span>: <span class="n">true</span>, <span class="n">"abstain_when_missing"</span>: <span class="n">true</span>}
+  },
+  <span class="n">"evidence_set"</span>: {
+    <span class="n">"method"</span>: <span class="s">"arlong_evidence_graph_v1"</span>,
+    <span class="n">"coverage_ratio"</span>: <span class="n">1.0</span>,
+    <span class="n">"missing_requirements"</span>: [],
+    <span class="n">"abstention_recommended"</span>: <span class="n">false</span>
+  }
+}</pre>
 
     <h3>Tool schemas</h3>
     <div class="tabs" data-group="mcp-tools">
