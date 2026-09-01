@@ -188,7 +188,7 @@ curl <span class="s">"https://arlong.org/api/arlong/search?q=python&amp;key=al_x
         <tr><td><code>mode</code></td><td>string</td><td>balanced</td><td><code>instant</code> for low latency, <code>balanced</code> for extracted evidence, or <code>deep</code> for broader coverage.</td></tr>
         <tr><td><code>max_results</code></td><td>integer</td><td>10</td><td>Return 1&ndash;20 ranked results.</td></tr>
         <tr><td><code>include_content</code></td><td>boolean</td><td>true</td><td>Include clean page text when available. Always false in instant mode.</td></tr>
-        <tr><td><code>source_type</code></td><td>string</td><td>any</td><td>Prefer academic, official, news, discussion, or long-form sources.</td></tr>
+        <tr><td><code>source_type</code></td><td>string</td><td>any</td><td>Select academic, official, news, discussion, or long-form retrieval. <code>news</code> uses Serper's news index and enforces an explicit or implied freshness window.</td></tr>
         <tr><td><code>key</code></td><td>string</td><td>&mdash;</td><td>API key (alt to Authorization header).</td></tr>
     </table>
 
@@ -373,6 +373,8 @@ results.<span class="fn">slice</span>(<span class="n">0</span>, <span class="n">
             <td>Live health snapshot of the model router (RPM/RPD/TPM/TPD usage + cooldowns) and neural module (local vs remote embeddings).</td>
         </tr>
     </table>
+
+    <p>MCP Search and Deep responses use <code>compact_evidence_v1</code> so result metadata, safe evidence atoms, freshness, authority, and security telemetry remain inside typical agent token budgets. Deep evaluates full pages but omits their raw bodies from the response; call <code>arlong_extract</code> only for a selected safe source.</p>
 
     <h3>Arlong Evidence Graph Search</h3>
     <p>Balanced Search, Deep Search, and Answer compile the request into an <code>answer_contract</code>. Arlong then extracts bounded, security-screened <code>evidence_atoms</code> and ranks the returned source set by marginal requirement coverage rather than ranking every page independently.</p>

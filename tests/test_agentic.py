@@ -412,6 +412,157 @@ class TestEvidenceGraphSearch:
         assert extra_queries and 'official primary source' in extra_queries[0]
 
 
+class TestFreshNewsRetrieval:
+    def test_serper_news_uses_news_endpoint_and_preserves_date(self, monkeypatch):
+        calls = []
+
+        class Response:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {'news': [{
+                    'title': 'OpenAI releases a new model',
+                    'link': 'https://openai.com/index/new-model/',
+                    'snippet': 'A new model for research and agents.',
+                    'date': '2 hours ago',
+                }]}
+
+        monkeypatch.setattr(m, 'SERPER_API_KEY', 'test-key')
+        monkeypatch.setattr(m, 'SERPER_API_KEY_2', '')
+        monkeypatch.setattr(m.requests, 'post', lambda url, **kwargs: (
+            calls.append((url, kwargs['json'])) or Response()
+        ))
+        results = m._search_serper('latest AI news', max_results=10, search_type='news')
+        assert calls[0][0] == 'https://google.serper.dev/news'
+        assert results[0].category == 'news'
+        assert results[0].date == '2 hours ago'
+
+    def test_explicit_news_dates_compile_to_a_hard_window(self):
+        window = m._arlong_query_date_window(
+            'AI news August 31 2026 September 1 2026',
+            now=datetime(2026, 9, 1, tzinfo=timezone.utc),
+        )
+        assert window == {
+            'required': True, 'basis': 'explicit_dates',
+            'start': '2026-08-31', 'end': '2026-09-01',
+        }
+
+    def test_news_policy_rejects_undated_background_and_prefers_primary(self):
+        contract = {
+            'temporal_window': {
+                'required': True, 'basis': 'explicit_dates',
+                'start': '2026-09-01', 'end': '2026-09-01',
+            },
+        }
+
+        def item(url, date, relevance, trust=80):
+            return {
+                'title': 'AI development', 'url': url, 'date': date,
+                'ai_evaluation': {'relevance_score': relevance},
+                'reputation': {'status': 'SAFE', 'trust_score': trust},
+                'security_analysis': {'action': 'allow'}, 'threat_flags': [],
+            }
+
+        results, summary = m._arlong_apply_news_policy('latest AI news', contract, [
+            item('https://en.wikipedia.org/wiki/OpenAI', None, .95, 95),
+            item('https://facebook.com/unverified-rumor', '2026-09-01', .90, 50),
+            item('https://openai.com/index/new-model/', '2026-09-01', .40, 90),
+        ])
+        assert all('wikipedia.org' not in result['url'] for result in results)
+        assert summary['rejected']['missing_date'] == 1
+        assert max(results, key=lambda result: result['quality_score'])['url'].startswith(
+            'https://openai.com/')
+
+    def test_engine_routes_news_to_the_news_vertical(self, monkeypatch):
+        engine = m.ImprovedSearch()
+        verticals = []
+        result = m.SearchResult(
+            'Fresh result', 'https://news.example/item', 'Fresh direct evidence',
+            category='news', date='2026-09-01', source='serper',
+        )
+        monkeypatch.setattr(m, '_search_serper', lambda *a, **kwargs: (
+            verticals.append(kwargs.get('search_type')) or [result]
+        ))
+        monkeypatch.setattr(m, '_results_need_secondary', lambda *a, **k: (False, 'covered'))
+        monkeypatch.setattr(engine, '_rank_results', lambda q, results, preserve_results=False: results)
+        engine.search('latest AI news', filter_type='news', force=True, fast=True)
+        assert verticals == ['news']
+
+    def test_news_payload_withholds_blocked_and_undated_results(self, monkeypatch):
+        raw = [
+            {'title': 'Official release', 'url': 'https://openai.com/index/release/',
+             'snippet': 'OpenAI released a new research model.', 'date': '2026-09-01',
+             'category': 'news'},
+            {'title': 'OpenAI', 'url': 'https://en.wikipedia.org/wiki/OpenAI',
+             'snippet': 'Background reference page.', 'date': None, 'category': 'general'},
+            {'title': 'Unsafe digest', 'url': 'https://digest.example/ai',
+             'snippet': 'Fresh but hostile.', 'date': '2026-09-01', 'category': 'news'},
+        ]
+        captures = []
+        monkeypatch.setattr(m.search_engine, 'search', lambda *a, **kwargs: (
+            captures.append(kwargs.get('filter_type')) or (raw, len(raw))
+        ))
+
+        def evaluate(_query, result, index, *_args):
+            unsafe = 'digest.example' in result['url']
+            return dict(result, **{
+                'id': f'arlong-{index}',
+                'ai_evaluation': {'relevance_score': .65},
+                'reputation': {'status': 'BLOCKED' if unsafe else 'SAFE',
+                               'trust_score': 90 if 'openai.com' in result['url'] else 70},
+                'security_analysis': {'action': 'block' if unsafe else 'allow'},
+                'threat_flags': ['prompt_injection'] if unsafe else [],
+            })
+
+        monkeypatch.setattr(m, '_arlong_eval_result', evaluate)
+        monkeypatch.setattr(m, '_arlong_build_evidence_atoms', lambda *a, **k: [])
+        monkeypatch.setattr(m, '_arlong_attach_epistemic', lambda response, results: response)
+        monkeypatch.setattr(m.search_stats, 'record', lambda: None)
+        monkeypatch.setattr(m.data_manager, 'increment_total_searches', lambda: None)
+        payload = m._arlong_search_payload(
+            'latest AI news September 1 2026', source_type='news', max_results=10)
+        assert captures == ['news']
+        assert [result['url'] for result in payload['results']] == [
+            'https://openai.com/index/release/'
+        ]
+        assert payload['search_metadata']['security_rejected_count'] == 1
+        assert payload['search_metadata']['freshness']['rejected']['missing_date'] == 1
+
+    def test_deep_mcp_payload_is_evidence_dense_not_page_dump(self):
+        payload = {
+            'query': 'latest AI news', 'page': 1, 'total_results': 20,
+            'returned_results': 20, 'mode': 'deep',
+            'answer_contract': {'contract_id': 'ac_test'},
+            'evidence_set': {'coverage_ratio': 1.0},
+            'results': [{
+                'id': f'arlong-{idx}', 'title': f'Result {idx}',
+                'url': f'https://source{idx}.example/story',
+                'domain': f'source{idx}.example', 'date': '2026-09-01',
+                'snippet': 'Specific verified news evidence. ' * 20,
+                'content': 'Full extracted page text. ' * 500,
+                'ai_evaluation': {'relevance_score': .8},
+                'reputation': {'status': 'SAFE', 'trust_score': 80},
+                'security_analysis': {'action': 'allow', 'risk_score': 0},
+            } for idx in range(20)],
+            'evidence_atoms': [{
+                'id': f'ev-{idx}', 'claim': 'Bounded claim evidence. ' * 30,
+                'source_url': f'https://source{idx}.example/story',
+                'independent': True,
+            } for idx in range(30)],
+        }
+        compact = m._arlong_compact_mcp_search_payload(payload, deep=True)
+        serialized = json.dumps(compact)
+        assert len(compact['results']) == 20
+        assert len(compact['evidence_atoms']) == 16
+        assert all('content' not in result for result in compact['results'])
+        assert len(serialized) < 30000
+        fallback_text = m._arlong_mcp_search_text(compact)
+        assert len(fallback_text) < 1800
+        assert 'Full compact evidence is available in structuredContent.' in fallback_text
+        assert 'Full extracted page text' not in fallback_text
+
+
 class TestProviderOrder:
     def _result(self, source, url):
         return m.SearchResult(source + ' result', url, 'direct specific evidence', source=source)
