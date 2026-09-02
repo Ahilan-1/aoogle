@@ -1609,12 +1609,6 @@
     </script>
 
     <button class="flag-toggle" id="flag-btn" title="Toggle flag colors" style="display:none">&#x1F1FA;&#x1F1F8;</button>
-    {% if announcement %}
-    <div style="background:#c5221f;color:#fff;text-align:center;padding:10px 20px;font-size:14px;font-weight:500;position:sticky;top:0;z-index:1000;box-shadow:0 2px 8px rgba(197,34,31,.3)">
-        &#x26A0; {{ announcement }}
-    </div>
-    {% endif %}
-
     {% set is_home = not query and not error and not pg_loading %}
     {% if is_home %}
     <div class="homepage" id="homepage">

@@ -1457,46 +1457,82 @@ def add_security_headers(response):
         try:
             announcement = data_manager.get_announcement()
             incident = data_manager.get_active_incident()
+            recovered = data_manager.get_recently_resolved_incident(30)
             postmortem = data_manager.get_latest_postmortem_announcement()
-            if announcement or incident or postmortem:
+            if announcement or incident or recovered or postmortem:
                 import html as _htmlmod
                 if incident:
                     notice = ('Service is recovering and being monitored.' if incident.get('status') == 'monitoring'
                               else 'Something is not working as expected. We are investigating.')
                     safe_ann = _htmlmod.escape(notice, quote=True)
                     incident_url = '/status/incidents/' + _htmlmod.escape(incident.get('id', ''), quote=True)
-                    safe_ann += ' <a href="' + incident_url + '" style="color:#fff;text-decoration:underline;font-weight:700">View live incident</a>'
+                    safe_ann += ' <a href="' + incident_url + '" class="arlong-banner-link">View live incident</a>'
                     banner_bg = '#8a4b08' if incident.get('kind') == 'maintenance' else '#9b1c1c'
                     banner_kind = incident.get('kind', 'incident')
-                    dismiss_key = ''
+                    dismiss_key = 'arlong-incident-' + re.sub(
+                        r'[^A-Za-z0-9_-]', '', str(incident.get('id', ''))
+                    ) + '-' + re.sub(r'[^A-Za-z0-9_-]', '', str(incident.get('status', 'active')))
+                    banner_icon = '&#x26A0;'
+                    banner_shadow = 'rgba(197,34,31,.28)'
+                elif recovered:
+                    report_id = re.sub(r'[^A-Za-z0-9_-]', '', str(recovered.get('id', '')))
+                    fixed_by_autopilot = bool(
+                        recovered.get('resolution_source') == 'incident_autopilot'
+                        or recovered.get('autopilot_mode')
+                    )
+                    notice = ('The incident was fixed by the Autopilot Engine.'
+                              if fixed_by_autopilot else 'The incident has been resolved.')
+                    safe_ann = (_htmlmod.escape(notice, quote=True) +
+                                ' <a href="/status/incidents/' + report_id +
+                                '" class="arlong-banner-link">View incident</a>')
+                    banner_bg = '#176b43'
+                    banner_kind = 'recovered'
+                    dismiss_key = 'arlong-recovery-' + report_id
+                    banner_icon = '&#x2713;'
+                    banner_shadow = 'rgba(23,107,67,.28)'
                 elif announcement:
                     # Manual announcements are text-only. Links are supplied by
                     # the incident system, avoiding stored-markup injection.
                     safe_ann = _htmlmod.escape(announcement, quote=True)
-                    banner_bg = '#9b1c1c'
+                    banner_bg = '#76520b'
                     banner_kind = 'manual'
-                    dismiss_key = ''
+                    dismiss_key = 'arlong-announcement-' + hashlib.sha256(
+                        announcement.encode('utf-8', 'ignore')
+                    ).hexdigest()[:16]
+                    banner_icon = '&#x26A0;'
+                    banner_shadow = 'rgba(118,82,11,.28)'
                 else:
                     report_id = re.sub(r'[^A-Za-z0-9_-]', '', str(postmortem.get('id', '')))
                     safe_ann = ('Incident report published: ' + _htmlmod.escape(postmortem.get('title', 'Service incident'), quote=True) +
-                                ' <a href="/status/incidents/' + report_id + '" style="color:#fff;text-decoration:underline;font-weight:700">Read what happened and compensation details</a>')
+                                ' <a href="/status/incidents/' + report_id + '" class="arlong-banner-link">Read the incident report</a>')
                     banner_bg = '#175cd3'
                     banner_kind = 'postmortem'
                     dismiss_key = 'arlong-postmortem-' + report_id
-                dismiss_js = ("localStorage.setItem('" + dismiss_key + "','1');" if dismiss_key else '')
+                    banner_icon = '&#x2139;'
+                    banner_shadow = 'rgba(23,92,211,.28)'
+                dismiss_js = ("try{localStorage.setItem('" + dismiss_key + "','1')}catch(e){};"
+                              if dismiss_key else '')
                 banner = (
-                    '<div id="arlong-urgent-banner" data-incident-kind="' + _htmlmod.escape(banner_kind, quote=True) + '" style="background:' + banner_bg + ';'
-                    'color:#fff;text-align:center;padding:10px 40px 10px 20px;font-size:13px;font-weight:500;'
-                    'position:fixed;top:0;left:0;right:0;z-index:9999;box-shadow:0 2px 12px rgba(197,34,31,.4);'
-                    'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Helvetica,Arial,sans-serif">'
-                    '<span style="margin-right:8px">&#x26A0;</span>' + safe_ann +
-                    '<button onclick="' + dismiss_js + 'this.parentElement.remove()" style="position:absolute;right:12px;top:50%;'
-                    'transform:translateY(-50%);background:none;border:none;color:#fff;font-size:18px;cursor:pointer;'
-                    'padding:2px 6px;opacity:.7" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.7">&times;</button>'
-                    '</div>'
+                    '<style id="arlong-banner-style">#arlong-urgent-banner{box-sizing:border-box;width:100%;min-height:42px;'
+                    'display:flex;align-items:center;justify-content:center;gap:8px;background:' + banner_bg + ';'
+                    'color:#fff;text-align:center;padding:10px 44px 10px 20px;font-size:13px;font-weight:600;'
+                    'position:relative;z-index:9999;box-shadow:0 2px 12px ' + banner_shadow + ';'
+                    'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Helvetica,Arial,sans-serif}'
+                    '#arlong-urgent-banner .arlong-banner-link{color:#fff;text-decoration:underline;font-weight:750;white-space:nowrap}'
+                    '#arlong-urgent-banner .arlong-banner-close{position:absolute;right:12px;top:50%;transform:translateY(-50%);'
+                    'background:none;border:none;color:#fff;font-size:19px;cursor:pointer;padding:4px 7px;opacity:.78}'
+                    '#arlong-urgent-banner .arlong-banner-close:hover{opacity:1}'
+                    '@media(max-width:620px){#arlong-urgent-banner{align-items:flex-start;text-align:left;justify-content:flex-start;'
+                    'padding:10px 42px 10px 13px;line-height:1.35;flex-wrap:wrap}#arlong-urgent-banner .arlong-banner-link{white-space:normal}}'
+                    '</style><div id="arlong-urgent-banner" role="status" aria-live="polite" data-incident-kind="' +
+                    _htmlmod.escape(banner_kind, quote=True) + '"><span aria-hidden="true">' + banner_icon + '</span><span>' + safe_ann + '</span>' +
+                    '<button class="arlong-banner-close" aria-label="Dismiss announcement" onclick="' + dismiss_js +
+                    'this.parentElement.remove();var s=document.getElementById(\'arlong-banner-style\');if(s)s.remove()">&times;</button></div>'
                 )
                 if dismiss_key:
-                    banner += '<script>if(localStorage.getItem("' + dismiss_key + '")){document.getElementById("arlong-urgent-banner").remove()}</script>'
+                    banner += ('<script>try{if(localStorage.getItem("' + dismiss_key + '")){' +
+                               'document.getElementById("arlong-urgent-banner").remove();'
+                               'document.getElementById("arlong-banner-style").remove()}}catch(e){}</script>')
                 data = response.get_data(as_text=True)
                 if '<body' in data:
                     body_start = data.index('<body')
@@ -3083,6 +3119,29 @@ class DataManager:
     def get_active_incident(self):
         return next((x for x in self.get_incidents(100) if x.get('status') != 'resolved'), None)
 
+    def get_recently_resolved_incident(self, window_minutes=30):
+        """Return the newest resolved incident while its recovery banner is live."""
+        window_minutes = max(1, min(int(window_minutes or 30), 240))
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        recent = []
+        for rec in self.get_incidents(100):
+            if rec.get('status') != 'resolved':
+                continue
+            try:
+                until_raw = rec.get('recovery_banner_until')
+                if until_raw:
+                    until = datetime.fromisoformat(str(until_raw).replace('Z', '+00:00'))
+                    until = until.astimezone(timezone.utc).replace(tzinfo=None) if until.tzinfo else until
+                else:
+                    resolved = datetime.fromisoformat(str(rec.get('resolved_at', '')).replace('Z', '+00:00'))
+                    resolved = resolved.astimezone(timezone.utc).replace(tzinfo=None) if resolved.tzinfo else resolved
+                    until = resolved + timedelta(minutes=window_minutes)
+                if until > now:
+                    recent.append(rec)
+            except (TypeError, ValueError):
+                continue
+        return max(recent, key=lambda item: item.get('resolved_at', ''), default=None)
+
     def get_latest_postmortem_announcement(self):
         return next((x for x in self.get_incidents(100)
                      if x.get('postmortem_published') and x.get('postmortem_announcement_active')), None)
@@ -3288,6 +3347,8 @@ class DataManager:
                     age >= int(policy.get('resolve_seconds', 60))):
                 rec['status'] = 'resolved'
                 rec['resolved_at'] = now
+                rec['recovery_banner_until'] = (now_dt + timedelta(minutes=30)).isoformat()
+                rec['resolution_source'] = 'incident_autopilot'
                 rec['updated_at'] = now
                 rec['autopilot_state'] = 'healthy'
                 controller['state'] = 'healthy'
@@ -3323,6 +3384,11 @@ class DataManager:
                 rec.setdefault('updates', []).append({'status': status, 'message': public_message, 'created_at': now})
             if status == 'resolved':
                 rec['resolved_at'] = now
+                rec['recovery_banner_until'] = (
+                    datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=30)
+                ).isoformat()
+                if rec.get('autopilot_mode') or rec.get('automatic'):
+                    rec['resolution_source'] = 'incident_autopilot'
             _save_json(self.data)
             return dict(rec)
 
@@ -4894,10 +4960,14 @@ class DataManager:
             _save_json(self.data)
         return True
 
-    def get_product_analytics(self, days=30, user_id=''):
+    def get_product_analytics(self, days=30, user_id='', hours=0):
         """Build administrator metrics from the minimal event stream."""
         days = max(1, min(int(days or 30), 90))
-        cutoff, selected_user = datetime.now(timezone.utc) - timedelta(days=days), str(user_id or '').strip()
+        hours = int(hours or 0)
+        hours = hours if hours in (3, 6) else 0
+        now = datetime.now(timezone.utc)
+        cutoff = now - (timedelta(hours=hours) if hours else timedelta(days=days))
+        selected_user = str(user_id or '').strip()
         with self._lock:
             loaded = _load_json()
             if loaded:
@@ -4957,13 +5027,39 @@ class DataManager:
                                          [str(key.get('last_used_at', '') or '') for key in user_keys] +
                                          [str(chat.get('updated_at', '') or '') for chat in user_chats]),
                 })
-        feature_counts, daily_counts, active_users = {}, {}, set()
+        feature_counts, daily_counts, active_users, active_account_map = {}, {}, set(), {}
+        account_plan_by_user = {row['user_id']: row['plan'] for row in account_usage}
         for event in filtered:
             feature = event.get('feature', 'other')
             feature_counts[feature] = feature_counts.get(feature, 0) + 1
             day = event['_time'].strftime('%Y-%m-%d')
             daily_counts[day] = daily_counts.get(day, 0) + 1
-            active_users.add(str(event.get('user_id', '')))
+            event_user_id = str(event.get('user_id', ''))
+            active_users.add(event_user_id)
+            user = users.get(event_user_id, {})
+            activity = active_account_map.setdefault(event_user_id, {
+                'user_id': event_user_id,
+                'username': user.get('username', 'Deleted account'),
+                'plan': account_plan_by_user.get(event_user_id, 'free'),
+                'event_count': 0, 'failed_count': 0, 'features': {},
+                '_latest': event['_time'],
+            })
+            activity['event_count'] += 1
+            activity['failed_count'] += int(event.get('status') != 'success')
+            activity['features'][feature] = activity['features'].get(feature, 0) + 1
+            activity['_latest'] = max(activity['_latest'], event['_time'])
+        active_accounts = []
+        for activity in active_account_map.values():
+            feature_summary = sorted(activity.pop('features').items(), key=lambda item: item[1], reverse=True)
+            latest = activity.pop('_latest')
+            activity['activities'] = [
+                {'feature': feature.replace('_', ' '), 'count': count}
+                for feature, count in feature_summary
+            ]
+            activity['last_seen'] = latest.strftime('%d %b %Y, %H:%M UTC')
+            activity['last_seen_iso'] = latest.isoformat()
+            active_accounts.append(activity)
+        active_accounts.sort(key=lambda item: (item['last_seen_iso'], item['event_count']), reverse=True)
         recent = []
         for event in sorted(filtered, key=lambda item: item['_time'], reverse=True)[:250]:
             user = users.get(str(event.get('user_id', '')), {})
@@ -4984,12 +5080,15 @@ class DataManager:
             {'feature': 'API and MCP credits used', 'count': sum(row['api_used'] for row in account_usage)},
         ]
         baseline_features = [row for row in baseline_features if row['count'] > 0]
-        return {'days': days, 'total_events': len(filtered), 'active_users': len(active_users),
+        return {'days': days, 'hours': hours,
+                'window_label': f'past {hours} hours' if hours else f'past {days} days',
+                'total_events': len(filtered), 'active_users': len(active_users),
                 'tracked_accounts': len({str(e.get('user_id', '')) for e in filtered}),
                 'feature_counts': sorted(({'feature': k.replace('_', ' '), 'count': v}
                                           for k, v in feature_counts.items()), key=lambda item: item['count'], reverse=True),
                 'daily_counts': [{'date': day, 'count': count} for day, count in sorted(daily_counts.items())],
-                'recent_events': recent, 'selected_user': selected_user,
+                'recent_events': recent, 'active_accounts': active_accounts,
+                'selected_user': selected_user,
                 'registered_accounts': len(users),
                 'active_subscriptions': sum(subscription_counts.values()),
                 'subscription_counts': subscription_counts,
@@ -15443,9 +15542,10 @@ def admin_analytics():
     if not session.get('admin_logged_in'):
         return redirect(url_for('admin_login'))
     days = safe_int(request.args.get('days', 30), 30)
+    hours = safe_int(request.args.get('hours', 0), 0)
     user_id = request.args.get('user_id', '').strip()[:128]
     return render_template('admin_analytics.html',
-                           analytics=data_manager.get_product_analytics(days, user_id))
+                           analytics=data_manager.get_product_analytics(days, user_id, hours))
 
 
 @app.route('/status')

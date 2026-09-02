@@ -302,6 +302,85 @@ class TestIncidentAutopilot:
                          if u.get('source') == 'incident_autopilot']
         assert len(announcements) == 1
 
+    def test_banner_uses_page_flow_and_recovery_is_green(self, client):
+        incident = m.data_manager.ensure_incident(
+            'search_degraded', 'Search reliability issue',
+            'Incident Autopilot is investigating repeated failures.',
+            automatic=True,
+        )
+        m.data_manager.enable_incident_autopilot('search_degraded')
+
+        active = client.get('/')
+        assert active.status_code == 200
+        assert b'id="arlong-urgent-banner"' in active.data
+        assert b'position:relative' in active.data
+        assert b'position:fixed;top:0;left:0;right:0;z-index:9999' not in active.data
+
+        resolved = m.data_manager.update_incident(incident['id'], 'resolved')
+        assert resolved['resolution_source'] == 'incident_autopilot'
+        assert m.data_manager.get_recently_resolved_incident(30)['id'] == incident['id']
+
+        recovery = client.get('/')
+        assert b'data-incident-kind="recovered"' in recovery.data
+        assert b'The incident was fixed by the Autopilot Engine.' in recovery.data
+        assert b'View incident' in recovery.data
+        assert b'background:#176b43' in recovery.data
+
+    def test_recovery_banner_expires_after_its_window(self):
+        incident = m.data_manager.ensure_incident(
+            'search_degraded', 'Search reliability issue', 'Investigating.', automatic=True,
+        )
+        m.data_manager.update_incident(incident['id'], 'resolved')
+        state = m._load_json()
+        saved = next(item for item in state['incidents'] if item['id'] == incident['id'])
+        saved['recovery_banner_until'] = (
+            datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=1)
+        ).isoformat()
+        m._save_json(state)
+        assert m.data_manager.get_recently_resolved_incident(30) is None
+
+
+class TestRecentProductAnalytics:
+    def test_three_and_six_hour_views_show_users_and_features(self, client):
+        user, error = m.data_manager.create_user(
+            'recent-user', 'strong-password', 'question', 'answer', '127.0.0.1',
+            'recent@example.com',
+        )
+        assert error is None
+        assert m.data_manager.record_product_event(user['user_id'], 'web_search')
+        assert m.data_manager.record_product_event(user['user_id'], 'mcp_request')
+
+        state = m._load_json()
+        state.setdefault('product_analytics_events', []).append({
+            'user_id': user['user_id'],
+            'feature': 'dashboard_opened',
+            'status': 'success',
+            'created_at': (datetime.now(timezone.utc) - timedelta(hours=5)).isoformat(),
+        })
+        m._save_json(state)
+
+        three_hours = m.data_manager.get_product_analytics(hours=3)
+        assert three_hours['window_label'] == 'past 3 hours'
+        assert three_hours['total_events'] == 2
+        assert three_hours['active_accounts'][0]['username'] == 'recent-user'
+        assert {item['feature'] for item in three_hours['active_accounts'][0]['activities']} == {
+            'web search', 'mcp request',
+        }
+
+        six_hours = m.data_manager.get_product_analytics(hours=6)
+        assert six_hours['total_events'] == 3
+        assert any(item['feature'] == 'dashboard opened'
+                   for item in six_hours['active_accounts'][0]['activities'])
+
+        with client.session_transaction() as sess:
+            sess['admin_logged_in'] = True
+        page = client.get('/admin/analytics?hours=3')
+        assert page.status_code == 200
+        assert b'Active accounts' in page.data
+        assert b'recent-user' in page.data
+        assert b'web search' in page.data
+        assert b'Past 3 hours' in page.data
+
 
 class TestEvidenceGraphSearch:
     def test_answer_contract_preserves_entity_constraints_and_fields(self):
