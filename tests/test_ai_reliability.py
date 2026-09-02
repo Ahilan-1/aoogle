@@ -49,6 +49,33 @@ def test_groq_rate_limit_uses_backup_account(monkeypatch):
     assert main._ai_groq_key_for_call() == 'backup-key'
 
 
+def test_groq_lane_falls_back_to_gemini_before_global_outage(monkeypatch):
+    monkeypatch.setattr(main, 'GEMINI_API_KEY', 'gemini-key')
+    monkeypatch.setattr(main, 'GEMINI_MODELS', ('gemini-2.5-flash-lite',))
+    monkeypatch.setattr(main, 'AI_MODE_GROQ_API_KEY', 'groq-key')
+    monkeypatch.setattr(main, 'AI_MODE_GROQ_BACKUP_API_KEY', '')
+    monkeypatch.setattr(main, 'AI_MODE_GROQ_TERTIARY_API_KEY', '')
+    monkeypatch.setattr(main, 'AI_GROQ_PRIMARY_COOLDOWN_UNTIL', 0.0)
+    monkeypatch.setattr(main._ai_router_module, 'get_router', lambda: None)
+    attempted = []
+
+    def provider(model, *args, **kwargs):
+        attempted.append(model)
+        if model == 'groq-model':
+            error = RuntimeError('429 rate limit')
+            error.status_code = 429
+            raise error
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='ok'))])
+
+    monkeypatch.setattr(main, '_ai_provider_call', provider)
+    monkeypatch.setattr(main, '_open_operational_incident',
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError('false global incident')))
+    response = main._ai_completion(
+        [{'role': 'user', 'content': 'test'}], models=['groq-model'])
+    assert response.choices[0].message.content == 'ok'
+    assert attempted == ['groq-model', 'gemini-2.5-flash-lite']
+
+
 def test_evaluation_fallback_understands_source_type_and_query_match():
     results = [
         {

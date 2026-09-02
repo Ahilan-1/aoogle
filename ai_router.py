@@ -221,6 +221,11 @@ class ModelRouter:
             if success:
                 c['successes'] += 1
                 self._fail_streak[model] = 0
+                # A real provider response is stronger evidence than a prior
+                # cooldown timer. This matters when the same model succeeds on
+                # a backup account after the primary account rate-limits.
+                self._cooldown_until[model] = 0
+                self._last_error.pop(model, None)
             else:
                 c['failures'] += 1
                 self._fail_streak[model] = self._fail_streak.get(model, 0) + 1

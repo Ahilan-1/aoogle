@@ -50,6 +50,43 @@ class TestAgenticPlanOffline:
         assert len({task['query'].lower() for task in tasks}) == 3
         assert all(task['label'] and task['query'] for task in tasks)
 
+    def test_current_query_cannot_be_rewritten_to_stale_year(self):
+        now = datetime(2026, 9, 2, tzinfo=timezone.utc)
+        cleaned = m._arlong_sanitize_planned_query(
+            'Research current AI models and pricing',
+            'AI models and pricing 2024 comparison',
+            now=now,
+        )
+        assert '2024' not in cleaned
+        assert '2026' in cleaned
+
+    def test_explicit_historical_year_is_preserved(self):
+        now = datetime(2026, 9, 2, tzinfo=timezone.utc)
+        cleaned = m._arlong_sanitize_planned_query(
+            'Compare AI model pricing in 2024',
+            'AI model pricing 2024 official sources',
+            now=now,
+        )
+        assert '2024' in cleaned
+        assert '2026' not in cleaned
+
+    def test_deep_current_pricing_has_official_lane_and_current_year(self, monkeypatch):
+        monkeypatch.setattr(m, 'AI_MODE_GROQ_API_KEY', '')
+        tasks = m._ai_deep_research_plan('current AI models and pricing')
+        assert tasks[0]['label'] == 'Official provider sources'
+        assert '2026' in tasks[0]['query']
+        assert all('2024' not in task['query'] for task in tasks)
+
+    def test_search_planner_accepts_persisted_dict_answers(self, monkeypatch):
+        monkeypatch.setattr(m, 'AI_MODE_GROQ_API_KEY', '')
+        plan = m._ai_plan_search(
+            'best database for my project',
+            [{'q': 'Deployment?', 'a': 'self hosted'}, {'q': 'Workload?', 'a': 'vector search'}],
+        )
+        assert plan['mode'] == 'single'
+        assert 'self hosted' in plan['query']
+        assert 'vector search' in plan['query']
+
 
 class TestAgenticGather:
     def _fake_top(self, query, limit=5):
@@ -182,6 +219,57 @@ class TestSecurityDisposition:
         assert m._search_preview_for_model(result) is None
 
 
+class TestAdaptiveEvidenceReader:
+    class Response:
+        def __init__(self, text, content_type='text/html'):
+            self.text = text
+            self.content = text.encode('utf-8')
+            self.headers = {'content-type': content_type}
+            self.url = 'https://example.test/final'
+
+        @staticmethod
+        def raise_for_status():
+            return None
+
+    def _allow_fetch(self, monkeypatch, response):
+        monkeypatch.setattr(m, '_is_safe_url', lambda url: True)
+        monkeypatch.setattr(m, '_safe_get', lambda *args, **kwargs: response)
+
+    def test_html_reader_prefers_article_and_preserves_pricing_table(self, monkeypatch):
+        html = '''<html><head><title>Provider pricing</title></head><body>
+        <nav>Navigation repeated Navigation repeated</nav>
+        <article><h1>Model API pricing</h1><p>The Nova model is available now for developers.</p>
+        <table><tr><th>Model</th><th>Input</th><th>Output</th></tr>
+        <tr><td>Nova</td><td>$4 / 1M tokens</td><td>$20 / 1M tokens</td></tr></table>
+        <p>Billing is per token processed through the native API.</p></article></body></html>'''
+        self._allow_fetch(monkeypatch, self.Response(html))
+        doc = m._extract_page_document('https://example.test/pricing')
+        assert doc['metadata']['status'] == 'ok'
+        assert doc['metadata']['reader_version'] == 'adaptive-evidence-reader-v1'
+        assert 'Nova | $4 / 1M tokens | $20 / 1M tokens' in doc['text']
+        assert 'Navigation repeated' not in doc['text']
+
+    def test_json_api_reader_extracts_nested_evidence(self, monkeypatch):
+        payload = json.dumps({
+            'model': {'name': 'Nova Ultra production language model',
+                      'pricing': {'input': '$4 per million tokens',
+                                  'output': '$20 per million tokens'}},
+        })
+        self._allow_fetch(monkeypatch, self.Response(payload, 'application/json'))
+        doc = m._extract_page_document('https://example.test/models.json')
+        assert doc['metadata']['method'] == 'json'
+        assert '$4 per million tokens' in doc['text']
+        assert '$20 per million tokens' in doc['text']
+
+    def test_source_roles_do_not_call_aggregator_primary(self):
+        assert m._arlong_source_role(
+            'current OpenAI pricing', {'url': 'https://openai.com/api/pricing/'}) == 'official'
+        assert m._arlong_source_role(
+            'current AI pricing', {'url': 'https://requesty.ai/models'}) == 'aggregator'
+        assert m._arlong_source_role(
+            'current AI pricing', {'url': 'https://intuitionlabs.ai/articles/pricing'}) == 'independent'
+
+
 class TestMcpExtractFailureIsolation:
     @staticmethod
     def _call(client):
@@ -274,7 +362,7 @@ class TestIncidentAutopilot:
         assert incident['status'] == 'investigating'
 
         first = m.data_manager.record_incident_recovery('provider_exhausted')
-        assert first['status'] == 'investigating'
+        assert first['status'] == 'monitoring'
         second = m.data_manager.record_incident_recovery('provider_exhausted')
         assert second['status'] == 'monitoring'
         assert 'validating stability' in second['updates'][-1]['message']
@@ -285,10 +373,24 @@ class TestIncidentAutopilot:
             datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=90)
         ).isoformat()
         m._save_json(state)
-        for _ in range(3):
-            resolved = m.data_manager.record_incident_recovery('provider_exhausted')
+        resolved = m.data_manager.record_incident_recovery('provider_exhausted')
         assert resolved['status'] == 'resolved'
         assert resolved['autopilot_state'] == 'healthy'
+
+    def test_monitoring_incident_closes_when_recovery_window_elapses(self):
+        for _ in range(3):
+            m._open_operational_incident('provider_exhausted')
+        m.data_manager.record_incident_recovery('provider_exhausted')
+        m.data_manager.record_incident_recovery('provider_exhausted')
+        state = m._load_json()
+        active = next(item for item in state['incidents'] if item['kind'] == 'provider_exhausted')
+        active['recovery_started_at'] = (
+            datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=30)
+        ).isoformat()
+        m._save_json(state)
+        assert m.data_manager.get_active_incident() is None
+        resolved = m.data_manager.get_recently_resolved_incident(30)
+        assert resolved['resolution_source'] == 'incident_autopilot'
 
     def test_existing_incident_gets_one_autopilot_announcement(self):
         incident = m.data_manager.ensure_incident(
@@ -844,6 +946,15 @@ class TestRouterBestAvailable:
         clock.t = 1005
         assert r.pick_best_available() is None
 
+    def test_success_on_backup_route_clears_model_cooldown(self):
+        clock = _Clock()
+        r = ar.ModelRouter(_BUDGETS, order=['a', 'b'], now=clock)
+        r.mark_failure('a', '429 rate limit')
+        assert r.cooldown('a') > 0
+        r.record('a', tokens=10, success=True)
+        assert r.cooldown('a') == 0
+        assert r.usage('a')['fail_streak'] == 0
+
 
 class _FakeRouter:
     """Stub router for exercising the middleware fallback path."""
@@ -939,12 +1050,47 @@ class TestMcpReliabilityRegressions:
             return type('R', (), {'ok': True})
 
         monkeypatch.setattr(m, 'AI_MODE_GROQ_API_KEY', 'test-key')
+        monkeypatch.setattr(m, 'AI_MODE_GROQ_BACKUP_API_KEY', '')
+        monkeypatch.setattr(m, 'AI_MODE_GROQ_TERTIARY_API_KEY', '')
+        monkeypatch.setattr(m, 'AI_GROQ_PRIMARY_COOLDOWN_UNTIL', 0.0)
         monkeypatch.setattr(m, '_ai_provider_call', provider)
         monkeypatch.setattr(m._ai_router_module, 'get_router', lambda: router)
         monkeypatch.setattr(m.data_manager, 'record_incident_recovery', lambda *a, **k: None)
         result = m._ai_completion([{'role': 'user', 'content': 'hi'}], models=['a', 'b'])
         assert result.ok
         assert attempted == ['a', 'b']
+
+    def test_non_capacity_failure_does_not_open_global_incident(self, monkeypatch):
+        monkeypatch.setattr(m, 'AI_MODE_GROQ_API_KEY', 'test-key')
+        monkeypatch.setattr(m, 'AI_MODE_GROQ_BACKUP_API_KEY', '')
+        monkeypatch.setattr(m, 'AI_MODE_GROQ_TERTIARY_API_KEY', '')
+        monkeypatch.setattr(m, 'AI_GROQ_PRIMARY_COOLDOWN_UNTIL', 0.0)
+        monkeypatch.setattr(m, 'GEMINI_API_KEY', '')
+        monkeypatch.setattr(m._ai_router_module, 'get_router', lambda: None)
+        monkeypatch.setattr(m, '_ai_provider_call',
+                            lambda *a, **k: (_ for _ in ()).throw(RuntimeError('invalid schema')))
+        monkeypatch.setattr(m, '_open_operational_incident',
+                            lambda *a, **k: pytest.fail('request-specific error opened incident'))
+        with pytest.raises(m.AIAllModelsFailedError) as exc:
+            m._ai_completion([{'role': 'user', 'content': 'hi'}], models=['a'])
+        assert exc.value.overloaded is False
+
+    def test_provider_signal_is_deduplicated(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(m, '_AI_PROVIDER_SIGNAL_LAST', 0.0)
+        monkeypatch.setattr(m, '_open_operational_incident',
+                            lambda kind, detail='': calls.append((kind, detail)))
+        m._ai_signal_provider_exhaustion(['a: 429'], True)
+        m._ai_signal_provider_exhaustion(['b: 429'], True)
+        assert len(calls) == 1
+
+    def test_status_page_is_read_only_when_keys_are_missing(self, client, monkeypatch):
+        monkeypatch.setattr(m, 'GEMINI_API_KEY', '')
+        monkeypatch.setattr(m, 'AI_MODE_GROQ_API_KEY', '')
+        monkeypatch.setattr(m, 'AI_MODE_GROQ_BACKUP_API_KEY', '')
+        monkeypatch.setattr(m, '_open_operational_incident',
+                            lambda *a, **k: pytest.fail('status view created an incident'))
+        assert client.get('/status').status_code == 200
 
     def test_deep_schema_discloses_minimum(self):
         tool = next(t for t in m.MCP_TOOLS if t['name'] == 'arlong_deep')

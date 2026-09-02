@@ -2852,7 +2852,7 @@ _INCIDENT_AUTOPILOT_POLICIES = {
     },
     'provider_exhausted': {
         'failure_threshold': 3, 'window_seconds': 120,
-        'monitor_successes': 2, 'resolve_successes': 5, 'resolve_seconds': 60,
+        'monitor_successes': 1, 'resolve_successes': 2, 'resolve_seconds': 15,
     },
     'service_offline': {
         'failure_threshold': 2, 'window_seconds': 60,
@@ -3117,7 +3117,51 @@ class DataManager:
         return next((x for x in self.get_incidents(100) if x.get('id') == incident_id), None)
 
     def get_active_incident(self):
+        self.reconcile_incident_autopilot()
         return next((x for x in self.get_incidents(100) if x.get('status') != 'resolved'), None)
+
+    def reconcile_incident_autopilot(self):
+        """Finish verified monitoring transitions even when traffic goes quiet."""
+        now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+        changed = False
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            for rec in self.data.setdefault('incidents', []):
+                if (rec.get('status') != 'monitoring' or not rec.get('automatic') or
+                        not rec.get('autopilot_mode')):
+                    continue
+                policy = _INCIDENT_AUTOPILOT_POLICIES.get(rec.get('kind'), {})
+                if int(rec.get('recovery_successes', 0)) < int(policy.get('resolve_successes', 5)):
+                    continue
+                try:
+                    started = datetime.fromisoformat(rec.get('recovery_started_at', ''))
+                    age = (now_dt - started).total_seconds()
+                except (TypeError, ValueError):
+                    continue
+                if age < int(policy.get('resolve_seconds', 60)):
+                    continue
+                now = now_dt.isoformat()
+                rec['status'] = 'resolved'
+                rec['resolved_at'] = now
+                rec['recovery_banner_until'] = (now_dt + timedelta(minutes=30)).isoformat()
+                rec['resolution_source'] = 'incident_autopilot'
+                rec['updated_at'] = now
+                rec['autopilot_state'] = 'healthy'
+                controller = self.data.setdefault('incident_autopilot', {}).setdefault(rec.get('kind'), {})
+                controller['state'] = 'healthy'
+                rec.setdefault('updates', []).append({
+                    'status': 'resolved',
+                    'message': ('Incident Autopilot verified recovered provider capacity and '
+                                'closed the incident automatically.'),
+                    'created_at': now,
+                    'source': 'incident_autopilot',
+                })
+                changed = True
+            if changed:
+                _save_json(self.data)
+        return changed
 
     def get_recently_resolved_incident(self, window_minutes=30):
         """Return the newest resolved incident while its recovery banner is live."""
@@ -5851,44 +5895,282 @@ def _remember_extraction_failure(url, reason='page extraction failed', blocked=F
         pass
 
 
-def _extract_page_text(url, timeout=5):
+_ARLONG_READER_VERSION = 'adaptive-evidence-reader-v1'
+_ARLONG_EXTRACT_METADATA = {}
+
+
+def _remember_extract_metadata(url, **metadata):
+    _ARLONG_EXTRACT_METADATA[url] = {
+        'reader_version': _ARLONG_READER_VERSION,
+        'fetched_at': datetime.now(timezone.utc).isoformat(),
+        **metadata,
+    }
+    if len(_ARLONG_EXTRACT_METADATA) > 3000:
+        for old_url in list(_ARLONG_EXTRACT_METADATA)[:500]:
+            _ARLONG_EXTRACT_METADATA.pop(old_url, None)
+
+
+def _get_extract_metadata(url):
+    return dict(_ARLONG_EXTRACT_METADATA.get(url) or {})
+
+
+def _reader_clean_lines(text, max_chars=12000):
+    """Normalize and de-duplicate page text without damaging exact values."""
+    lines = []
+    seen = set()
+    for raw in re.split(r'[\r\n]+', str(text or '')):
+        line = re.sub(r'[\t \u00a0]+', ' ', raw).strip()
+        if not line:
+            continue
+        fingerprint = re.sub(r'\W+', '', line.lower())[:240]
+        if len(fingerprint) >= 18 and fingerprint in seen:
+            continue
+        if fingerprint:
+            seen.add(fingerprint)
+        lines.append(line)
+        if sum(len(part) + 1 for part in lines) >= max_chars:
+            break
+    return '\n'.join(lines)[:max_chars]
+
+
+def _reader_json_strings(value, path='', depth=0):
+    """Extract human-readable evidence from JSON APIs and hydration payloads."""
+    if depth > 12:
+        return []
+    out = []
+    if isinstance(value, dict):
+        for key, child in value.items():
+            key_text = str(key)
+            if key_text.lower() in {'css', 'styles', 'webpack', 'buildid', 'runtimeconfig'}:
+                continue
+            child_path = f'{path}.{key_text}' if path else key_text
+            out.extend(_reader_json_strings(child, child_path, depth + 1))
+    elif isinstance(value, list):
+        for child in value[:250]:
+            out.extend(_reader_json_strings(child, path, depth + 1))
+    elif isinstance(value, (str, int, float, bool)):
+        text = str(value).strip()
+        if isinstance(value, str) and (len(text) < 18 or re.fullmatch(r'[A-Za-z0-9_./:-]+', text)):
+            return out
+        if text and len(text) <= 5000:
+            label = path.rsplit('.', 1)[-1].replace('_', ' ').strip()
+            out.append(f'{label}: {text}' if label and label.lower() not in {'text', 'content', 'body'} else text)
+    return out
+
+
+def _reader_table_text(table):
+    rows = []
+    for tr in table.find_all('tr')[:100]:
+        cells = [re.sub(r'\s+', ' ', cell.get_text(' ', strip=True))
+                 for cell in tr.find_all(['th', 'td'])]
+        cells = [cell for cell in cells if cell]
+        if cells:
+            rows.append(' | '.join(cells))
+    return '\n'.join(rows)
+
+
+def _reader_candidate_score(text, kind):
+    clean = _reader_clean_lines(text)
+    if not clean:
+        return -1000
+    words = re.findall(r'\b[\w$€£¥₹.%+-]+\b', clean)
+    score = min(len(clean), 8000) / 120
+    score += min(len(words), 1000) / 60
+    score += min(len(re.findall(r'[.!?](?:\s|$)', clean)), 60) * .35
+    score += min(len(re.findall(r'(?:[$€£¥₹]\s?\d|\d+(?:\.\d+)?\s?%)', clean)), 30) * .7
+    score += {'article': 18, 'main': 14, 'structured': 12, 'json': 12,
+              'xml': 10, 'pdf': 12, 'body': 0, 'metadata': -4}.get(kind, 0)
+    low = clean[:1200].lower()
+    if any(marker in low for marker in ('enable javascript', 'checking your browser',
+                                        'access denied', 'cookie preferences')):
+        score -= 35
+    return score
+
+
+def _reader_html_candidates(raw_text):
+    soup = BeautifulSoup(raw_text or '', 'html.parser')
+    candidates = []
+
+    metadata_parts = []
+    if soup.title and soup.title.get_text(strip=True):
+        metadata_parts.append(soup.title.get_text(' ', strip=True))
+    for attrs in ({'name': 'description'}, {'property': 'og:description'},
+                  {'name': 'twitter:description'}):
+        node = soup.find('meta', attrs=attrs)
+        if node and node.get('content'):
+            metadata_parts.append(node.get('content'))
+    if metadata_parts:
+        candidates.append(('metadata', '\n'.join(metadata_parts)))
+
+    for script in soup.find_all('script'):
+        script_type = (script.get('type') or '').lower()
+        script_id = (script.get('id') or '').lower()
+        if script_type == 'application/ld+json' or script_id in {'__next_data__', '__nuxt_data__'}:
+            try:
+                payload = json.loads(script.string or script.get_text() or '{}')
+                lines = _reader_json_strings(payload)
+                if lines:
+                    candidates.append(('structured', '\n'.join(lines)))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+
+    # Preserve tabular facts (especially prices/specifications) separately.
+    table_text = '\n'.join(filter(None, (_reader_table_text(t) for t in soup.find_all('table')[:20])))
+    if table_text:
+        candidates.append(('structured', table_text))
+
+    for tag in soup(['style', 'nav', 'footer', 'header', 'aside', 'noscript',
+                     'form', 'svg', 'iframe', 'canvas', 'template']):
+        tag.decompose()
+    for script in soup.find_all('script'):
+        script.decompose()
+
+    selectors = (
+        ('article', 'article'), ('main', 'main'), ('[role="main"]', 'main'),
+        ('.article-content', 'article'), ('.post-content', 'article'),
+        ('.entry-content', 'article'), ('.markdown-body', 'main'),
+        ('.documentation', 'main'), ('#content', 'main'),
+    )
+    seen_nodes = set()
+    for selector, kind in selectors:
+        for node in soup.select(selector)[:4]:
+            node_id = id(node)
+            if node_id in seen_nodes:
+                continue
+            seen_nodes.add(node_id)
+            text = node.get_text('\n', strip=True)
+            if len(text) >= 80:
+                candidates.append((kind, text))
+    body = soup.find('body') or soup
+    candidates.append(('body', body.get_text('\n', strip=True)))
+    return candidates
+
+
+def _extract_page_document(url, timeout=8):
+    """Security-first adaptive reader for HTML, JSON, XML, text, and PDF.
+
+    The raw response is screened before parsing. Multiple representations are
+    then scored and fused, preserving structured facts and removing duplicated
+    hydration/visible content. Unsupported or unscanned documents fail closed.
+    """
     try:
         if not _is_safe_url(url):
             _remember_extraction_failure(url, 'URL failed the public-network safety check', blocked=True)
-            return ''
+            _remember_extract_metadata(url, status='blocked', method='none', quality=0)
+            return {'text': '', 'metadata': _get_extract_metadata(url)}
         ua = UserAgent()
         headers = {'User-Agent': ua.random}
         resp = _safe_get(url, timeout=timeout, headers=headers)
         resp.raise_for_status()
-        # Screen the raw document before BeautifulSoup removes comments,
-        # scripts, styles, and concealed DOM nodes. The visible-text pass
-        # below remains useful for ordinary content; this preflight protects
-        # the trust boundary against instructions deliberately hidden in HTML.
+        response_headers = getattr(resp, 'headers', {}) or {}
+        content_type = str(response_headers.get('content-type') or '').split(';', 1)[0].lower()
+        raw_bytes = getattr(resp, 'content', None)
+        raw_text = getattr(resp, 'text', '') or ''
+        if raw_bytes is None:
+            raw_bytes = raw_text.encode('utf-8', errors='replace')
+        raw_screen = raw_text or raw_bytes[:250000].decode('utf-8', errors='replace')
         try:
             import neural_search as _neural
-            report = _neural.detect_injection(resp.text, url=url)
+            report = _neural.detect_injection(raw_screen[:250000], url=url)
             _remember_extract_security_report(url, report)
             if report.flagged:
                 app.logger.info('Blocked page extraction %s due to security flags: %s',
                                 urlparse(url).netloc, ','.join(report.flags[:4]))
-                return ''
+                _remember_extract_metadata(url, status='blocked', method='none', quality=0,
+                                           content_type=content_type)
+                return {'text': '', 'metadata': _get_extract_metadata(url)}
         except Exception as exc:
-            # Extraction is a trust boundary. An unscanned document must not
-            # become model context merely because the detector itself failed.
             app.logger.error('Raw page security preflight failed closed for %s: %s',
                              urlparse(url).netloc, str(exc)[:120])
             _remember_extraction_failure(url, 'raw-source security screening failed')
-            return ''
-        soup = BeautifulSoup(resp.text, 'html.parser')
-        for tag in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'noscript', 'form', 'svg', 'iframe']):
-            tag.decompose()
-        body = soup.find('body') or soup
-        text = body.get_text(separator=' ', strip=True)
-        text = re.sub(r'\s+', ' ', text)
-        return text[:5000]
+            _remember_extract_metadata(url, status='failed', method='none', quality=0,
+                                       content_type=content_type)
+            return {'text': '', 'metadata': _get_extract_metadata(url)}
+
+        candidates = []
+        if content_type == 'application/pdf' or raw_bytes[:5] == b'%PDF-':
+            try:
+                from pypdf import PdfReader
+                reader = PdfReader(io.BytesIO(raw_bytes))
+                pdf_text = '\n'.join((page.extract_text() or '') for page in reader.pages[:80])
+                candidates.append(('pdf', pdf_text))
+            except Exception as exc:
+                _remember_extraction_failure(url, f'PDF extraction failed: {exc.__class__.__name__}')
+        elif ('json' in content_type or
+              (not content_type and raw_text.lstrip().startswith(('{', '[')))):
+            try:
+                candidates.append(('json', '\n'.join(_reader_json_strings(json.loads(raw_text)))))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                candidates.append(('body', raw_text))
+        elif ('xml' in content_type or 'rss' in content_type or 'atom' in content_type or
+              raw_text.lstrip().startswith('<?xml')):
+            xml = BeautifulSoup(raw_text, 'xml')
+            parts = []
+            for node in xml.find_all(['title', 'description', 'summary', 'content', 'loc'])[:500]:
+                value = node.get_text(' ', strip=True)
+                if value:
+                    parts.append(value)
+            candidates.append(('xml', '\n'.join(parts)))
+        elif content_type.startswith('text/plain'):
+            candidates.append(('body', raw_text))
+        elif ('html' in content_type or not content_type or '<html' in raw_text[:1000].lower()):
+            candidates.extend(_reader_html_candidates(raw_text))
+        else:
+            _remember_extraction_failure(url, f'unsupported content type: {content_type or "unknown"}')
+
+        ranked = []
+        for kind, candidate in candidates:
+            clean = _reader_clean_lines(candidate)
+            if clean:
+                ranked.append((_reader_candidate_score(clean, kind), kind, clean))
+        ranked.sort(reverse=True, key=lambda row: row[0])
+        if not ranked:
+            _remember_extract_metadata(url, status='empty', method='none', quality=0,
+                                       content_type=content_type, candidates=0)
+            return {'text': '', 'metadata': _get_extract_metadata(url)}
+
+        # Start with the strongest representation, then fuse high-value
+        # structured/table facts. Line fingerprints prevent Next.js/JSON-LD
+        # copies from inflating the evidence.
+        selected = [ranked[0]]
+        for row in ranked[1:]:
+            if row[1] == 'structured' and row[0] >= 8:
+                selected.append(row)
+        text = _reader_clean_lines('\n'.join(row[2] for row in selected), max_chars=12000)
+
+        # Parsed text can reveal instructions encoded inside PDFs or JSON. It
+        # receives a second security scan before crossing into model context.
+        try:
+            parsed_report = _neural.detect_injection(text, url=url)
+            if parsed_report.flagged:
+                _remember_extract_security_report(url, parsed_report)
+                _remember_extract_metadata(url, status='blocked', method=ranked[0][1], quality=0,
+                                           content_type=content_type, candidates=len(ranked))
+                return {'text': '', 'metadata': _get_extract_metadata(url)}
+        except Exception:
+            _remember_extraction_failure(url, 'parsed-content security screening failed')
+            _remember_extract_metadata(url, status='failed', method=ranked[0][1], quality=0,
+                                       content_type=content_type, candidates=len(ranked))
+            return {'text': '', 'metadata': _get_extract_metadata(url)}
+
+        quality = max(0, min(100, round(ranked[0][0])))
+        final_url = str(getattr(resp, 'url', '') or url)
+        _remember_extract_metadata(
+            url, status='ok', method=ranked[0][1], quality=quality,
+            content_type=content_type or 'unknown', candidates=len(ranked),
+            characters=len(text), final_url=final_url,
+        )
+        return {'text': text, 'metadata': _get_extract_metadata(url)}
     except Exception as exc:
         _remember_extraction_failure(url, f'page retrieval failed: {exc.__class__.__name__}')
-        return None
+        _remember_extract_metadata(url, status='failed', method='none', quality=0,
+                                   error=exc.__class__.__name__)
+        return {'text': None, 'metadata': _get_extract_metadata(url)}
+
+
+def _extract_page_text(url, timeout=8):
+    """Compatibility wrapper around the adaptive evidence reader."""
+    return _extract_page_document(url, timeout=timeout).get('text')
 
 
 def _search_serper(query, region=None, max_results=10, search_type='web'):
@@ -11288,11 +11570,7 @@ def api_demo():
             plan = _ai_plan_search(query, [])
             tasks = plan.get('tasks') if plan.get('mode') == 'multi' else None
             if not tasks:
-                tasks = [
-                    {'label': 'Core question', 'query': query},
-                    {'label': 'Primary evidence', 'query': f'{query} official sources evidence'},
-                    {'label': 'Recent context', 'query': f'{query} latest developments'},
-                ]
+                tasks = _ai_deep_fallback_tasks(query, 3)
             research, groups = _ai_agentic_gather(query, tasks[:3], per_query=4)
             _ai_ground_results(query, research, per_fetch=2, max_fetch=5)
             extra_sources, extra_context = _ai_agentic_context(research)
@@ -11898,17 +12176,11 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None,
         try:
             if SearchBlocker.is_blocklisted(r_url) or _neural is None:
                 return None
-            resp = _httpx.get(r_url, timeout=10, follow_redirects=True, headers={'User-Agent': _UA})
-            if resp.status_code == 200:
-                if _neural is not None:
-                    raw_report = _neural.detect_injection(resp.text, url=r_url)
-                    if raw_report.flagged:
-                        app.logger.info('AI context preflight dropped %s (%s)',
-                                        _urlparse(r_url).netloc, ','.join(raw_report.flags[:4]))
-                        return None
-                text = _clean_page(resp.text)
-                if len(text) > 100:
-                    return (r_url, r_title or '', text)
+            # Use the shared reader so AI answers cannot bypass SSRF checks,
+            # raw-source prompt-injection screening, or structured extraction.
+            text = _arlong_page_text(r_url)
+            if text and len(text) > 100:
+                return (r_url, r_title or '', text[:4000])
         except Exception:
             pass
         return None
@@ -12104,6 +12376,7 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None,
 
     system_msg = (
         "You are a world-class research assistant. "
+        f"Today's date is {datetime.now(timezone.utc).date().isoformat()}. Treat that as now. "
         "Answer search queries with direct, specific, factual answers — like Google's featured snippet. "
         "Lead with the answer itself, not preamble like \"Based on\" or \"According to\". "
         "Use numbers, dates, names, and concrete details — not vague generalities. "
@@ -12112,6 +12385,10 @@ def arlong_ai_answer(q, results=None, extra_context=None, extra_sources=None,
         "about 'Vortex AI' almost certainly mean Google Cloud Vertex AI). Explicitly state the interpretation once. "
         "Reject sources about unrelated products that merely share a keyword. Prefer official documentation and "
         "regulators over forums, social posts, SEO pages, and similarly named domains. "
+        "For current pricing, model specifications, product availability, or release claims, require the provider's "
+        "own page. Aggregators and model marketplaces may be used only as clearly labelled marketplace/discovery context; "
+        "they do not independently verify native provider pricing. If official evidence is unavailable, say the field "
+        "could not be verified instead of filling it from an aggregator. "
         "Never attribute a statement to an agency or standards body unless that statement is supported by that agency's own source URL. "
         "Never invent a framework edition or version number; preserve the exact version shown in the source. "
         "If a source provides a date, use it exactly as written. If no source provides a specific date, "
@@ -12938,6 +13215,7 @@ def _arlong_eval_result(q, r, idx, fetch_content=True, content_max_chars=4000):
         "date": date,
         "snippet": snippet[:1000],
     }
+    item['source_role'] = _arlong_source_role(q, item)
     if SearchBlocker.is_blocklisted(url):
         item['reputation'] = {'status': 'BLOCKED', 'trust_score': 0}
         item['threat_flags'] = ['domain_blocklist']
@@ -12950,6 +13228,7 @@ def _arlong_eval_result(q, r, idx, fetch_content=True, content_max_chars=4000):
     try:
         import neural_search as _neural
         content = _arlong_page_text(url) if fetch_content else None
+        reader_meta = _get_extract_metadata(url) if fetch_content else {}
         # Filter out garbage content (JS loading spinners, "Try again" etc.)
         if content and _is_junk_content(content):
             content = None
@@ -12981,6 +13260,8 @@ def _arlong_eval_result(q, r, idx, fetch_content=True, content_max_chars=4000):
             item['extraction_status'] = 'empty'
         else:
             item['extraction_status'] = 'failed'
+        if reader_meta:
+            item['reader'] = reader_meta
         # Do NOT include content for BLOCKED sources — the flag is meaningless
         # if the synthesis model still sees the raw text. Blocked content
         # should never reach the answer prompt or the API response body.
@@ -13166,6 +13447,44 @@ def _arlong_normalize_query(q):
     return text
 
 
+_ARLONG_FRESHNESS_RE = re.compile(
+    r'\b(?:latest|current|currently|today|now|recent|newest|up[- ]to[- ]date|this (?:week|month|year))\b',
+    re.I,
+)
+
+
+def _arlong_sanitize_planned_query(original_query, planned_query, now=None):
+    """Prevent a planner from silently converting a live query to stale history.
+
+    Explicit years in the user's request are immutable. For a freshness request,
+    model-invented historical years are removed and the actual current year is
+    added as a retrieval hint. This deterministic guard fixes the observed 2024
+    rewrite without hard-coding any particular year.
+    """
+    original = re.sub(r'\s+', ' ', str(original_query or '')).strip()
+    planned = re.sub(r'\s+', ' ', str(planned_query or '')).strip() or original
+    current_year = (now or datetime.now(timezone.utc)).year
+    original_years = set(re.findall(r'\b(?:19|20)\d{2}\b', original))
+    wants_fresh = bool(_ARLONG_FRESHNESS_RE.search(original))
+
+    def keep_year(match):
+        year = match.group(0)
+        if year in original_years:
+            return year
+        if wants_fresh and int(year) != current_year:
+            return ''
+        # A planner may not invent a historical scope the user never requested.
+        if not wants_fresh and year not in original_years:
+            return ''
+        return year
+
+    planned = re.sub(r'\b(?:19|20)\d{2}\b', keep_year, planned)
+    planned = re.sub(r'\s+', ' ', planned).strip(' ,;-')
+    if wants_fresh and not original_years and str(current_year) not in planned:
+        planned = f'{planned} {current_year}'.strip()
+    return planned[:220]
+
+
 def _arlong_is_official_url(url):
     host = (urlparse(url or '').hostname or '').lower()
     official_hosts = ('cloud.google.com', 'ai.google.dev', 'developers.google.com',
@@ -13176,6 +13495,45 @@ def _arlong_is_official_url(url):
                       'nist.gov', 'cisa.gov', 'europa.eu', 'un.org', 'imf.org')
     return (host.endswith('.gov') or host.endswith('.mil') or host.endswith('.int') or
             any(host == d or host.endswith('.' + d) for d in official_hosts))
+
+
+_ARLONG_AGGREGATOR_HOSTS = (
+    'openrouter.ai', 'requesty.ai', 'artificialanalysis.ai', 'pricepertoken.com',
+    'llmprices.dev', 'models.dev', 'openllm.ai',
+)
+_ARLONG_COMMUNITY_HOSTS = (
+    'reddit.com', 'quora.com', 'medium.com', 'dev.to', 'linkedin.com',
+    'youtube.com', 'youtu.be', 'facebook.com', 'x.com', 'twitter.com',
+)
+_ARLONG_RESEARCH_HOSTS = (
+    'arxiv.org', 'pubmed.ncbi.nlm.nih.gov', 'nature.com', 'science.org',
+    'acm.org', 'ieee.org', 'semanticscholar.org',
+)
+
+
+def _arlong_source_role(query, item):
+    """Classify provenance independently from relevance and page security."""
+    url = item.get('url') if isinstance(item, dict) else str(item or '')
+    parsed = urlparse(url or '')
+    host = (parsed.hostname or '').lower().removeprefix('www.')
+    if any(host == d or host.endswith('.' + d) for d in _ARLONG_COMMUNITY_HOSTS):
+        return 'community'
+    if any(host == d or host.endswith('.' + d) for d in _ARLONG_AGGREGATOR_HOSTS):
+        return 'aggregator'
+    if (host.endswith('.edu') or
+            any(host == d or host.endswith('.' + d) for d in _ARLONG_RESEARCH_HOSTS)):
+        return 'research'
+    if _arlong_is_official_url(url):
+        return 'official'
+    if host.endswith('.gov') or host.endswith('.mil') or host.endswith('.int'):
+        return 'official'
+    path = parsed.path.lower()
+    query_tokens = set(re.findall(r'[a-z0-9]{3,}', (query or '').lower()))
+    host_parts = host.split('.')
+    brand = host_parts[-2] if len(host_parts) >= 2 else host
+    if brand in query_tokens and any(marker in path for marker in ('/docs', '/pricing', '/developers', '/api')):
+        return 'official'
+    return 'independent'
 
 
 def _arlong_official_query(query):
@@ -13385,10 +13743,12 @@ def _arlong_build_answer_contract(query):
     else:
         source_policy = 'claim_dependent_authority'
 
-    retrieval_queries = [raw]
+    retrieval_base = _arlong_sanitize_planned_query(raw, raw)
+    retrieval_queries = [retrieval_base]
     phrase = str(understood.get('phrase') or '').strip()
     if task in ('entity_list', 'comparison'):
-        retrieval_queries.append(f'{raw[:185]} official primary source')
+        retrieval_queries.append(
+            _arlong_sanitize_planned_query(raw, f'{retrieval_base[:175]} official primary source'))
     if phrase and phrase.lower() != low:
         retrieval_queries.append(f'"{phrase}"')
     deduped_queries = []
@@ -13481,16 +13841,22 @@ def _arlong_claim_authority(requirement, item):
     url = (item.get('url') or '').lower()
     trust = max(0.0, min(1.0, float((item.get('reputation') or {}).get('trust_score') or 0) / 100))
     label = (requirement or '').lower()
+    role = item.get('source_role') or _arlong_source_role(requirement, item)
     bonus = 0.0
     if any(x in label for x in ('education', 'university', 'degree')) and '.edu' in url:
         bonus = .22
     elif any(x in label for x in ('law', 'policy', 'government', 'regulation')) and '.gov' in url:
         bonus = .25
-    elif any(x in label for x in ('product', 'feature', 'price', 'company')) and _arlong_is_official_url(url):
+    elif any(x in label for x in ('product', 'feature', 'price', 'company')) and role == 'official':
         bonus = .18
     elif any(x in label for x in ('current', 'latest', 'date')) and item.get('date'):
         bonus = .12
-    return round(min(1.0, trust * .82 + bonus), 3)
+    score = min(1.0, trust * .82 + bonus)
+    if role == 'aggregator':
+        score = min(score, .52)
+    elif role == 'community':
+        score = min(score, .42)
+    return round(score, 3)
 
 
 def _arlong_build_evidence_atoms(query, contract, results):
@@ -13664,7 +14030,7 @@ def _arlong_search_payload(q, page=1, source_type='any', mode='balanced',
     """Run a search and build the full agentic response dict (shared by the
     REST endpoints and the /mcp MCP tools). Raises on engine failure."""
     started = time.perf_counter()
-    search_q = _arlong_normalize_query(q)
+    search_q = _arlong_sanitize_planned_query(q, _arlong_normalize_query(q))
     answer_contract = _arlong_build_answer_contract(q)
     mode = mode if mode in ('instant', 'balanced', 'deep') else 'balanced'
     max_results = max(1, min(int(max_results or 10), 20))
@@ -13779,7 +14145,7 @@ def _arlong_search_payload(q, page=1, source_type='any', mode='balanced',
 def _arlong_quick_payload(q, page=1, max_results=10):
     """Low-latency retrieval with no page fetch, embeddings, or AI evaluation."""
     started = time.perf_counter()
-    search_q = _arlong_normalize_query(q)
+    search_q = _arlong_sanitize_planned_query(q, _arlong_normalize_query(q))
     results, total_results = search_engine.search(search_q, page, fast=True)
     links = []
     seen = set()
@@ -13826,7 +14192,7 @@ def _arlong_answer_payload(q, source_type='any', deep=False):
     research = {'parallel': False, 'tasks': [], 'groups': []}
     grounded = []
     try:
-        search_q = _arlong_normalize_query(q)
+        search_q = _arlong_sanitize_planned_query(q, _arlong_normalize_query(q))
         if deep:
             tasks = _ai_deep_research_plan(q)
             results, groups = _ai_agentic_gather(q, tasks, per_query=6)
@@ -15083,7 +15449,9 @@ def mcp_endpoint():
                 'message': str(e)[:240] or 'Invalid tool arguments',
             }})
         except AIAllModelsFailedError as e:
-            return _mcp_outage_result(msg_id, 'provider_exhausted')
+            # The provider boundary already recorded (or deliberately ignored)
+            # this terminal failure. Do not count the wrapper as a second signal.
+            return _mcp_outage_result(msg_id, 'provider_exhausted', record_signal=False)
         except Exception as e:
             app.logger.error('MCP tool %s error: %s', name, str(e)[:240])
             if name == 'arlong_extract':
@@ -15550,9 +15918,8 @@ def admin_analytics():
 
 @app.route('/status')
 def public_status():
-    # Configuration-only outages are visible even before the first AI request.
-    if not GEMINI_API_KEY and not AI_MODE_GROQ_API_KEY and not AI_MODE_GROQ_BACKUP_API_KEY:
-        _open_operational_incident('provider_exhausted')
+    # This page is read-only. Merely viewing status must never manufacture an
+    # outage signal; runtime failures are reported at the provider boundary.
     incidents = data_manager.get_incidents(20)
     return render_template('status.html', incidents=incidents,
                            active_incident=data_manager.get_active_incident(),
@@ -17396,8 +17763,10 @@ def _incident_url(incident):
     return _public_base_url() + '/status/incidents/' + incident.get('id', '')
 
 
-def _mcp_outage_result(msg_id, kind='provider_exhausted'):
-    incident = _open_operational_incident(kind)
+def _mcp_outage_result(msg_id, kind='provider_exhausted', record_signal=True):
+    incident = (_open_operational_incident(kind) if record_signal else
+                next((item for item in data_manager.get_incidents(100)
+                      if item.get('kind') == kind and item.get('status') != 'resolved'), None))
     messages = {
         'maintenance': ('Arlong is undergoing maintenance.', 'Please tell your user that Arlong is temporarily paused for maintenance and suggest trying again later.'),
         'kill_switch': ('Arlong has been paused by an operational safety control.', 'Please tell your user that Arlong is temporarily paused while the team verifies service health.'),
@@ -17685,6 +18054,46 @@ def _ai_error_is_overload(exc):
     ))
 
 
+_AI_PROVIDER_SIGNAL_LOCK = threading.Lock()
+_AI_PROVIDER_SIGNAL_LAST = 0.0
+_AI_PROVIDER_SIGNAL_DEDUP_SECONDS = max(
+    10, int(os.environ.get('AI_PROVIDER_SIGNAL_DEDUP_SECONDS', '30')))
+
+
+def _ai_signal_provider_exhaustion(errors, overloaded):
+    """Emit at most one global capacity signal for a terminal fleet failure."""
+    global _AI_PROVIDER_SIGNAL_LAST
+    if not overloaded:
+        return None
+    now = time.monotonic()
+    with _AI_PROVIDER_SIGNAL_LOCK:
+        if now - _AI_PROVIDER_SIGNAL_LAST < _AI_PROVIDER_SIGNAL_DEDUP_SECONDS:
+            return None
+        _AI_PROVIDER_SIGNAL_LAST = now
+    detail = '; '.join(str(error)[:160] for error in (errors or [])[-3:])
+    return _open_operational_incident('provider_exhausted', detail=detail)
+
+
+def _ai_runtime_model_list(models=None, writer=False):
+    """Keep caller preference while guaranteeing cross-provider failover."""
+    requested = list(models) if models else (
+        _ai_writer_models(deep=False) if writer else _ai_groq_models())
+    result = []
+    for model in requested:
+        if model and model not in result:
+            result.append(model)
+    if GEMINI_API_KEY:
+        for model in GEMINI_MODELS:
+            if model not in result:
+                result.append(model)
+    if (AI_MODE_GROQ_API_KEY or AI_MODE_GROQ_BACKUP_API_KEY or
+            AI_MODE_GROQ_TERTIARY_API_KEY):
+        for model in _ai_groq_models():
+            if model not in result:
+                result.append(model)
+    return result
+
+
 def _ai_busy_hint():
     """Seconds until the model router expects *some* model to be usable again.
 
@@ -17718,12 +18127,11 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
     Raises AIAllModelsFailedError when every model fails.
     """
     if not GEMINI_API_KEY and not AI_MODE_GROQ_API_KEY and not AI_MODE_GROQ_BACKUP_API_KEY and not AI_MODE_GROQ_TERTIARY_API_KEY and not api_key:
-        _open_operational_incident('provider_exhausted')
         raise AIAllModelsFailedError(['Arlong AI is not configured (missing Gemini and Groq credentials)'])
     errors = []
     overloaded = False
     est_tokens = _ai_est_tokens(json.dumps(messages, default=str)) + max_tokens
-    model_list = list(models) if models else _ai_groq_models()
+    model_list = _ai_runtime_model_list(models)
     tried = set()
     router = _ai_router_module.get_router()
     for _ in range(len(model_list) + 2):
@@ -17795,20 +18203,14 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
             err = str(e) or e.__class__.__name__
             errors.append(f'{model}: {err}')
             app.logger.error(f"AI model {model} failed: {err}")
-            if router is not None:
-                router.mark_failure(model, err)
-            if _ai_error_is_overload(e):
+            model_overloaded = _ai_error_is_overload(e)
+            if model_overloaded:
                 overloaded = True
                 if not _ai_is_gemini(model) and not api_key:
                     _ai_cooldown_primary_groq()
-                # A provider overload is model-specific until proven otherwise.
-                # Move to a different eligible model immediately; the key
-                # selector will naturally use another Groq account on the next
-                # attempt. Only retry the same model on another account when
-                # there is no alternate model left in this request.
-                alternate_model_available = any(candidate not in tried for candidate in model_list)
-                if (not alternate_model_available and not _ai_is_gemini(model)
-                        and not api_key):
+                # Account quotas are independent. Exhaust the configured Groq
+                # accounts before declaring the model unavailable or cooling it.
+                if not _ai_is_gemini(model) and not api_key:
                     for failover_key in _ai_groq_failover_keys(selected_api_key)[1:]:
                         try:
                             app.logger.warning(
@@ -17828,7 +18230,13 @@ def _ai_completion(messages, max_tokens=700, temperature=0.2, response_format=No
                             errors.append(f'{model} (backup account): {backup_err}')
                             app.logger.error(
                                 'AI Groq backup account failed on %s: %s', model, backup_err)
-    _open_operational_incident('provider_exhausted')
+                if router is not None:
+                    router.mark_failure(model, err)
+            elif router is not None:
+                # Invalid output or a request-specific 4xx is not capacity
+                # pressure and must not put a healthy route into cooldown.
+                router.record(model, tokens=0, success=False)
+    _ai_signal_provider_exhaustion(errors, overloaded)
     raise AIAllModelsFailedError(errors, overloaded=overloaded)
 
 
@@ -17841,12 +18249,11 @@ def _ai_open_stream(messages, max_tokens=1600, temperature=0.4, timeout=120,
     (model, stream). Raises AIAllModelsFailedError if every model fails.
     """
     if not GEMINI_API_KEY and not AI_MODE_GROQ_API_KEY and not AI_MODE_GROQ_BACKUP_API_KEY and not AI_MODE_GROQ_TERTIARY_API_KEY:
-        _open_operational_incident('provider_exhausted')
         raise AIAllModelsFailedError(['Arlong AI is not configured'])
     errors = []
     overloaded = False
     est_tokens = _ai_est_tokens(json.dumps(messages, default=str)) + max_tokens
-    model_list = list(models) if models else _ai_writer_models(deep=False)
+    model_list = _ai_runtime_model_list(models, writer=True)
     tried = set()
     router = _ai_router_module.get_router()
     for _ in range(len(model_list) + 2):
@@ -17902,9 +18309,8 @@ def _ai_open_stream(messages, max_tokens=1600, temperature=0.4, timeout=120,
             err = str(e) or e.__class__.__name__
             errors.append(f'{model}: {err}')
             app.logger.error(f"AI stream model {model} failed: {err}")
-            if router is not None:
-                router.mark_failure(model, err)
-            if _ai_error_is_overload(e):
+            model_overloaded = _ai_error_is_overload(e)
+            if model_overloaded:
                 overloaded = True
                 if not _ai_is_gemini(model):
                     _ai_cooldown_primary_groq()
@@ -17921,7 +18327,11 @@ def _ai_open_stream(messages, max_tokens=1600, temperature=0.4, timeout=120,
                             backup_err = str(backup_error) or backup_error.__class__.__name__
                             errors.append(f'{model} (failover account): {backup_err}')
                             app.logger.error('AI stream Groq failover account failed on %s: %s', model, backup_err)
-    _open_operational_incident('provider_exhausted')
+                if router is not None:
+                    router.mark_failure(model, err)
+            elif router is not None:
+                router.record(model, tokens=0, success=False)
+    _ai_signal_provider_exhaustion(errors, overloaded)
     raise AIAllModelsFailedError(errors, overloaded=overloaded)
 
 
@@ -18179,19 +18589,26 @@ def _ai_pick_sources(query, candidates, k=5):
                   if _search_preview_for_model(candidate) is not None]
     if not candidates:
         return []
-    candidates.sort(key=lambda c: _ai_source_relevance(query, c), reverse=True)
+    role_weight = {'official': .20, 'research': .10, 'independent': .05,
+                   'aggregator': -.10, 'community': -.16}
+    for candidate in candidates:
+        candidate['source_role'] = _arlong_source_role(query, candidate)
+    candidates.sort(
+        key=lambda c: _ai_source_relevance(query, c) + role_weight.get(c.get('source_role'), 0),
+        reverse=True,
+    )
     candidates = candidates[:max(k * 4, 16)]
     if not (AI_MODE_GROQ_API_KEY or AI_MODE_GROQ_BACKUP_API_KEY) or len(candidates) <= k:
         useful = [c for c in candidates if _ai_source_relevance(query, c) >= .28]
         return (useful or candidates[:2])[:k]
     try:
         listing = '\n'.join(
-            f"{i+1}. url={c['url']} | preview={_search_preview_for_model(c)}"
+            f"{i+1}. role={c.get('source_role')} | url={c['url']} | preview={_search_preview_for_model(c)}"
             for i, c in enumerate(candidates)
         )
         comp = _ai_completion(
             messages=[
-                {'role': 'system', 'content': f'You pick useful web sources for a query. Reply with STRICT JSON only, shaped as {{"chosen":[1,4,2]}}: indices of the best sources, at most {k}, in priority order. Preserve the query constraints and rank direct evidence first, but also include useful background that covers the core products, entities, or comparison. Prefer primary sources over SEO aggregators. Exclude only spam, broken pages, or genuinely unrelated results.'},
+                {'role': 'system', 'content': f'You pick useful web sources for a query. Reply with STRICT JSON only, shaped as {{"chosen":[1,4,2]}}: indices of the best sources, at most {k}, in priority order. Preserve every query constraint. For live pricing, capabilities, ownership, and release facts choose official first-party pages first. Aggregators are discovery-only and cannot independently verify a provider claim. Include independent or research sources for comparison and limitations. Exclude spam, broken pages, and unrelated results.'},
                 {'role': 'user', 'content': f"Query: {query}\n\nSources:\n{listing}\n\nChoose direct evidence first, followed by pages that provide useful background for understanding the query. Do not reject a page solely because it covers only part of a detailed request."},
             ],
             max_tokens=120,
@@ -18362,11 +18779,22 @@ def _ai_agentic_plan(q, max_tasks=3):
     if not ql:
         return {'mode': 'single', 'query': 'general search'}
     if not AI_MODE_GROQ_API_KEY:
-        return _ai_agentic_plan_offline(ql, max_tasks)
+        plan = _ai_agentic_plan_offline(ql, max_tasks)
+        if plan.get('mode') == 'multi':
+            for task in plan.get('tasks') or []:
+                task['query'] = _arlong_sanitize_planned_query(ql, task.get('query'))
+        else:
+            plan['query'] = _arlong_sanitize_planned_query(ql, plan.get('query'))
+        return plan
     try:
         comp = _ai_completion(
             messages=[
-                {'role': 'system', 'content': _AI_AGENTIC_PLAN_SYSTEM},
+                {'role': 'system', 'content': (
+                    _AI_AGENTIC_PLAN_SYSTEM +
+                    f'\nToday is {datetime.now(timezone.utc).date().isoformat()}. '
+                    'Never add a historical year the user did not request. For latest/current queries, '
+                    'search the present date and current year, not an older training-data year.'
+                )},
                 {'role': 'user', 'content': f'User question: {ql}\n\nPlan the search(es).'},
             ],
             max_tokens=360,
@@ -18393,16 +18821,22 @@ def _ai_agentic_plan(q, max_tasks=3):
                     if isinstance(t, dict) and str(t.get('query') or '').strip():
                         tasks.append({
                             'label': (str(t.get('label') or '').strip() or 'search')[:60],
-                            'query': str(t['query']).strip()[:220],
+                            'query': _arlong_sanitize_planned_query(ql, str(t['query']).strip()),
                         })
                 tasks = _ai_dedupe_task_queries(tasks, ql)
                 if len(tasks) >= 2:
                     return {'mode': 'multi', 'tasks': tasks}
-            q2 = str(parsed.get('query') or '').strip() or ql
+            q2 = _arlong_sanitize_planned_query(ql, str(parsed.get('query') or '').strip() or ql)
             return {'mode': 'single', 'query': q2[:220]}
     except Exception as e:
         app.logger.warning(f"AI agentic plan failed: {e}")
-    return _ai_agentic_plan_offline(ql, max_tasks)
+    plan = _ai_agentic_plan_offline(ql, max_tasks)
+    if plan.get('mode') == 'multi':
+        for task in plan.get('tasks') or []:
+            task['query'] = _arlong_sanitize_planned_query(ql, task.get('query'))
+    else:
+        plan['query'] = _arlong_sanitize_planned_query(ql, plan.get('query'))
+    return plan
 
 
 _AI_DEEP_RESEARCH_PLAN_SYSTEM = (
@@ -18418,20 +18852,42 @@ _AI_DEEP_RESEARCH_PLAN_SYSTEM = (
 )
 
 
+def _ai_deep_fallback_tasks(q, max_tasks=3):
+    fresh_q = _arlong_sanitize_planned_query(q, q)
+    low = fresh_q.lower()
+    if any(term in low for term in ('price', 'pricing', 'cost', 'models')):
+        return [
+            {'label': 'Official provider sources',
+             'query': _arlong_sanitize_planned_query(q, f'{fresh_q} official provider API pricing documentation')},
+            {'label': 'Capabilities and comparison',
+             'query': _arlong_sanitize_planned_query(q, f'{fresh_q} capabilities context limits comparison')},
+            {'label': 'Independent verification',
+             'query': _arlong_sanitize_planned_query(q, f'{fresh_q} independent benchmark limitations')},
+        ][:max_tasks]
+    return [
+        {'label': 'Direct evidence', 'query': fresh_q},
+        {'label': 'First-party source discovery',
+         'query': _arlong_sanitize_planned_query(q, f'{fresh_q} official primary source')},
+        {'label': 'Independent verification',
+         'query': _arlong_sanitize_planned_query(q, f'{fresh_q} independent verification limitations')},
+    ][:max_tasks]
+
+
 def _ai_deep_research_plan(q, max_tasks=3):
     """Plan the parallel lanes used only by Arlong Deep Search."""
     q = re.sub(r'\s+', ' ', str(q or '')).strip()[:500]
-    fallback = [
-        {'label': 'Direct evidence', 'query': q[:220]},
-        {'label': 'Primary sources', 'query': f'{q[:185]} official primary source'},
-        {'label': 'Independent verification', 'query': f'{q[:175]} independent verification limitations'},
-    ][:max_tasks]
+    fallback = _ai_deep_fallback_tasks(q, max_tasks)
     if not AI_MODE_GROQ_API_KEY:
         return fallback
     try:
         comp = _ai_completion(
             messages=[
-                {'role': 'system', 'content': _AI_DEEP_RESEARCH_PLAN_SYSTEM},
+                {'role': 'system', 'content': (
+                    _AI_DEEP_RESEARCH_PLAN_SYSTEM +
+                    f' Today is {datetime.now(timezone.utc).date().isoformat()}. Never invent a historical year. '
+                    'For latest/current work, use the present date/current year. Pricing and product facts must '
+                    'have a first-party provider-documentation lane; aggregators are discovery evidence only.'
+                )},
                 {'role': 'user', 'content': q},
             ],
             max_tokens=420, temperature=0.1,
@@ -18447,7 +18903,7 @@ def _ai_deep_research_plan(q, max_tasks=3):
         for item in (parsed.get('tasks') or [])[:max_tasks]:
             if not isinstance(item, dict):
                 continue
-            query = re.sub(r'\s+', ' ', str(item.get('query') or '')).strip()[:220]
+            query = _arlong_sanitize_planned_query(q, item.get('query'))
             if query:
                 tasks.append({'label': str(item.get('label') or 'Research')[:60], 'query': query})
         tasks = _ai_dedupe_task_queries(tasks, q)
@@ -18556,7 +19012,7 @@ def _ai_ground_results(query, results, per_fetch=4, max_fetch=8):
         try:
             text = _arlong_page_text(r.get('url') or '')
             if text and len(text.strip()) > 80 and not _is_junk_body(text[:400]):
-                return (r.get('url'), text[:2000])
+                return (r.get('url'), text[:4000], _get_extract_metadata(r.get('url') or ''))
         except Exception:
             pass
         return None
@@ -18568,13 +19024,15 @@ def _ai_ground_results(query, results, per_fetch=4, max_fetch=8):
             try:
                 res = fut.result()
                 if res:
-                    done[res[0]] = res[1]
+                    done[res[0]] = (res[1], res[2])
             except Exception:
                 continue
     for r in results:
-        c = done.get(r.get('url') or '')
-        if c:
-            r['content'] = c
+        grounded = done.get(r.get('url') or '')
+        if grounded:
+            r['content'] = grounded[0]
+            r['reader'] = grounded[1]
+            r['source_role'] = r.get('source_role') or _arlong_source_role(query, r)
     return results
 
 
@@ -18601,9 +19059,12 @@ def _ai_agentic_context(grounded_results, per_fetch=4):
         idx += 1
         extra.append({'url': url, 'title': r.get('title') or '',
                       'content': evidence[:2000], 'snippet': snippet[:300],
-                      'evidence_type': 'page' if content else 'search_preview'})
+                      'evidence_type': 'page' if content else 'search_preview',
+                      'source_role': r.get('source_role') or _arlong_source_role('', r),
+                      'reader': r.get('reader') or {}})
         ctx += (f"\n\n[Source {idx}]\nURL: {url}\nTitle: {r.get('title') or ''}\n"
                 f"Facet: {r.get('group') or 'General'}\n"
+                f"Source role: {r.get('source_role') or _arlong_source_role('', r)}\n"
                 f"Evidence type: {'full page text' if content else 'search preview only'}\n"
                 f"Content: {evidence[:2000]}")
     return extra, ctx
@@ -18790,14 +19251,25 @@ def _ai_plan_search(original_query, answers):
     planner proposes genuinely distinct facets AND the queries survive a
     dedupe/distinctness guard.
     """
-    context = ' '.join(str(a).strip() for _q, a in (answers or []) if str(a).strip())
+    answer_pairs = []
+    for item in (answers or []):
+        if isinstance(item, dict):
+            question, answer = item.get('q') or '', item.get('a') or ''
+        elif isinstance(item, (list, tuple)) and len(item) >= 2:
+            question, answer = item[0], item[1]
+        else:
+            question, answer = '', item
+        if str(answer or '').strip():
+            answer_pairs.append((question, answer))
+    context = ' '.join(str(a).strip() for _q, a in answer_pairs)
     fallback_q = (f"{original_query} {context}".strip() if context else (original_query or '')).strip() or 'general search'
+    fallback_q = _arlong_sanitize_planned_query(original_query, fallback_q)
     if not AI_MODE_GROQ_API_KEY:
         return {'mode': 'single', 'query': fallback_q}
     try:
         answer_lines = '\n'.join(
-            f"- {str(q).strip() or 'Reply'}: {str(a).strip()}" for q, a in (answers or []) if str(a).strip()
-        ) if answers else f"- (raw reply): {original_query}"
+            f"- {str(q).strip() or 'Reply'}: {str(a).strip()}" for q, a in answer_pairs
+        ) if answer_pairs else f"- (raw reply): {original_query}"
         comp = _ai_completion(
             messages=[
                 {'role': 'system', 'content': (
@@ -18817,6 +19289,8 @@ def _ai_plan_search(original_query, answers):
                     'search the opposite of what the user asked for (e.g. if they said '
                     '"indoor", do not search outdoor activities). Fold group size, city, '
                     'budget and preferences into the query text. When in doubt, return single.'
+                    f' Today is {datetime.now(timezone.utc).date().isoformat()}. Never insert a historical year '
+                    'that the user did not request. For latest/current queries, use the present date/current year.'
                 )},
                 {'role': 'user', 'content': f"Original request: {original_query}\n\nUser's answers:\n{answer_lines}\n\nPlan the search(es)."},
             ],
@@ -18835,12 +19309,13 @@ def _ai_plan_search(original_query, answers):
                 tasks = []
                 for t in parsed['tasks'][:3]:
                     if isinstance(t, dict) and str(t.get('query') or '').strip():
-                        q = str(t['query']).strip()[:200]
+                        q = _arlong_sanitize_planned_query(original_query, str(t['query']).strip())[:200]
                         tasks.append({'label': (str(t.get('label') or '').strip() or q[:60])[:80], 'query': q})
                 tasks = _ai_dedupe_task_queries(tasks, fallback_q)
                 if len(tasks) >= 2:
                     return {'mode': 'multi', 'tasks': tasks}
-            q = str(parsed.get('query') or '').strip() or fallback_q
+            q = _arlong_sanitize_planned_query(
+                original_query, str(parsed.get('query') or '').strip() or fallback_q)
             return {'mode': 'single', 'query': q[:200]}
         return {'mode': 'single', 'query': fallback_q}
     except Exception as e:
@@ -19029,6 +19504,9 @@ def _ai_build_messages(history, results, report=False):
             "or supports open models is not automatically an open-source service.\n"
             "- Search previews are discovery evidence only. They can identify a candidate or a page topic, but cannot support "
             "detailed capability, pricing, security, or ownership claims without full-page evidence.\n"
+            "- For live provider pricing, model specifications, availability, and release claims, require an official first-party "
+            "provider page. Aggregators and marketplaces are discovery/context only, not independent confirmation. Keep marketplace "
+            "prices separate from native API prices. If no official page supports a field, write \"Unable to verify\" for that field.\n"
             "- Keep claim scope intact. A source about a team's combined deployment spend, a high-usage ceiling, an enterprise tier, "
             "or an optional add-on does NOT establish a product's base individual subscription price. Label those facts with their "
             "actual scope, and never turn a range for a stack into a price for each named tool.\n"
@@ -19115,6 +19593,7 @@ def _ai_build_messages(history, results, report=False):
         for i, r in enumerate(shown):
             line = (f"[{i+1}] {('(' + r.get('group', '') + ') ') if r.get('group') else ''}"
                     f"{r['title']} - {r['url']}")
+            line += f"\n    SOURCE ROLE: {r.get('source_role') or _arlong_source_role('', r)}"
             if r.get('content'):
                 line += "\n    PAGE CONTENT: " + re.sub(r'\s+', ' ', str(r['content'])[:1100])
             else:
@@ -20175,11 +20654,7 @@ def api_ai_search():
             # the planner considers the request a single topic. Search the core
             # question plus evidence and limitations in parallel, then dedupe.
             core_query = plan.get('query') or base_q
-            deep_tasks = [
-                {'label': 'Representative landscape', 'query': f'{core_query} projects landscape comparison alternatives'},
-                {'label': 'Primary evidence', 'query': f'{core_query} official documentation architecture'},
-                {'label': 'Trade-offs and limitations', 'query': f'{core_query} limitations trade-offs comparison'},
-            ]
+            deep_tasks = _ai_deep_fallback_tasks(core_query, 3)
             flat, groups = _ai_agentic_gather(base_q, deep_tasks, per_query=5)
             multi_hop = len(groups) > 1
     else:
@@ -20290,6 +20765,11 @@ def _ai_eval_tokens(text):
 
 def _ai_source_tag(query, result):
     """Classify provenance, including first-party brand and video sources."""
+    role = result.get('source_role') or _arlong_source_role(query, result)
+    if role == 'official':
+        return 'primary'
+    if role in {'community', 'aggregator', 'research'}:
+        return role
     raw_url = result.get('url') or ''
     parsed = urlparse(raw_url)
     host = parsed.netloc.lower().removeprefix('www.')
