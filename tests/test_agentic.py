@@ -496,6 +496,39 @@ class TestEvidenceGraphSearch:
                    for item in contract['constraints'])
         assert contract['verification']['abstain_when_missing'] is True
 
+    def test_comparison_contract_preserves_entities_and_requested_dimensions(self):
+        query = (
+            'As of September 2026, compare Turbo AI, StudyFetch, and Google '
+            'NotebookLM for ECE students: equation-heavy PDFs, circuit diagrams, '
+            'lecture transcription, citations, flashcards, quizzes, reliability, '
+            'and pricing. Identify weaknesses or missing evidence.'
+        )
+        contract = m._arlong_build_answer_contract(query)
+        assert contract['task'] == 'comparison'
+        assert contract['entities'] == ['Turbo AI', 'StudyFetch', 'Google NotebookLM']
+        dimensions = {item['id'] for item in contract['comparison_dimensions']}
+        assert {
+            'dimension:documents', 'dimension:equations', 'dimension:visuals',
+            'dimension:transcription', 'dimension:grounding',
+            'dimension:flashcards', 'dimension:quizzes',
+            'dimension:reliability', 'dimension:pricing',
+        } <= dimensions
+        assert contract['output_shape'] == 'comparison_matrix_with_field_citations'
+        assert any('"StudyFetch" official' in q for q in contract['retrieval_queries'])
+
+    def test_planned_query_preserves_late_constraints(self):
+        query = ('Compare Alpha, Beta, and Gamma for documents, equations, diagrams, '
+                 'transcription, citations, tutoring, and organization. ' +
+                 ('technical evidence ' * 35) +
+                 'Finally evaluate reliability and pricing using independent testing.')
+        planned = m._arlong_sanitize_planned_query(query, query)
+        assert 'pricing' in planned
+        assert 'independent testing' in planned
+
+    def test_named_product_homepage_is_first_party(self):
+        item = {'url': 'https://www.studyfetch.com/', 'title': 'StudyFetch'}
+        assert m._arlong_source_role('Compare StudyFetch and NotebookLM', item) == 'official'
+
     def test_evidence_atoms_mark_syndicated_copy_as_dependent(self):
         contract = m._arlong_build_answer_contract('Find startup founders and their education')
         claim = ('Acme founder Mira Rao attended Stanford University and earned '
@@ -592,6 +625,40 @@ class TestEvidenceGraphSearch:
         assert 'evidence_marginal_score' in payload['results'][0]
         assert extra_queries and 'official primary source' in extra_queries[0]
 
+    def test_empty_exact_model_search_runs_recovery(self, monkeypatch):
+        recovered = m.SearchResult(
+            title='Introducing Gemini 3.8 Flash',
+            url='https://blog.google/technology/ai/gemini-3-8-flash/',
+            snippet=('Google released Gemini 3.8 Flash on September 2, 2026 with '
+                     'new model features and benchmark results.'),
+            category='news', date='2026-09-02', source='serper',
+        )
+        queries = []
+        monkeypatch.setattr(m.search_engine, 'search', lambda *a, **k: ([], 0))
+        monkeypatch.setattr(m, '_search_serper', lambda query, *a, **k: (
+            queries.append(query) or ([recovered] if 'official' in query else [])
+        ))
+        monkeypatch.setattr(m, '_search_puri', lambda *a, **k: [])
+        monkeypatch.setattr(m, '_arlong_eval_result', lambda query, item, index, *a: {
+            **item, 'id': f'arlong-{index}', 'extraction_status': 'ok',
+            'content': item.get('snippet', ''),
+            'ai_evaluation': {'relevance_score': .9},
+            'reputation': {'status': 'SAFE', 'trust_score': 95},
+            'security_analysis': {'action': 'allow'}, 'threat_flags': [],
+        })
+        monkeypatch.setattr(m, '_arlong_attach_epistemic', lambda response, results: response)
+        monkeypatch.setattr(m.search_stats, 'record', lambda: None)
+        monkeypatch.setattr(m.data_manager, 'increment_total_searches', lambda: None)
+        payload = m._arlong_search_payload(
+            'Gemini 3.8 Flash September 2 2026 official announcement independent benchmark analysis',
+            mode='deep', max_results=20,
+        )
+        assert payload['results'][0]['url'].startswith('https://blog.google/')
+        assert payload['total_results'] >= 1
+        assert payload['search_metadata']['recovery']['triggered'] is True
+        assert any('Gemini 3.8 Flash' in query and 'official' in query
+                   for query in queries), queries
+
 
 class TestFreshNewsRetrieval:
     def test_serper_news_uses_news_endpoint_and_preserves_date(self, monkeypatch):
@@ -627,7 +694,45 @@ class TestFreshNewsRetrieval:
         assert window == {
             'required': True, 'basis': 'explicit_dates',
             'start': '2026-08-31', 'end': '2026-09-01',
+            'hard_filter': True,
         }
+
+    def test_last_seven_days_uses_explicit_as_of_date_as_anchor(self):
+        window = m._arlong_query_date_window(
+            'Important AI developments from the last 7 days as of September 3, 2026',
+            now=datetime(2026, 9, 10, tzinfo=timezone.utc),
+        )
+        assert window == {
+            'required': True, 'basis': 'relative_range',
+            'start': '2026-08-28', 'end': '2026-09-03',
+            'hard_filter': True,
+        }
+
+    def test_release_date_allows_later_independent_analysis(self):
+        window = m._arlong_query_date_window(
+            'Gemini 3.8 Flash September 2 2026 official announcement and independent benchmark analysis',
+            now=datetime(2026, 9, 3, tzinfo=timezone.utc),
+        )
+        assert window == {
+            'required': True, 'basis': 'release_anchor',
+            'start': '2026-09-02', 'end': '2026-09-03',
+            'hard_filter': True,
+        }
+
+    def test_fresh_release_query_automatically_uses_news_vertical(self, monkeypatch):
+        captures = []
+        monkeypatch.setattr(m.search_engine, 'search', lambda *a, **kwargs: (
+            captures.append(kwargs.get('filter_type')) or ([], 0)
+        ))
+        monkeypatch.setattr(m, '_arlong_attach_epistemic', lambda response, results: response)
+        monkeypatch.setattr(m.search_stats, 'record', lambda: None)
+        monkeypatch.setattr(m.data_manager, 'increment_total_searches', lambda: None)
+        payload = m._arlong_search_payload(
+            'Important AI releases from the last 7 days as of September 3, 2026',
+            source_type='any', mode='instant', max_results=8,
+        )
+        assert captures == ['news']
+        assert payload['search_metadata']['retrieval_vertical'] == 'news'
 
     def test_news_policy_rejects_undated_background_and_prefers_primary(self):
         contract = {

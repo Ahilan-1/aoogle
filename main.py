@@ -13404,14 +13404,55 @@ def _arlong_query_date_window(query, now=None):
             parsed = _arlong_parse_date_value(match.group(0), now=reference)
             if parsed and parsed not in candidates:
                 candidates.append(parsed)
-    if candidates:
+    low = text.lower()
+    relative_span = re.search(r'\b(?:last|past)\s+(\d{1,3})\s+(day|week)s?\b', low)
+    if relative_span:
+        amount = max(1, int(relative_span.group(1)))
+        days = amount * (7 if relative_span.group(2) == 'week' else 1)
+        # In "last 7 days as of September 3", the explicit date is the anchor,
+        # not a one-day range. This was the cause of the benchmark's Sep 3-only
+        # evidence contract.
+        end = max(candidates) if candidates else reference.date()
+        return {
+            'required': True, 'basis': 'relative_range',
+            'start': (end - timedelta(days=days - 1)).isoformat(),
+            'end': end.isoformat(), 'hard_filter': True,
+        }
+    if len(candidates) >= 2:
         return {
             'required': True,
             'basis': 'explicit_dates',
             'start': min(candidates).isoformat(),
             'end': max(candidates).isoformat(),
+            'hard_filter': True,
         }
-    low = text.lower()
+    if len(candidates) == 1:
+        anchor = candidates[0]
+        if re.search(r'\b(?:only|on)\b', low) and not re.search(r'\bas of\b', low):
+            start = anchor
+            end = anchor
+            basis = 'explicit_date'
+        elif re.search(r'\b(?:announcement|launched?|released?)\b', low) and re.search(
+                r'\b(?:independent|analysis|benchmark|review)\b', low):
+            # The date identifies a release; follow-up analysis can legitimately
+            # be published afterwards. Do not discard it as "outside" that day.
+            start = anchor
+            end = max(anchor, reference.date())
+            basis = 'release_anchor'
+        elif re.search(r'\b(?:latest|recent|current|this week)\b', low):
+            start = anchor - timedelta(days=6)
+            end = anchor
+            basis = 'explicit_anchor'
+        else:
+            start = anchor
+            end = anchor
+            basis = 'explicit_date'
+        return {
+            'required': True,
+            'basis': basis,
+            'start': start.isoformat(), 'end': end.isoformat(),
+            'hard_filter': True,
+        }
     today = reference.date()
     if re.search(r'\b(?:today|right now)\b', low):
         start = today
@@ -13421,7 +13462,8 @@ def _arlong_query_date_window(query, now=None):
         basis = 'latest'
     else:
         return {'required': False, 'basis': 'not_specified', 'start': None, 'end': None}
-    return {'required': True, 'basis': basis, 'start': start.isoformat(), 'end': today.isoformat()}
+    return {'required': True, 'basis': basis, 'start': start.isoformat(),
+            'end': today.isoformat(), 'hard_filter': True}
 
 
 def _arlong_normalize_query(q):
@@ -13482,7 +13524,10 @@ def _arlong_sanitize_planned_query(original_query, planned_query, now=None):
     planned = re.sub(r'\s+', ' ', planned).strip(' ,;-')
     if wants_fresh and not original_years and str(current_year) not in planned:
         planned = f'{planned} {current_year}'.strip()
-    return planned[:220]
+    # Modern provider APIs accept a substantially larger query. The previous
+    # 220-character cut silently removed late constraints such as pricing,
+    # reliability, exclusions, and requested sources.
+    return planned[:1000]
 
 
 def _arlong_is_official_url(url):
@@ -13531,7 +13576,11 @@ def _arlong_source_role(query, item):
     query_tokens = set(re.findall(r'[a-z0-9]{3,}', (query or '').lower()))
     host_parts = host.split('.')
     brand = host_parts[-2] if len(host_parts) >= 2 else host
-    if brand in query_tokens and any(marker in path for marker in ('/docs', '/pricing', '/developers', '/api')):
+    # A registrable brand domain explicitly named by the user is first-party,
+    # including its homepage. Requiring /docs or /pricing misclassified official
+    # product homepages such as studyfetch.com and turbo.ai as independent blogs.
+    if brand in query_tokens and (path in ('', '/') or any(
+            marker in path for marker in ('/docs', '/pricing', '/developers', '/api', '/features', '/help'))):
         return 'official'
     return 'independent'
 
@@ -13558,7 +13607,7 @@ def _arlong_prefer_sources(results, source_type='any', q=''):
     def weight(r):
         url = (r.get('url') or '').lower()
         category = (r.get('category') or '').lower()
-        official = _arlong_is_official_url(url)
+        official = _arlong_source_role(q, r) == 'official'
         academic = any(d in url for d in ('arxiv.org', 'pubmed', 'nature.com', '.edu'))
         discussion = any(d in url for d in ('reddit.com', 'quora.com', 'forum', 'discuss.'))
         long_form = category in ('blog', 'article') or len(r.get('snippet') or '') > 350
@@ -13670,6 +13719,47 @@ _ARLONG_CONTRACT_FIELD_PATTERNS = (
     ('metric', r'\b(?:metric|score|accuracy|latency|benchmark|performance)\b'),
 )
 
+_ARLONG_COMPARISON_DIMENSION_PATTERNS = (
+    ('documents', 'PDF and document understanding', r'\b(?:pdfs?|documents?|slides?|powerpoints?|readings?)\b'),
+    ('equations', 'equations and mathematical notation', r'\b(?:equations?|formulas?|mathematical notation|math(?:ematics)?)\b'),
+    ('visuals', 'diagrams, tables, and figures', r'\b(?:diagrams?|tables?|figures?|charts?)\b'),
+    ('transcription', 'lecture audio and video transcription', r'\b(?:lectures?|audio|video|recordings?|transcri\w*)\b'),
+    ('grounding', 'source grounding and citations', r'\b(?:source[- ]ground\w*|grounded|citations?|sources?)\b'),
+    ('flashcards', 'flashcards', r'\bflashcards?\b'),
+    ('quizzes', 'quizzes and practice tests', r'\b(?:quizzes?|practice tests?|tests?)\b'),
+    ('active_recall', 'active recall', r'\bactive recall\b'),
+    ('tutoring', 'AI tutoring', r'\b(?:ai tutor(?:ing)?|tutors?|personalized tutoring)\b'),
+    ('reasoning', 'multi-step STEM problem solving', r'\b(?:multi[- ]step|numericals?|problem solving|reasoning)\b'),
+    ('organization', 'note and semester organization', r'\b(?:organi[sz]\w*|semester notes?|study plans?)\b'),
+    ('reliability', 'reliability and limitations', r'\b(?:reliab\w*|limitations?|weaknesses?|failures?|accuracy)\b'),
+    ('pricing', 'free and paid pricing', r'\b(?:free|paid|price|pricing|cost|subscription|value)\b'),
+)
+
+
+def _arlong_comparison_entities(query):
+    """Extract explicitly named comparison subjects without an LLM."""
+    raw = re.sub(r'\s+', ' ', str(query or '')).strip()
+    match = re.search(
+        r'\bcompare\s+(.{2,220}?)(?=\s+(?:for|specifically|across|on|regarding)\b|[:?.]|$)',
+        raw, re.I,
+    )
+    if not match:
+        match = re.search(r'\b(.{2,160}?)\s+(?:versus|\bvs\.?\b)\s+(.{2,100}?)(?=\s+(?:for|on|across)\b|[:?.]|$)', raw, re.I)
+        if match:
+            value = f'{match.group(1)}, {match.group(2)}'
+        else:
+            return []
+    else:
+        value = match.group(1)
+    value = re.sub(r'\s+(?:versus|vs\.?)\s+', ',', value, flags=re.I)
+    value = re.sub(r'\s*,?\s+(?:and|or)\s+', ',', value, flags=re.I)
+    entities = []
+    for part in value.split(','):
+        entity = re.sub(r'^(?:the|a|an)\s+', '', part.strip(), flags=re.I).strip(' -')
+        if 1 < len(entity) <= 80 and entity.lower() not in {item.lower() for item in entities}:
+            entities.append(entity)
+    return entities[:8]
+
 
 def _arlong_build_answer_contract(query):
     """Compile a query into the evidence obligations retrieval must satisfy.
@@ -13689,10 +13779,13 @@ def _arlong_build_answer_contract(query):
                       'phrase': '', 'ambiguity': []}
         backend = 'lexical_fallback'
 
-    if re.search(r'\b(?:find|list|identify|which|show me|give me)\b', low):
-        task = 'entity_list'
-    elif re.search(r'\b(?:compare|comparison|versus|\bvs\b|difference between)\b', low):
+    # Comparison is the dominant intent even when the request later says
+    # "identify weaknesses". Checking entity-list verbs first caused a real
+    # comparison benchmark to compile into the wrong answer shape.
+    if re.search(r'\b(?:compare|comparison|versus|\bvs\b|difference between)\b', low):
         task = 'comparison'
+    elif re.search(r'\b(?:find|list|identify|which|show me|give me)\b', low):
+        task = 'entity_list'
     elif re.search(r'^\s*how\b|\bsteps?\b|\btutorial\b', low):
         task = 'procedure'
     elif re.search(r'^\s*why\b|\bexplain\b', low):
@@ -13709,10 +13802,24 @@ def _arlong_build_answer_contract(query):
         entity_type = re.sub(r'\b(?:all|the|some|any)\b', ' ', entity_match.group(1), flags=re.I)
         entity_type = re.sub(r'\s+', ' ', entity_type).strip(' ,')[:80] or None
 
+    comparison_entities = _arlong_comparison_entities(raw) if task == 'comparison' else []
+    comparison_dimensions = []
+    if task == 'comparison':
+        for dimension_id, label, pattern in _ARLONG_COMPARISON_DIMENSION_PATTERNS:
+            if re.search(pattern, low):
+                comparison_dimensions.append({
+                    'id': f'dimension:{dimension_id}', 'name': label,
+                })
+
     required_fields = []
     for field, pattern in _ARLONG_CONTRACT_FIELD_PATTERNS:
         if re.search(pattern, low):
             required_fields.append({'id': f'field:{field}', 'name': field})
+    if task == 'comparison' and (comparison_entities or comparison_dimensions):
+        # Entities and dimensions are the actual comparison obligations. Generic
+        # fields such as "product" made coverage both redundant and misleading.
+        required_fields = [field for field in required_fields
+                           if field['id'] not in {'field:product', 'field:date', 'field:price'}]
     if task == 'entity_list' and re.search(r'\b(?:yc|y combinator)\b', low):
         if not any(item['id'] == 'field:batch' for item in required_fields):
             required_fields.append({'id': 'field:batch', 'name': 'batch'})
@@ -13746,9 +13853,16 @@ def _arlong_build_answer_contract(query):
     retrieval_base = _arlong_sanitize_planned_query(raw, raw)
     retrieval_queries = [retrieval_base]
     phrase = str(understood.get('phrase') or '').strip()
-    if task in ('entity_list', 'comparison'):
+    if task == 'comparison' and comparison_entities:
+        year_hint = ' '.join(sorted(set(re.findall(r'\b20\d{2}\b', raw))))
+        for entity in comparison_entities:
+            retrieval_queries.append(_arlong_sanitize_planned_query(
+                raw, f'"{entity}" official features pricing documentation {year_hint}'.strip()))
+        retrieval_queries.append(_arlong_sanitize_planned_query(
+            raw, f'{" ".join(comparison_entities)} independent hands-on comparison {year_hint}'.strip()))
+    elif task == 'entity_list':
         retrieval_queries.append(
-            _arlong_sanitize_planned_query(raw, f'{retrieval_base[:175]} official primary source'))
+            _arlong_sanitize_planned_query(raw, f'{retrieval_base} official primary source'))
     if phrase and phrase.lower() != low:
         retrieval_queries.append(f'"{phrase}"')
     deduped_queries = []
@@ -13758,19 +13872,23 @@ def _arlong_build_answer_contract(query):
             deduped_queries.append(candidate)
 
     contract_id = 'ac_' + hashlib.sha256(
-        ('evidence-contract-v1|' + low).encode('utf-8', 'ignore')
+        ('evidence-contract-v2|' + low).encode('utf-8', 'ignore')
     ).hexdigest()[:12]
     return {
         'contract_id': contract_id,
-        'version': 'evidence-contract-v1',
+        'version': 'evidence-contract-v2',
         'task': task,
         'entity_type': entity_type,
+        'entities': comparison_entities,
+        'comparison_dimensions': comparison_dimensions,
         'required_fields': required_fields,
         'constraints': constraints,
         'freshness': freshness,
         'temporal_window': _arlong_query_date_window(raw),
         'source_policy': source_policy,
-        'output_shape': 'rows_with_field_citations' if task == 'entity_list' else 'cited_answer',
+        'output_shape': ('comparison_matrix_with_field_citations' if task == 'comparison'
+                         else ('rows_with_field_citations' if task == 'entity_list'
+                               else 'cited_answer')),
         'verification': {
             'field_level_evidence': True,
             'independent_sources_preferred': 2,
@@ -13781,12 +13899,19 @@ def _arlong_build_answer_contract(query):
             'concepts': list(understood.get('keywords') or understood.get('terms') or [])[:16],
             'ambiguity': list(understood.get('ambiguity') or [])[:6],
         },
-        'retrieval_queries': deduped_queries[:3],
+        'retrieval_queries': deduped_queries[:8],
     }
 
 
 def _arlong_contract_requirements(contract):
     requirements = []
+    for item in contract.get('entities') or []:
+        label = item.get('name') if isinstance(item, dict) else item
+        slug = re.sub(r'[^a-z0-9]+', '_', str(label or '').lower()).strip('_')
+        if slug and label:
+            requirements.append({'id': f'entity:{slug}', 'label': label, 'kind': 'entity'})
+    for item in contract.get('comparison_dimensions') or []:
+        requirements.append({'id': item.get('id'), 'label': item.get('name'), 'kind': 'dimension'})
     for item in contract.get('required_fields') or []:
         requirements.append({'id': item.get('id'), 'label': item.get('name'), 'kind': 'field'})
     for item in contract.get('constraints') or []:
@@ -14025,6 +14150,74 @@ def _arlong_result_quality(item):
     return 0.0 if blocked else round(min(1.0, score), 3)
 
 
+def _arlong_recovery_queries(query, contract, results, evidence_set, limit=6,
+                             exclude_queries=None):
+    """Build bounded, requirement-directed searches after the first pass.
+
+    Recovery happens after extraction and temporal filtering, because a good
+    snippet is not evidence if the page is stale, hostile, or unreadable.
+    """
+    raw = re.sub(r'\s+', ' ', str(query or '')).strip()
+    years = ' '.join(sorted(set(re.findall(r'\b20\d{2}\b', raw))))
+    entities = list(contract.get('entities') or [])
+    if not entities:
+        # Recover the named subject from queries like "Gemini 3.8 Flash
+        # September 2 2026 official announcement ...".
+        month = (r'January|February|March|April|May|June|July|August|September|'
+                 r'October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec')
+        subject = re.match(
+            rf'\s*(?:find\s+)?(.{{2,120}}?)(?=\s+(?:{month}|official|independent|benchmark|analysis|20\d{{2}})\b)',
+            raw, re.I,
+        )
+        if subject:
+            candidate = subject.group(1).strip(' ,:-')
+            if candidate and len(candidate.split()) <= 12:
+                entities.append(candidate)
+
+    missing_ids = {item.get('id') for item in (evidence_set or {}).get('missing_requirements', [])}
+    queries = []
+    for entity in entities:
+        slug = re.sub(r'[^a-z0-9]+', '_', str(entity).lower()).strip('_')
+        if not missing_ids or f'entity:{slug}' in missing_ids or contract.get('task') == 'comparison':
+            queries.append(f'"{entity}" official features pricing documentation {years}'.strip())
+            queries.append(f'"{entity}" independent hands-on review benchmark {years}'.strip())
+
+    for item in results or []:
+        if item.get('extraction_status') != 'failed':
+            continue
+        host = (urlparse(item.get('url') or '').hostname or '').lower().removeprefix('www.')
+        if host:
+            title = clean_snippet_text(item.get('title') or host)[:90]
+            # Use both an operator query and a relaxed equivalent. Search
+            # operators occasionally return zero even when the page is indexed.
+            queries.append(f'site:{host} {title} features pricing')
+            queries.append(f'"{title}" {host} features pricing')
+
+    if not queries:
+        relaxed = re.sub(r'\b(?:site|inurl|intitle):\S+', ' ', raw, flags=re.I)
+        relaxed = re.sub(r'\b(?:prefer|only|exclude|excluding)\b.{0,80}', ' ', relaxed, flags=re.I)
+        relaxed = re.sub(r'\s+', ' ', relaxed).strip(' ,')
+        if relaxed:
+            queries.extend((f'{relaxed} official announcement',
+                            f'{relaxed} independent technical analysis'))
+
+    excluded = {str(item).strip().lower() for item in (exclude_queries or [])}
+    deduped = []
+    for candidate in queries:
+        candidate = _arlong_sanitize_planned_query(raw, candidate)
+        if (candidate and candidate.lower() not in excluded and
+                candidate.lower() not in {item.lower() for item in deduped}):
+            deduped.append(candidate)
+    return deduped[:max(1, int(limit or 1))]
+
+
+def _arlong_fetch_recovery_query(query, source_type='any'):
+    """Serper-first recovery branch with Puri used only for weak recall."""
+    primary = _search_serper(query, max_results=10, search_type=source_type)
+    secondary = _search_puri(query, max_results=10) if len(primary) < 3 else []
+    return _merge_search_provider_results(primary, secondary), bool(secondary)
+
+
 def _arlong_search_payload(q, page=1, source_type='any', mode='balanced',
                            max_results=10, include_content=True, content_max_chars=4000):
     """Run a search and build the full agentic response dict (shared by the
@@ -14032,6 +14225,13 @@ def _arlong_search_payload(q, page=1, source_type='any', mode='balanced',
     started = time.perf_counter()
     search_q = _arlong_sanitize_planned_query(q, _arlong_normalize_query(q))
     answer_contract = _arlong_build_answer_contract(q)
+    retrieval_type = source_type
+    if (str(source_type or '').lower() in ('any', 'general', 'web') and
+            (answer_contract.get('temporal_window') or {}).get('required') and
+            re.search(r'\b(?:news|release[sd]?|launch(?:ed)?|announcement|development|this week)\b', q, re.I)):
+        # Fresh release discovery belongs on the provider's live news index even
+        # when a client leaves source_type at its default "any".
+        retrieval_type = 'news'
     mode = mode if mode in ('instant', 'balanced', 'deep') else 'balanced'
     max_results = max(1, min(int(max_results or 10), 20))
     if mode == 'instant':
@@ -14042,20 +14242,21 @@ def _arlong_search_payload(q, page=1, source_type='any', mode='balanced',
     # Instant mode is the only metadata-only path. Balanced and deep search run
     # the neural/LLM relevance director before page evaluation.
     results, total_results = search_engine.search(
-        search_q, page, filter_type=source_type, fast=(mode == 'instant'),
+        search_q, page, filter_type=retrieval_type, fast=(mode == 'instant'),
     )
     executed_queries = [search_q]
     complex_contract = bool(answer_contract.get('constraints')) or answer_contract.get('task') in (
         'entity_list', 'comparison',
     )
     if mode != 'instant' and complex_contract:
-        extra_queries = (answer_contract.get('retrieval_queries') or [])[1:(3 if mode == 'deep' else 2)]
+        extra_limit = 5 if mode == 'deep' else 2
+        extra_queries = (answer_contract.get('retrieval_queries') or [])[1:extra_limit + 1]
         if extra_queries:
             try:
                 with ThreadPoolExecutor(max_workers=len(extra_queries)) as query_pool:
                     extra_lists = list(query_pool.map(
                         lambda contract_query: _search_serper(
-                            contract_query, max_results=12, search_type=source_type,
+                            contract_query, max_results=12, search_type=retrieval_type,
                         ),
                         extra_queries,
                     ))
@@ -14096,7 +14297,7 @@ def _arlong_search_payload(q, page=1, source_type='any', mode='balanced',
     for item in evaluated:
         item['quality_score'] = _arlong_result_quality(item)
     freshness_summary = None
-    if source_type == 'news':
+    if retrieval_type == 'news' or (answer_contract.get('temporal_window') or {}).get('required'):
         evaluated, freshness_summary = _arlong_apply_news_policy(
             q, answer_contract, evaluated,
         )
@@ -14104,6 +14305,92 @@ def _arlong_search_payload(q, page=1, source_type='any', mode='balanced',
     evaluated, evidence_set = _arlong_optimize_evidence_set(
         answer_contract, evaluated, evidence_atoms,
     )
+
+    recovery_queries = []
+    recovery_candidates = 0
+    recovery_secondary_used = False
+    should_recover = mode != 'instant' and (
+        not evaluated or
+        float(evidence_set.get('coverage_ratio') or 0) < 1.0 or
+        (mode == 'deep' and int(evidence_set.get('independent_domains') or 0) <
+         int((answer_contract.get('verification') or {}).get('independent_sources_preferred') or 1)) or
+        any(item.get('extraction_status') == 'failed' for item in evaluated)
+    )
+    if should_recover:
+        recovery_queries = _arlong_recovery_queries(
+            q, answer_contract, evaluated, evidence_set,
+            limit=6 if mode == 'deep' else 2,
+            exclude_queries=executed_queries,
+        )
+        if recovery_queries:
+            try:
+                with ThreadPoolExecutor(max_workers=min(6, len(recovery_queries))) as recovery_pool:
+                    recovered_lists = list(recovery_pool.map(
+                        lambda recovery_query: _arlong_fetch_recovery_query(
+                            recovery_query, source_type=retrieval_type),
+                        recovery_queries,
+                    ))
+                existing_urls = {
+                    (item.get('url') or '').rstrip('/').lower() for item in evaluated
+                }
+                recovered_raw = []
+                for recovery_query, (recovered, used_secondary) in zip(
+                        recovery_queries, recovered_lists):
+                    executed_queries.append(recovery_query)
+                    recovery_secondary_used = recovery_secondary_used or used_secondary
+                    for candidate in recovered or []:
+                        raw_item = candidate.to_dict() if hasattr(candidate, 'to_dict') else dict(candidate)
+                        key = (raw_item.get('url') or '').rstrip('/').lower()
+                        if key and key not in existing_urls:
+                            existing_urls.add(key)
+                            recovered_raw.append(raw_item)
+                recovered_raw = _arlong_prefer_sources(recovered_raw, source_type, q)
+                recovery_cap = 24 if mode == 'deep' else 10
+                recovered_raw = recovered_raw[:recovery_cap]
+                recovery_candidates = len(recovered_raw)
+                if recovered_raw:
+                    workers = min(8, len(recovered_raw))
+                    with ThreadPoolExecutor(max_workers=workers) as recovery_eval_pool:
+                        recovery_futures = [
+                            recovery_eval_pool.submit(
+                                _arlong_eval_result, q, item, len(evaluated) + index,
+                                include_content, content_max_chars,
+                            )
+                            for index, item in enumerate(recovered_raw, start=1)
+                        ]
+                        recovered_evaluated = [future.result() for future in recovery_futures]
+                    security_rejected += sum(
+                        1 for item in recovered_evaluated if _arlong_source_is_blocked(item)
+                    )
+                    recovered_evaluated = [
+                        item for item in recovered_evaluated
+                        if not _arlong_source_is_blocked(item)
+                    ]
+                    for item in recovered_evaluated:
+                        item['quality_score'] = _arlong_result_quality(item)
+                    if retrieval_type == 'news' or (answer_contract.get('temporal_window') or {}).get('required'):
+                        recovered_evaluated, recovery_freshness = _arlong_apply_news_policy(
+                            q, answer_contract, recovered_evaluated,
+                        )
+                        if freshness_summary and recovery_freshness:
+                            for key, value in recovery_freshness.get('rejected', {}).items():
+                                freshness_summary['rejected'][key] = (
+                                    freshness_summary['rejected'].get(key, 0) + value
+                                )
+                    evaluated.extend(recovered_evaluated)
+                    evidence_atoms = _arlong_build_evidence_atoms(q, answer_contract, evaluated)
+                    evaluated, evidence_set = _arlong_optimize_evidence_set(
+                        answer_contract, evaluated, evidence_atoms,
+                    )
+                    # Keep the response and its evidence graph aligned. Recovery
+                    # may inspect more pages than the public result budget allows.
+                    evaluated = evaluated[:max_results]
+                    evidence_atoms = _arlong_build_evidence_atoms(q, answer_contract, evaluated)
+                    evaluated, evidence_set = _arlong_optimize_evidence_set(
+                        answer_contract, evaluated, evidence_atoms,
+                    )
+            except Exception as exc:
+                app.logger.warning('Evidence recovery search failed: %s', str(exc)[:160])
     if source_type == 'official':
         # Preserve the caller's explicit source preference after semantic
         # reranking; otherwise a high-scoring commercial blog can jump above
@@ -14111,6 +14398,7 @@ def _arlong_search_payload(q, page=1, source_type='any', mode='balanced',
         evaluated.sort(key=lambda item: 0 if _arlong_is_official_url(item.get('url')) else 1)
     for rank, item in enumerate(evaluated, start=1):
         item['rank'] = rank
+    total_results = max(int(total_results or 0), len(evaluated))
     evaluation_ms = round((time.perf_counter() - evaluation_started) * 1000, 1)
     response = {
         "query": q,
@@ -14130,10 +14418,17 @@ def _arlong_search_payload(q, page=1, source_type='any', mode='balanced',
         },
         "search_metadata": {
             "source_preference": source_type,
+            "retrieval_vertical": retrieval_type,
             "content_included": bool(include_content),
             "ranking": "arlong_evidence_graph_v1",
             "candidate_generation": "serper_primary_puri_secondary",
             "retrieval_queries_executed": executed_queries,
+            "recovery": {
+                "triggered": bool(recovery_queries),
+                "queries": recovery_queries,
+                "candidates_evaluated": recovery_candidates,
+                "puri_secondary_used": recovery_secondary_used,
+            },
             "security_rejected_count": security_rejected,
             "freshness": freshness_summary,
         },
