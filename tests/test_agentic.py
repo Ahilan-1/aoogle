@@ -1475,6 +1475,43 @@ class TestPreIngressSecurity:
         assert security['risk_score'] == 0
         assert security['detector_version'] == neural_search.DETECTOR_VERSION
 
+    def test_framework_css_and_scripts_do_not_create_ambient_warning(self):
+        page = '''<html><head><style>.menu,.modal { display:none }</style>
+        <script>window.__DATA__ = {"title":"AI policy news","subscriberDiscount":false}</script>
+        </head><body><nav>Search Menu</nav><article>
+        Researchers published an AI agent security report and discussed tools used
+        in controlled evaluations. The article contains ordinary news copy.
+        </article></body></html>'''
+        report = neural_search.detect_injection(
+            page, url='https://news.example/article', allow_llm_escalation=False)
+        assert report.flagged is False
+        assert report.action == 'allow'
+        assert report.risk_score == 0
+        assert 'MULTIPLE_SUSPICIOUS_SIGNALS' not in report.flags
+
+    def test_descriptive_tool_prose_is_not_an_execution_request(self):
+        report = neural_search.detect_injection(
+            'The benchmark evaluates whether an AI agent can use a browser tool safely. '
+            'Researchers observed the tool during controlled trials.',
+            allow_llm_escalation=False,
+        )
+        assert report.flagged is False
+        assert report.action == 'allow'
+        assert 'TOOL_EXECUTION_REQUEST' not in report.flags
+
+    def test_hidden_menu_does_not_correlate_with_visible_tutorial_instructions(self):
+        page = '''<html><head><style>.menu { display:none }</style></head><body>
+        <article>Use YC's company directory. You can scrape the directory with a
+        script, use an API, and run records through one enrichment tool.</article>
+        <script>self.__next_f.push([1, "ordinary hydration data"])</script>
+        </body></html>'''
+        report = neural_search.detect_injection(
+            page, url='https://origami.chat/blog/example', allow_llm_escalation=False)
+        assert report.flagged is False
+        assert report.action == 'allow'
+        assert report.risk_score == 0
+        assert 'CONCEALED_INSTRUCTION' not in report.flags
+
 
 class TestClaudePluginPackage:
     def test_manifest_mcp_and_skills_have_official_layout(self):

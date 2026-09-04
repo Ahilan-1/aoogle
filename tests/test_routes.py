@@ -11,11 +11,126 @@ import main as m
 
 
 class TestRoutes:
+    def test_benchmark_wrapper_executes_embedded_research_query(self):
+        query = (
+            'Benchmark three AI web search APIs - Exa, Arlong Search, and Parallel Search - '
+            'using exactly the same query: "What are the latest developments in AI agent '
+            'security in 2026? Focus on indirect prompt injection, tool poisoning, web-agent '
+            'security, agent security benchmarks, real-world incidents, and architectural '
+            'defenses." Evaluate relevance, freshness, source quality, coverage, factual '
+            'grounding, citation quality, and handling of adversarial/prompt-injection content. '
+            'Return enough evidence to compare the three search systems objectively.'
+        )
+
+        contract = m._arlong_build_answer_contract(query)
+        plan = m._arlong_compile_retrieval_plan(query, contract, mode='deep')
+        planned_queries = [branch['query'].lower() for branch in plan]
+
+        assert contract['benchmark_wrapper_detected'] is True
+        assert contract['task'] == 'factual_answer'
+        assert contract['entities'] == []
+        assert contract['research_query'].startswith(
+            'What are the latest developments in AI agent security in 2026?')
+        assert contract['temporal_window']['basis'] == 'year_to_date'
+        assert contract['temporal_window']['start'] == '2026-01-01'
+        assert {facet['id'] for facet in contract['topic_facets']} == {
+            'topic:indirect_prompt_injection',
+            'topic:tool_poisoning',
+            'topic:web_agent_security',
+            'topic:security_benchmarks',
+            'topic:real_world_incidents',
+            'topic:architectural_defenses',
+        }
+        assert planned_queries[0].replace('"', '') == 'ai agent security 2026'
+        assert any('indirect prompt injection' in item for item in planned_queries)
+        assert any('tool and mcp poisoning' in item for item in planned_queries)
+        assert any('architectural defenses' in item for item in planned_queries)
+        assert all('three search systems objectively' not in item for item in planned_queries)
+
+    def test_direct_comparison_still_compiles_as_comparison(self):
+        query = 'Compare Exa, Arlong Search, and Parallel Search on source grounding and citations.'
+        contract = m._arlong_build_answer_contract(query)
+
+        assert contract['benchmark_wrapper_detected'] is False
+        assert contract['task'] == 'comparison'
+        assert contract['entities'] == ['Exa', 'Arlong Search', 'Parallel Search']
+
+    def test_security_research_brief_keeps_question_intent_and_every_facet(self):
+        query = (
+            'What are the latest developments in AI agent security in 2026? Focus on '
+            'indirect prompt injection, tool poisoning, web-agent security, agent security '
+            'benchmarks, real-world incidents, and architectural defenses. Prefer recent '
+            'primary research, official security guidance, and high-quality technical '
+            'sources. Identify major developments and cite evidence.'
+        )
+
+        contract = m._arlong_build_answer_contract(query)
+        plan = m._arlong_compile_retrieval_plan(query, contract, mode='deep')
+        planned = ' '.join(branch['query'].lower() for branch in plan)
+
+        assert contract['task'] == 'factual_answer'
+        assert contract['entity_type'] is None
+        assert contract['temporal_window']['start'] == '2026-01-01'
+        assert len(plan) <= 8
+        assert plan[0]['query'].replace('"', '') == 'AI agent security 2026'
+        assert 'ai model releases' not in planned
+        for facet in (
+                'indirect prompt injection', 'tool and mcp poisoning', 'web-agent security',
+                'agent security benchmarks', 'real-world security incidents',
+                'architectural defenses'):
+            assert facet.lower() in planned
+
+    def test_recovery_can_force_puri_after_usable_recall_collapses(self, monkeypatch):
+        from types import SimpleNamespace
+
+        primary = [SimpleNamespace(url=f'https://primary.example/{index}') for index in range(5)]
+        secondary = [SimpleNamespace(url='https://secondary.example/evidence')]
+        calls = []
+        monkeypatch.setattr(m, '_search_serper', lambda *args, **kwargs: primary)
+        monkeypatch.setattr(
+            m, '_search_puri',
+            lambda *args, **kwargs: calls.append(args[0]) or secondary,
+        )
+
+        results, used_secondary = m._arlong_fetch_recovery_query(
+            'AI agent security architectural defenses 2026', force_secondary=True)
+
+        assert used_secondary is True
+        assert calls == ['AI agent security architectural defenses 2026']
+        assert len(results) == 6
+
+    def test_empty_authenticated_result_is_refunded(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(
+            m, '_arlong_refund_gate_credits',
+            lambda gate, credits: calls.append((gate, credits)) or True,
+        )
+        gate = ({'allowed': True}, 'key', 'test-key')
+
+        assert m._arlong_refund_empty_result(
+            gate, {'returned_results': 0, 'evidence_atoms': []}, 12) is True
+        assert calls == [(gate, 12)]
+        assert m._arlong_refund_empty_result(
+            gate, {'returned_results': 1}, 12) is False
+
+    def test_navigation_and_hydration_text_cannot_become_evidence_claims(self):
+        assert m._arlong_is_boilerplate_claim(
+            'Apps Menu News Homepage Latest News Video Gallery Programmes Photo Gallery '
+            'News Bulletins News Archive Live Video News Home OpenAI takes it slow') is True
+        assert m._arlong_is_boilerplate_claim(
+            'id: 11788492708561 title: Story firstPublishedDate: 2026-09-04 '
+            'lastPublishedDate: 2026-09-04 keywords: artificial intelligence') is True
+        assert m._arlong_is_boilerplate_claim(
+            'Researchers measured indirect prompt-injection attacks across thirteen models '
+            'and reported the successful attack rate in their evaluation.') is False
+
     def test_home_page(self, client):
         resp = client.get('/')
         assert resp.status_code == 200
         assert b'Secure Web Search API for AI Agents' in resp.data
         assert b'Arlong Evidence Graph Search' in resp.data
+        assert b'class="search-form" action="/login"' in resp.data
+        assert b'name="redirect" value="/playground"' in resp.data
         assert b'rel="canonical" href="https://arlong.org/"' in resp.data
         assert b'application/ld+json' in resp.data
 

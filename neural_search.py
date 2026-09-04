@@ -70,7 +70,12 @@ INJECTION_RE_SIGNALS = [
 BEHAVIOR_RE_SIGNALS = [
     (re.compile(r'\b(?:send|upload|post|transmit|exfiltrat\w*|forward)\b.{0,90}\b(?:secret|token|password|credential|api[_ -]?key|environment variable|\.env|private key|seed phrase)\b', re.I | re.S), 'SECRET_EXFILTRATION', 6),
     (re.compile(r'\b(?:enter|provide|paste|submit|verify|reveal)\b.{0,70}\b(?:password|credential|api[_ -]?key|private key|seed phrase|recovery phrase|cvv|social security)\b', re.I | re.S), 'CREDENTIAL_SOLICITATION', 5),
-    (re.compile(r'\b(?:run|execute|invoke|call|use)\b.{0,60}\b(?:shell|terminal|command|tool|function|powershell|bash|cmd(?:\.exe)?)\b', re.I | re.S), 'TOOL_EXECUTION_REQUEST', 4),
+    (re.compile(r'(?:(?:^|[\n.!?]\s*)(?:please\s+)?(?:run|execute|invoke|call|use)\b|'
+                r'\b(?:you|assistant|agent|model)\s+(?:must|should|need(?:s)?\s+to|have\s+to)\s+'
+                r'(?:run|execute|invoke|call|use)\b|\b(?:instructions?|rules?|prompt)\b.{0,30}'
+                r'\b(?:and|then)\s+(?:run|execute|invoke|call)\b)'
+                r'.{0,60}\b(?:shell|terminal|command|tool|function|powershell|bash|cmd(?:\.exe)?)\b',
+                re.I | re.S), 'TOOL_EXECUTION_REQUEST', 4),
     (re.compile(r'\b(?:download|install)\b.{0,80}\b(?:and|then)\b.{0,30}\b(?:run|execute|open)\b', re.I | re.S), 'DOWNLOAD_EXECUTE', 5),
     (re.compile(r'\b(?:do not|never)\b.{0,35}\b(?:tell|inform|mention|reveal)\b.{0,40}\b(?:user|developer|operator|human)\b', re.I | re.S), 'HIDE_FROM_USER', 4),
     (re.compile(r'(?:^|\n)\s*(?:system|assistant|developer|tool)\s*(?:message)?\s*:', re.I), 'ROLE_IMPERSONATION', 4),
@@ -81,7 +86,7 @@ _SECURITY_CACHE = {}
 _SECURITY_CACHE_LOCK = threading.Lock()
 _SECURITY_CACHE_MAX = 10000
 _SECURITY_SCAN_LIMIT = 48000
-DETECTOR_VERSION = '3.1'
+DETECTOR_VERSION = '3.2'
 
 AMBIENT_INJECTION_RE = (
     re.compile(r'<[^>]+>', re.I),           # raw markup in plain text context
@@ -507,6 +512,13 @@ def detect_injection(text, allow_llm_escalation=True, llm_eval=None, url=''):
     raw_scan = forms[0]
     for rx, flag in INJECTION_RE_SIGNALS:
         if any(rx.search(form) for form in forms):
+            # Framework CSS routinely contains hidden menus, modals, and
+            # off-screen accessibility helpers. Concealment is dangerous only
+            # when the hidden region itself contains an instruction; that
+            # correlation is handled by _concealed_instruction_fragments.
+            if flag in ('HIDDEN_CSS', 'OFFSCREEN_CSS'):
+                soft_hits += 1
+                continue
             if flag in ('ZERO_WIDTH_CONTROL', 'HIDDEN_CSS', 'OFFSCREEN_CSS',
                         'INSTRUCTION_OVERRIDE', 'SYSTEM_HIJACK'):
                 weight = 5 if flag in ('INSTRUCTION_OVERRIDE', 'SYSTEM_HIJACK') else 3
@@ -538,7 +550,9 @@ def detect_injection(text, allow_llm_escalation=True, llm_eval=None, url=''):
     for rx in AMBIENT_INJECTION_RE:
         if any(rx.search(form) for form in forms):
             soft_hits += 1
-    if soft_hits >= 3:
+    # Ambient HTML/script/ad vocabulary is useful corroborating telemetry but
+    # must never manufacture a public prompt-injection warning by itself.
+    if soft_hits >= 3 and weighted_flags:
         weighted_flags.append(('MULTIPLE_SUSPICIOUS_SIGNALS', 2))
         risk += 2
 
@@ -560,7 +574,8 @@ def detect_injection(text, allow_llm_escalation=True, llm_eval=None, url=''):
     flagged = bool(block_flags.intersection(flags))
     if not flagged:
         public_risk = min(public_risk, 59)
-    reason = 'high-confidence model or browser threat signals detected' if flagged else ''
+    reason = ('high-confidence model or browser threat signals detected' if flagged else
+              ('potential model-directed instruction requires review' if risk else ''))
 
     if not flagged and risk in (3, 4):
         # ambiguous → escalate to LLM if provided (only for subtle cases)
