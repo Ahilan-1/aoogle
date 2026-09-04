@@ -100,7 +100,7 @@
     <div class="top-inner">
         <a href="/" class="ml"><span>Arlong</span></a>
         <div class="nav">
-            <a href="/ai">AI Chat</a>
+            <a href="/playground">Playground</a>
             <a href="/api/dashboard">Dashboard</a>
             <a href="/docs" class="active">Docs</a>
         </div>
@@ -347,30 +347,30 @@ results.<span class="fn">slice</span>(<span class="n">0</span>, <span class="n">
 
     <h3 id="mcp-tools">Available Tools</h3>
     <table>
-        <tr><th>Tool</th><th>Description</th></tr>
+        <tr><th>Tool</th><th>Credits</th><th>Description</th></tr>
         <tr>
             <td><code>arlong_quick</code></td>
-            <td>Low-token plain links with no extraction, embeddings, AI evaluation, or generated answer.</td>
+            <td>1</td><td>Low-token plain links with no extraction, embeddings, AI evaluation, or generated answer.</td>
         </tr>
         <tr>
             <td><code>arlong_search</code></td>
-            <td>Serper-primary live-web retrieval compiled into an Answer Contract, followed by security-screened evidence atoms and marginal evidence-set ranking.</td>
+            <td>3</td><td>Serper-primary live-web retrieval compiled into an Answer Contract, followed by security-screened evidence atoms and marginal evidence-set ranking.</td>
         </tr>
         <tr>
             <td><code>arlong_deep</code></td>
-            <td>Parallel evidence-gap retrieval across up to 20 sources, with Answer Contract coverage, source-lineage deduplication, claim-level records, and abstention telemetry.</td>
+            <td>12</td><td>Parallel evidence-gap retrieval across up to 20 sources, with Answer Contract coverage, source-lineage deduplication, claim-level records, and abstention telemetry.</td>
         </tr>
         <tr>
             <td><code>arlong_extract</code></td>
-            <td>Extract up to 12,000 characters of clean page text with prompt-injection checks and an explicit <code>extraction_status</code>.</td>
+            <td>2</td><td>Extract up to 12,000 characters of clean page text with prompt-injection checks and an explicit <code>extraction_status</code>.</td>
         </tr>
         <tr>
             <td><code>arlong_answer</code></td>
-            <td>Grounded AI answer with cited sources, explicit evidence claims, and an epistemic state that distinguishes textual overlap from factual verification.</td>
+            <td>12 / 20 deep</td><td>Grounded AI answer with cited sources, explicit evidence claims, and an epistemic state that distinguishes textual overlap from factual verification.</td>
         </tr>
         <tr>
             <td><code>arlong_status</code></td>
-            <td>Live health snapshot of the model router (RPM/RPD/TPM/TPD usage + cooldowns) and neural module (local vs remote embeddings).</td>
+            <td>Free</td><td>Live health snapshot of the model router (RPM/RPD/TPM/TPD usage + cooldowns) and neural module (local vs remote embeddings).</td>
         </tr>
     </table>
 
@@ -549,13 +549,13 @@ console.<span class="fn">log</span>(results);</pre>
         <li><strong>Cache results</strong> &mdash; identical queries return the same results for one hour. Cache locally to avoid hitting the rate limit.</li>
         <li><strong>Respect rate limits</strong> &mdash; 2 req/hour tokenless, or 80 req/30 minutes with an API key. Back off on <code>429</code> responses.</li>
         <li><strong>Use the MCP server</strong> &mdash; for Claude Desktop / Cursor integrations, the remote MCP endpoint is the easiest path. Zero dependencies.</li>
-        <li><strong>Send your key</strong> &mdash; requests count against your account allowance instead of an anonymous IP limit. Free includes 100 API/MCP calls monthly; Founder and Pro include 2,000 per billing period. An 80-request/30-minute burst limit still applies.</li>
+        <li><strong>Send your key</strong> &mdash; authenticated Playground, API, and MCP operations use one shared credit balance. Free includes 100 credits every three days; paid credits refill monthly. An 80-request/30-minute burst limit still applies.</li>
         <li><strong>Monitor status</strong> &mdash; call <code>/api/arlong/status</code> or check the MCP <code>arlong_status</code> tool for router health before high-volume requests.</li>
     </ul>
 
     <div class="footer">
         <a href="/">Search</a>
-        <a href="/ai">AI Chat</a>
+        <a href="/playground">Playground</a>
         <a href="/api/dashboard">API Dashboard</a>
         <a href="/docs">Docs</a>
     </div>

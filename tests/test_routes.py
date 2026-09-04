@@ -288,12 +288,25 @@ class TestCommunitySupport:
         assert response.status_code == 302
         assert '/login' in response.location or '/signup' in response.location
 
-    def test_retired_ai_chat_redirects_to_agent_playground(self, client):
+    def test_retired_ai_chat_redirects_to_playground(self, client):
         self._login_user(client, 'appearanceuser')
         response = client.get('/ai/chat')
         assert response.status_code == 302
-        assert '/dashboard' in response.location
-        assert 'tab=agent' in response.location
+        assert response.location.endswith('/playground')
+
+    def test_pricing_uses_one_balance_and_keeps_subscription_prices(self, client):
+        page = client.get('/premium')
+        assert page.status_code == 200
+        assert b'ONE BALANCE' in page.data
+        assert b'2,500' in page.data
+        assert b'4,000' in page.data
+        assert b'6,000' in page.data
+        assert b'$3' in page.data
+        assert b'$5' in page.data
+        assert b'$52' in page.data
+        assert b'Save $8 compared with 12 Pro months' in page.data
+        assert b'Normal Search runs' not in page.data
+        assert b'API &amp; MCP credits every month' not in page.data
 
     def test_openai_apps_domain_verification_challenge(self, client):
         response = client.get('/.well-known/openai-apps-challenge')
@@ -437,11 +450,11 @@ class TestCommunitySupport:
         assert processed_again is False
         assert m.data_manager.get_api_credit_wallet(user['user_id'])['balance'] == 300
 
-    def test_free_user_can_spend_prepaid_credits_after_included_allowance(self, client):
+    def test_free_user_can_spend_prepaid_credits_after_unified_allowance(self, client):
         import main as m
         user = self._login_user(client, 'freecredituser')
         uid = user['user_id']
-        assert m.data_manager.consume_plan_usage(uid, 'api', 30)['allowed'] is True
+        assert m.data_manager.consume_plan_usage(uid, 'api', 100)['allowed'] is True
         assert m.data_manager.consume_plan_usage(uid, 'api', 1)['allowed'] is False
         m.data_manager.grant_api_credits(uid, 2, 'Purchased test credits', source='test')
         result = m.data_manager.consume_plan_usage(uid, 'api', 1)
@@ -452,11 +465,27 @@ class TestCommunitySupport:
         import main as m
         user = self._login_user(client, 'deeprefunduser')
         uid = user['user_id']
-        consumed = m.data_manager.consume_plan_usage(uid, 'deep', 1)
+        consumed = m.data_manager.consume_plan_usage(
+            uid, 'deep', m.CREDIT_COSTS['playground_research'])
         assert consumed['allowed'] is True
-        assert consumed['used'] == 1
-        restored = m.data_manager.refund_plan_usage(uid, 'deep', 1)
+        assert consumed['used'] == 12
+        restored = m.data_manager.refund_plan_usage(
+            uid, 'deep', m.CREDIT_COSTS['playground_research'])
         assert restored['used'] == 0
         assert restored['remaining'] == restored['limit']
+
+    def test_playground_api_and_mcp_share_one_credit_balance(self, client):
+        import main as m
+        user = self._login_user(client, 'unifiedcredituser')
+        uid = user['user_id']
+        m.data_manager.consume_plan_usage(uid, 'standard', 3)
+        m.data_manager.consume_plan_usage(uid, 'api', 2)
+        usage = m.data_manager.get_plan_usage(uid)['usage']
+        assert usage['credits']['used'] == 5
+        assert usage['standard']['used'] == 5
+        assert usage['api']['used'] == 5
+        assert m.PLAN_LIMITS['free']['credits'] == 100
+        assert m.CREDIT_COSTS['arlong_deep'] == 12
+        assert m.CREDIT_PACKS[100]['price'] == 1.49
 
 

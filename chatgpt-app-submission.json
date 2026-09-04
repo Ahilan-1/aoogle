@@ -27,7 +27,7 @@
         "destructiveHint": false
       },
       "justifications": {
-        "read_only_justification": "Retrieves and evaluates public search results while recording account usage and deducting an MCP credit.",
+        "read_only_justification": "Retrieves and evaluates public search results while recording account usage and deducting three unified credits.",
         "open_world_justification": "Does not publish content or change public internet or third-party state.",
         "destructive_justification": "Does not delete, overwrite, revoke, or perform irreversible actions."
       }
@@ -39,7 +39,7 @@
         "destructiveHint": false
       },
       "justifications": {
-        "read_only_justification": "Performs multi-source retrieval and analysis while recording usage and deducting two MCP credits.",
+        "read_only_justification": "Performs multi-source retrieval and analysis while recording usage and deducting twelve unified credits.",
         "open_world_justification": "Only reads public sources and does not publish or modify external content.",
         "destructive_justification": "Does not delete, overwrite, revoke, or perform irreversible actions."
       }
@@ -51,7 +51,7 @@
         "destructiveHint": false
       },
       "justifications": {
-        "read_only_justification": "Fetches a selected public webpage but records usage and deducts the applicable MCP credit.",
+        "read_only_justification": "Fetches a selected public webpage but records usage and deducts two unified credits.",
         "open_world_justification": "Does not submit forms, publish content, or modify the selected website.",
         "destructive_justification": "Does not delete, overwrite, revoke, or perform irreversible actions."
       }
@@ -63,7 +63,7 @@
         "destructiveHint": false
       },
       "justifications": {
-        "read_only_justification": "Generates a cited answer from public sources while recording usage and deducting three MCP credits.",
+        "read_only_justification": "Generates a cited answer from public sources while recording usage and deducting twelve credits, or twenty in deep mode.",
         "open_world_justification": "Does not publish the generated answer or modify any external service.",
         "destructive_justification": "Does not delete, overwrite, revoke, or perform irreversible actions."
       }

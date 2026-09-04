@@ -9,12 +9,12 @@ In the Dodo test-mode dashboard, open **Product Catalog → Products → Create 
 Create **Arlong Pro Monthly** with:
 
 - Product type: Subscription / recurring
-- Price: INR 399
+- Price: INR 499
 - Billing interval: Every 1 month
 - Tax category: SaaS
 - Tax inclusive: Enabled
 - Purchasing power parity: Enabled, if available on the product form
-- Description: 300 standard AI answers, 25 deep research answers, and 2,000 API/MCP searches per billing period
+- Description: 4,000 unified Arlong credits each month for Playground, REST API, and MCP
 
 Copy the resulting product ID into `.env`:
 
@@ -24,8 +24,9 @@ DODO_PAYMENTS_PRODUCT_ID_MONTHLY=pdt_...
 
 Create **Arlong Pro Annual** separately with:
 
-- Price: INR 3,990
+- Price: INR 5,000
 - Billing interval: Every 1 year
+- Description: 6,000 unified Arlong credits per monthly refill for Playground, REST API, and MCP
 - All other settings identical to Monthly
 
 Copy its ID:
@@ -35,6 +36,28 @@ DODO_PAYMENTS_PRODUCT_ID_ANNUAL=pdt_...
 ```
 
 Monthly and annual billing must be separate Dodo products.
+
+Create or update **Arlong Founder** with:
+
+- Price: INR 289
+- Billing interval: Every 1 month
+- Description: 2,500 unified Arlong credits each month for Playground, REST API, and MCP
+
+Keep the existing `DODO_PAYMENTS_PRODUCT_ID_FOUNDER` environment name. Founder access is capped by the application at 100 active or pending seats.
+
+Create or update the one-time prepaid-credit products to match the public dashboard:
+
+| Credits | USD price |
+| ---: | ---: |
+| 100 | $1.49 |
+| 200 | $2.69 |
+| 300 | $3.79 |
+| 600 | $6.99 |
+| 1,500 | $15.99 |
+| 3,000 | $29.99 |
+| 6,000 | $54.99 |
+
+Keep the existing `DODO_PAYMENTS_PRODUCT_ID_CREDITS_<amount>` environment names. The displayed price in Arlong does not change the amount charged by Dodo; the product prices must also be updated in the Dodo dashboard before deployment.
 
 ## 2. Enable regional currency
 

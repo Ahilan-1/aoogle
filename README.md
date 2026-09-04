@@ -1,6 +1,6 @@
 # aoogle
 
-A meta search engine that scrapes public web indexes and re-ranks results using a multi-factor scoring algorithm. No ads, no promoted links, no user tracking. AI features (chat at `/ai` and the optional search "AI Summary" button) are opt-in and never run by default.
+A secure, evidence-aware web retrieval engine for people and AI agents. Arlong compiles agent tasks into live-web searches, screens retrieved content, and returns structured evidence through the Playground, REST API, and MCP.
 
 ## How it works
 
@@ -24,7 +24,7 @@ A meta search engine that scrapes public web indexes and re-ranks results using 
 - Search suggestions (powered by Google Suggest API)
 - "I'm Feeling Lucky" — random wholesome query
 - Domain sitelinks — repeated hits from the same root domain collapse into a single parent card with indented child links
-- Opt-in AI Summary button on results plus a dedicated AI chat at `/ai`
+- Interactive Playground for Search and Deep Research
 - Scoring is fully transparent and heuristic (no ML, no vectors, no indexing)
 
 ## API
@@ -38,7 +38,7 @@ GET /api/search?q=your+query
 Two access tiers:
 
 - **Tokenless** — 2 requests per hour per IP address. For occasional, exploratory use.
-- **Registered** — create a free account, accept the [Terms of Service](https://arlong.org/terms-of-service), and get an API key with a burst limit of **80 requests per 30 minutes**. Free includes 30 API/MCP credits every three days; paid allowances are listed on the membership page. Keys and usage live in the Arlong dashboard.
+- **Registered** — create a free account, accept the [Terms of Service](https://arlong.org/terms-of-service), and get an API key with a burst limit of **80 requests per 30 minutes**. Free includes 100 unified credits every three days; the same balance works in Playground, API, and MCP.
 
 Pass your key via the `Authorization` header (`Authorization: Bearer al_...`) or the `key` query parameter.
 
@@ -49,10 +49,10 @@ Compatible MCP clients discover authorization through
 MCP search profiles are explicit so agents can control latency and context use:
 
 - `arlong_quick` — plain links only; no extraction or AI evaluation (1 credit)
-- `arlong_search` — Serper-primary neural relevance, trust signals, and screened previews (1 credit)
-- `arlong_deep` — parallel Arlong research lanes, extraction, and claim-level evidence across up to 20 sources (2 credits)
-- `arlong_extract` — clean text from one public URL (1 credit)
-- `arlong_answer` — grounded cited synthesis (3 credits)
+- `arlong_search` — Serper-primary neural relevance, trust signals, and screened previews (3 credits)
+- `arlong_deep` — parallel Arlong research lanes, extraction, and claim-level evidence across up to 20 sources (12 credits)
+- `arlong_extract` — clean text from one public URL (2 credits)
+- `arlong_answer` — grounded cited synthesis (12 credits, or 20 in deep mode)
 - `arlong_status` — capabilities and live health (free)
 
 - Returns clean JSON with title, url, snippet, category, score, and more

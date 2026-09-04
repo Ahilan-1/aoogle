@@ -186,7 +186,7 @@ curl "https://arlong.org/api/arlong/search?q=python" -H "Authorization: Bearer Y
 
         <!-- ── Usage & Models ───────────────────────────────────────────── -->
         <div class="pane" id="pane-usage">
-            <div class="card"><h2>{{ plan_usage.limits.name }} plan allowance</h2><div class="grid"><div class="stat"><div class="num">{{ plan_usage.usage.api.used }}</div><div class="label">API/MCP used</div></div><div class="stat"><div class="num">{{ [plan_usage.usage.api.limit-plan_usage.usage.api.used,0]|max }}</div><div class="label">Period remaining</div></div><div class="stat"><div class="num">{{ plan_usage.usage.api.limit }}</div><div class="label">Period limit</div></div></div>{% if plan_usage.plan == 'free' %}<a class="btn btn-blue" href="/premium">Upgrade to 2,000 requests</a>{% endif %}</div>
+            <div class="card"><h2>{{ plan_usage.limits.name }} unified credit balance</h2><p class="muted">The same included balance is used by Playground, REST API, and MCP.</p><div class="grid"><div class="stat"><div class="num">{{ plan_usage.usage.credits.used }}</div><div class="label">Credits used</div></div><div class="stat"><div class="num">{{ [plan_usage.usage.credits.limit-plan_usage.usage.credits.used,0]|max }}</div><div class="label">Included remaining</div></div><div class="stat"><div class="num">{{ plan_usage.usage.credits.limit }}</div><div class="label">Period allowance</div></div></div>{% if plan_usage.plan == 'free' %}<a class="btn btn-blue" href="/premium">Compare credit plans</a>{% endif %}</div>
             {% if usage %}
             <div class="grid">
                 <div class="stat"><div class="num">{{ usage.used_30m }}</div><div class="label">Used ({{ usage.window_min }} min)</div></div>

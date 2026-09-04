@@ -334,6 +334,34 @@ class TestMcpExtractFailureIsolation:
         assert payload['result']['structuredContent']['extraction_status'] == 'ok'
 
 
+class TestUnifiedCreditPricing:
+    def test_deep_rest_search_charges_twelve_credits(self, client, monkeypatch):
+        charged = []
+        monkeypatch.setattr(m, '_service_blocked', lambda: None)
+        monkeypatch.setattr(m, '_arlong_api_gate',
+                            lambda credits=1: charged.append(credits) or ({}, 'key', 'test'))
+        monkeypatch.setattr(m, '_arlong_search_payload', lambda *a, **k: {'results': []})
+        response = client.get('/api/arlong/search?q=test&mode=deep')
+        assert response.status_code == 200
+        assert charged == [m.CREDIT_COSTS['arlong_deep']]
+        assert response.get_json()['usage']['credits_consumed'] == 12
+
+    def test_deep_mcp_answer_charges_twenty_credits(self, client, monkeypatch):
+        charged = []
+        monkeypatch.setattr(m, '_service_blocked', lambda: None)
+        monkeypatch.setattr(m, '_arlong_api_gate',
+                            lambda credits=1: charged.append(credits) or ({}, 'key', 'test'))
+        monkeypatch.setattr(m, '_mcp_call_tool', lambda *a, **k: json.dumps({'answer': 'ok'}))
+        response = client.post('/mcp', json={
+            'jsonrpc': '2.0', 'id': 12, 'method': 'tools/call',
+            'params': {'name': 'arlong_answer', 'arguments': {'q': 'test', 'mode': 'deep'}},
+        })
+        assert response.status_code == 200
+        payload = response.get_json()['result']['structuredContent']
+        assert charged == [m.CREDIT_COSTS['arlong_answer_deep']]
+        assert payload['usage']['credits_consumed'] == 20
+
+
 class TestIncidentAutopilot:
     def test_single_failure_does_not_open_incident(self):
         first = m._open_operational_incident('search_degraded')
@@ -612,6 +640,7 @@ class TestEvidenceGraphSearch:
         monkeypatch.setattr(m.search_engine, 'search', lambda *a, **k: ([raw], 1))
         monkeypatch.setattr(m, '_search_serper',
                             lambda query, *a, **k: (extra_queries.append(query) or []))
+        monkeypatch.setattr(m, '_search_puri', lambda *a, **k: [])
         monkeypatch.setattr(m, '_arlong_eval_result', lambda *a, **k: dict(evaluated))
         monkeypatch.setattr(m, '_arlong_attach_epistemic', lambda response, results: response)
         monkeypatch.setattr(m.search_stats, 'record', lambda: None)
@@ -623,7 +652,60 @@ class TestEvidenceGraphSearch:
         assert payload['evidence_atoms']
         assert payload['search_metadata']['ranking'] == 'arlong_evidence_graph_v1'
         assert 'evidence_marginal_score' in payload['results'][0]
-        assert extra_queries and 'official primary source' in extra_queries[0]
+        assert any('official directory primary source' in query for query in extra_queries)
+
+    def test_verbose_agent_brief_compiles_to_atomic_search_queries(self):
+        query = (
+            'Find the most important AI developments from the last 7 days as of '
+            'September 3, 2026. STRICT REQUIREMENT: return only new models, agents, '
+            'chips, open source and research. Prefer Google DeepMind, OpenAI, '
+            'Anthropic, Meta, NVIDIA, arXiv, Ars Technica and Artificial Analysis.'
+        )
+        contract = m._arlong_build_answer_contract(query)
+        plan = m._arlong_compile_retrieval_plan(query, contract, mode='deep')
+        assert plan[0] == {
+            'query': 'AI model releases 2026-08-28 to 2026-09-03',
+            'vertical': 'news',
+            'purpose': 'models',
+        }
+        assert any(item['purpose'] == 'agents' for item in plan)
+        assert any(item['purpose'] == 'open_source' for item in plan)
+        assert any(item['query'].startswith('site:deepmind.google AI') for item in plan)
+        assert all(len(item['query']) <= 220 for item in plan)
+        assert all('strict requirement' not in item['query'].lower() for item in plan)
+        assert all('prefer ' not in item['query'].lower() for item in plan)
+
+    def test_exact_subject_plan_isolates_requested_publishers(self):
+        query = (
+            'Gemini 3.8 Flash September 2 2026 official announcement and independent '
+            'benchmark analysis. Prefer Google official sources, Artificial Analysis '
+            'and Ars Technica.'
+        )
+        contract = m._arlong_build_answer_contract(query)
+        plan = m._arlong_compile_retrieval_plan(query, contract, mode='deep')
+        queries = [item['query'] for item in plan]
+        assert queries[0].startswith('"Gemini 3.8 Flash"')
+        assert any(query.startswith('site:blog.google Gemini 3.8 Flash') for query in queries)
+        assert any(query.startswith('site:artificialanalysis.ai Gemini 3.8 Flash')
+                   for query in queries)
+        assert any(query.startswith('site:arstechnica.com Gemini 3.8 Flash')
+                   for query in queries)
+
+    def test_recovery_never_replays_agent_control_instructions(self):
+        query = (
+            'Find AI releases September 1 2026. STRICT REQUIREMENT: return only '
+            'verified rows. Prefer official sources and exclude social media.'
+        )
+        contract = m._arlong_build_answer_contract(query)
+        recovery = m._arlong_recovery_queries(
+            query, contract, [], {
+                'missing_requirements': [{'id': 'field:answer', 'name': 'direct answer'}],
+                'independent_domains': 0,
+            },
+        )
+        assert recovery
+        assert all('strict requirement' not in item.lower() for item in recovery)
+        assert all('return only' not in item.lower() for item in recovery)
 
     def test_empty_exact_model_search_runs_recovery(self, monkeypatch):
         recovered = m.SearchResult(
@@ -685,6 +767,66 @@ class TestFreshNewsRetrieval:
         assert calls[0][0] == 'https://google.serper.dev/news'
         assert results[0].category == 'news'
         assert results[0].date == '2 hours ago'
+
+    def test_serper_scholar_uses_scholar_endpoint(self, monkeypatch):
+        calls = []
+
+        class Response:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {'organic': [{
+                    'title': 'A scientific paper',
+                    'link': 'https://arxiv.org/abs/2609.00001',
+                    'snippet': 'A controlled evaluation of the method.',
+                    'date': '2026-09-01',
+                }]}
+
+        monkeypatch.setattr(m, 'SERPER_API_KEY', 'test-key')
+        monkeypatch.setattr(m, 'SERPER_API_KEY_2', '')
+        monkeypatch.setattr(m.requests, 'post', lambda url, **kwargs: (
+            calls.append(url) or Response()
+        ))
+        results = m._search_serper('AI research paper', search_type='scholar')
+        assert calls == ['https://google.serper.dev/scholar']
+        assert results[0].category == 'academic'
+
+    def test_search_payload_executes_mixed_vertical_plan(self, monkeypatch):
+        primary_calls = []
+        branch_calls = []
+        monkeypatch.setattr(m.search_engine, 'search', lambda query, *a, **kwargs: (
+            primary_calls.append((query, kwargs.get('filter_type'))) or ([], 0)
+        ))
+        monkeypatch.setattr(m, '_arlong_fetch_recovery_query', lambda query, source_type='any': (
+            branch_calls.append((query, source_type)) or ([], False)
+        ))
+        monkeypatch.setattr(m, '_arlong_attach_epistemic', lambda response, results: response)
+        monkeypatch.setattr(m.search_stats, 'record', lambda: None)
+        monkeypatch.setattr(m.data_manager, 'increment_total_searches', lambda: None)
+        payload = m._arlong_search_payload(
+            'Latest AI research papers and model releases September 3 2026 from arXiv',
+            mode='deep', max_results=10,
+        )
+        assert primary_calls[0][1] == 'news'
+        assert any(vertical == 'scholar' for _query, vertical in branch_calls)
+        assert payload['search_metadata']['query_compiler'] == 'arlong_search_native_v1'
+        assert payload['search_metadata']['query_plan']
+
+    def test_quick_payload_also_compiles_verbose_agent_briefs(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(m.search_engine, 'search', lambda query, *a, **kwargs: (
+            calls.append((query, kwargs.get('filter_type'))) or ([], 0)
+        ))
+        monkeypatch.setattr(m.search_stats, 'record', lambda: None)
+        monkeypatch.setattr(m.search_engine.executor, 'submit', lambda *a, **k: None)
+        payload = m._arlong_quick_payload(
+            'Find latest AI developments September 3 2026. STRICT REQUIREMENT: '
+            'return only verified results. Prefer official sources.'
+        )
+        assert calls == [('AI model releases 2026-09-03', 'news')]
+        assert payload['interpreted_query'] == calls[0][0]
+        assert payload['search_metadata']['query_compiler'] == 'arlong_search_native_v1'
 
     def test_explicit_news_dates_compile_to_a_hard_window(self):
         window = m._arlong_query_date_window(

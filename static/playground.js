@@ -94,7 +94,7 @@
       const buttonIsAgent = button.dataset.mode === 'agent';
       button.type = 'button';
       button.classList.toggle('active', buttonIsAgent === isAgent);
-      button.querySelector('b').textContent = buttonIsAgent ? 'Agentic Search' : 'Normal Search';
+      button.querySelector('b').textContent = buttonIsAgent ? 'Research Agent' : 'Search';
       button.querySelector('small').textContent = buttonIsAgent
         ? 'Multi-pass evidence and synthesis'
         : 'One focused retrieval pass';
@@ -103,11 +103,11 @@
       const linkMode = new URL(link.href, window.location.origin).searchParams.get('mode');
       link.classList.toggle('active', linkMode === mode);
     });
-    modeStatus.textContent = isAgent ? 'AGENTIC SEARCH' : 'NORMAL SEARCH';
+    modeStatus.textContent = isAgent ? 'RESEARCH AGENT' : 'SEARCH';
     modeDescription.textContent = isAgent
       ? 'Plans independent evidence lanes and produces a grounded report.'
       : 'Uses one focused retrieval pass and returns screened sources.';
-    runButton.textContent = isAgent ? 'Run agentic search ↗' : 'Run normal search ↗';
+    runButton.textContent = isAgent ? 'Run research ↗' : 'Run search ↗';
     const url = new URL(window.location.href);
     url.searchParams.set('mode', mode);
     window.history.replaceState({}, '', url);
@@ -157,7 +157,7 @@
     runButton.disabled = true;
     copyButton.disabled = true;
     status.className = 'mode-status';
-    status.textContent = isAgent ? 'AGENTIC SEARCHING' : 'NORMAL SEARCHING';
+    status.textContent = isAgent ? 'RESEARCHING' : 'SEARCHING';
     output.innerHTML = '<div class="loading">Gathering source evidence…</div>';
 
     try {
@@ -189,14 +189,15 @@
       const autopilot = isAgent
         ? '<div class="autopilot"><span>Autopilot mode is on.</span><span>Checking coverage across independent sources.</span></div>'
         : '';
-      const productName = isAgent ? 'Agentic Search' : 'Normal Search';
+      const productName = isAgent ? 'Research Agent' : 'Search';
+      const creditsUsed = Number(data.allowance_consumed ?? (isAgent ? 12 : 3));
       output.innerHTML = `
         <div class="trace">${trace}</div>${autopilot}
         <div class="answer-label">${isAgent ? 'RESEARCH REPORT' : 'GROUNDED ANSWER'}</div>
         <div id="answer" class="answer">Preparing synthesis…</div>
         <div class="answer-label">SOURCES</div>${renderSources(data.results)}
-        <div class="usage">1 ${productName} allowance used · ${data.msg_remaining ?? '—'} remaining</div>
-        <div class="cost-breakdown">Customer charge: <b>$${Number(data.charged_usd || 0).toFixed(2)} USD</b> · included allowance</div>`;
+        <div class="usage">${creditsUsed} credits used by ${productName} · ${data.msg_remaining ?? '—'} included credits remaining</div>
+        <div class="cost-breakdown">No separate per-request charge when credits are available.</div>`;
 
       await streamAnswer({
         query,
@@ -233,14 +234,15 @@
       const panel = document.createElement('section');
       panel.className = 'history';
       panel.innerHTML = '<h3>Recent playground history</h3>' + chats.map((chat) => {
-        const product = chat.meter.deep ? 'Agentic Search' : 'Normal Search';
+        const product = chat.meter.deep ? 'Research Agent' : 'Search';
+        const credits = Number(chat.meter.allowance_consumed || (chat.meter.deep ? 12 : 3));
         const stamp = String(chat.updated_at || '').replace('T', ' ').slice(0, 16);
         const params = new URLSearchParams({
           mode: chat.meter.deep ? 'agent' : 'search',
           q: chat.title || '',
         });
         return `<a href="/playground?${params}">${escapeHtml(chat.title || 'Untitled request')}
-          <small>${product} · 1 included allowance · $${Number(chat.meter.charged_usd || 0).toFixed(2)} billed · ${escapeHtml(stamp)}</small></a>`;
+          <small>${product} · ${credits} credits · ${escapeHtml(stamp)}</small></a>`;
       }).join('');
       document.querySelector('.inside')?.appendChild(panel);
     } catch (_) {
@@ -253,20 +255,6 @@
     wordmark.setAttribute('aria-label', 'arlong');
     wordmark.innerHTML = '<i>a</i><i>r</i><i>l</i><i>o</i><i>n</i><i>g</i>';
   }
-  document.querySelectorAll('.nav a').forEach((link) => {
-    if (link.textContent.includes('Research Agent')) link.childNodes[0].nodeValue = '✦ Agentic Search ';
-    if (link.textContent.trim() === '⌕ Search') link.childNodes[0].nodeValue = '⌕ Normal Search';
-  });
-  const extractNav = [...document.querySelectorAll('.nav a')].find((link) =>
-    link.textContent.includes('Extract')
-  );
-  if (extractNav && !document.querySelector('.nav a[href="/people"]')) {
-    const people = document.createElement('a');
-    people.href = '/people';
-    people.textContent = '◎ People Search';
-    extractNav.before(people);
-  }
-
   runButton.type = 'button';
   copyButton.type = 'button';
   modeButtons.forEach((button) => button.addEventListener('click', () => setMode(button.dataset.mode)));
