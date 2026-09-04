@@ -1,0 +1,7 @@
+{% if account_offer.active %}
+<link rel="stylesheet" href="{{ url_for('static', filename='offer-picker.css') }}">
+<div class="offer-picker" data-offer-picker data-csrf="{{ csrf_token() }}" data-next="{{ account_offer.next_offer_at }}">
+<span data-offer-clock>Checking next offer availability…</span><button type="button" data-offer-request hidden disabled>Show another offer</button><span data-offer-error role="status"></span>
+<dialog aria-labelledby="offer-choice-title"><button type="button" class="offer-close" aria-label="Close offer dialog">×</button><p class="offer-kicker">YOUR CHOICE</p><h2 id="offer-choice-title">Another offer to consider</h2><p>Current discount: <strong data-current-percent></strong>. New discount: <strong data-new-percent></strong>.</p><p>Your current offer remains available unless you choose the new one. A new offer may be lower or higher.</p><p>Available plans start at $3/month (Founder, subject to availability), $5/month (Pro), or $52/year (Pro Annual), before discounts and taxes. Discounts apply only to eligible plans. Dodo confirms the payable price, discount duration, and renewal terms before purchase. Subscriptions renew automatically until cancelled.</p><div class="offer-choices"><button type="button" data-offer-action="keep">Keep my current offer</button><button type="button" data-offer-action="accept">Use the new offer</button></div><p data-dialog-error role="status"></p></dialog>
+</div><script src="{{ url_for('static', filename='offer-picker.js') }}" defer></script>
+{% endif %}

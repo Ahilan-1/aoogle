@@ -555,7 +555,7 @@ CREDIT_COSTS = {
 }
 
 PLAN_LIMITS = {
-    'free': {'name': 'Free', 'credits': 100, 'ctx': 15000, 'period_days': 3},
+    'free': {'name': 'Free', 'credits': 100, 'ctx': 15000, 'lifetime': True},
     'founder': {'name': 'Founder', 'credits': 2500, 'ctx': 150000},
     'pro': {'name': 'Pro', 'credits': 4000, 'ctx': 150000},
     'pro_annual': {'name': 'Pro Annual', 'credits': 6000, 'ctx': 150000},
@@ -586,6 +586,8 @@ AI_CLARIFY_MAX_ROUNDS = int(os.environ.get('AI_CLARIFY_MAX_ROUNDS', 2))
 AI_CLARIFY_MAX_QUESTIONS = int(os.environ.get('AI_CLARIFY_MAX_QUESTIONS', 5))
 AI_AUTO_FOLLOWUPS = False
 FOUNDER_SEAT_LIMIT = max(1, int(os.environ.get('FOUNDER_SEAT_LIMIT', 100)))
+ACCOUNT_BETA_OFFERS = {'FOMOP': 30, 'YOLO': 40, 'EARLYBETA': 15, 'BETA': 68}
+ACCOUNT_OFFER_COOLDOWN_SECONDS = 81 * 60
 PLACES_RADIUS_KM = 40  # drop places farther than this from the requested location
 PLACES_MAX_RESULTS = 4  # cap shown results (also caps Place Details billing)
 PLACES_GL_DEFAULT = 'in'
@@ -5325,6 +5327,74 @@ class DataManager:
             record = self.data.setdefault('billing_subscriptions', {}).get(str(user_id), {})
             return dict(record)
 
+    def get_account_beta_offer(self, user_id, *, create=True):
+        """Return standing free-plan offers, without an artificial deadline.
+
+        Legacy timed-offer records are retained but no longer govern this
+        campaign. Dodo validates coupon availability and final discounts.
+        """
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            entitlement = self._entitlement_locked(user_id)
+            if entitlement.get('plan') != 'free':
+                return {'active': False, 'eligible': False, 'reason': 'paid_plan'}
+            assignments = self.data.setdefault('account_offer_assignments', {})
+            uid = str(user_id)
+            code = assignments.get(uid, {}).get('code')
+            if code not in ACCOUNT_BETA_OFFERS:
+                if not create:
+                    return {'active': False, 'eligible': True}
+                code = secrets.choice(tuple(ACCOUNT_BETA_OFFERS))
+                assignments[uid] = {'code': code, 'assigned_at': datetime.now(timezone.utc).isoformat()}
+                _save_json(self.data)
+            record = assignments[uid]
+            if not record.get('next_offer_at'):
+                record['next_offer_at'] = (datetime.now(timezone.utc) + timedelta(seconds=ACCOUNT_OFFER_COOLDOWN_SECONDS)).isoformat()
+                _save_json(self.data)
+            return {
+                'active': True,
+                'eligible': True,
+                'campaign': 'beta_free_plan',
+                'code': code,
+                'percent': ACCOUNT_BETA_OFFERS[code],
+                'next_offer_at': record['next_offer_at'],
+                'pending_percent': ACCOUNT_BETA_OFFERS.get(record.get('pending_code')),
+            }
+
+    def change_account_offer(self, user_id, action):
+        """Persist proposals and choices; a proposal never replaces an offer by itself."""
+        self.get_account_beta_offer(user_id)
+        with self._lock:
+            loaded = _load_json()
+            if loaded:
+                self.data = loaded
+            if self._entitlement_locked(user_id).get('plan') != 'free':
+                return False, 'Offers are only available to free accounts.'
+            record = self.data.get('account_offer_assignments', {}).get(str(user_id), {})
+            if record.get('code') not in ACCOUNT_BETA_OFFERS:
+                return False, 'Your offer is unavailable. Please try again.'
+            if action == 'propose':
+                if record.get('pending_code'):
+                    return True, ''
+                now = datetime.now(timezone.utc)
+                ready = _parse_iso_datetime(record.get('next_offer_at'))
+                if not ready or now < ready:
+                    return False, 'Your next offer is not available yet.'
+                record['pending_code'] = secrets.choice(tuple(code for code in ACCOUNT_BETA_OFFERS if code != record['code']))
+                record['next_offer_at'] = (now + timedelta(seconds=ACCOUNT_OFFER_COOLDOWN_SECONDS)).isoformat()
+            elif action in {'accept', 'keep'}:
+                if record.get('pending_code') not in ACCOUNT_BETA_OFFERS:
+                    return False, 'There is no pending offer to choose.'
+                if action == 'accept':
+                    record['code'] = record['pending_code']
+                record.pop('pending_code', None)
+            else:
+                return False, 'Invalid offer action.'
+            _save_json(self.data)
+            return True, ''
+
     def get_founder_seats_claimed(self):
         """Count active founders plus recent pending checkouts as reserved seats."""
         with self._lock:
@@ -5374,8 +5444,9 @@ class DataManager:
 
     @staticmethod
     def _usage_period(entitlement, now):
-        # Free access renews in predictable three-day windows. Paid product
-        # allowances refill monthly even when the Dodo subscription is annual.
+        # Free is a one-time allowance; paid allowances continue to refill monthly.
+        if entitlement.get('limits', {}).get('lifetime'):
+            return 'lifetime', None
         period_days = int(entitlement.get('limits', {}).get('period_days') or 0)
         if period_days:
             midnight = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
@@ -5396,6 +5467,19 @@ class DataManager:
         period_start, period_end = self._usage_period(entitlement, now)
         records = self.data.setdefault('plan_usage', {})
         record = records.get(str(user_id)) or {}
+        # Keep Free usage separate so upgrading and later downgrading cannot
+        # create another starter allowance. Preserve the retained legacy period's
+        # consumption; older overwritten periods cannot be reconstructed here.
+        lifetime = self.data.setdefault('free_lifetime_usage', {})
+        uid = str(user_id)
+        if uid not in lifetime and (record.get('plan') == 'free' or entitlement['plan'] == 'free'):
+            lifetime[uid] = {
+                'plan': 'free', 'period_start': 'lifetime', 'period_end': None,
+                'credits': max(0, int(record.get('credits', 0))) if record.get('plan') == 'free' else 0,
+                'credit_model': 'unified_v1', 'day': now.date().isoformat(),
+            }
+        if entitlement['plan'] == 'free':
+            record = lifetime[uid]
         if record.get('period_start') != period_start or record.get('plan') != entitlement['plan']:
             record = {
                 'plan': entitlement['plan'], 'period_start': period_start, 'period_end': period_end,
@@ -11512,7 +11596,7 @@ def home():
         return redirect(url_for('dashboard'))
     user_id = session.get('user_id')
     user = data_manager.get_user_by_id(user_id) if user_id else None
-    return render_template('ai_landing.html', user=user,
+    return render_template('ai_landing.html', user=user, show_offer=True,
                            announcement=data_manager.get_announcement())
 
 
@@ -11523,6 +11607,8 @@ def playground():
         return redirect(url_for('signup', mode='login', redirect='/playground'))
     user = data_manager.get_user_by_id(session['user_id'])
     return render_template('playground.html', user=user,
+                           credit_wallet=data_manager.get_api_credit_wallet(session['user_id']),
+                           account_offer=_account_beta_offer(session['user_id']),
                            plan_usage=data_manager.get_plan_usage(session['user_id']),
                            initial_query=request.args.get('q', '')[:360],
                            initial_mode=request.args.get('mode', 'search'))
@@ -17001,6 +17087,9 @@ def dashboard():
     user = data_manager.get_user_by_id(session['user_id'])
     billing = data_manager.get_billing_record(session['user_id'])
     plan_usage = data_manager.get_plan_usage(session['user_id'])
+    account_offer = _account_beta_offer(session['user_id']) if plan_usage.get('plan') == 'free' else {
+        'active': False, 'eligible': False,
+    }
     keys = data_manager.get_api_keys_for_user(session['user_id'])
     accepted = data_manager.user_accepted_tos(session['user_id'])
     usage = None
@@ -17014,6 +17103,7 @@ def dashboard():
         user=user,
         billing=billing,
         plan_usage=plan_usage,
+        account_offer=account_offer,
         keys=keys, accepted_tos=accepted, api_usage=usage,
         mcp_url=_public_base_url() + '/mcp', credit_packs=CREDIT_PACKS,
         credit_product_ids={credits: _dodo_credit_product_id(credits) for credits in CREDIT_PACKS},
@@ -17341,6 +17431,16 @@ def _dodo_credit_product_id(credits):
     return os.environ.get(prefix + str(credits), '').strip()
 
 
+def _account_beta_offer(user_id, *, create=True):
+    if not user_id:
+        return {'active': False, 'eligible': False, 'expires_at': '', 'remaining_seconds': 0, 'codes': []}
+    try:
+        return data_manager.get_account_beta_offer(user_id, create=create)
+    except PersistenceUnavailableError:
+        app.logger.warning('Account offer unavailable because persistent storage is offline')
+        return {'active': False, 'eligible': False, 'expires_at': '', 'remaining_seconds': 0, 'codes': []}
+
+
 @app.route('/premium')
 def premium():
     user_id = session.get('user_id')
@@ -17351,6 +17451,9 @@ def premium():
                      ('pro' if billing_plan else '')))
     founder_claimed = data_manager.get_founder_seats_claimed()
     founder_left = max(0, FOUNDER_SEAT_LIMIT - founder_claimed)
+    account_offer = _account_beta_offer(user_id) if user_id else {
+        'active': False, 'eligible': False, 'expires_at': '', 'remaining_seconds': 0, 'codes': [],
+    }
     return render_template('premium.html',
         regional_price='$5',
         founder_price='$3',
@@ -17361,7 +17464,7 @@ def premium():
         founder_seats_left=founder_left,
         billing=billing,
         billing_active=str(billing.get('status', '')).lower() in {'active', 'trialing'},
-        current_plan=current_plan,
+        current_plan=current_plan, account_offer=account_offer,
         billing_ready=bool(_dodo_product_id('monthly')),
         annual_ready=bool(_dodo_product_id('annual')),
         founder_ready=bool(_dodo_product_id('founder')) and founder_left > 0,
@@ -17388,6 +17491,25 @@ def billing_page():
     )
 
 
+@app.route('/api/billing/offer', methods=['GET', 'POST'])
+def account_offer_api():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Sign in to view offers.'}), 401
+    try:
+        if request.method == 'POST':
+            body = request.get_json(silent=True) or {}
+            if not isinstance(body, dict) or body.get('action') not in ('propose', 'accept', 'keep'):
+                return jsonify({'error': 'Invalid offer action.'}), 400
+            ok, error = data_manager.change_account_offer(user_id, body.get('action'))
+            if not ok:
+                return jsonify({'error': error}), 409
+        offer = data_manager.get_account_beta_offer(user_id)
+        return jsonify({key: offer.get(key) for key in ('active', 'percent', 'next_offer_at', 'pending_percent')})
+    except PersistenceUnavailableError:
+        return jsonify({'error': 'Offers are temporarily unavailable.'}), 503
+
+
 @app.route('/api/billing/checkout', methods=['POST'])
 def billing_checkout():
     user_id = session.get('user_id')
@@ -17398,6 +17520,8 @@ def billing_checkout():
         return jsonify({'error': 'Add an email address to your account before subscribing'}), 400
     body = request.get_json(silent=True) or request.form
     plan = str(body.get('plan', 'monthly')).lower()
+    account_offer = _account_beta_offer(user_id)
+    selected_offer = account_offer.get('code', '') if account_offer.get('active') else ''
     if plan not in {'monthly', 'annual', 'founder'}:
         return jsonify({'error': 'Invalid billing plan'}), 400
     if plan == 'founder' and data_manager.get_founder_seats_claimed() >= FOUNDER_SEAT_LIMIT:
@@ -17413,6 +17537,8 @@ def billing_checkout():
             return_url=f'{base}/billing/success',
             cancel_url=f'{base}/premium?checkout=cancelled',
             plan=f'pro_{plan}',
+            discount_codes=[selected_offer] if selected_offer else None,
+            allow_discount_code=False,
         )
         data_manager.record_checkout(user_id, f'pro_{plan}', checkout.get('session_id', ''), product_id)
         return jsonify({'checkout_url': checkout['checkout_url']})
@@ -18397,14 +18523,7 @@ def user_profile(username):
     if not profile:
         return render_template('user_profile.html', profile=None, error='User not found'), 404
     owns_profile = session.get('username') == username
-    if owns_profile and request.args.get('public') != '1':
-        return redirect(url_for('dashboard', tab=request.args.get('tab', 'account')))
     profile['is_owner'] = owns_profile and request.args.get('public') != '1'
-    if profile['is_owner']:
-        user = data_manager.get_user_by_id(session.get('user_id'))
-        profile['email'] = user.get('email', '') if user else ''
-    else:
-        profile['email'] = ''
     return render_template('user_profile.html', profile=profile)
 
 

@@ -549,7 +549,7 @@ console.<span class="fn">log</span>(results);</pre>
         <li><strong>Cache results</strong> &mdash; identical queries return the same results for one hour. Cache locally to avoid hitting the rate limit.</li>
         <li><strong>Respect rate limits</strong> &mdash; 2 req/hour tokenless, or 80 req/30 minutes with an API key. Back off on <code>429</code> responses.</li>
         <li><strong>Use the MCP server</strong> &mdash; for Claude Desktop / Cursor integrations, the remote MCP endpoint is the easiest path. Zero dependencies.</li>
-        <li><strong>Send your key</strong> &mdash; authenticated Playground, API, and MCP operations use one shared credit balance. Free includes 100 credits every three days; paid credits refill monthly. An 80-request/30-minute burst limit still applies.</li>
+        <li><strong>Send your key</strong> &mdash; authenticated Playground, API, and MCP operations use one shared credit balance. Free includes 100 one-time credits that never expire or refresh; paid credits refill monthly. An 80-request/30-minute burst limit still applies.</li>
         <li><strong>Monitor status</strong> &mdash; call <code>/api/arlong/status</code> or check the MCP <code>arlong_status</code> tool for router health before high-volume requests.</li>
     </ul>
 

@@ -133,6 +133,30 @@ class TestRoutes:
         assert b'name="redirect" value="/playground"' in resp.data
         assert b'rel="canonical" href="https://arlong.org/"' in resp.data
         assert b'application/ld+json' in resp.data
+        assert b'TRUST,' in resp.data
+        assert b'pixel-stage' in resp.data
+        assert b'account-offer-banner' not in resp.data
+
+    def test_profile_redesign_owner_public_and_missing(self, client):
+        user = TestCommunitySupport._login_user(client, 'profiledesignuser')
+        owner = client.get('/u/profiledesignuser')
+        assert owner.status_code == 200
+        assert b'id="bio-form"' in owner.data
+        assert b'Account settings' in owner.data
+        public = client.get('/u/profiledesignuser?public=1')
+        assert public.status_code == 200
+        assert b'id="bio-form"' not in public.data
+        assert b'No collections yet' in public.data
+        assert user['email'].encode() not in public.data
+        with client.session_transaction() as session:
+            session.clear()
+        visitor = client.get('/u/profiledesignuser')
+        assert visitor.status_code == 200
+        assert b'id="bio-form"' not in visitor.data
+        assert b'Credits remaining' not in visitor.data
+        assert client.get('/u/missing-profile-xyz').status_code == 404
+        assert client.get('/static/profile.css').status_code == 200
+        assert client.get('/static/profile.js').status_code == 200
 
     def test_legacy_landing_redirects_to_canonical_home(self, client):
         resp = client.get('/land')
@@ -422,6 +446,199 @@ class TestCommunitySupport:
         assert b'Save $8 compared with 12 Pro months' in page.data
         assert b'Normal Search runs' not in page.data
         assert b'API &amp; MCP credits every month' not in page.data
+
+    def test_offer_selection_is_whitelisted_on_pricing(self, client):
+        anonymous = client.get('/premium?offer=earlybeta')
+        assert b'Explore your free-plan offers' in anonymous.data
+        assert b'EARLYBETA is selected' not in anonymous.data
+        self._login_user(client, 'pricingofferuser')
+        selected = client.get('/premium?offer=earlybeta')
+        assert selected.status_code == 200
+        assert b'Your account offer:' in selected.data
+        assert b'EARLYBETA' not in selected.data
+        rejected = client.get('/premium?offer=NOTREAL')
+        assert b'NOTREAL is selected' not in rejected.data
+
+    def test_dodo_checkout_payload_supports_verified_offer_codes(self, monkeypatch):
+        import dodo_billing
+
+        class CheckoutResponse:
+            ok = True
+            status_code = 200
+
+            @staticmethod
+            def json():
+                return {'session_id': 'checkout_test', 'checkout_url': 'https://checkout.example/test'}
+
+        captured = {}
+        monkeypatch.setattr(dodo_billing, 'configured', lambda: True)
+        monkeypatch.setattr(dodo_billing, 'api_key', lambda: 'test-key')
+        monkeypatch.setattr(
+            dodo_billing.requests, 'post',
+            lambda url, **kwargs: captured.update({'url': url, **kwargs}) or CheckoutResponse(),
+        )
+        result = dodo_billing.create_checkout(
+            product_id='prod_test', user_id='user_test', email='person@example.com',
+            name='Person', return_url='https://arlong.org/billing/success',
+            cancel_url='https://arlong.org/premium', plan='pro_monthly',
+            discount_codes=['earlybeta'], allow_discount_code=True,
+        )
+        assert result['checkout_url'] == 'https://checkout.example/test'
+        assert captured['json']['discount_codes'] == ['EARLYBETA']
+        assert captured['json']['feature_flags'] == {'allow_discount_code': True}
+
+    def test_assigned_discount_is_persistent_private_and_server_applied(self, client, monkeypatch):
+        user = self._login_user(client, 'assignedofferuser')
+        first = m.data_manager.get_account_beta_offer(user['user_id'])
+        assert first['percent'] in (15, 30, 40, 68)
+        assert m.data_manager.get_account_beta_offer(user['user_id'])['code'] == first['code']
+        for path in ('/dashboard', '/playground', '/premium?offer=BETA'):
+            page = client.get(path)
+            for code in m.ACCOUNT_BETA_OFFERS:
+                assert code.encode() not in page.data
+        captured = {}
+        def checkout(**kwargs):
+            captured.update(kwargs)
+            return {'checkout_url': 'https://checkout.example/test', 'session_id': 'assigned-session'}
+        monkeypatch.setattr(m.dodo_billing, 'create_checkout', checkout)
+        response = client.post('/api/billing/checkout', json={
+            'plan': 'monthly', 'offer': 'BETA', '_csrf_token': 'support-csrf',
+        }, headers={'X-CSRF-Token': 'support-csrf'})
+        assert response.status_code == 200
+        assert captured['discount_codes'] == [first['code']]
+        assert captured['allow_discount_code'] is False
+
+    def test_offer_cooldown_proposals_and_choices(self, client):
+        from datetime import datetime, timedelta, timezone
+        user = self._login_user(client, 'offerrotationuser')
+        first = m.data_manager.get_account_beta_offer(user['user_id'])
+        assert first['next_offer_at'] == m.data_manager.get_account_beta_offer(user['user_id'])['next_offer_at']
+        headers = {'X-CSRF-Token': 'support-csrf'}
+        def choose(action):
+            return client.post('/api/billing/offer', json={'action': action, '_csrf_token': 'support-csrf'}, headers=headers)
+        assert choose('propose').status_code == 409
+        def unlock():
+            with m.data_manager._lock:
+                m.data_manager.data['account_offer_assignments'][str(user['user_id'])]['next_offer_at'] = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+                m._save_json(m.data_manager.data)
+        unlock()
+        proposal = choose('propose').get_json()
+        assert proposal['pending_percent'] != first['percent']
+        assert choose('propose').get_json() == proposal
+        assert proposal['percent'] == first['percent']
+        assert 'code' not in proposal
+        kept = choose('keep').get_json()
+        assert kept['percent'] == first['percent']
+        assert kept['pending_percent'] is None
+        assert choose('propose').status_code == 409
+        unlock()
+        next_offer = choose('propose').get_json()
+        assert choose('accept').get_json()['percent'] == next_offer['pending_percent']
+        assert choose('accept').status_code == 409
+        with m.data_manager._lock:
+            m.data_manager.data.setdefault('billing_subscriptions', {})[str(user['user_id'])] = {
+                'plan': 'pro_monthly', 'status': 'active',
+                'current_period_end': (datetime.now(timezone.utc) + timedelta(days=20)).isoformat(),
+            }
+            m._save_json(m.data_manager.data)
+        assert choose('propose').status_code == 409
+        assert client.get('/api/billing/offer').get_json()['active'] is False
+
+    def test_free_credits_are_lifetime_and_survive_plan_changes(self, client):
+        from datetime import datetime, timedelta, timezone
+        user = self._login_user(client, 'lifetimecredituser')
+        uid = str(user['user_id'])
+        with m.data_manager._lock:
+            m.data_manager.data.setdefault('plan_usage', {})[uid] = {
+                'plan': 'free', 'period_start': '2020-01-01', 'credits': 40,
+                'credit_model': 'unified_v1',
+            }
+            m._save_json(m.data_manager.data)
+        usage = m.data_manager.get_plan_usage(uid)
+        assert usage['usage']['credits']['used'] == 40
+        assert usage['usage']['credits']['limit'] == 100
+        assert usage['period_end'] is None
+        assert m.data_manager._usage_period(usage, datetime(2040, 1, 1, tzinfo=timezone.utc)) == ('lifetime', None)
+        assert m.data_manager.consume_plan_usage(uid, 'credits', 60)['allowed'] is True
+        assert m.data_manager.consume_plan_usage(uid, 'credits', 1)['allowed'] is False
+        with m.data_manager._lock:
+            m.data_manager.data.setdefault('billing_subscriptions', {})[uid] = {
+                'plan': 'pro_monthly', 'status': 'active',
+                'current_period_end': (datetime.now(timezone.utc) + timedelta(days=20)).isoformat(),
+            }
+            m._save_json(m.data_manager.data)
+        assert m.data_manager.consume_plan_usage(uid, 'credits', 1)['allowed'] is True
+        with m.data_manager._lock:
+            m.data_manager.data['billing_subscriptions'][uid]['status'] = 'expired'
+            m.data_manager.data['billing_subscriptions'][uid]['current_period_end'] = '2020-01-01T00:00:00+00:00'
+            m._save_json(m.data_manager.data)
+        assert m.data_manager.get_plan_usage(uid)['usage']['credits']['used'] == 100
+        assert m.data_manager.consume_plan_usage(uid, 'credits', 1)['allowed'] is False
+
+    def test_free_workspace_shows_offer_and_paid_workspace_hides_it(self, client):
+        from datetime import datetime, timedelta, timezone
+        user = self._login_user(client, 'workspaceofferuser')
+        free_page = client.get('/dashboard')
+        assert b'class="account-offer-banner"' in free_page.data
+        assert b'Verified at checkout' in free_page.data
+        assert b'% OFF' in free_page.data
+        assert b'Credits remaining' in free_page.data
+        assert b'class="credit-meter"' in free_page.data
+        assert b'OFFER ENDS IN' not in free_page.data
+        assert b'class="workspace-nav"' in free_page.data
+        assert b'class="feature-grid"' in free_page.data
+        assert b'class="toolkit-layout"' in free_page.data
+        assert b'class="side"' not in free_page.data
+        assert b'filename=' not in free_page.data
+        assert client.get('/static/dashboard.css').status_code == 200
+        for tab in ('api', 'account', 'agent'):
+            pane = client.get('/dashboard?tab=' + tab)
+            assert pane.status_code == 200
+            assert ('id="' + tab + '"').encode() in pane.data
+        uid = str(user['user_id'])
+        with m.data_manager._lock:
+            m.data_manager.data.setdefault('billing_subscriptions', {})[uid] = {
+                'plan': 'pro_monthly', 'status': 'active',
+                'current_period_end': (datetime.now(timezone.utc) + timedelta(days=20)).isoformat(),
+            }
+            m._save_json(m.data_manager.data)
+        paid_page = client.get('/dashboard')
+        assert b'class="account-offer-banner"' not in paid_page.data
+        assert b'class="pricing-offer"' not in paid_page.data
+        assert b'class="account-offer-banner"' not in client.get('/playground').data
+
+    def test_api_setup_guides_use_manual_mcp_connections(self, client):
+        self._login_user(client, 'manualmcpuser')
+        page = client.get('/dashboard?tab=api')
+        assert page.status_code == 200
+        assert b'chatgpt.com/plugins/plugin_asdk_' not in page.data
+        assert b'Add Arlong to ChatGPT' not in page.data
+        assert b'Add Arlong plugin' not in page.data
+        assert b'Manual MCP connection' in page.data
+        assert b'codex mcp add arlong --url https://arlong.org/mcp' in page.data
+        assert b'codex mcp login arlong' in page.data
+        assert b'auth = "oauth"' not in page.data
+
+    def test_free_plan_offers_reappear_without_a_resetting_deadline(self, client):
+        from datetime import datetime, timedelta, timezone
+        user = self._login_user(client, 'standingofferuser')
+        uid = str(user['user_id'])
+        legacy_deadline = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        with m.data_manager._lock:
+            m.data_manager.data.setdefault('account_beta_offers', {})[uid] = {
+                'expires_at': legacy_deadline, 'campaign': 'beta_launch_v1',
+            }
+            m._save_json(m.data_manager.data)
+        for route in ('/dashboard', '/playground', '/dashboard'):
+            response = client.get(route)
+            assert response.status_code == 200
+            assert b'class="account-offer-banner"' in response.data
+            assert b'OFFER ENDS IN' not in response.data
+            assert b'data-expires-at' not in response.data
+        offer = m.data_manager.get_account_beta_offer(user['user_id'])
+        assert offer['active'] is True
+        assert 'expires_at' not in offer
+        assert m.data_manager.data['account_beta_offers'][uid]['expires_at'] == legacy_deadline
 
     def test_openai_apps_domain_verification_challenge(self, client):
         response = client.get('/.well-known/openai-apps-challenge')

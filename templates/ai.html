@@ -508,7 +508,7 @@
         <div class="ai-limit-title"><span>Token Budget ({{ ctx_reset_hours }}h)</span><span class="ai-limit-num" id="ai-ctx-text">{{ ctx_used }} / {{ ctx_limit }} tokens</span></div>
         <div class="ai-usage-track"><div class="ai-usage-fill" id="ai-ctx-fill" style="width:{{ ctx_pct }}%"></div></div>
         </div>
-        {% if plan_usage is defined and plan_usage.plan == 'free' %}<a class="ai-upgrade" href="/premium">Upgrade your limits</a><div class="ai-upgrade-note">Free: 10 standard answers, 3 deep answers, and 30 API/MCP credits each month.</div>{% else %}<div class="ai-upgrade-note">{{ plan_usage.limits.name if plan_usage is defined else 'Free' }} plan active</div>{% endif %}
+        {% if plan_usage is defined and plan_usage.plan == 'free' %}<a class="ai-upgrade" href="/premium">Upgrade your limits</a><div class="ai-upgrade-note">Free: 100 one-time credits shared across Playground, API, and MCP. No expiry or refresh.</div>{% else %}<div class="ai-upgrade-note">{{ plan_usage.limits.name if plan_usage is defined else 'Free' }} plan active</div>{% endif %}
         <a href="/dashboard" style="display:block;margin-top:14px;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;font-size:12px;color:#bbb;text-decoration:none;text-align:center">
             Manage account &amp; usage
         </a>

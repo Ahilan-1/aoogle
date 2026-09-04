@@ -34,7 +34,7 @@ def configured():
 
 
 def create_checkout(*, product_id, user_id, email, name, return_url, cancel_url, plan='', metadata=None,
-                    billing_currency=None):
+                    billing_currency=None, discount_codes=None, allow_discount_code=False):
     if not configured():
         raise DodoBillingError("Dodo Payments is not configured")
     if not product_id:
@@ -48,6 +48,11 @@ def create_checkout(*, product_id, user_id, email, name, return_url, cancel_url,
     }
     if billing_currency:
         payload["billing_currency"] = str(billing_currency).upper()
+    clean_codes = [str(code).strip().upper() for code in (discount_codes or []) if str(code).strip()]
+    if clean_codes:
+        payload["discount_codes"] = clean_codes[:20]
+    if allow_discount_code:
+        payload["feature_flags"] = {"allow_discount_code": True}
     try:
         response = requests.post(
             f"{api_base()}/checkouts",

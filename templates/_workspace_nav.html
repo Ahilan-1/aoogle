@@ -1,0 +1,21 @@
+<header class="workspace-nav">
+<a class="brand" href="/dashboard" aria-label="Arlong dashboard">arlong<span class="brand-dot"></span></a>
+<nav class="nav" aria-label="Workspace">
+<a href="/dashboard" data-tab="overview">Explore</a>
+<a href="/playground?mode=search">Search</a>
+<a href="/dashboard?tab=agent" data-tab="agent">Research</a>
+<a href="/dashboard?tab=api" data-tab="api">API &amp; MCP</a>
+<a href="/docs">Docs ↗</a>
+</nav>
+{% set nav_credits = plan_usage.usage.credits %}
+{% set nav_remaining = [nav_credits.limit - nav_credits.used, 0]|max %}
+{% set nav_prepaid = credit_wallet.balance %}
+<div class="nav-utility">
+<a class="nav-billing" href="/billing"><strong>{{ nav_remaining + nav_prepaid }}</strong> credits</a>
+<a class="pricing-link{% if account_offer.active %} has-offer{% endif %}" href="/premium{% if account_offer.active %}{% endif %}"><span aria-hidden="true">◇</span> Pricing{% if account_offer.active %}<span class="pricing-offer">{{ account_offer.percent }}% OFF</span><span class="sr-only">on eligible plans; verified at checkout</span>{% endif %}</a>
+<details class="account-menu"><summary aria-label="Account menu">{{ user.username[:1]|upper }}</summary><div class="account-dropdown">
+<div class="account-identity"><span class="account-avatar" aria-hidden="true">{{ user.username[:1]|upper }}</span><div><b>{{ user.username }}</b><span>{{ plan_usage.limits.name }} plan</span></div></div>
+<section class="account-credits" aria-label="Remaining credits"><div class="credit-heading"><span>Credits remaining</span><strong>{{ nav_remaining + nav_prepaid }}</strong></div><progress class="credit-meter" max="{{ nav_credits.limit if nav_credits.limit > 0 else 1 }}" value="{{ [nav_remaining, nav_credits.limit]|min }}" aria-label="Included plan credits remaining"></progress><dl class="credit-details"><div><dt>Included plan credits</dt><dd>{{ nav_remaining }} / {{ nav_credits.limit }}</dd></div><div><dt>Prepaid credits</dt><dd>{{ nav_prepaid }}</dd></div></dl>
+{% if account_offer.active %}<a class="account-upgrade" href="/premium"><span>Explore paid plans</span><strong>View offers ↗</strong></a>{% else %}<a class="account-upgrade" href="/billing"><span>{{ plan_usage.limits.name }} plan</span><strong>Manage ↗</strong></a>{% endif %}</section>
+<a href="/u/{{ user.username }}?public=1">View profile <span aria-hidden="true">↗</span></a><a href="/dashboard?tab=account">Account settings</a><a href="/billing">Billing &amp; credits</a><a href="/support">Community Support</a><a class="account-signout" href="/logout">Sign out</a></div></details></div>
+</header>
